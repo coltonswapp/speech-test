@@ -1,0 +1,28 @@
+{
+  "id": "n5-node",
+  "orderIndex": 44,
+  "title": "ので",
+  "headlineEnglish": "because of; the reason is that",
+  "blurb": "",
+  "forms": [
+    "ので"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "太いので、走るのは遅い。",
+      "romaji": "futoi node, hashiru no wa osoi.",
+      "english": "Because I'm big, I'm slow at running.",
+      "targetSubstring": "ので",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "ので",
+  "shortDefinition": "because of; the reason is that",
+  "reading": "ので"
+}

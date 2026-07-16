@@ -1,0 +1,341 @@
+{
+  "blurb": "Japanese doesn't bolt -est onto adjectives the way English does — it leans on one word that means 'number one.' Drop いちばん in front of almost any adjective or verb phrase and you instantly have a superlative. You'll hear it everywhere from menu descriptions to sports commentary, and once you've got it, you can rank anything.",
+  "drills": [
+    {
+      "choices": [
+        "いちばん",
+        "もっと",
+        "とても",
+        "すごく"
+      ],
+      "correctChoice": "いちばん",
+      "english": "This ramen is the spiciest.",
+      "exampleJapanese": "このラーメンがいちばん辛い。",
+      "instruction": "Select the missing component to make this sentence whole.",
+      "kind": "precursorChoice",
+      "targetSubstring": "いちばん"
+    },
+    {
+      "choices": [
+        "この公園がいちばんきれいだ。",
+        "この公園がもっときれいだ。",
+        "この公園はきれいいちばんだ。",
+        "この公園がきれいないちばんだ。"
+      ],
+      "correctChoice": "この公園がいちばんきれいだ。",
+      "instruction": "Pick the correct superlative sentence.",
+      "kind": "formChoice",
+      "prompt": "This park is the most beautiful."
+    },
+    {
+      "choices": [
+        "Of the three, this book is the most interesting.",
+        "This book is more interesting than three others.",
+        "I want to read this book the most.",
+        "This book is interesting, but not the best."
+      ],
+      "correctChoice": "Of the three, this book is the most interesting.",
+      "exampleJapanese": "三つの中でこの本がいちばん面白い。",
+      "kind": "meaningChoice"
+    },
+    {
+      "buildComponents": [
+        "春が",
+        "いちばん",
+        "楽しい"
+      ],
+      "choices": [
+        "春が",
+        "いちばん",
+        "楽しい",
+        "もっと",
+        "春は",
+        "楽しかった"
+      ],
+      "correctChoice": "春がいちばん楽しい",
+      "english": "Spring is the most fun.",
+      "kind": "sentenceBuilder"
+    },
+    {
+      "choices": [
+        "もっと辛い",
+        "いちばん辛い"
+      ],
+      "contrastLabel": "spicier vs. spiciest",
+      "correctChoice": "いちばん辛い",
+      "kind": "contrastChoice"
+    },
+    {
+      "choices": [
+        "田中くんがクラスでいちばん速い。",
+        "田中くんはクラスでもっと速い。",
+        "田中くんがクラスで速いです。",
+        "田中くんはいちばん速くなりたい。"
+      ],
+      "correctChoice": "田中くんがクラスでいちばん速い。",
+      "kind": "sentenceChoice",
+      "prompt": "Tanaka is the fastest in the class."
+    },
+    {
+      "choices": [
+        "Of all the problems, this one was the hardest.",
+        "This problem is harder than the others in class.",
+        "I found this problem in class very difficult.",
+        "Nobody in class could solve this problem."
+      ],
+      "correctChoice": "Of all the problems, this one was the hardest.",
+      "exampleJapanese": "クラスの中でこの問題がいちばん難しかった。",
+      "kind": "meaningChoice"
+    }
+  ],
+  "examples": [
+    {
+      "english": "This ramen is the spiciest.",
+      "japanese": "このラーメンがいちばん辛い。",
+      "romaji": "kono raamen ga ichiban karai.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "Which one are you getting? They all look spicy.",
+            "japanese": "どれにする？全部辛そうだけど。",
+            "romaji": "dore ni suru? zenbu karasou da kedo.",
+            "speaker": "B"
+          },
+          {
+            "english": "I love spicy food, so it's hard to choose.",
+            "japanese": "辛いの大好きだから、迷う。",
+            "romaji": "karai no daisuki dakara, mayou.",
+            "speaker": "A"
+          },
+          {
+            "speaker": "A",
+            "japanese": "このラーメンがいちばん辛い。",
+            "romaji": "kono raamen ga ichiban karai.",
+            "english": "This ramen is the spiciest."
+          }
+        ],
+        "setting": "Two friends study a ramen shop's spice chart, trying to choose."
+      },
+      "targetSubstring": "いちばん"
+    },
+    {
+      "english": "Of the three, spring is my favorite season.",
+      "japanese": "三つの中で、春がいちばん好きな季節だ。",
+      "romaji": "mittsu no naka de, haru ga ichiban sukina kisetsu da.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "The weather's been so nice lately.",
+            "japanese": "最近、いい天気が続いてるね。",
+            "romaji": "saikin, ii tenki ga tsuzuiteru ne.",
+            "speaker": "A"
+          },
+          {
+            "english": "Really. Of all the seasons...",
+            "japanese": "本当に。四季の中でも…",
+            "romaji": "hontou ni. shiki no naka de mo...",
+            "speaker": "B"
+          },
+          {
+            "speaker": "B",
+            "japanese": "三つの中で、春がいちばん好きな季節だ。",
+            "romaji": "mittsu no naka de, haru ga ichiban sukina kisetsu da.",
+            "english": "Of the three, spring is my favorite season."
+          }
+        ],
+        "setting": "Two coworkers chat by the window as cherry blossoms drift past."
+      },
+      "targetSubstring": "いちばん"
+    },
+    {
+      "english": "Along this mountain trail, this spot has the best view.",
+      "japanese": "この山道の中で、ここがいちばん景色がいい。",
+      "romaji": "kono yamamichi no naka de, koko ga ichiban keshiki ga ii.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "We finally made it... my legs ache.",
+            "japanese": "やっと着いた…足が痛い。",
+            "romaji": "yatto tsuita... ashi ga itai.",
+            "speaker": "B"
+          },
+          {
+            "english": "But turn around and look.",
+            "japanese": "でも振り返ってみて。",
+            "romaji": "demo furikaette mite.",
+            "speaker": "A"
+          },
+          {
+            "speaker": "A",
+            "japanese": "この山道の中で、ここがいちばん景色がいい。",
+            "romaji": "kono yamamichi no naka de, koko ga ichiban keshiki ga ii.",
+            "english": "Along this mountain trail, this spot has the best view."
+          }
+        ],
+        "setting": "Two hikers reach a rocky overlook, catching their breath."
+      },
+      "targetSubstring": "いちばん"
+    },
+    {
+      "english": "I tried everything, but the chocolate cake was the best.",
+      "japanese": "全部食べたけど、チョコレートケーキがいちばんおいしかった。",
+      "romaji": "zenbu tabeta kedo, chokoreeto keeki ga ichiban oishikatta.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "Which one did you like?",
+            "japanese": "どれが好きだった？",
+            "romaji": "dore ga sukidatta?",
+            "speaker": "A"
+          },
+          {
+            "english": "They were all good, but honestly...",
+            "japanese": "全部よかったけど、やっぱり…",
+            "romaji": "zenbu yokatta kedo, yappari...",
+            "speaker": "B"
+          },
+          {
+            "speaker": "B",
+            "japanese": "全部食べたけど、チョコレートケーキがいちばんおいしかった。",
+            "romaji": "zenbu tabeta kedo, chokoreeto keeki ga ichiban oishikatta.",
+            "english": "I tried everything, but the chocolate cake was the best."
+          }
+        ],
+        "setting": "Friends walk out of a bakery tasting event, comparing notes."
+      },
+      "targetSubstring": "いちばん"
+    },
+    {
+      "english": "Tanaka is the fastest runner in the class.",
+      "japanese": "クラスの中で田中くんがいちばん足が速い。",
+      "romaji": "kurasu no naka de tanaka-kun ga ichiban ashi ga hayai.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "Do you have a student who could run the relay?",
+            "japanese": "リレーに出せる生徒、誰かいますか。",
+            "romaji": "riree ni daseru seito, dareka imasu ka.",
+            "speaker": "Coach"
+          },
+          {
+            "english": "Let me think — if it's about running...",
+            "japanese": "そうですね、走りなら…",
+            "romaji": "sou desu ne, hashiri nara...",
+            "speaker": "Teacher"
+          },
+          {
+            "speaker": "Teacher",
+            "japanese": "クラスの中で田中くんがいちばん足が速い。",
+            "romaji": "kurasu no naka de tanaka-kun ga ichiban ashi ga hayai.",
+            "english": "Tanaka is the fastest runner in the class."
+          }
+        ],
+        "setting": "A coach talks to a teacher before a school sports day."
+      },
+      "targetSubstring": "いちばん"
+    }
+  ],
+  "formation": [
+    {
+      "body": "Place いちばん directly before the adjective.\n\nこの店がいちばん安い。\nThis shop is the cheapest.",
+      "title": "いちばん + い-adjective"
+    },
+    {
+      "body": "Same pattern — いちばん comes before the adjective.\n\n彼女がいちばん元気だ。\nShe is the most energetic.",
+      "title": "いちばん + な-adjective"
+    },
+    {
+      "body": "Add の中で before いちばん to say 'the most among ~.'\n\nクラスの中でいちばん背が高い。\nThe tallest in the class.",
+      "title": "〜の中でいちばん"
+    }
+  ],
+  "forms": [
+    "いちばん",
+    "一番"
+  ],
+  "headlineEnglish": "the most",
+  "id": "n5-ichiban",
+  "orderIndex": 3,
+  "relatedPointIDs": [],
+  "status": "approved",
+  "title": "いちばん",
+  "usage": [
+    {
+      "body": "いちばん turns any adjective into its superlative form. Unlike English, the adjective itself doesn't change.\n\nおいしい → いちばんおいしい (most delicious)\n速い → いちばん速い (fastest)",
+      "title": "Superlative"
+    },
+    {
+      "body": "Pair いちばん with 〜の中で to specify the pool you're ranking within.\n\n三つの中でこれがいちばん好き。\nOf the three, I like this one the most.",
+      "title": "Ranking among a group"
+    }
+  ],
+  "usageLadders": [
+    {
+      "label": "most delicious",
+      "levels": [
+        {
+          "japanese": "これいちばんうまい",
+          "register": "Rough"
+        },
+        {
+          "japanese": "これがいちばんおいしい",
+          "register": "Casual"
+        },
+        {
+          "japanese": "これがいちばんおいしいです",
+          "register": "Polite"
+        }
+      ]
+    },
+    {
+      "label": "fastest",
+      "levels": [
+        {
+          "japanese": "田中がいちばん速い",
+          "register": "Casual"
+        },
+        {
+          "japanese": "田中さんがいちばん速いです",
+          "register": "Polite"
+        },
+        {
+          "japanese": "田中さんがいちばん速くいらっしゃいます",
+          "register": "Honorific"
+        }
+      ]
+    },
+    {
+      "label": "most fun",
+      "levels": [
+        {
+          "japanese": "これがいちばん楽しい",
+          "register": "Casual"
+        },
+        {
+          "japanese": "これがいちばん楽しいですね",
+          "register": "Polite"
+        },
+        {
+          "japanese": "こちらがいちばん楽しゅうございます",
+          "register": "Very Formal"
+        }
+      ]
+    }
+  ],
+  "pattern": "いちばん",
+  "shortDefinition": "the most",
+  "reading": "いちばん",
+  "structure": "Place いちばん directly before the adjective.\n\nこの店がいちばん安い。\nThis shop is the cheapest.\n\nSame pattern — いちばん comes before the adjective.\n\n彼女がいちばん元気だ。\nShe is the most energetic.\n\nAdd の中で before いちばん to say 'the most among ~.'\n\nクラスの中でいちばん背が高い。\nThe tallest in the class.",
+  "register": "casual",
+  "contrastDrills": [
+    {
+      "contrastLabel": "spicier vs. spiciest",
+      "choices": [
+        "もっと辛い",
+        "いちばん辛い"
+      ],
+      "correctChoice": "いちばん辛い",
+      "ruleTargeted": null
+    }
+  ]
+}

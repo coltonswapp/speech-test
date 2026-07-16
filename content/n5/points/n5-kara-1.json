@@ -1,0 +1,28 @@
+{
+  "id": "n5-kara-1",
+  "orderIndex": 10,
+  "title": "から①",
+  "headlineEnglish": "because; since",
+  "blurb": "",
+  "forms": [
+    "から"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "車で来ましたから。",
+      "romaji": "kuruma de kimashita kara.",
+      "english": "Because I came by car.",
+      "targetSubstring": "から",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "から①",
+  "shortDefinition": "because; since",
+  "reading": "から"
+}

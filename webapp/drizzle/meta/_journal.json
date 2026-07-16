@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1784129206927,
+      "tag": "0000_useful_martin_li",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784129206928,
+      "tag": "0001_dialogue_scenario_publish",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784129206929,
+      "tag": "0002_dialogue_collection_thumbnail",
+      "breakpoints": true
+    }
+  ]
+}

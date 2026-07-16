@@ -1,0 +1,29 @@
+{
+  "id": "n5-no-ga-suki",
+  "orderIndex": 43,
+  "title": "のが好き",
+  "headlineEnglish": "like / love doing",
+  "blurb": "",
+  "forms": [
+    "のが好き",
+    "のが好きです"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "犬と遊ぶのが好き。",
+      "romaji": "inu to asobu no ga suki.",
+      "english": "I love playing with dogs.",
+      "targetSubstring": "のが好き",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "のが好き",
+  "shortDefinition": "like / love doing",
+  "reading": "のが好き"
+}

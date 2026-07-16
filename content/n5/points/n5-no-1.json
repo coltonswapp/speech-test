@@ -1,0 +1,28 @@
+{
+  "id": "n5-no-1",
+  "orderIndex": 39,
+  "title": "の①",
+  "headlineEnglish": "of (possession)",
+  "blurb": "",
+  "forms": [
+    "の"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "私の犬です。",
+      "romaji": "watashi no inu desu.",
+      "english": "It's my dog.",
+      "targetSubstring": "の",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "の①",
+  "shortDefinition": "of (possession)",
+  "reading": "の"
+}

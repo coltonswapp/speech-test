@@ -1,0 +1,31 @@
+{
+  "id": "n5-suru",
+  "orderIndex": 14,
+  "title": "する",
+  "headlineEnglish": "to do",
+  "blurb": "",
+  "forms": [
+    "する",
+    "します",
+    "した",
+    "しない"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "質問する。",
+      "romaji": "shitsumon suru.",
+      "english": "To ask a question.",
+      "targetSubstring": "する",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "する",
+  "shortDefinition": "to do",
+  "reading": "する"
+}

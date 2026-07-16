@@ -1,0 +1,29 @@
+{
+  "id": "n5-darou-1",
+  "orderIndex": 19,
+  "title": "だろう①",
+  "headlineEnglish": "probably",
+  "blurb": "",
+  "forms": [
+    "だろう",
+    "でしょう"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "ペンがあるだろう。",
+      "romaji": "pen ga aru darou.",
+      "english": "There's probably a pen.",
+      "targetSubstring": "だろう",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "だろう①",
+  "shortDefinition": "probably",
+  "reading": "だろう"
+}

@@ -1,0 +1,28 @@
+{
+  "id": "n5-naide-kudasai",
+  "orderIndex": 33,
+  "title": "ないでください",
+  "headlineEnglish": "please don't",
+  "blurb": "",
+  "forms": [
+    "ないでください"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "泣かないでください。",
+      "romaji": "nakanaide kudasai.",
+      "english": "Please don't cry.",
+      "targetSubstring": "ないでください",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "ないでください",
+  "shortDefinition": "please don't",
+  "reading": "ないでください"
+}

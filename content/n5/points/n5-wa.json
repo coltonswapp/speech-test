@@ -1,0 +1,108 @@
+{
+  "id": "n5-wa",
+  "usageLadders": [],
+  "status": "draft",
+  "orderIndex": 45,
+  "title": "は",
+  "pattern": "は",
+  "reading": "は",
+  "shortDefinition": "as for; topic marker",
+  "headlineEnglish": "as for; topic marker",
+  "blurb": "Marks what you're talking about — the topic. Think \"As for X…\" and then say something about it.",
+  "structure": "Noun + は + comment\n\n東京は人が多い。\nTokyo has a lot of people.",
+  "forms": [
+    "は"
+  ],
+  "formation": [
+    {
+      "title": "Noun + は",
+      "body": "Place は after the word you want to talk about.\n\nお昼はパンを食べる。\nFor lunch, I eat bread."
+    }
+  ],
+  "usage": [
+    {
+      "title": "Topic, not subject",
+      "body": "は frames the sentence. What follows describes that topic — not always the doer of an action."
+    },
+    {
+      "title": "Compared to が",
+      "body": "が spotlights who acts (猫が来た). は keeps talking about something already on the table (猫は小さい)."
+    }
+  ],
+  "relatedPointIDs": [
+    "n5-ga-1"
+  ],
+  "examples": [
+    {
+      "japanese": "東京は人が多い。",
+      "romaji": "toukyou wa hito ga ooi.",
+      "english": "Tokyo has a lot of people.",
+      "targetSubstring": "は",
+      "audioKey": null
+    },
+    {
+      "japanese": "お昼はパンを食べる。",
+      "romaji": "ohiru wa pan o taberu.",
+      "english": "For lunch, I eat bread.",
+      "targetSubstring": "は",
+      "audioKey": null
+    },
+    {
+      "japanese": "私は猫が好きです。",
+      "romaji": "watashi wa neko ga suki desu.",
+      "english": "I like cats.",
+      "targetSubstring": "は",
+      "audioKey": null
+    },
+    {
+      "japanese": "ここは静かだね。",
+      "romaji": "koko wa shizuka da ne.",
+      "english": "It's quiet here, isn't it?",
+      "targetSubstring": "は",
+      "audioKey": null
+    },
+    {
+      "japanese": "日本語は難しいですか。",
+      "romaji": "nihongo wa muzukashii desu ka.",
+      "english": "Is Japanese difficult?",
+      "targetSubstring": "は",
+      "audioKey": null
+    }
+  ],
+  "drills": [
+    {
+      "kind": "precursorChoice",
+      "instruction": "Select the correct particle.",
+      "exampleJapanese": "これ___本です。",
+      "targetSubstring": "は",
+      "english": "This is a book.",
+      "choices": [
+        "は",
+        "が",
+        "を",
+        "に"
+      ],
+      "correctChoice": "は"
+    },
+    {
+      "kind": "contrastChoice",
+      "contrastLabel": "Topic vs. subject",
+      "choices": [
+        "私は行きます",
+        "私が行きます"
+      ],
+      "correctChoice": "私は行きます"
+    }
+  ],
+  "contrastDrills": [
+    {
+      "contrastLabel": "Topic vs. subject",
+      "choices": [
+        "私は行きます",
+        "私が行きます"
+      ],
+      "correctChoice": "私は行きます",
+      "ruleTargeted": null
+    }
+  ]
+}

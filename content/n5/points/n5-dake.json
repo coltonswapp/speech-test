@@ -1,0 +1,28 @@
+{
+  "id": "n5-dake",
+  "orderIndex": 17,
+  "title": "だけ",
+  "headlineEnglish": "only; just",
+  "blurb": "",
+  "forms": [
+    "だけ"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "これは水だけだ。",
+      "romaji": "kore wa mizu dake da.",
+      "english": "This is just water.",
+      "targetSubstring": "だけ",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "だけ",
+  "shortDefinition": "only; just",
+  "reading": "だけ"
+}

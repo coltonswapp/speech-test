@@ -1,0 +1,24 @@
+{
+  "originHash" : "c70e89c0bb1292cf05a8b1662a86a62579396c39157b72f1baa5e4241658c17c",
+  "pins" : [
+    {
+      "identity" : "grdb.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/groue/GRDB.swift",
+      "state" : {
+        "revision" : "2cf6c756e1e5ef6901ebae16576a7e4e4b834622",
+        "version" : "6.29.3"
+      }
+    },
+    {
+      "identity" : "mecab-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/shinjukunian/Mecab-Swift",
+      "state" : {
+        "revision" : "1f096492e37fc05fc2e7304091f54889974c5368",
+        "version" : "0.8.0"
+      }
+    }
+  ],
+  "version" : 3
+}

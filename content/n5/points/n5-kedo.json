@@ -1,0 +1,30 @@
+{
+  "id": "n5-kedo",
+  "orderIndex": 13,
+  "title": "けど・けれども",
+  "headlineEnglish": "but; although",
+  "blurb": "",
+  "forms": [
+    "けど",
+    "けれど",
+    "けれども"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "早く寝たけれども、まだ眠たいです。",
+      "romaji": "hayaku neta keredomo, mada nemutai desu.",
+      "english": "I slept early, but I'm still sleepy.",
+      "targetSubstring": "けれども",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "けど・けれども",
+  "shortDefinition": "but; although",
+  "reading": "けど"
+}

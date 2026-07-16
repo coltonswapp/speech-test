@@ -1,0 +1,28 @@
+{
+  "id": "n5-kara-2",
+  "orderIndex": 11,
+  "title": "から②",
+  "headlineEnglish": "from",
+  "blurb": "",
+  "forms": [
+    "から"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "西からの風。",
+      "romaji": "nishi kara no kaze.",
+      "english": "Wind from the west.",
+      "targetSubstring": "から",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "から②",
+  "shortDefinition": "from",
+  "reading": "から"
+}

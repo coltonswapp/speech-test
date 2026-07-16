@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "asking-directions.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

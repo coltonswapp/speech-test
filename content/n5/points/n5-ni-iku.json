@@ -1,0 +1,29 @@
+{
+  "id": "n5-ni-iku",
+  "orderIndex": 37,
+  "title": "にいく",
+  "headlineEnglish": "to go in order to do…",
+  "blurb": "",
+  "forms": [
+    "にいく",
+    "にいきます"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "エレベーターで５かいにいく。",
+      "romaji": "erebeetaa de go-kai ni iku.",
+      "english": "To go to the 5th floor by elevator.",
+      "targetSubstring": "にいく",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "にいく",
+  "shortDefinition": "to go in order to do…",
+  "reading": "にいく"
+}

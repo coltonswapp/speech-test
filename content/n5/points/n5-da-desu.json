@@ -1,0 +1,31 @@
+{
+  "id": "n5-da-desu",
+  "orderIndex": 15,
+  "title": "だ・です",
+  "headlineEnglish": "there is; this is (copula)",
+  "blurb": "",
+  "forms": [
+    "だ",
+    "です",
+    "でした",
+    "じゃない"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "猫だ。猫です。",
+      "romaji": "neko da. neko desu.",
+      "english": "It's a cat.",
+      "targetSubstring": "だ",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "だ・です",
+  "shortDefinition": "there is; this is (copula)",
+  "reading": "だ"
+}

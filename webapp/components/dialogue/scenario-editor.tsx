@@ -1,0 +1,627 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Sparkles, Trash2, ClipboardCheck, ShieldCheck } from "lucide-react";
+import { GrammarPointPicker } from "@/components/content/grammar-point-picker";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { contentApi } from "@/lib/content/client";
+import { dialogueApi, type DialogueScenario } from "@/lib/dialogue/client";
+import { enrichDialogueHighlights } from "@/lib/dialogue/enrich-dialogue-highlights";
+import { LineEditor } from "@/components/dialogue/line-editor";
+import { GenerateLinesPanel } from "@/components/dialogue/generate-lines-panel";
+import { HighlightsEditor } from "@/components/dialogue/highlights-editor";
+import { QuizEditor } from "@/components/dialogue/quiz-editor";
+import { ScenarioAudioPanel } from "@/components/dialogue/scenario-audio-panel";
+import { ScenarioAuditPanel } from "@/components/dialogue/scenario-audit-panel";
+import type {
+  AuditScenarioResult,
+  DialogueHighlights,
+  DialogueLine,
+} from "@/lib/dialogue/types";
+
+const TAB_VALUES = ["overview", "lines", "audio", "highlights", "quiz", "raw"];
+
+export function ScenarioEditor({
+  collectionId,
+  scenarioSlug,
+}: {
+  collectionId: string;
+  scenarioSlug: string;
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["dialogue-scenario", collectionId, scenarioSlug],
+    queryFn: () => dialogueApi.getScenario(collectionId, scenarioSlug),
+  });
+
+  const [draft, setDraft] = useState<DialogueScenario | null>(null);
+  const [rawText, setRawText] = useState("");
+  const [rawError, setRawError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [generateNonce, setGenerateNonce] = useState(0);
+  const [auditResult, setAuditResult] = useState<AuditScenarioResult | null>(
+    null
+  );
+  const [isAuditing, setIsAuditing] = useState(false);
+  const [isSanitizing, setIsSanitizing] = useState(false);
+  const [isEnrichingHighlights, setIsEnrichingHighlights] = useState(false);
+
+  const { data: pointsData } = useQuery({
+    queryKey: ["content-points", "approved-labels"],
+    queryFn: () => contentApi.listPoints({ status: "approved" }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const pointMap = useMemo(
+    () =>
+      new Map(
+        (pointsData?.points ?? []).map((point) => [
+          point.id,
+          { title: point.title, pattern: point.pattern },
+        ])
+      ),
+    [pointsData?.points]
+  );
+
+  useEffect(() => {
+    if (data?.scenario) {
+      setDraft(data.scenario);
+      setRawText(JSON.stringify(data.scenario, null, 2));
+      setRawError(null);
+    }
+  }, [data?.scenario]);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab && TAB_VALUES.includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      if (!draft) throw new Error("Nothing to save");
+      const current = draft;
+      return dialogueApi.updateScenario(collectionId, scenarioSlug, {
+        menuTitle: current.menuTitle,
+        menuSubtitle: current.menuSubtitle,
+        japanese: current.japanese,
+        romaji: current.romaji,
+        english: current.english,
+        targetSubstring: current.targetSubstring,
+        audioKey: current.audioKey,
+        grammarPointIds: current.grammarPointIds,
+        setting: current.setting,
+        lines: current.lines,
+        highlights: current.highlights,
+        quiz: current.quiz,
+      });
+    },
+    onSuccess: ({ scenario }) => {
+      setDraft(scenario);
+      queryClient.invalidateQueries({
+        queryKey: ["dialogue-scenario", collectionId, scenarioSlug],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["dialogue-collection", collectionId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["dialogue-collections"] });
+      queryClient.invalidateQueries({
+        queryKey: ["scenario-audio", `${collectionId}/${scenarioSlug}`],
+      });
+      toast.success("Scenario saved.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => dialogueApi.deleteScenario(collectionId, scenarioSlug),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dialogue-collections"] });
+      queryClient.invalidateQueries({
+        queryKey: ["dialogue-collection", collectionId],
+      });
+      toast.success("Scenario deleted.");
+      router.push(`/content/dialogues/${collectionId}`);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  if (isLoading || !draft) {
+    return (
+      <div className="flex flex-1 flex-col gap-4">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+
+  function update<K extends keyof DialogueScenario>(
+    key: K,
+    value: DialogueScenario[K]
+  ) {
+    setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
+  async function enrichHighlightsForLines(
+    lines: DialogueLine[],
+    grammarPointIds: string[],
+    existingHighlights: DialogueHighlights | null,
+    options?: { switchTab?: boolean; replaceHighlights?: boolean }
+  ) {
+    if (
+      !draft ||
+      lines.length === 0 ||
+      lines.every((line) => !line.japanese.trim()) ||
+      isEnrichingHighlights
+    ) {
+      return;
+    }
+    const current = draft;
+
+    setIsEnrichingHighlights(true);
+    const toastId = toast.loading("Extracting highlights…");
+    try {
+      const highlights = await enrichDialogueHighlights({
+        lines,
+        existing: options?.replaceHighlights ? null : existingHighlights,
+        grammarPointIds,
+        setting: current.setting ?? undefined,
+        menuTitle: current.menuTitle,
+        pointMap,
+        mode: "refresh",
+      });
+      update("highlights", highlights);
+      if (options?.switchTab) {
+        setActiveTab("highlights");
+      }
+      toast.success("Highlights extracted — review and Save.", { id: toastId });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Highlight extraction failed.",
+        { id: toastId }
+      );
+    } finally {
+      setIsEnrichingHighlights(false);
+    }
+  }
+
+  const targetMissing =
+    !!draft.targetSubstring &&
+    !!draft.japanese &&
+    !draft.japanese.includes(draft.targetSubstring);
+
+  function applyRawJson() {
+    try {
+      const parsed = JSON.parse(rawText);
+      if (typeof parsed !== "object" || parsed === null) {
+        setRawError("Must be a JSON object.");
+        return;
+      }
+      if (!Array.isArray(parsed.lines)) {
+        setRawError("Missing required field: lines (array).");
+        return;
+      }
+      setRawError(null);
+      setDraft({
+        ...parsed,
+        id: draft!.id,
+        collectionId: draft!.collectionId,
+      } as DialogueScenario);
+      toast.success("Redecoded into editor. Save to persist.");
+    } catch (e) {
+      setRawError(e instanceof Error ? e.message : "Invalid JSON.");
+    }
+  }
+
+  async function runAudit() {
+    if (!draft || draft.lines.length === 0) {
+      toast.error("Add dialogue lines before auditing.");
+      return;
+    }
+    const current = draft;
+    setIsAuditing(true);
+    setAuditResult(null);
+    try {
+      const { result } = await dialogueApi.auditScenario({
+        lines: current.lines,
+        highlights: current.highlights,
+        grammarPointIds: current.grammarPointIds,
+        setting: current.setting ?? undefined,
+        menuTitle: current.menuTitle,
+      });
+      setAuditResult(result);
+      const fixable =
+        result.proposed.lines !== undefined ||
+        result.proposed.highlights !== undefined;
+      if (result.issues.length === 0) {
+        toast.success("Audit complete — no issues found.");
+      } else if (fixable) {
+        toast.message(
+          `Audit found ${result.issues.length} issue(s). Review and apply fixes.`
+        );
+      } else {
+        toast.message(
+          `Audit found ${result.issues.length} issue(s) with no auto-fix.`
+        );
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Audit failed.");
+    } finally {
+      setIsAuditing(false);
+    }
+  }
+
+  function applyAuditFixes() {
+    if (!auditResult) return;
+    const { proposed } = auditResult;
+    setDraft((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        ...(proposed.lines ? { lines: proposed.lines } : {}),
+        ...(proposed.highlights !== undefined
+          ? { highlights: proposed.highlights ?? null }
+          : {}),
+        ...(proposed.grammarPointIds
+          ? { grammarPointIds: proposed.grammarPointIds }
+          : {}),
+      };
+    });
+    setAuditResult(null);
+    toast.success("Proposed fixes applied to draft. Save to persist.");
+  }
+
+  async function sanitizeGrammarTags() {
+    if (!draft || draft.lines.length === 0) {
+      toast.error("Add dialogue lines before sanitizing.");
+      return;
+    }
+    const current = draft;
+
+    setIsSanitizing(true);
+    try {
+      const { result } = await dialogueApi.sanitizeGrammarTags({
+        lines: current.lines,
+        highlights: current.highlights,
+        grammarPointIds: current.grammarPointIds,
+      });
+
+      if (result.removedCount === 0) {
+        toast.success("All grammar IDs are already in the approved catalog.");
+        return;
+      }
+
+      setDraft((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          lines: result.lines,
+          highlights: result.highlights,
+          grammarPointIds: result.grammarPointIds,
+        };
+      });
+      toast.success(
+        `Removed ${result.removedCount} invalid grammar ID(s) from draft. Save to persist.`
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Sanitization failed."
+      );
+    } finally {
+      setIsSanitizing(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-1 flex-col gap-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {draft.menuTitle}
+          </h1>
+          <p className="text-sm text-muted-foreground">{draft.id}</p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => void sanitizeGrammarTags()}
+            disabled={isSanitizing || draft.lines.length === 0}
+            title="Strip grammar IDs that are not in the approved N5 catalog"
+          >
+            <ShieldCheck className="size-4" />
+            {isSanitizing ? "Sanitizing…" : "Sanitize IDs"}
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => void runAudit()}
+            disabled={isAuditing || draft.lines.length === 0}
+          >
+            <ClipboardCheck className="size-4" />
+            {isAuditing ? "Auditing…" : "Audit"}
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              if (window.confirm(`Delete scenario "${draft.menuTitle}"?`)) {
+                deleteMutation.mutate();
+              }
+            }}
+            disabled={deleteMutation.isPending}
+            aria-label="Delete scenario"
+          >
+            <Trash2 className="size-4" />
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+
+      <ScenarioAuditPanel
+        result={auditResult}
+        isAuditing={isAuditing}
+        onApply={applyAuditFixes}
+        onDismiss={() => setAuditResult(null)}
+      />
+
+      <Tabs value={activeTab} onValueChange={(value) => value && setActiveTab(value)}>
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="lines">Lines</TabsTrigger>
+          <TabsTrigger value="audio">Audio</TabsTrigger>
+          <TabsTrigger value="highlights">
+            Highlights
+            {isEnrichingHighlights ? "…" : ""}
+          </TabsTrigger>
+          <TabsTrigger value="quiz">Quiz</TabsTrigger>
+          <TabsTrigger value="raw">Raw JSON</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="flex max-w-2xl flex-col gap-4 pt-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <Label>Menu title</Label>
+              <Input
+                value={draft.menuTitle}
+                onChange={(e) => update("menuTitle", e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Menu subtitle</Label>
+              <Input
+                value={draft.menuSubtitle ?? ""}
+                onChange={(e) => update("menuSubtitle", e.target.value || null)}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>Headline — Japanese</Label>
+            <Input
+              value={draft.japanese}
+              onChange={(e) => update("japanese", e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <Label>Headline — Romaji</Label>
+              <Input
+                value={draft.romaji}
+                onChange={(e) => update("romaji", e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Headline — English</Label>
+              <Input
+                value={draft.english}
+                onChange={(e) => update("english", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>Target substring (highlighted in headline)</Label>
+            <Input
+              value={draft.targetSubstring ?? ""}
+              onChange={(e) =>
+                update("targetSubstring", e.target.value || null)
+              }
+            />
+            {targetMissing && (
+              <p className="text-sm text-destructive">
+                Target substring does not appear verbatim in the Japanese
+                headline.
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>Audio key</Label>
+            <Input
+              value={draft.audioKey ?? ""}
+              onChange={(e) => update("audioKey", e.target.value || null)}
+              placeholder={draft.id}
+            />
+            <p className="text-xs text-muted-foreground">
+              Resolves to Dialogue/Audio/&lt;key&gt;.m4a in the app bundle.
+              Leave empty for on-device TTS.
+            </p>
+          </div>
+
+          <GrammarPointPicker
+            label="Grammar points"
+            description="Points practiced in this scenario. Used when generating dialogue lines."
+            value={draft.grammarPointIds}
+            onChange={(grammarPointIds) =>
+              update("grammarPointIds", grammarPointIds)
+            }
+          />
+
+          <div className="flex flex-col gap-2">
+            <Label>Setting</Label>
+            <Textarea
+              rows={2}
+              value={draft.setting ?? ""}
+              onChange={(e) => update("setting", e.target.value || null)}
+              placeholder="At the library — a student asks the librarian where to find quiet study desks."
+            />
+          </div>
+
+          <Button
+            className="w-fit gap-2"
+            onClick={() => {
+              if (draft.grammarPointIds.length === 0) {
+                toast.error("Select grammar points first.");
+                return;
+              }
+              if (!draft.setting?.trim()) {
+                toast.error("Add a setting first.");
+                return;
+              }
+              setActiveTab("lines");
+              setGenerateNonce((count) => count + 1);
+              requestAnimationFrame(() => {
+                document
+                  .getElementById("generate-dialogue-panel")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              });
+            }}
+          >
+            <Sparkles className="size-4" />
+            {draft.lines.length > 0
+              ? "Regenerate dialogue"
+              : "Generate dialogue from setting"}
+          </Button>
+        </TabsContent>
+
+        <TabsContent value="lines" className="flex max-w-5xl flex-col gap-6 pt-4">
+          <LineEditor
+            lines={draft.lines}
+            onChange={(lines) => update("lines", lines)}
+            reviseContext={{
+              setting: draft.setting ?? undefined,
+              menuTitle: draft.menuTitle,
+              grammarPointIds: draft.grammarPointIds,
+            }}
+            onLinesCommitted={(lines) => {
+              void enrichHighlightsForLines(
+                lines,
+                draft.grammarPointIds,
+                draft.highlights,
+                { switchTab: true }
+              );
+            }}
+          />
+          <GenerateLinesPanel
+            existingLines={draft.lines}
+            setting={draft.setting ?? ""}
+            menuTitle={draft.menuTitle}
+            grammarPointIds={draft.grammarPointIds}
+            autoGenerateOnMount={
+              draft.lines.length === 0 &&
+              !!draft.setting?.trim() &&
+              draft.grammarPointIds.length > 0
+            }
+            triggerGenerateCount={generateNonce}
+            onInsert={(lines, mode, options) => {
+              const nextLines =
+                mode === "replace" ? lines : [...draft.lines, ...lines];
+              const nextGrammarPointIds =
+                options?.grammarPointIds ?? draft.grammarPointIds;
+
+              setDraft((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  lines: nextLines,
+                  setting: prev.setting ?? options?.setting ?? null,
+                  grammarPointIds: nextGrammarPointIds,
+                };
+              });
+
+              void enrichHighlightsForLines(
+                nextLines,
+                nextGrammarPointIds,
+                mode === "replace" ? null : draft.highlights,
+                { switchTab: true, replaceHighlights: mode === "replace" }
+              );
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="audio" className="pt-4">
+          <ScenarioAudioPanel
+            collectionId={collectionId}
+            scenarioSlug={scenarioSlug}
+            lines={draft.lines}
+            hasUnsavedChanges={
+              JSON.stringify(draft.lines) !==
+              JSON.stringify(data?.scenario.lines ?? [])
+            }
+            onSaveScenario={() => saveMutation.mutateAsync()}
+          />
+        </TabsContent>
+
+        <TabsContent value="highlights" className="pt-4">
+          <HighlightsEditor
+            key={draft.id}
+            highlights={draft.highlights}
+            onChange={(highlights) => update("highlights", highlights)}
+            lines={draft.lines}
+            grammarPointIds={draft.grammarPointIds}
+            setting={draft.setting}
+            menuTitle={draft.menuTitle}
+          />
+        </TabsContent>
+
+        <TabsContent value="quiz" className="pt-4">
+          <QuizEditor
+            quiz={draft.quiz}
+            onChange={(quiz) => update("quiz", quiz)}
+          />
+        </TabsContent>
+
+        <TabsContent value="raw" className="flex flex-col gap-3 pt-4">
+          <Textarea
+            rows={24}
+            value={rawText}
+            onChange={(e) => setRawText(e.target.value)}
+            className="font-mono text-xs"
+            spellCheck={false}
+          />
+          {rawError && <p className="text-sm text-destructive">{rawError}</p>}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRawText(JSON.stringify(draft, null, 2))}
+            >
+              Load current draft
+            </Button>
+            <Button size="sm" onClick={applyRawJson}>
+              Redecode into editor
+            </Button>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

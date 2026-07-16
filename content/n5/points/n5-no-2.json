@@ -1,0 +1,28 @@
+{
+  "id": "n5-no-2",
+  "orderIndex": 40,
+  "title": "の②",
+  "headlineEnglish": "nominalizer (turns verbs into nouns)",
+  "blurb": "",
+  "forms": [
+    "の"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "彼は走るのが速い。",
+      "romaji": "kare wa hashiru no ga hayai.",
+      "english": "He is fast at running.",
+      "targetSubstring": "の",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "の②",
+  "shortDefinition": "nominalizer (turns verbs into nouns)",
+  "reading": "の"
+}

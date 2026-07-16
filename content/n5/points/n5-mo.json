@@ -1,0 +1,82 @@
+{
+  "id": "n5-mo",
+  "usageLadders": [],
+  "status": "draft",
+  "orderIndex": 51,
+  "title": "も",
+  "pattern": "も",
+  "reading": "も",
+  "shortDefinition": "also; too; as well",
+  "headlineEnglish": "also; too; as well",
+  "blurb": "Adds \"also\" or \"too\" — includes something in what was already mentioned.",
+  "structure": "Noun + も\n\n田中さんも来る。\nTanaka is coming too.",
+  "forms": [
+    "も"
+  ],
+  "formation": [
+    {
+      "title": "Noun + も",
+      "body": "Swap は or が for も to add \"also.\"\n\n犬も好き。\nI like dogs too."
+    }
+  ],
+  "usage": [
+    {
+      "title": "Adding to the set",
+      "body": "も layers on: 猫が好き。犬も好き。 = I like cats. I like dogs too."
+    }
+  ],
+  "relatedPointIDs": [
+    "n5-wa"
+  ],
+  "examples": [
+    {
+      "japanese": "田中さんも来る。",
+      "romaji": "tanaka san mo kuru.",
+      "english": "Tanaka is coming too.",
+      "targetSubstring": "も",
+      "audioKey": null
+    },
+    {
+      "japanese": "土曜日も開いてる。",
+      "romaji": "doyoubi mo aiteru.",
+      "english": "They're open on Saturdays too.",
+      "targetSubstring": "も",
+      "audioKey": null
+    },
+    {
+      "japanese": "水も飲む。",
+      "romaji": "mizu mo nomu.",
+      "english": "I'll drink water too.",
+      "targetSubstring": "も",
+      "audioKey": null
+    },
+    {
+      "japanese": "子どもも泣いてる。",
+      "romaji": "kodomo mo naiteru.",
+      "english": "The child is crying too.",
+      "targetSubstring": "も",
+      "audioKey": null
+    },
+    {
+      "japanese": "こちらもどうぞ。",
+      "romaji": "kochira mo douzo.",
+      "english": "This for you as well.",
+      "targetSubstring": "も",
+      "audioKey": null
+    }
+  ],
+  "drills": [
+    {
+      "kind": "meaningChoice",
+      "exampleJapanese": "田中さんも来る。",
+      "choices": [
+        "Tanaka is coming too.",
+        "Tanaka is coming. (topic)",
+        "Only Tanaka is coming.",
+        "Tanaka is not coming."
+      ],
+      "correctChoice": "Tanaka is coming too."
+    }
+  ],
+  "contrastDrills": []
+}

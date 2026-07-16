@@ -1,0 +1,28 @@
+{
+  "id": "n5-te-kara",
+  "orderIndex": 25,
+  "title": "てから",
+  "headlineEnglish": "after doing",
+  "blurb": "",
+  "forms": [
+    "てから"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "映画を見てから、帰ります。",
+      "romaji": "eiga o mite kara, kaerimasu.",
+      "english": "After watching the movie, I'll go home.",
+      "targetSubstring": "てから",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "てから",
+  "shortDefinition": "after doing",
+  "reading": "てから"
+}

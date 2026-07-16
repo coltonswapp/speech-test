@@ -1,0 +1,29 @@
+{
+  "id": "n5-mae-ni",
+  "orderIndex": 48,
+  "title": "前に",
+  "headlineEnglish": "before",
+  "blurb": "",
+  "forms": [
+    "前に",
+    "のまえに"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "犬が門の前にいる。",
+      "romaji": "inu ga mon no mae ni iru.",
+      "english": "The dog is in front of the gate.",
+      "targetSubstring": "前に",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "前に",
+  "shortDefinition": "before",
+  "reading": "前に"
+}

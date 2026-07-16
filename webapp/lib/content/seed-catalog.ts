@@ -1,0 +1,67 @@
+// Ported from GrammarContentKit/Sources/GrammarContentKit/GrammarPointGenerator.swift
+// (N5GrammarPointCatalog.seeds)
+
+export type GrammarSeed = {
+  id: string;
+  title: string;
+  headlineEnglish: string;
+  orderIndex: number;
+};
+
+export const n5GrammarSeedCatalog: GrammarSeed[] = [
+  { id: "n5-wa", title: "は", headlineEnglish: "topic marker", orderIndex: 0 },
+  { id: "n5-ga-1", title: "が (subject)", headlineEnglish: "subject marker", orderIndex: 1 },
+  { id: "n5-ga-2", title: "が (but)", headlineEnglish: "but; however", orderIndex: 2 },
+  { id: "n5-ka-1", title: "か (question)", headlineEnglish: "question particle", orderIndex: 3 },
+  { id: "n5-ka-2", title: "か (or)", headlineEnglish: "or", orderIndex: 4 },
+  { id: "n5-ni", title: "に", headlineEnglish: "to; at; in", orderIndex: 5 },
+  { id: "n5-ni-e", title: "に行く", headlineEnglish: "go to", orderIndex: 6 },
+  { id: "n5-de-1", title: "で (location)", headlineEnglish: "at; by means of", orderIndex: 7 },
+  { id: "n5-de-2", title: "で (reason)", headlineEnglish: "because of", orderIndex: 8 },
+  { id: "n5-mo", title: "も", headlineEnglish: "also; too", orderIndex: 9 },
+  { id: "n5-cha-ikenai", title: "ちゃいけない・じゃいけない", headlineEnglish: "must not; may not (casual)", orderIndex: 10 },
+  { id: "n5-te-wa-ikenai", title: "てはいけない", headlineEnglish: "must not (standard)", orderIndex: 11 },
+  { id: "n5-nakucha", title: "なくちゃ", headlineEnglish: "have to (casual)", orderIndex: 12 },
+  { id: "n5-na-prohibitive", title: "な (prohibitive)", headlineEnglish: "don't (casual command)", orderIndex: 13 },
+  { id: "n5-naide-kudasai", title: "ないでください", headlineEnglish: "please don't", orderIndex: 14 },
+  { id: "n5-te-mo-ii", title: "てもいい", headlineEnglish: "may; it's okay to", orderIndex: 15 },
+  { id: "n5-te-kudasai", title: "てください", headlineEnglish: "please do", orderIndex: 16 },
+  { id: "n5-hou-ga-ii-1", title: "ほうがいい (advice)", headlineEnglish: "had better", orderIndex: 17 },
+  { id: "n5-hou-ga-ii-2", title: "ほうがいい (comparison)", headlineEnglish: "better to", orderIndex: 18 },
+  { id: "n5-suru", title: "する", headlineEnglish: "do", orderIndex: 19 },
+  { id: "n5-da-desu", title: "だ・です", headlineEnglish: "to be", orderIndex: 20 },
+  { id: "n5-te-iru", title: "ている", headlineEnglish: "ongoing action / state", orderIndex: 21 },
+  { id: "n5-te-kara", title: "てから", headlineEnglish: "after doing", orderIndex: 22 },
+  { id: "n5-tai", title: "たい", headlineEnglish: "want to", orderIndex: 23 },
+  { id: "n5-naru", title: "なる", headlineEnglish: "become", orderIndex: 24 },
+  { id: "n5-tsumori", title: "つもり", headlineEnglish: "intend to", orderIndex: 25 },
+  { id: "n5-ni-iku", title: "に行く", headlineEnglish: "go to do", orderIndex: 26 },
+  { id: "n5-ni-suru", title: "にする", headlineEnglish: "decide on", orderIndex: 27 },
+  { id: "n5-ga-aru", title: "がある", headlineEnglish: "there is (inanimate)", orderIndex: 28 },
+  { id: "n5-ga-iru", title: "がいる", headlineEnglish: "there is (animate)", orderIndex: 29 },
+  { id: "n5-ichiban", title: "いちばん", headlineEnglish: "the most", orderIndex: 30 },
+  { id: "n5-kurai", title: "くらい・ぐらい", headlineEnglish: "about; to the extent", orderIndex: 31 },
+  { id: "n5-dake", title: "だけ", headlineEnglish: "only", orderIndex: 32 },
+  { id: "n5-yori-hou-ga", title: "より〜ほうが", headlineEnglish: "more than", orderIndex: 33 },
+  { id: "n5-ta-koto-ga-aru", title: "たことがある", headlineEnglish: "have done before", orderIndex: 34 },
+  { id: "n5-no-1", title: "の (possessive)", headlineEnglish: "possessive", orderIndex: 35 },
+  { id: "n5-no-2", title: "の (nominalizer)", headlineEnglish: "the one who / thing that", orderIndex: 36 },
+  { id: "n5-no-ga-heta", title: "のが下手", headlineEnglish: "bad at", orderIndex: 37 },
+  { id: "n5-no-ga-jouzu", title: "のが上手", headlineEnglish: "good at", orderIndex: 38 },
+  { id: "n5-kara", title: "から", headlineEnglish: "because; from", orderIndex: 39 },
+  { id: "n5-node", title: "ので", headlineEnglish: "because (softer)", orderIndex: 40 },
+  { id: "n5-kedo", title: "けど", headlineEnglish: "but", orderIndex: 41 },
+  { id: "n5-nagara", title: "ながら", headlineEnglish: "while", orderIndex: 42 },
+  { id: "n5-to", title: "と", headlineEnglish: "and; with; when", orderIndex: 43 },
+  { id: "n5-tara", title: "たら", headlineEnglish: "if; when", orderIndex: 44 },
+  { id: "n5-nara", title: "なら", headlineEnglish: "if (given)", orderIndex: 45 },
+  { id: "n5-ba", title: "ば", headlineEnglish: "if (conditional)", orderIndex: 46 },
+  { id: "n5-to-omou", title: "と思う", headlineEnglish: "think that", orderIndex: 47 },
+  { id: "n5-you-da", title: "ようだ", headlineEnglish: "seems like", orderIndex: 48 },
+  { id: "n5-rashii", title: "らしい", headlineEnglish: "seems; I hear", orderIndex: 49 },
+  { id: "n5-sou-da", title: "そうだ", headlineEnglish: "looks like", orderIndex: 50 },
+  { id: "n5-te-shimau", title: "てしまう", headlineEnglish: "end up doing", orderIndex: 51 },
+  { id: "n5-te-aru", title: "てある", headlineEnglish: "has been done (state)", orderIndex: 52 },
+  { id: "n5-te-oku", title: "ておく", headlineEnglish: "do in advance", orderIndex: 53 },
+  { id: "n5-te-miru", title: "てみる", headlineEnglish: "try doing", orderIndex: 54 },
+];

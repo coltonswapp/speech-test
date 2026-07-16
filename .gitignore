@@ -1,0 +1,30 @@
+# Swift Package Manager build output
+.build/
+
+# Xcode user-specific data
+xcuserdata/
+*.xcuserstate
+
+# SPM Xcode integration user data
+.swiftpm/xcuserdata/
+
+# macOS
+.DS_Store
+
+# SQLite WAL sidecars (regenerated when DB is open)
+*.sqlite-wal
+*.sqlite-shm
+
+# JMdict database (generated — run scripts/build_jmdict.py)
+jmdict.sqlite
+data/jmdict.sqlite
+shizen/jmdict.sqlite
+JMdict_e.xml
+JMdict_e.gz
+
+# Webapp build artifacts
+webapp/node_modules/
+webapp/.next/
+
+# Local API keys (copy Secrets.plist.example → Secrets.plist)
+shizen/Secrets.plist

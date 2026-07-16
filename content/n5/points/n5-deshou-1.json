@@ -1,0 +1,29 @@
+{
+  "id": "n5-deshou-1",
+  "orderIndex": 27,
+  "title": "でしょう①",
+  "headlineEnglish": "probably",
+  "blurb": "",
+  "forms": [
+    "でしょう",
+    "だろう"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "雨でしょうね。",
+      "romaji": "ame deshou ne.",
+      "english": "It'll probably rain.",
+      "targetSubstring": "でしょう",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "でしょう①",
+  "shortDefinition": "probably",
+  "reading": "でしょう"
+}

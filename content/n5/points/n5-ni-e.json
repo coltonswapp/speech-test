@@ -1,0 +1,83 @@
+{
+  "id": "n5-ni-e",
+  "usageLadders": [],
+  "status": "draft",
+  "orderIndex": 35,
+  "title": "に・へ",
+  "pattern": "に・へ",
+  "reading": "に",
+  "shortDefinition": "to; toward (direction)",
+  "headlineEnglish": "to (direction/destination)",
+  "blurb": "Both mark direction toward a place. に is everyday; へ sounds a bit more written or directional.",
+  "structure": "Place + に / へ + go/head\n\n空港へ向かう。\nHead for the airport.",
+  "forms": [
+    "に",
+    "へ"
+  ],
+  "formation": [
+    {
+      "title": "Movement toward",
+      "body": "Either particle works with 行く, 向かう, 進む.\n\n北に進む。 / 北へ進む。"
+    }
+  ],
+  "usage": [
+    {
+      "title": "に vs. へ",
+      "body": "For most destinations they're interchangeable with 行く. へ emphasizes \"toward\" — common on signs and in writing."
+    }
+  ],
+  "relatedPointIDs": [
+    "n5-ni"
+  ],
+  "examples": [
+    {
+      "japanese": "空港へ向かう。",
+      "romaji": "kuukou e mukau.",
+      "english": "Head for the airport.",
+      "targetSubstring": "へ",
+      "audioKey": null
+    },
+    {
+      "japanese": "右へ曲がる。",
+      "romaji": "migi e magaru.",
+      "english": "Turn right.",
+      "targetSubstring": "へ",
+      "audioKey": null
+    },
+    {
+      "japanese": "彼の家へ行った。",
+      "romaji": "kare no ie e itta.",
+      "english": "I went to his house.",
+      "targetSubstring": "へ",
+      "audioKey": null
+    },
+    {
+      "japanese": "駅に行く。",
+      "romaji": "eki ni iku.",
+      "english": "Go to the station.",
+      "targetSubstring": "に",
+      "audioKey": null
+    },
+    {
+      "japanese": "先生のところへ行く。",
+      "romaji": "sensei no tokoro e iku.",
+      "english": "Go to the teacher's place.",
+      "targetSubstring": "へ",
+      "audioKey": null
+    }
+  ],
+  "drills": [
+    {
+      "kind": "sentenceChoice",
+      "prompt": "Head for the airport.",
+      "choices": [
+        "空港へ向かう。",
+        "空港で向かう。",
+        "空港を向かう。",
+        "空港は向かう。"
+      ],
+      "correctChoice": "空港へ向かう。"
+    }
+  ],
+  "contrastDrills": []
+}

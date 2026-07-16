@@ -1,0 +1,28 @@
+{
+  "id": "n5-ya",
+  "orderIndex": 53,
+  "title": "や",
+  "headlineEnglish": "and (etc.; non-exhaustive list)",
+  "blurb": "",
+  "forms": [
+    "や"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "鳥や馬が山にいました。",
+      "romaji": "tori ya uma ga yama ni imashita.",
+      "english": "There were birds, horses, and more in the mountains.",
+      "targetSubstring": "や",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "や",
+  "shortDefinition": "and (etc.; non-exhaustive list)",
+  "reading": "や"
+}

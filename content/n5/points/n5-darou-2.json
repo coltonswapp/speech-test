@@ -1,0 +1,29 @@
+{
+  "id": "n5-darou-2",
+  "orderIndex": 20,
+  "title": "だろう②",
+  "headlineEnglish": "isn't it?; right?",
+  "blurb": "",
+  "forms": [
+    "だろう",
+    "でしょう"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "ここがいいだろう。",
+      "romaji": "koko ga ii darou.",
+      "english": "This is good, right?",
+      "targetSubstring": "だろう",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "だろう②",
+  "shortDefinition": "isn't it?; right?",
+  "reading": "だろう"
+}

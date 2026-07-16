@@ -1,0 +1,82 @@
+{
+  "id": "n5-ka-1",
+  "usageLadders": [],
+  "status": "draft",
+  "orderIndex": 6,
+  "title": "か①",
+  "pattern": "か①",
+  "reading": "か",
+  "shortDefinition": "or (between two options)",
+  "headlineEnglish": "or (choice between two options)",
+  "blurb": "Between two nouns, か means \"or\" — pick one.",
+  "structure": "A + か + B\n\nラーメンかうどん？\nRamen or udon?",
+  "forms": [
+    "か"
+  ],
+  "formation": [
+    {
+      "title": "A + か + B",
+      "body": "Put か between the options.\n\n赤か青？\nRed or blue?"
+    }
+  ],
+  "usage": [
+    {
+      "title": "Offering a choice",
+      "body": "Present alternatives and let the listener choose. Often casual — no です needed."
+    }
+  ],
+  "relatedPointIDs": [
+    "n5-ka-2"
+  ],
+  "examples": [
+    {
+      "japanese": "ラーメンかうどん？",
+      "romaji": "raamen ka udon?",
+      "english": "Ramen or udon?",
+      "targetSubstring": "か",
+      "audioKey": null
+    },
+    {
+      "japanese": "赤か青？",
+      "romaji": "aka ka ao?",
+      "english": "Red or blue?",
+      "targetSubstring": "か",
+      "audioKey": null
+    },
+    {
+      "japanese": "週末か来週？",
+      "romaji": "shuumatsu ka raishuu?",
+      "english": "This weekend or next week?",
+      "targetSubstring": "か",
+      "audioKey": null
+    },
+    {
+      "japanese": "ビールかワイン？",
+      "romaji": "biiru ka wain?",
+      "english": "Beer or wine?",
+      "targetSubstring": "か",
+      "audioKey": null
+    },
+    {
+      "japanese": "歩くか走る？",
+      "romaji": "aruku ka hashiru?",
+      "english": "Walk or run?",
+      "targetSubstring": "か",
+      "audioKey": null
+    }
+  ],
+  "drills": [
+    {
+      "kind": "meaningChoice",
+      "exampleJapanese": "ラーメンかうどん？",
+      "choices": [
+        "Ramen or udon?",
+        "Is it ramen?",
+        "Ramen and udon.",
+        "Ramen because of udon."
+      ],
+      "correctChoice": "Ramen or udon?"
+    }
+  ],
+  "contrastDrills": []
+}

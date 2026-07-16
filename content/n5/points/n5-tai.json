@@ -1,0 +1,30 @@
+{
+  "id": "n5-tai",
+  "orderIndex": 16,
+  "title": "たい",
+  "headlineEnglish": "want to",
+  "blurb": "",
+  "forms": [
+    "たい",
+    "たいです",
+    "たくない"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "何食べたい？",
+      "romaji": "nani tabetai?",
+      "english": "What do you want to eat?",
+      "targetSubstring": "たい",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "たい",
+  "shortDefinition": "want to",
+  "reading": "たい"
+}

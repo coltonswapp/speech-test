@@ -1,0 +1,94 @@
+{
+  "id": "n5-ga-2",
+  "usageLadders": [],
+  "status": "draft",
+  "orderIndex": 5,
+  "title": "が②",
+  "pattern": "が②",
+  "reading": "が",
+  "shortDefinition": "but; however",
+  "headlineEnglish": "but; however",
+  "blurb": "Between two ideas, が means \"but\" — a touch more formal than けど.",
+  "structure": "Clause + が + clause\n\n忙しいが、楽しみだ。\nI'm busy, but I'm looking forward to it.",
+  "forms": [
+    "が"
+  ],
+  "formation": [
+    {
+      "title": "Clause + が + clause",
+      "body": "Link contrasting ideas with が.\n\n遠いが、行きたい。\nIt's far, but I want to go."
+    }
+  ],
+  "usage": [
+    {
+      "title": "Soft contrast",
+      "body": "The first part admits a downside; the second part is what you really want to say."
+    }
+  ],
+  "relatedPointIDs": [
+    "n5-ga-1",
+    "n5-kedo"
+  ],
+  "examples": [
+    {
+      "japanese": "難しいが、楽しい。",
+      "romaji": "muzukashii ga, tanoshii.",
+      "english": "It's difficult, but fun.",
+      "targetSubstring": "が",
+      "audioKey": null
+    },
+    {
+      "japanese": "忙しいが、楽しみだ。",
+      "romaji": "isogashii ga, tanoshimi da.",
+      "english": "I'm busy, but I'm looking forward to it.",
+      "targetSubstring": "が",
+      "audioKey": null
+    },
+    {
+      "japanese": "遠いが、行きたい。",
+      "romaji": "tooi ga, ikitai.",
+      "english": "It's far, but I want to go.",
+      "targetSubstring": "が",
+      "audioKey": null
+    },
+    {
+      "japanese": "高いが、買う。",
+      "romaji": "takai ga, kau.",
+      "english": "It's expensive, but I'll buy it.",
+      "targetSubstring": "が",
+      "audioKey": null
+    },
+    {
+      "japanese": "雨だが、出かける。",
+      "romaji": "ame da ga, dekakeru.",
+      "english": "It's raining, but I'm heading out.",
+      "targetSubstring": "が",
+      "audioKey": null
+    }
+  ],
+  "drills": [
+    {
+      "kind": "meaningChoice",
+      "exampleJapanese": "難しいが、楽しい。",
+      "choices": [
+        "It's difficult, but fun.",
+        "It's difficult and fun.",
+        "It's difficult, so it's fun.",
+        "It's difficult, isn't it fun?"
+      ],
+      "correctChoice": "It's difficult, but fun."
+    },
+    {
+      "kind": "sentenceChoice",
+      "prompt": "It's expensive, but I'll buy it.",
+      "choices": [
+        "高いが、買う。",
+        "高いから、買う。",
+        "高いけど、買わない。",
+        "高いは、買う。"
+      ],
+      "correctChoice": "高いが、買う。"
+    }
+  ],
+  "contrastDrills": []
+}

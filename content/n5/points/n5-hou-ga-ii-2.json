@@ -1,0 +1,29 @@
+{
+  "id": "n5-hou-ga-ii-2",
+  "orderIndex": 47,
+  "title": "ほうがいい②",
+  "headlineEnglish": "it'd be better not to",
+  "blurb": "",
+  "forms": [
+    "ないほうがいい",
+    "ないほうがいいです"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "そのことを言わないほうがいいかもしれない。",
+      "romaji": "sono koto o iwanai hou ga ii kamoshirenai.",
+      "english": "It might be better not to say that.",
+      "targetSubstring": "ないほうがいい",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "ほうがいい②",
+  "shortDefinition": "it'd be better not to",
+  "reading": "ないほうがいい"
+}

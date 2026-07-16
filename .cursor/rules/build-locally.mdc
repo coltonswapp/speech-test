@@ -1,0 +1,12 @@
+---
+description: User runs builds; agent does not invoke Xcode/SPM build commands
+alwaysApply: true
+---
+
+# Builds: user only
+
+- Do **not** run `xcodebuild`, `swift build`, `swift test`, or other build/compile commands in this project unless the user explicitly asks for a one-off run in that turn.
+- Do **not** run package resolution or dependency-fetch commands (`xcodebuild -resolvePackageDependencies`, etc.) to verify the project; the user handles Xcode/SPM locally.
+- It is fine to **suggest** build steps or `xcodebuild` invocations as documentation when debugging, but default to: **you build in Xcode; the agent implements and stops short of building.**
+
+If the user does ask you to run a build, you may do so in that case only.

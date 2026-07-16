@@ -1,0 +1,105 @@
+{
+  "id": "n5-de-1",
+  "usageLadders": [],
+  "status": "draft",
+  "orderIndex": 22,
+  "title": "で①",
+  "pattern": "で①",
+  "reading": "で",
+  "shortDefinition": "at; in (place of action)",
+  "headlineEnglish": "at; in (location of action)",
+  "blurb": "Marks where an action happens — not where you're headed (that's に).",
+  "structure": "Place + で + action\n\n図書館で本を読む。\nRead a book at the library.",
+  "forms": [
+    "で"
+  ],
+  "formation": [
+    {
+      "title": "Place + で + verb",
+      "body": "Attach で to the location of the action.\n\n海で泳ぐ。\nSwim at the sea."
+    }
+  ],
+  "usage": [
+    {
+      "title": "Stage vs. destination",
+      "body": "駅に行く = go to the station. 駅で待つ = wait at the station."
+    }
+  ],
+  "relatedPointIDs": [
+    "n5-ni",
+    "n5-de-2"
+  ],
+  "examples": [
+    {
+      "japanese": "レストランで会う。",
+      "romaji": "resutoran de au.",
+      "english": "Meet at a restaurant.",
+      "targetSubstring": "で",
+      "audioKey": null
+    },
+    {
+      "japanese": "図書館で本を読む。",
+      "romaji": "toshokan de hon o yomu.",
+      "english": "Read a book at the library.",
+      "targetSubstring": "で",
+      "audioKey": null
+    },
+    {
+      "japanese": "台所で料理する。",
+      "romaji": "daidokoro de ryouri suru.",
+      "english": "Cook in the kitchen.",
+      "targetSubstring": "で",
+      "audioKey": null
+    },
+    {
+      "japanese": "海で泳ぐ。",
+      "romaji": "umi de oyogu.",
+      "english": "Swim in the ocean.",
+      "targetSubstring": "で",
+      "audioKey": null
+    },
+    {
+      "japanese": "オフィスで働く。",
+      "romaji": "ofisu de hataraku.",
+      "english": "Work at the office.",
+      "targetSubstring": "で",
+      "audioKey": null
+    }
+  ],
+  "drills": [
+    {
+      "kind": "precursorChoice",
+      "instruction": "Select the correct particle.",
+      "exampleJapanese": "学校___勉強する。",
+      "targetSubstring": "で",
+      "english": "Study at school.",
+      "choices": [
+        "で",
+        "に",
+        "を",
+        "は"
+      ],
+      "correctChoice": "で"
+    },
+    {
+      "kind": "contrastChoice",
+      "contrastLabel": "Destination vs. place of action",
+      "choices": [
+        "学校に行く",
+        "学校で勉強する"
+      ],
+      "correctChoice": "学校で勉強する"
+    }
+  ],
+  "contrastDrills": [
+    {
+      "contrastLabel": "Destination vs. place of action",
+      "choices": [
+        "学校に行く",
+        "学校で勉強する"
+      ],
+      "correctChoice": "学校で勉強する",
+      "ruleTargeted": null
+    }
+  ]
+}

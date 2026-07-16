@@ -1,0 +1,323 @@
+{
+  "points": [
+    {
+      "id": "n5-cha-ikenai",
+      "orderIndex": 0,
+      "title": "ちゃいけない・じゃいけない",
+      "headlineEnglish": "must not; may not (casual)",
+      "blurb": "Japanese has several ways to tell someone they shouldn't do something — from a parent scolding a child to a formal workplace rule. This lesson covers the casual, spoken end: the kind you'd hear from a friend, a parent, or in everyday conversation. You'll recognize it when someone sets a boundary and know when to say \"you shouldn't\" versus \"you must not.\"",
+      "forms": ["ちゃいけない", "じゃいけない", "ちゃダメ", "じゃダメ"],
+      "formation": [
+        {
+          "title": "Build from the て-form",
+          "body": "Take the verb's て-form and drop て. Add ちゃ or じゃ, then いけない or ダメ.\n\nたべる → たべて → たべちゃ + いけない"
+        },
+        {
+          "title": "ちゃ vs じゃ",
+          "body": "If the て-form ends in で, use じゃ instead of ちゃ.\n\nのむ → のんで → のんじゃ + いけない"
+        }
+      ],
+      "usage": [],
+      "usageLadders": [
+        {
+          "label": "eat",
+          "levels": [
+            { "japanese": "食べちゃダメ", "register": "Everyday" },
+            { "japanese": "食べちゃいけない", "register": "Casual" },
+            { "japanese": "食べてはいけません", "register": "Formal" }
+          ]
+        },
+        {
+          "label": "drink",
+          "levels": [
+            { "japanese": "飲んじゃダメ", "register": "Everyday" },
+            { "japanese": "飲んじゃいけない", "register": "Casual" },
+            { "japanese": "飲んではいけません", "register": "Formal" }
+          ]
+        },
+        {
+          "label": "say",
+          "levels": [
+            { "japanese": "言っちゃダメ", "register": "Everyday" },
+            { "japanese": "言っちゃいけない", "register": "Casual" },
+            { "japanese": "言ってはいけません", "register": "Formal" }
+          ]
+        }
+      ],
+      "relatedPointIDs": ["n5-te-wa-ikenai"],
+      "examples": [
+        {
+          "japanese": "寝る前にスマホを見ちゃいけない。",
+          "romaji": "neru mae ni sumaho o micha ikenai.",
+          "english": "You shouldn't look at your smartphone before going to bed.",
+          "targetSubstring": "見ちゃいけない"
+        },
+        {
+          "japanese": "寝る前にスマホを見ちゃダメよ。",
+          "romaji": "neru mae ni sumaho o micha dame yo.",
+          "english": "You shouldn't look at your smartphone before going to bed.",
+          "targetSubstring": "見ちゃダメ"
+        },
+        {
+          "japanese": "ここはきけんなので、入っちゃダメだよ。",
+          "romaji": "koko wa kiken na node, haiccha dame da yo.",
+          "english": "This area is dangerous, so you're not allowed to enter.",
+          "targetSubstring": "入っちゃダメ"
+        },
+        {
+          "japanese": "やっちゃいけないことをやっちゃった。",
+          "romaji": "yaccha ikenai koto o yacchatta.",
+          "english": "I did something I shouldn't have...",
+          "targetSubstring": "やっちゃいけない"
+        },
+        {
+          "japanese": "２０歳未満の人はお酒を飲んじゃいけません。",
+          "romaji": "hatachi miman no hito wa osake o nonja ikemasen.",
+          "english": "People under 20 cannot drink alcohol.",
+          "targetSubstring": "飲んじゃいけません"
+        }
+      ],
+      "drills": [
+        {
+          "kind": "precursorChoice",
+          "instruction": "Select the missing component to make this sentence whole.",
+          "exampleJapanese": "寝る前にスマホを見ちゃいけない。",
+          "targetSubstring": "見ちゃ",
+          "english": "You shouldn't look at your smartphone before going to bed.",
+          "choices": ["みちゃ", "みて", "みる", "みました"],
+          "correctChoice": "みちゃ"
+        },
+        {
+          "kind": "formChoice",
+          "instruction": "Pick the correct casual prohibition form.",
+          "prompt": "たべる (to eat)",
+          "choices": ["たべちゃいけない", "たべじゃいけない", "たべていけません", "たべないで"],
+          "correctChoice": "たべちゃいけない"
+        },
+        {
+          "kind": "formChoice",
+          "prompt": "のむ (to drink)",
+          "choices": ["のんじゃいけない", "のんちゃいけない", "のんではいけません", "のんじゃダメ"],
+          "correctChoice": "のんじゃいけない"
+        },
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "野菜を食べるまでデザートを食べちゃいけないよ。",
+          "choices": [
+            "No dessert until you eat your vegetables.",
+            "You may eat dessert before vegetables.",
+            "Vegetables are dessert.",
+            "Eat dessert first."
+          ],
+          "correctChoice": "No dessert until you eat your vegetables."
+        },
+        {
+          "kind": "sentenceBuilder",
+          "english": "Don't eat that.",
+          "buildComponents": ["それを", "食べちゃ", "いけない"],
+          "choices": ["それを", "食べちゃ", "いけない", "それに", "食べて", "よ"],
+          "correctChoice": "それを食べちゃいけない"
+        },
+        {
+          "kind": "contrastChoice",
+          "contrastLabel": "のむ → のんで → ?",
+          "choices": ["のんちゃ", "のんじゃ"],
+          "correctChoice": "のんじゃ"
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "You shouldn't skip class so much.",
+          "choices": [
+            "そんなに授業をさぼっちゃダメよ。",
+            "そんなに授業をさぼってもいいよ。",
+            "授業をさぼりたいですか。",
+            "授業は楽しいです。"
+          ],
+          "correctChoice": "そんなに授業をさぼっちゃダメよ。"
+        }
+      ]
+    },
+    {
+      "id": "n5-te-wa-ikenai",
+      "orderIndex": 1,
+      "title": "てはいけない",
+      "headlineEnglish": "must not; may not (standard)",
+      "forms": ["てはいけない", "ではいけない", "てはいけません"],
+      "formation": [
+        {
+          "title": "て-form + はいけない",
+          "body": "Attach はいけない to the verb's て-form.\n\nかく → かいて → かいてはいけない"
+        },
+        {
+          "title": "では for で",
+          "body": "When the て-form is で, は often becomes では.\n\nのむ → のんで → のんではいけない"
+        }
+      ],
+      "usage": [
+        {
+          "title": "Standard prohibition",
+          "body": "Neutral-to-formal \"must not.\" Common in rules, instructions, and textbooks."
+        },
+        {
+          "title": "Compared to ちゃいけない",
+          "body": "Same meaning as ちゃいけない, but less casual. Use てはいけない in writing and polite speech."
+        }
+      ],
+      "relatedPointIDs": ["n5-cha-ikenai"],
+      "examples": [
+        {
+          "japanese": "ここで写真を撮ってはいけません。",
+          "romaji": "koko de shashin o totte wa ikemasen.",
+          "english": "You must not take photos here.",
+          "targetSubstring": "撮ってはいけません"
+        },
+        {
+          "japanese": "廊下を走ってはいけない。",
+          "romaji": "rouka o hashitte wa ikenai.",
+          "english": "You must not run in the hallway.",
+          "targetSubstring": "走ってはいけない"
+        },
+        {
+          "japanese": "宿題を忘れてはいけません。",
+          "romaji": "shukudai o wasurete wa ikemasen.",
+          "english": "You must not forget your homework.",
+          "targetSubstring": "忘れてはいけません"
+        }
+      ],
+      "drills": [
+        {
+          "kind": "formChoice",
+          "prompt": "かく (to write)",
+          "choices": ["かいてはいけません", "かいてちゃいけない", "かくてはいけません", "かいてもいい"],
+          "correctChoice": "かいてはいけません"
+        },
+        {
+          "kind": "formChoice",
+          "prompt": "のむ (to drink)",
+          "choices": ["のんではいけません", "のんじゃいけない", "のんではいけない", "のんでもいい"],
+          "correctChoice": "のんではいけません"
+        },
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "ここでタバコを吸ってはいけません。",
+          "choices": [
+            "Smoking is not allowed here.",
+            "Please smoke here.",
+            "Smoking is encouraged here.",
+            "I want a cigarette."
+          ],
+          "correctChoice": "Smoking is not allowed here."
+        },
+        {
+          "kind": "sentenceBuilder",
+          "english": "Don't go there.",
+          "buildComponents": ["そこに", "行って", "はいけない"],
+          "choices": ["そこに", "行って", "はいけない", "そこを", "行っちゃ", "よ"],
+          "correctChoice": "そこに行ってはいけない"
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "You must not take photos here.",
+          "choices": [
+            "ここで写真を撮ってはいけません。",
+            "ここで写真を撮ってもいいです。",
+            "ここで写真を撮りましょう。",
+            "写真が好きです。"
+          ],
+          "correctChoice": "ここで写真を撮ってはいけません。"
+        }
+      ]
+    },
+    {
+      "id": "n5-nakucha",
+      "orderIndex": 2,
+      "title": "なくちゃ",
+      "headlineEnglish": "have to; must (casual)",
+      "forms": ["なくちゃ", "なきゃ", "なくちゃいけない", "なきゃいけない"],
+      "formation": [
+        {
+          "title": "From the negative ない-stem",
+          "body": "Take the verb's negative stem (ない-form without ない) and add ちゃ or きゃ.\n\nいく → いかない → いかなくちゃ"
+        },
+        {
+          "title": "Short forms",
+          "body": "なくちゃ and なきゃ often stand alone as \"gotta / have to.\" You can add いけない for emphasis."
+        }
+      ],
+      "usage": [
+        {
+          "title": "Casual obligation",
+          "body": "Spoken shorthand for なければならない. Used with friends and family."
+        },
+        {
+          "title": "Compared to なければならない",
+          "body": "Same obligation meaning, but なくちゃ is informal. Avoid in formal writing."
+        }
+      ],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "もう行かなくちゃ。",
+          "romaji": "mou ikanakucha.",
+          "english": "I have to go already.",
+          "targetSubstring": "行かなくちゃ"
+        },
+        {
+          "japanese": "薬を飲まなくちゃいけない。",
+          "romaji": "kusuri o nomanakucha ikenai.",
+          "english": "I have to take my medicine.",
+          "targetSubstring": "飲まなくちゃ"
+        },
+        {
+          "japanese": "早く寝なきゃ。",
+          "romaji": "hayaku ne nakya.",
+          "english": "I gotta sleep early.",
+          "targetSubstring": "寝なきゃ"
+        }
+      ],
+      "drills": [
+        {
+          "kind": "formChoice",
+          "prompt": "いく (to go)",
+          "choices": ["いかなくちゃ", "いってなくちゃ", "いきなくちゃ", "いかないちゃ"],
+          "correctChoice": "いかなくちゃ"
+        },
+        {
+          "kind": "formChoice",
+          "prompt": "のむ (to drink)",
+          "choices": ["のまなくちゃ", "のんでなくちゃ", "のみなくちゃ", "のまないちゃ"],
+          "correctChoice": "のまなくちゃ"
+        },
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "もう行かなくちゃ。",
+          "choices": [
+            "I have to go already.",
+            "I must not go.",
+            "I went already.",
+            "I want to stay."
+          ],
+          "correctChoice": "I have to go already."
+        },
+        {
+          "kind": "sentenceBuilder",
+          "english": "I gotta eat.",
+          "buildComponents": ["食べ", "なくちゃ"],
+          "choices": ["食べ", "なくちゃ", "食べて", "ない", "よ", "いけない"],
+          "correctChoice": "食べなくちゃ"
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "I gotta sleep early.",
+          "choices": [
+            "早く寝なきゃ。",
+            "早く寝ちゃダメ。",
+            "早く寝ました。",
+            "早く起きなきゃ。"
+          ],
+          "correctChoice": "早く寝なきゃ。"
+        }
+      ]
+    }
+  ]
+}

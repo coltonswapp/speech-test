@@ -1,0 +1,29 @@
+{
+  "id": "n5-ni-suru",
+  "orderIndex": 38,
+  "title": "にする",
+  "headlineEnglish": "to decide on",
+  "blurb": "",
+  "forms": [
+    "にする",
+    "にします"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "この音楽にする。",
+      "romaji": "kono ongaku ni suru.",
+      "english": "I'll go with this music.",
+      "targetSubstring": "にする",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "にする",
+  "shortDefinition": "to decide on",
+  "reading": "にする"
+}

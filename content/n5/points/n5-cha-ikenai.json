@@ -1,0 +1,494 @@
+{
+  "blurb": "Japanese has several ways to tell someone they shouldn't do something — from a parent scolding a child to a formal workplace rule. This lesson covers the casual, spoken end: the kind you'd hear from a friend, a parent, or in everyday conversation. You'll recognize it when someone sets a boundary and know when to say \"you shouldn't\" versus \"you must not.\"",
+  "drills": [
+    {
+      "choices": [
+        "みちゃ",
+        "みて",
+        "みる",
+        "みました"
+      ],
+      "correctChoice": "みちゃ",
+      "english": "You shouldn't look at your smartphone before going to bed.",
+      "exampleJapanese": "寝る前にスマホを見ちゃいけない。",
+      "instruction": "Select the missing component to make this sentence whole.",
+      "kind": "precursorChoice",
+      "targetSubstring": "見ちゃ"
+    },
+    {
+      "choices": [
+        "たべちゃいけない",
+        "たべじゃいけない",
+        "たべていけません",
+        "たべないで"
+      ],
+      "correctChoice": "たべちゃいけない",
+      "instruction": "Pick the correct casual prohibition form.",
+      "kind": "formChoice",
+      "prompt": "たべる (to eat)"
+    },
+    {
+      "choices": [
+        "のんじゃいけない",
+        "のんちゃいけない",
+        "のんではいけません",
+        "のんじゃダメ"
+      ],
+      "correctChoice": "のんじゃいけない",
+      "kind": "formChoice",
+      "prompt": "のむ (to drink)"
+    },
+    {
+      "choices": [
+        "No dessert until you eat your vegetables.",
+        "You may eat dessert before vegetables.",
+        "Vegetables are dessert.",
+        "Eat dessert first."
+      ],
+      "correctChoice": "No dessert until you eat your vegetables.",
+      "exampleJapanese": "野菜を食べるまでデザートを食べちゃいけないよ。",
+      "kind": "meaningChoice"
+    },
+    {
+      "buildComponents": [
+        "それを",
+        "食べちゃ",
+        "いけない"
+      ],
+      "choices": [
+        "それを",
+        "食べちゃ",
+        "いけない",
+        "それに",
+        "食べて",
+        "よ"
+      ],
+      "correctChoice": "それを食べちゃいけない",
+      "english": "Don't eat that.",
+      "kind": "sentenceBuilder"
+    },
+    {
+      "choices": [
+        "のんちゃ",
+        "のんじゃ"
+      ],
+      "contrastLabel": "のむ → のんで → ?",
+      "correctChoice": "のんじゃ",
+      "kind": "contrastChoice"
+    },
+    {
+      "choices": [
+        "そんなに授業をさぼっちゃダメよ。",
+        "そんなに授業をさぼってもいいよ。",
+        "授業をさぼりたいですか。",
+        "授業は楽しいです。"
+      ],
+      "correctChoice": "そんなに授業をさぼっちゃダメよ。",
+      "kind": "sentenceChoice",
+      "prompt": "You shouldn't skip class so much."
+    }
+  ],
+  "examples": [
+    {
+      "audioKey": "n5-cha-ikenai/ex-0-scenario",
+      "english": "You shouldn't look at your smartphone before going to bed.",
+      "japanese": "寝る前にスマホを見ちゃいけない。",
+      "romaji": "neru mae ni sumaho o micha ikenai.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "Can I look at my phone for just five more minutes?",
+            "japanese": "あと5分だけスマホ見ていい？",
+            "romaji": "ato go-fun dake sumaho mite ii?",
+            "speaker": "Child"
+          },
+          {
+            "english": "No — it's already late.",
+            "japanese": "だめよ。もう遅いでしょ。",
+            "romaji": "dame yo. mou osoi desho.",
+            "speaker": "Parent"
+          },
+          {
+            "speaker": "Parent",
+            "japanese": "寝る前にスマホを見ちゃいけない。",
+            "romaji": "neru mae ni sumaho o micha ikenai.",
+            "english": "You shouldn't look at your smartphone before going to bed."
+          }
+        ],
+        "setting": "At home — a parent and child settle in before bed."
+      },
+      "targetSubstring": "見ちゃいけない"
+    },
+    {
+      "audioKey": "n5-cha-ikenai/ex-1-scenario",
+      "english": "You shouldn't look at your smartphone before going to bed.",
+      "japanese": "寝る前にスマホを見ちゃダメよ。",
+      "romaji": "neru mae ni sumaho o micha dame yo.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "Hey, I just want to check it one more time.",
+            "japanese": "ねえ、もう一回だけ見たい。",
+            "romaji": "nee, mou ikkai dake mitai.",
+            "speaker": "Child"
+          },
+          {
+            "english": "It's late — you're still on your phone?",
+            "japanese": "もう遅いのに、まだスマホ？",
+            "romaji": "mou osoi noni, mada sumaho?",
+            "speaker": "Parent"
+          },
+          {
+            "speaker": "Parent",
+            "japanese": "寝る前にスマホを見ちゃダメよ。",
+            "romaji": "neru mae ni sumaho o micha dame yo.",
+            "english": "You shouldn't look at your smartphone before going to bed."
+          }
+        ],
+        "setting": "Same bedtime scene — a softer, everyday warning."
+      },
+      "targetSubstring": "見ちゃダメ"
+    },
+    {
+      "audioKey": "n5-cha-ikenai/ex-2-scenario",
+      "english": "Looks like we're not supposed to go in.",
+      "japanese": "入っちゃだめみたいよ。",
+      "romaji": "haiccha dame mitai yo.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "Hey, wanna go in over there?",
+            "japanese": "ねえ、あそこ入っていこうか？",
+            "romaji": "nee, asoko haitte ikou ka?",
+            "speaker": "A"
+          },
+          {
+            "english": "Nah — there's a fence, right?",
+            "japanese": "いや、ちょっと柵があるでしょ。",
+            "romaji": "iya, chotto saku ga aru desho.",
+            "speaker": "B"
+          },
+          {
+            "speaker": "B",
+            "japanese": "入っちゃだめみたいよ。",
+            "romaji": "haiccha dame mitai yo.",
+            "english": "Looks like we're not supposed to go in."
+          }
+        ],
+        "setting": "Two friends at a hot spring town spot a roped-off steaming pool."
+      },
+      "targetSubstring": "入っちゃだめ"
+    },
+    {
+      "english": "I did something I shouldn't have...",
+      "japanese": "やっちゃいけないことをやっちゃった。",
+      "romaji": "yaccha ikenai koto o yacchatta.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "What's wrong? You don't look so good.",
+            "japanese": "どうしたの？元気ないね。",
+            "romaji": "doushita no? genki nai ne.",
+            "speaker": "Friend"
+          },
+          {
+            "english": "Yeah… I got yelled at by the teacher.",
+            "japanese": "うん…先生に怒られちゃって。",
+            "romaji": "un… sensei ni okorarechatte.",
+            "speaker": "Student"
+          },
+          {
+            "speaker": "Student",
+            "japanese": "やっちゃいけないことをやっちゃった。",
+            "romaji": "yaccha ikenai koto o yacchatta.",
+            "english": "I did something I shouldn't have..."
+          }
+        ],
+        "setting": "A student confesses to a friend after breaking a rule."
+      },
+      "targetSubstring": "やっちゃいけない"
+    },
+    {
+      "english": "People under 20 cannot drink alcohol.",
+      "japanese": "20歳未満の人はお酒を飲んじゃいけません。",
+      "romaji": "hatachi miman no hito wa osake o nonja ikemasen.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "Excuse me, this beer, please.",
+            "japanese": "すみません、このビールください。",
+            "romaji": "sumimasen, kono biiru kudasai.",
+            "speaker": "Customer"
+          },
+          {
+            "english": "May I see your ID?",
+            "japanese": "身分証明書、見せてもらえますか。",
+            "romaji": "mibun shoumeisho, misete moraemasu ka.",
+            "speaker": "Clerk"
+          },
+          {
+            "speaker": "Clerk",
+            "japanese": "20歳未満の人はお酒を飲んじゃいけません。",
+            "romaji": "hatachi miman no hito wa osake o nonja ikemasen.",
+            "english": "People under 20 cannot drink alcohol."
+          }
+        ],
+        "setting": "A clerk checks ID at a convenience store register."
+      },
+      "targetSubstring": "飲んじゃいけません"
+    },
+    {
+      "audioKey": "n5-cha-ikenai/dialogue-8-lines",
+      "english": "You have to throw away your trash before returning your books.",
+      "japanese": "本を返す前にゴミも捨てちゃいけないからね。",
+      "romaji": "hon o kaesu mae ni gomi mo sutecha ikenai kara ne.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "Hey, do you still have homework?",
+            "japanese": "ねえ、まだ宿題ある？",
+            "romaji": "nee, mada shukudai aru?",
+            "speaker": "Yui"
+          },
+          {
+            "english": "Yeah — math and English. Quite a bit left.",
+            "japanese": "うん、数学と英語。結構残ってる。",
+            "romaji": "un, suugaku to eigo. kekkou nokotteru.",
+            "speaker": "Ken"
+          },
+          {
+            "english": "That's rough. Is it okay to work here?",
+            "japanese": "大変だね。ここでやっていい？",
+            "romaji": "taihen da ne. koko de yatte ii?",
+            "speaker": "Yui"
+          },
+          {
+            "english": "Sure, it's quiet. But keep your drinks outside.",
+            "japanese": "うん、静かだし。でも飲み物は外に置いときなよ。",
+            "romaji": "un, shizuka da shi. demo nomimono wa soto ni oito ki na yo.",
+            "speaker": "Ken"
+          },
+          {
+            "english": "Oh — I brought my cup in.",
+            "japanese": "あ、コップ持ってきちゃった。",
+            "romaji": "a, koppu motte kichatta.",
+            "speaker": "Yui"
+          },
+          {
+            "english": "You can't bring food or drinks into the library.",
+            "japanese": "図書館では食べ物も飲み物も持ち込んじゃダメだよ。",
+            "romaji": "toshokan de wa tabemono mo nomimono mo mochikomu ja dame da yo.",
+            "speaker": "Ken"
+          },
+          {
+            "english": "Sorry — I'll put it away now.",
+            "japanese": "ごめん、今から片付ける。",
+            "romaji": "gomen, ima kara katazukeru.",
+            "speaker": "Yui"
+          },
+          {
+            "speaker": "Ken",
+            "japanese": "本を返す前にゴミも捨てちゃいけないからね。",
+            "romaji": "hon o kaesu mae ni gomi mo sutecha ikenai kara ne.",
+            "english": "You have to throw away your trash before returning your books."
+          }
+        ],
+        "setting": "After school — two friends study at the library."
+      },
+      "targetSubstring": "捨てちゃいけない"
+    },
+    {
+      "audioKey": "n5-cha-ikenai/dialogue-15-lines",
+      "english": "You have to take your trash with you before getting out of the car.",
+      "japanese": "車を降りる前にゴミも持って帰らなきゃいけないんだよ。",
+      "romaji": "kuruma o oriru mae ni gomi mo motte kaeranakya ikenai n da yo.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "How much longer?",
+            "japanese": "まだ何時間かかるの？",
+            "romaji": "mada nan jikan kakaru no?",
+            "speaker": "Mai"
+          },
+          {
+            "english": "About another hour.",
+            "japanese": "あと一時間くらいだよ。",
+            "romaji": "ato ichi jikan kurai da yo.",
+            "speaker": "Dad"
+          },
+          {
+            "english": "I'm tired. Can I listen to music?",
+            "japanese": "疲れた。音楽聴いていい？",
+            "romaji": "tsukareta. ongaku kiite ii?",
+            "speaker": "Riku"
+          },
+          {
+            "english": "Sure — but don't play it too loud.",
+            "japanese": "いいよ。でも大きい声は出しちゃダメね。",
+            "romaji": "ii yo. demo ookii koe wa dashicha dame ne.",
+            "speaker": "Mom"
+          },
+          {
+            "english": "Hey, can I stick my hand out the window?",
+            "japanese": "ねえ、窓から手出していい？",
+            "romaji": "nee, mado kara te dashite ii?",
+            "speaker": "Mai"
+          },
+          {
+            "english": "No way — that's dangerous.",
+            "japanese": "危ないよ。絶対だめ。",
+            "romaji": "abunai yo. zettai dame.",
+            "speaker": "Dad"
+          },
+          {
+            "english": "I'm hungry. Can I eat a snack?",
+            "japanese": "お腹すいた。スナック食べていい？",
+            "romaji": "onaka suita. sunakku tabete ii?",
+            "speaker": "Riku"
+          },
+          {
+            "english": "Okay, but no messy snacks in the car.",
+            "japanese": "うん、でも車の中で粉が出るやつは食べちゃダメよ。",
+            "romaji": "un, demo kuruma no naka de kona ga deru yatsu wa tabecha dame yo.",
+            "speaker": "Mom"
+          },
+          {
+            "english": "Is chocolate okay?",
+            "japanese": "チョコなら大丈夫？",
+            "romaji": "choko nara daijoubu?",
+            "speaker": "Mai"
+          },
+          {
+            "english": "Yeah, that should be fine.",
+            "japanese": "うん、それならいいよ。",
+            "romaji": "un, sore nara ii yo.",
+            "speaker": "Mom"
+          },
+          {
+            "english": "Hey, can I watch a video?",
+            "japanese": "ねえ、動画見ていい？",
+            "romaji": "nee, douga mite ii?",
+            "speaker": "Riku"
+          },
+          {
+            "english": "Sure — just don't forget your headphones.",
+            "japanese": "いいけど、ヘッドホン忘れないで。",
+            "romaji": "ii kedo, heddohon wasurenai de.",
+            "speaker": "Dad"
+          },
+          {
+            "english": "Oh — I unplugged the cable.",
+            "japanese": "あ、ケーブル外しちゃった。",
+            "romaji": "a, keeburu hazushichatta.",
+            "speaker": "Mai"
+          },
+          {
+            "english": "See? That's why I said don't make a mess.",
+            "japanese": "だから散らかしちゃダメって言ったでしょ。",
+            "romaji": "dakara chirakashicha dame tte itta desho.",
+            "speaker": "Mom"
+          },
+          {
+            "speaker": "Dad",
+            "japanese": "車を降りる前にゴミも持って帰らなきゃいけないんだよ。",
+            "romaji": "kuruma o oriru mae ni gomi mo motte kaeranakya ikenai n da yo.",
+            "english": "You have to take your trash with you before getting out of the car."
+          }
+        ],
+        "setting": "A family road trip — siblings in the back seat."
+      },
+      "targetSubstring": "持って帰らなきゃいけない"
+    }
+  ],
+  "formation": [
+    {
+      "body": "Take the verb's て-form and drop て. Add ちゃ or じゃ, then いけない or ダメ.\n\nたべる → たべて → たべちゃ + いけない",
+      "title": "Build from the て-form"
+    },
+    {
+      "body": "If the て-form ends in で, use じゃ instead of ちゃ.\n\nのむ → のんで → のんじゃ + いけない",
+      "title": "ちゃ vs じゃ"
+    }
+  ],
+  "forms": [
+    "ちゃいけない",
+    "じゃいけない",
+    "ちゃダメ",
+    "じゃダメ"
+  ],
+  "headlineEnglish": "must not; may not (casual)",
+  "id": "n5-cha-ikenai",
+  "orderIndex": 0,
+  "relatedPointIDs": [],
+  "status": "approved",
+  "title": "ちゃいけない・じゃいけない",
+  "usageLadders": [
+    {
+      "label": "eat",
+      "levels": [
+        {
+          "japanese": "食べちゃダメ",
+          "register": "Everyday"
+        },
+        {
+          "japanese": "食べちゃいけない",
+          "register": "Casual"
+        },
+        {
+          "japanese": "食べてはいけません",
+          "register": "Formal"
+        }
+      ]
+    },
+    {
+      "label": "drink",
+      "levels": [
+        {
+          "japanese": "飲んじゃダメ",
+          "register": "Everyday"
+        },
+        {
+          "japanese": "飲んじゃいけない",
+          "register": "Casual"
+        },
+        {
+          "japanese": "飲んではいけません",
+          "register": "Formal"
+        }
+      ]
+    },
+    {
+      "label": "say",
+      "levels": [
+        {
+          "japanese": "言っちゃダメ",
+          "register": "Everyday"
+        },
+        {
+          "japanese": "言っちゃいけない",
+          "register": "Casual"
+        },
+        {
+          "japanese": "言ってはいけません",
+          "register": "Formal"
+        }
+      ]
+    }
+  ],
+  "pattern": "ちゃいけない・じゃいけない",
+  "shortDefinition": "must not; may not (casual)",
+  "reading": "ちゃいけない",
+  "structure": "Take the verb's て-form and drop て. Add ちゃ or じゃ, then いけない or ダメ.\n\nたべる → たべて → たべちゃ + いけない\n\nIf the て-form ends in で, use じゃ instead of ちゃ.\n\nのむ → のんで → のんじゃ + いけない",
+  "register": "casual",
+  "contrastDrills": [
+    {
+      "contrastLabel": "のむ → のんで → ?",
+      "choices": [
+        "のんちゃ",
+        "のんじゃ"
+      ],
+      "correctChoice": "のんじゃ",
+      "ruleTargeted": null
+    }
+  ]
+}

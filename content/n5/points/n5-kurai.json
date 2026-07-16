@@ -1,0 +1,29 @@
+{
+  "id": "n5-kurai",
+  "orderIndex": 12,
+  "title": "くらい・ぐらい",
+  "headlineEnglish": "about; approximately",
+  "blurb": "",
+  "forms": [
+    "くらい",
+    "ぐらい"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "東京まで、３０分くらいです。",
+      "romaji": "toukyou made, sanjuppun kurai desu.",
+      "english": "It's about 30 minutes to Tokyo.",
+      "targetSubstring": "くらい",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "くらい・ぐらい",
+  "shortDefinition": "about; approximately",
+  "reading": "くらい"
+}

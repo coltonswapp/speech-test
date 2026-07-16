@@ -1,0 +1,82 @@
+{
+  "id": "n5-de-2",
+  "usageLadders": [],
+  "status": "draft",
+  "orderIndex": 23,
+  "title": "で②",
+  "pattern": "で②",
+  "reading": "で",
+  "shortDefinition": "with; by (means or tool)",
+  "headlineEnglish": "with; by (means or method)",
+  "blurb": "Marks the tool, vehicle, or method — how you do something.",
+  "structure": "Means + で\n\nペンで書く。\nWrite with a pen.",
+  "forms": [
+    "で"
+  ],
+  "formation": [
+    {
+      "title": "Means + で",
+      "body": "Put で after the tool or method.\n\n自転車で来た。\nI came by bicycle."
+    }
+  ],
+  "usage": [
+    {
+      "title": "How or with what",
+      "body": "Answers \"by what means?\" — bus, chopsticks, Japanese, email."
+    }
+  ],
+  "relatedPointIDs": [
+    "n5-de-1"
+  ],
+  "examples": [
+    {
+      "japanese": "ペンで書く。",
+      "romaji": "pen de kaku.",
+      "english": "Write with a pen.",
+      "targetSubstring": "で",
+      "audioKey": null
+    },
+    {
+      "japanese": "自転車で来た。",
+      "romaji": "jitensha de kita.",
+      "english": "I came by bicycle.",
+      "targetSubstring": "で",
+      "audioKey": null
+    },
+    {
+      "japanese": "ネットで買う。",
+      "romaji": "netto de kau.",
+      "english": "Buy online.",
+      "targetSubstring": "で",
+      "audioKey": null
+    },
+    {
+      "japanese": "左手で持つ。",
+      "romaji": "hidari te de motsu.",
+      "english": "Hold it in your left hand.",
+      "targetSubstring": "で",
+      "audioKey": null
+    },
+    {
+      "japanese": "英語でメールを書く。",
+      "romaji": "eigo de meeru o kaku.",
+      "english": "Write an email in English.",
+      "targetSubstring": "で",
+      "audioKey": null
+    }
+  ],
+  "drills": [
+    {
+      "kind": "meaningChoice",
+      "exampleJapanese": "自転車で来た。",
+      "choices": [
+        "I came by bicycle.",
+        "I came to the bicycle.",
+        "I came at the bicycle.",
+        "I came from the bicycle."
+      ],
+      "correctChoice": "I came by bicycle."
+    }
+  ],
+  "contrastDrills": []
+}

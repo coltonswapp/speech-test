@@ -1,0 +1,28 @@
+{
+  "id": "n5-made",
+  "orderIndex": 50,
+  "title": "まで",
+  "headlineEnglish": "until; till; to; even",
+  "blurb": "",
+  "forms": [
+    "まで"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "駅まで、歩く。",
+      "romaji": "eki made, aruku.",
+      "english": "To walk as far as the station.",
+      "targetSubstring": "まで",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "まで",
+  "shortDefinition": "until; till; to; even",
+  "reading": "まで"
+}

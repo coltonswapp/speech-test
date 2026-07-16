@@ -1,0 +1,210 @@
+{
+  "drills": [
+    {
+      "choices": [
+        "かいてはいけません",
+        "かいてちゃいけない",
+        "かくてはいけません",
+        "かいてもいい"
+      ],
+      "correctChoice": "かいてはいけません",
+      "kind": "formChoice",
+      "prompt": "かく (to write)"
+    },
+    {
+      "choices": [
+        "のんではいけません",
+        "のんじゃいけない",
+        "のんではいけない",
+        "のんでもいい"
+      ],
+      "correctChoice": "のんではいけません",
+      "kind": "formChoice",
+      "prompt": "のむ (to drink)"
+    },
+    {
+      "choices": [
+        "Smoking is not allowed here.",
+        "Please smoke here.",
+        "Smoking is encouraged here.",
+        "I want a cigarette."
+      ],
+      "correctChoice": "Smoking is not allowed here.",
+      "exampleJapanese": "ここでタバコを吸ってはいけません。",
+      "kind": "meaningChoice"
+    },
+    {
+      "buildComponents": [
+        "そこに",
+        "行って",
+        "はいけない"
+      ],
+      "choices": [
+        "そこに",
+        "行って",
+        "はいけない",
+        "そこを",
+        "行っちゃ",
+        "よ"
+      ],
+      "correctChoice": "そこに行ってはいけない",
+      "english": "Don't go there.",
+      "kind": "sentenceBuilder"
+    },
+    {
+      "choices": [
+        "ここで写真を撮ってはいけません。",
+        "ここで写真を撮ってもいいです。",
+        "ここで写真を撮りましょう。",
+        "写真が好きです。"
+      ],
+      "correctChoice": "ここで写真を撮ってはいけません。",
+      "kind": "sentenceChoice",
+      "prompt": "You must not take photos here."
+    }
+  ],
+  "examples": [
+    {
+      "english": "You must not take photos here.",
+      "japanese": "ここで写真を撮ってはいけません。",
+      "romaji": "koko de shashin o totte wa ikemasen.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "Excuse me, is it okay to take photos here?",
+            "japanese": "すみません、ここ写真撮っていいですか。",
+            "romaji": "sumimasen, koko shashin totte ii desu ka.",
+            "speaker": "Visitor"
+          },
+          {
+            "english": "I'm sorry — to protect the exhibits…",
+            "japanese": "申し訳ありません、展示の保護のため…",
+            "romaji": "moushiwake arimasen, tenji no hogo no tame…",
+            "speaker": "Staff"
+          },
+          {
+            "speaker": "Staff",
+            "japanese": "ここで写真を撮ってはいけません。",
+            "romaji": "koko de shashin o totte wa ikemasen.",
+            "english": "You must not take photos here."
+          }
+        ],
+        "setting": "A museum gallery — a visitor raises their phone."
+      },
+      "targetSubstring": "撮ってはいけません"
+    },
+    {
+      "english": "You must not run in the hallway.",
+      "japanese": "廊下を走ってはいけない。",
+      "romaji": "rouka o hashitte wa ikenai.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "Teacher, I'm going to be late!",
+            "japanese": "先生、遅刻しちゃう！",
+            "romaji": "sensei, chikoku shichau!",
+            "speaker": "Student"
+          },
+          {
+            "english": "Wait. Running is…",
+            "japanese": "待って。走るのは…",
+            "romaji": "matte. hashiru no wa…",
+            "speaker": "Teacher"
+          },
+          {
+            "speaker": "Teacher",
+            "japanese": "廊下を走ってはいけない。",
+            "romaji": "rouka o hashitte wa ikenai.",
+            "english": "You must not run in the hallway."
+          }
+        ],
+        "setting": "An elementary school hallway between classes."
+      },
+      "targetSubstring": "走ってはいけない"
+    },
+    {
+      "english": "You must not forget your homework.",
+      "japanese": "宿題を忘れてはいけません。",
+      "romaji": "shukudai o wasurete wa ikemasen.",
+      "scenario": {
+        "lines": [
+          {
+            "english": "What should we bring tomorrow?",
+            "japanese": "明日、何持ってきたらいいですか。",
+            "romaji": "ashita, nani motte kitara ii desu ka.",
+            "speaker": "Student"
+          },
+          {
+            "english": "A notebook is fine, but what's important is…",
+            "japanese": "ノートはいいですが、大事なのは…",
+            "romaji": "nooto wa ii desu ga, daiji na no wa…",
+            "speaker": "Teacher"
+          },
+          {
+            "speaker": "Teacher",
+            "japanese": "宿題を忘れてはいけません。",
+            "romaji": "shukudai o wasurete wa ikemasen.",
+            "english": "You must not forget your homework."
+          }
+        ],
+        "setting": "A teacher reminds the class at the end of the lesson."
+      },
+      "targetSubstring": "忘れてはいけません"
+    }
+  ],
+  "formation": [
+    {
+      "body": "Attach はいけない to the verb's て-form.\n\nかく → かいて → かいてはいけない",
+      "title": "て-form + はいけない"
+    },
+    {
+      "body": "When the て-form is で, は often becomes では.\n\nのむ → のんで → のんではいけない",
+      "title": "では for で"
+    }
+  ],
+  "forms": [
+    "てはいけない",
+    "ではいけない",
+    "てはいけません"
+  ],
+  "headlineEnglish": "must not; may not (standard)",
+  "id": "n5-te-wa-ikenai",
+  "orderIndex": 1,
+  "relatedPointIDs": [],
+  "status": "approved",
+  "title": "てはいけない",
+  "usage": [
+    {
+      "body": "Neutral-to-formal \"must not.\" Common in rules, instructions, and textbooks.",
+      "title": "Standard prohibition"
+    },
+    {
+      "body": "Same meaning as ちゃいけない, but less casual. Use てはいけない in writing and polite speech.",
+      "title": "Compared to ちゃいけない"
+    }
+  ],
+  "usageLadders": [
+    {
+      "label": "eat",
+      "levels": [
+        {
+          "japanese": "食べちゃいけない",
+          "register": "Everyday"
+        },
+        {
+          "japanese": "食べてはいけない",
+          "register": "Casual"
+        },
+        {
+          "japanese": "食べてはいけません",
+          "register": "Formal"
+        }
+      ]
+    }
+  ],
+  "pattern": "てはいけない",
+  "shortDefinition": "must not; may not (standard)",
+  "reading": "てはいけない",
+  "structure": "Attach はいけない to the verb's て-form.\n\nかく → かいて → かいてはいけない\n\nWhen the て-form is で, は often becomes では.\n\nのむ → のんで → のんではいけない",
+  "register": "casual"
+}

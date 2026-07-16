@@ -1,0 +1,28 @@
+{
+  "id": "n5-mou",
+  "orderIndex": 52,
+  "title": "もう",
+  "headlineEnglish": "already; anymore",
+  "blurb": "",
+  "forms": [
+    "もう"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "もう帰った。",
+      "romaji": "mou kaetta.",
+      "english": "I already went home.",
+      "targetSubstring": "もう",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "もう",
+  "shortDefinition": "already; anymore",
+  "reading": "もう"
+}

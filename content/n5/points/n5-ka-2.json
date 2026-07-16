@@ -1,0 +1,86 @@
+{
+  "id": "n5-ka-2",
+  "usageLadders": [],
+  "status": "draft",
+  "orderIndex": 7,
+  "title": "か②",
+  "pattern": "か②",
+  "reading": "か",
+  "shortDefinition": "question particle",
+  "headlineEnglish": "question particle",
+  "blurb": "At the end of a sentence, か turns a statement into a yes/no question.",
+  "structure": "Statement + か\n\n分かりますか。\nDo you understand?",
+  "forms": [
+    "か"
+  ],
+  "formation": [
+    {
+      "title": "Statement + か",
+      "body": "Add か to ask yes/no.\n\n行きますか。\nWill you go?"
+    },
+    {
+      "title": "Polite questions",
+      "body": "With です or ます → ですか / ますか.\n\n大丈夫ですか。\nAre you okay?"
+    }
+  ],
+  "usage": [
+    {
+      "title": "Yes/no questions",
+      "body": "か asks whether something is true. Answer with はい, いいえ, or a fuller reply."
+    }
+  ],
+  "relatedPointIDs": [
+    "n5-ka-1"
+  ],
+  "examples": [
+    {
+      "japanese": "分かりますか。",
+      "romaji": "wakarimasu ka.",
+      "english": "Do you understand?",
+      "targetSubstring": "か",
+      "audioKey": null
+    },
+    {
+      "japanese": "もう帰りますか。",
+      "romaji": "mou kaerimasu ka.",
+      "english": "Are you leaving already?",
+      "targetSubstring": "か",
+      "audioKey": null
+    },
+    {
+      "japanese": "これ、あなたのですか。",
+      "romaji": "kore, anata no desu ka.",
+      "english": "Is this yours?",
+      "targetSubstring": "か",
+      "audioKey": null
+    },
+    {
+      "japanese": "寒いですか。",
+      "romaji": "samui desu ka.",
+      "english": "Is it cold?",
+      "targetSubstring": "か",
+      "audioKey": null
+    },
+    {
+      "japanese": "結構ですか。",
+      "romaji": "kekkou desu ka.",
+      "english": "Is that enough?",
+      "targetSubstring": "か",
+      "audioKey": null
+    }
+  ],
+  "drills": [
+    {
+      "kind": "meaningChoice",
+      "exampleJapanese": "分かりますか。",
+      "choices": [
+        "Do you understand?",
+        "I understand.",
+        "Please understand.",
+        "Understanding is difficult."
+      ],
+      "correctChoice": "Do you understand?"
+    }
+  ],
+  "contrastDrills": []
+}

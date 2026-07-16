@@ -1,0 +1,29 @@
+{
+  "id": "n5-ga-iru",
+  "orderIndex": 9,
+  "title": "がいる",
+  "headlineEnglish": "there is (living things)",
+  "blurb": "",
+  "forms": [
+    "がいる",
+    "がいます"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "可愛い女の子がいる。",
+      "romaji": "kawaii onna no ko ga iru.",
+      "english": "There is a cute girl.",
+      "targetSubstring": "がいる",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "がいる",
+  "shortDefinition": "there is (living things)",
+  "reading": "がいる"
+}

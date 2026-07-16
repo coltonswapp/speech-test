@@ -1,0 +1,118 @@
+{
+  "blurb": "Use this when asking if yourself (the speaker) can do something. Like entering a store; can I enter? Or asking to take pictures at a musuem; can I take pictures here? The も may be omitted in casual speech, while the いい may be swapped with よろしい to fit a more formal / respectful tone.",
+  "drills": [
+    {
+      "choices": [
+        "つかってもいい",
+        "つかてもいい",
+        "つかいますもいい",
+        "つかってはいけない"
+      ],
+      "correctChoice": "つかってもいい",
+      "instruction": "Pick the correct permission form.",
+      "kind": "formChoice",
+      "prompt": "つかう (to use), as in \"Can I use?\""
+    }
+  ],
+  "examples": [
+    {
+      "english": "Can I eat?",
+      "japanese": "食べてもいいですか？",
+      "romaji": "tabete mo ii desu ka",
+      "targetSubstring": "てもいい"
+    }
+  ],
+  "formation": [
+    {
+      "body": "Take the verb's て-form and drop て. \n\nたべる → たべて、はいる→ はいって",
+      "title": "Build from the て-form"
+    },
+    {
+      "body": "いい means good: literally meaning 'good if I do x?'\n\nはいってもいい、食べてもいい、、つかってもいい",
+      "title": "Add the もいい"
+    }
+  ],
+  "forms": [
+    "てもいい",
+    "てもいいです",
+    "でもいい"
+  ],
+  "headlineEnglish": "is okay; is it alright to, can I do ___",
+  "id": "n5-te-mo-ii",
+  "orderIndex": 29,
+  "relatedPointIDs": [],
+  "status": "approved",
+  "title": "てもいい",
+  "usage": [
+    {
+      "body": "The most common use of てもいいですか (te mo ii desu ka?) is to ask if you, the speaker, are allowed to do something. Think of it as \"Is it okay if I do X?\" or \"Can I do X?\". For example, you might ask 入ってもいいですか？ (haitte mo ii desu ka?) when entering a room, or 写真を撮ってもいいですか？ (shashin o totte mo ii desu ka?) at a museum.",
+      "title": "Asking for Permission"
+    },
+    {
+      "body": "You can also use てもいいです (te mo ii desu) (or the more casual てもいい (te mo ii)) to tell someone that they *are* allowed to do something. If someone asks 食べてもいいですか？ (tabete mo ii desu ka? - Can I eat?), you can reply はい、食べてもいいです (hai, tabete mo ii desu - Yes, you can eat).",
+      "title": "Granting Permission"
+    },
+    {
+      "body": "Breaking it down, て (te) is the verb's て-form, も (mo) means \"even if,\" and いい (ii) means \"good\" or \"okay.\" So, てもいい (te mo ii) literally means \"even if I do X, it is good.\" This helps understand why it's used for permission: you're asking if the action is acceptable.",
+      "title": "The Literal Meaning"
+    }
+  ],
+  "usageLadders": [
+    {
+      "label": "eat",
+      "levels": [
+        {
+          "japanese": "食べていい",
+          "register": "Everyday"
+        },
+        {
+          "japanese": "食べてもいい",
+          "register": "Casual"
+        },
+        {
+          "japanese": "食べてもよろしい",
+          "register": "Formal"
+        }
+      ]
+    },
+    {
+      "label": "enter",
+      "levels": [
+        {
+          "japanese": "入っていい",
+          "register": "Everyday"
+        },
+        {
+          "japanese": "入ってもいい",
+          "register": "Casual"
+        },
+        {
+          "japanese": "入ってもよろしい",
+          "register": "Formal"
+        }
+      ]
+    },
+    {
+      "label": "take a picture",
+      "levels": [
+        {
+          "japanese": "写真を撮っていい",
+          "register": "Everyday"
+        },
+        {
+          "japanese": "写真を撮ってもいい",
+          "register": "Casual"
+        },
+        {
+          "japanese": "写真を撮ってもよろしい",
+          "register": "Formal"
+        }
+      ]
+    }
+  ],
+  "pattern": "てもいい",
+  "shortDefinition": "is okay; is it alright to, can I do ___",
+  "reading": "てもいい",
+  "structure": "Take the verb's て-form and drop て. \n\nたべる → たべて、はいる→ はいって\n\nいい means good: literally meaning 'good if I do x?'\n\nはいってもいい、食べてもいい、、つかってもいい",
+  "register": "casual"
+}

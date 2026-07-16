@@ -1,0 +1,30 @@
+{
+  "id": "n5-te-iru",
+  "orderIndex": 24,
+  "title": "ている",
+  "headlineEnglish": "is / are / am doing",
+  "blurb": "",
+  "forms": [
+    "ている",
+    "ています",
+    "てる"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "何をしている？",
+      "romaji": "nani o shite iru?",
+      "english": "What are you doing?",
+      "targetSubstring": "している",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "ている",
+  "shortDefinition": "is / are / am doing",
+  "reading": "ている"
+}

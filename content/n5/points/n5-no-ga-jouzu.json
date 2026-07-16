@@ -1,0 +1,29 @@
+{
+  "id": "n5-no-ga-jouzu",
+  "orderIndex": 42,
+  "title": "のが上手",
+  "headlineEnglish": "to be good at",
+  "blurb": "",
+  "forms": [
+    "のが上手",
+    "のが上手です"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "彼女は歌うのが上手。",
+      "romaji": "kanojo wa utau no ga jouzu.",
+      "english": "She is good at singing.",
+      "targetSubstring": "のが上手",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "のが上手",
+  "shortDefinition": "to be good at",
+  "reading": "のが上手"
+}

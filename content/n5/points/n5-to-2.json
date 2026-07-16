@@ -1,0 +1,28 @@
+{
+  "id": "n5-to-2",
+  "orderIndex": 31,
+  "title": "と②",
+  "headlineEnglish": "with (together with someone)",
+  "blurb": "",
+  "forms": [
+    "と"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "友達と見る。",
+      "romaji": "tomodachi to miru.",
+      "english": "To watch with a friend.",
+      "targetSubstring": "と",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "と②",
+  "shortDefinition": "with (together with someone)",
+  "reading": "と"
+}

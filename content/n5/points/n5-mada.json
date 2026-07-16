@@ -1,0 +1,25 @@
+{
+  "drills": [],
+  "examples": [
+    {
+      "english": "My daughter still hasn't woken up.",
+      "japanese": "娘はまだ起きていません。",
+      "romaji": "musume wa mada okite imasen.",
+      "targetSubstring": "まだ"
+    }
+  ],
+  "formation": [],
+  "forms": [
+    "まだ"
+  ],
+  "headlineEnglish": "still; not yet",
+  "id": "n5-mada",
+  "orderIndex": 49,
+  "relatedPointIDs": [],
+  "reviewNotes": "need to generate a blurb, add some formation + usage",
+  "status": "draft",
+  "title": "まだ",
+  "pattern": "まだ",
+  "shortDefinition": "still; not yet",
+  "reading": "まだ"
+}

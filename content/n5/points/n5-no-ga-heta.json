@@ -1,0 +1,29 @@
+{
+  "id": "n5-no-ga-heta",
+  "orderIndex": 41,
+  "title": "のが下手",
+  "headlineEnglish": "to be bad at",
+  "blurb": "",
+  "forms": [
+    "のが下手",
+    "のが下手です"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "彼は漢字を書くのが下手。",
+      "romaji": "kare wa kanji o kaku no ga heta.",
+      "english": "He is bad at writing kanji.",
+      "targetSubstring": "のが下手",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "のが下手",
+  "shortDefinition": "to be bad at",
+  "reading": "のが下手"
+}

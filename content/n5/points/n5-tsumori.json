@@ -1,0 +1,29 @@
+{
+  "id": "n5-tsumori",
+  "orderIndex": 21,
+  "title": "つもり",
+  "headlineEnglish": "plan to; intend to",
+  "blurb": "",
+  "forms": [
+    "つもりだ",
+    "つもりです"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "日本に行くつもりだ。",
+      "romaji": "nihon ni iku tsumori da.",
+      "english": "I plan to go to Japan.",
+      "targetSubstring": "つもり",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "つもり",
+  "shortDefinition": "plan to; intend to",
+  "reading": "つもりだ"
+}

@@ -1,0 +1,107 @@
+{
+  "jlptLevel": 5,
+  "checkpoints": [
+    {
+      "id": "n5-cp-01",
+      "orderIndex": 0,
+      "title": "Core particles",
+      "subtitle": "は, が, か, に, で, and more",
+      "pointIDs": [
+        "n5-wa",
+        "n5-ga-1",
+        "n5-ga-2",
+        "n5-ka-1",
+        "n5-ka-2",
+        "n5-ni",
+        "n5-ni-e",
+        "n5-de-1",
+        "n5-de-2",
+        "n5-mo"
+      ]
+    },
+    {
+      "id": "n5-cp-02",
+      "orderIndex": 1,
+      "title": "Rules & limits",
+      "subtitle": "Prohibition, obligation, and permission",
+      "pointIDs": [
+        "n5-cha-ikenai",
+        "n5-te-wa-ikenai",
+        "n5-nakucha",
+        "n5-na-prohibitive",
+        "n5-naide-kudasai",
+        "n5-te-mo-ii",
+        "n5-te-kudasai",
+        "n5-hou-ga-ii-1",
+        "n5-hou-ga-ii-2"
+      ]
+    },
+    {
+      "id": "n5-cp-03",
+      "orderIndex": 2,
+      "title": "Verbs in motion",
+      "subtitle": "Doing, becoming, wanting, and planning",
+      "pointIDs": [
+        "n5-suru",
+        "n5-da-desu",
+        "n5-te-iru",
+        "n5-te-kara",
+        "n5-tai",
+        "n5-naru",
+        "n5-tsumori",
+        "n5-ni-iku",
+        "n5-ni-suru",
+        "n5-ga-aru"
+      ]
+    },
+    {
+      "id": "n5-cp-04",
+      "orderIndex": 3,
+      "title": "Describing & comparing",
+      "subtitle": "Existence, degree, and skill",
+      "pointIDs": [
+        "n5-ga-iru",
+        "n5-ichiban",
+        "n5-kurai",
+        "n5-dake",
+        "n5-yori-hou-ga",
+        "n5-ta-koto-ga-aru",
+        "n5-no-1",
+        "n5-no-2",
+        "n5-no-ga-heta",
+        "n5-no-ga-jouzu"
+      ]
+    },
+    {
+      "id": "n5-cp-05",
+      "orderIndex": 4,
+      "title": "Time, place & connection",
+      "subtitle": "Because, but, with, and when",
+      "pointIDs": [
+        "n5-no-ga-suki",
+        "n5-kara-1",
+        "n5-kara-2",
+        "n5-kedo",
+        "n5-node",
+        "n5-to-1",
+        "n5-to-2",
+        "n5-mae-ni",
+        "n5-made",
+        "n5-ya"
+      ]
+    },
+    {
+      "id": "n5-cp-06",
+      "orderIndex": 5,
+      "title": "Nuance & everyday speech",
+      "subtitle": "Probably, still, and already",
+      "pointIDs": [
+        "n5-darou-1",
+        "n5-darou-2",
+        "n5-deshou-1",
+        "n5-deshou-2",
+        "n5-mou"
+      ]
+    }
+  ]
+}

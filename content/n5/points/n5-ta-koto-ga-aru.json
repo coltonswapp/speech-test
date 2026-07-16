@@ -1,0 +1,29 @@
+{
+  "id": "n5-ta-koto-ga-aru",
+  "orderIndex": 18,
+  "title": "たことがある",
+  "headlineEnglish": "have done before",
+  "blurb": "",
+  "forms": [
+    "たことがある",
+    "たことがあります"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "高い肉を食べたことがある。",
+      "romaji": "takai niku o tabeta koto ga aru.",
+      "english": "I have eaten expensive meat before.",
+      "targetSubstring": "たことがある",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "たことがある",
+  "shortDefinition": "have done before",
+  "reading": "たことがある"
+}

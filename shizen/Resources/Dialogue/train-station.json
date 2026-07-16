@@ -1,0 +1,630 @@
+{
+  "id": "train-station",
+  "title": "At the Train Station",
+  "subtitle": "A tourist talks with a station attendant. Each scenario adds one new layer.",
+  "sceneImage": "train-station",
+  "scenarios": [
+    {
+      "id": "train-station/buying-a-ticket",
+      "menuTitle": "Buying a ticket",
+      "menuSubtitle": "Soft requests + basic counters",
+      "japanese": "東京に行きたいんですけど。。。",
+      "romaji": "Tōkyō ni ikitai n desu kedo...",
+      "english": "So, I'd like to go to Tokyo...",
+      "targetSubstring": "行きたいんですけど",
+      "audioKey": "train-station/buying-a-ticket",
+      "scenario": {
+        "setting": "At the ticket counter — a tourist approaches the station attendant.",
+        "lines": [
+          {
+            "speaker": "Tourist",
+            "japanese": "東京に行きたいんですけど。。。",
+            "romaji": "Tōkyō ni ikitai n desu kedo...",
+            "english": "So, I'd like to go to Tokyo...",
+            "id": "train-station/buying-a-ticket/line-0",
+            "grammarPointIDs": [
+              "n5-tai",
+              "n5-kedo",
+              "n5-ni-e"
+            ]
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "はい、わかりました。こちらへどうぞ。",
+            "romaji": "Hai, wakarimashita. Kochira e dōzo.",
+            "english": "Yes, of course. Please come this way.",
+            "id": "train-station/buying-a-ticket/line-1"
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "まずはきっぷですよね。一人ですか？",
+            "romaji": "Mazu wa kippu desu yo ne. Hitori desu ka?",
+            "english": "First the ticket, right? Just one person?",
+            "id": "train-station/buying-a-ticket/line-2",
+            "grammarPointIDs": [
+              "n5-da-desu"
+            ]
+          },
+          {
+            "speaker": "Tourist",
+            "japanese": "はい、一人です。",
+            "romaji": "Hai, hitori desu.",
+            "english": "Yes, one person.",
+            "id": "train-station/buying-a-ticket/line-3",
+            "grammarPointIDs": [
+              "n5-da-desu"
+            ]
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "かしこまりました。少々お待ちください。",
+            "romaji": "Kashikomarimashita. Shōshō omachi kudasai.",
+            "english": "Certainly. One moment, please.",
+            "id": "train-station/buying-a-ticket/line-4",
+            "grammarPointIDs": [
+              "n5-te-kudasai"
+            ]
+          }
+        ]
+      },
+      "highlights": {
+        "vocabulary": [
+          "東京",
+          "行く / 行きたい",
+          "わかりました",
+          "こちら",
+          "どうぞ",
+          "まず",
+          "きっぷ",
+          "一人 / ひとり",
+          "かしこまりました",
+          "少々",
+          "お待ちください"
+        ],
+        "grammarPatterns": [
+          {
+            "label": "〜たいんですけど。。。",
+            "grammarPointID": "n5-tai"
+          },
+          {
+            "label": "へ (direction)",
+            "grammarPointID": "n5-ni-e"
+          },
+          {
+            "label": "〜よね",
+            "grammarPointID": "n5-da-desu"
+          },
+          {
+            "label": "〜です",
+            "grammarPointID": "n5-da-desu"
+          },
+          {
+            "label": "お〜ください",
+            "grammarPointID": "n5-te-kudasai"
+          }
+        ],
+        "contextNotes": [
+          "〜たいんですけど。。。 softens a request by trailing off. The けど isn't \"but\" — it's a polite hedge that leaves room for the listener to help. This hanging sentence is very Japanese.",
+          "へ marks direction (\"toward\"). Compare it with に in later scenarios.",
+          "〜よね seeks agreement (\"right?\") — softer than a plain confirmation.",
+          "お〜ください is a polite request form. Recognize it here; you'll produce it much later.",
+          "かしこまりました is service keigo for \"certainly.\""
+        ]
+      },
+      "grammarPointIDs": [
+        "n5-tai",
+        "n5-kedo",
+        "n5-ni-e",
+        "n5-da-desu",
+        "n5-te-kudasai"
+      ],
+      "quiz": [
+        {
+          "prompt": "Where is the tourist trying to go?",
+          "layout": "grid",
+          "choices": [
+            "Tokyo",
+            "Hiroshima",
+            "New York",
+            "Kyoto"
+          ],
+          "correctChoice": "Tokyo",
+          "wrongAnswerExplanation": "The tourist says 東京に行きたい — they want to go to Tokyo."
+        },
+        {
+          "prompt": "What is the attendant asking at the end of the dialogue?",
+          "layout": "list",
+          "choices": [
+            "how much the ticket costs?",
+            "how many people are going?",
+            "which train to take?"
+          ],
+          "correctChoice": "how many people are going?",
+          "wrongAnswerExplanation": "The attendant was essentially asking if the tourist was traveling alone, or if they only needed 1 ticket."
+        }
+      ]
+    },
+    {
+      "id": "train-station/asking-the-price",
+      "menuTitle": "Asking the price & paying",
+      "menuSubtitle": "Understanding a spoken number",
+      "japanese": "東京までは、二千三百円です。",
+      "romaji": "Tōkyō made wa, nisen sanbyaku en desu.",
+      "english": "To Tokyo, it's 2,300 yen.",
+      "targetSubstring": "二千三百円",
+      "audioKey": "train-station/asking-the-price",
+      "scenario": {
+        "setting": "Still at the counter — the tourist asks the fare and pays.",
+        "lines": [
+          {
+            "speaker": "Tourist",
+            "japanese": "すみません、いくらですか。",
+            "romaji": "Sumimasen, ikura desu ka.",
+            "english": "Excuse me, how much is it?",
+            "id": "train-station/asking-the-price/line-0",
+            "grammarPointIDs": [
+              "n5-da-desu"
+            ]
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "東京までは、二千三百円です。",
+            "romaji": "Tōkyō made wa, nisen sanbyaku en desu.",
+            "english": "To Tokyo, it's 2,300 yen.",
+            "id": "train-station/asking-the-price/line-1",
+            "grammarPointIDs": [
+              "n5-made",
+              "n5-da-desu"
+            ]
+          },
+          {
+            "speaker": "Tourist",
+            "japanese": "二千三百円ですね。",
+            "romaji": "Nisen sanbyaku en desu ne.",
+            "english": "2,300 yen, got it.",
+            "id": "train-station/asking-the-price/line-2",
+            "grammarPointIDs": [
+              "n5-da-desu"
+            ]
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "お支払いは現金ですか、カードですか。",
+            "romaji": "Oshiharai wa genkin desu ka, kādo desu ka.",
+            "english": "Will you pay by cash or card?",
+            "id": "train-station/asking-the-price/line-3",
+            "grammarPointIDs": [
+              "n5-ka-1"
+            ]
+          },
+          {
+            "speaker": "Tourist",
+            "japanese": "現金でお願いします。",
+            "romaji": "Genkin de onegai shimasu.",
+            "english": "Cash, please.",
+            "id": "train-station/asking-the-price/line-4",
+            "grammarPointIDs": [
+              "n5-de-2"
+            ]
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "ありがとうございます。少々お待ちください。",
+            "romaji": "Arigatō gozaimasu. Shōshō omachi kudasai.",
+            "english": "Thank you. One moment, please.",
+            "id": "train-station/asking-the-price/line-5",
+            "grammarPointIDs": [
+              "n5-te-kudasai"
+            ]
+          }
+        ]
+      },
+      "highlights": {
+        "vocabulary": [
+          "すみません",
+          "いくら",
+          "〜まで",
+          "二千三百円",
+          "お支払い / おしはらい",
+          "現金 / げんきん",
+          "カード"
+        ],
+        "grammarPatterns": [
+          {
+            "label": "まで (endpoint)",
+            "grammarPointID": "n5-made"
+          },
+          {
+            "label": "〜ね",
+            "grammarPointID": "n5-da-desu"
+          },
+          {
+            "label": "AですかBですか",
+            "grammarPointID": "n5-ka-1"
+          },
+          {
+            "label": "〜でお願いします",
+            "grammarPointID": "n5-de-2"
+          }
+        ],
+        "contextNotes": [
+          "まで marks the endpoint (\"as far as / to\"). Listening focus: parsing にせんさんびゃくえん as one number.",
+          "Note さんびゃく (300) — the h→b sound change is a real beginner stumble.",
+          "〜ね confirms back what you heard — a genuine, usable comprehension-check move.",
+          "AですかBですか offers an A-or-B choice.",
+          "〜でお願いします means \"[do it] with/by ___, please.\" Hugely reusable: 現金で, カードで, 急行で."
+        ]
+      },
+      "grammarPointIDs": [
+        "n5-made",
+        "n5-da-desu",
+        "n5-ka-1",
+        "n5-de-2",
+        "n5-te-kudasai"
+      ]
+    },
+    {
+      "id": "train-station/which-platform",
+      "menuTitle": "Which platform / directions",
+      "menuSubtitle": "Parsing a 2-step spatial instruction",
+      "japanese": "あちらの階段を上って、右側です。",
+      "romaji": "Achira no kaidan o nobotte, migigawa desu.",
+      "english": "Go up those stairs, and it's on the right.",
+      "targetSubstring": "上って、右側",
+      "audioKey": "train-station/which-platform",
+      "scenario": {
+        "setting": "Near the gates — the tourist asks which platform and how to get there.",
+        "lines": [
+          {
+            "speaker": "Tourist",
+            "japanese": "東京行きは、何番線ですか。",
+            "romaji": "Tōkyō-yuki wa, nanbansen desu ka.",
+            "english": "Which platform is the Tokyo train?",
+            "id": "train-station/which-platform/line-0",
+            "grammarPointIDs": [
+              "n5-wa",
+              "n5-ni-e"
+            ]
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "三番線です。",
+            "romaji": "Sanbansen desu.",
+            "english": "Platform 3.",
+            "id": "train-station/which-platform/line-1",
+            "grammarPointIDs": [
+              "n5-da-desu"
+            ]
+          },
+          {
+            "speaker": "Tourist",
+            "japanese": "三番線は、どこですか。",
+            "romaji": "Sanbansen wa, doko desu ka.",
+            "english": "Where is platform 3?",
+            "id": "train-station/which-platform/line-2",
+            "grammarPointIDs": [
+              "n5-wa",
+              "n5-ka-1"
+            ]
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "あちらの階段を上って、右側です。",
+            "romaji": "Achira no kaidan o nobotte, migigawa desu.",
+            "english": "Go up those stairs, and it's on the right.",
+            "id": "train-station/which-platform/line-3",
+            "grammarPointIDs": [
+              "n5-te-kara"
+            ]
+          },
+          {
+            "speaker": "Tourist",
+            "japanese": "階段を上って、右ですね。",
+            "romaji": "Kaidan o nobotte, migi desu ne.",
+            "english": "Up the stairs, then right — got it.",
+            "id": "train-station/which-platform/line-4",
+            "grammarPointIDs": [
+              "n5-te-kara",
+              "n5-da-desu"
+            ]
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "はい、そうです。",
+            "romaji": "Hai, sō desu.",
+            "english": "Yes, that's right.",
+            "id": "train-station/which-platform/line-5",
+            "grammarPointIDs": [
+              "n5-da-desu"
+            ]
+          }
+        ]
+      },
+      "highlights": {
+        "vocabulary": [
+          "〜行き / 〜ゆき",
+          "何番線 / なんばんせん",
+          "三番線",
+          "どこ",
+          "あちら",
+          "階段 / かいだん",
+          "上る / のぼる",
+          "右側 / みぎがわ",
+          "そうです"
+        ],
+        "grammarPatterns": [
+          {
+            "label": "〜行き (bound for)",
+            "grammarPointID": "n5-ni-e"
+          },
+          {
+            "label": "どこ (where)",
+            "grammarPointID": "n5-ka-1"
+          },
+          {
+            "label": "〜て、〜 (sequence)",
+            "grammarPointID": "n5-te-kara"
+          },
+          {
+            "label": "〜ね",
+            "grammarPointID": "n5-da-desu"
+          }
+        ],
+        "contextNotes": [
+          "〜行き attaches to a destination to mean \"bound for.\"",
+          "〜て、〜 chains two actions in sequence (\"do X, then Y\"). This first multi-step instruction is the difficulty bump.",
+          "The learner repeats the sequence back with ね, reinforcing the て-chain by re-saying it.",
+          "そうです confirms \"that's right.\""
+        ]
+      },
+      "grammarPointIDs": [
+        "n5-wa",
+        "n5-ka-1",
+        "n5-te-kara",
+        "n5-da-desu"
+      ]
+    },
+    {
+      "id": "train-station/next-train",
+      "menuTitle": "Time & the next train",
+      "menuSubtitle": "Time expressions + making a choice",
+      "japanese": "次の急行は、十時十五分です。",
+      "romaji": "Tsugi no kyūkō wa, jūji jūgofun desu.",
+      "english": "The next express is at 10:15.",
+      "targetSubstring": "十時十五分",
+      "scenario": {
+        "setting": "On the platform — the tourist checks the next train and picks one.",
+        "lines": [
+          {
+            "speaker": "Tourist",
+            "japanese": "次の電車は、何時ですか。",
+            "romaji": "Tsugi no densha wa, nanji desu ka.",
+            "english": "What time is the next train?",
+            "id": "train-station/next-train/line-0",
+            "grammarPointIDs": [
+              "n5-wa",
+              "n5-ka-1"
+            ]
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "次の急行は、十時十五分です。",
+            "romaji": "Tsugi no kyūkō wa, jūji jūgofun desu.",
+            "english": "The next express is at 10:15.",
+            "id": "train-station/next-train/line-1",
+            "grammarPointIDs": [
+              "n5-wa",
+              "n5-da-desu"
+            ]
+          },
+          {
+            "speaker": "Tourist",
+            "japanese": "急行ですか。普通もありますか。",
+            "romaji": "Kyūkō desu ka. Futsū mo arimasu ka.",
+            "english": "The express? Is there a local too?",
+            "id": "train-station/next-train/line-2",
+            "grammarPointIDs": [
+              "n5-ka-1",
+              "n5-mo",
+              "n5-ga-aru"
+            ]
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "はい。普通は、十時半に出ます。",
+            "romaji": "Hai. Futsū wa, jūji han ni demasu.",
+            "english": "Yes. The local leaves at 10:30.",
+            "id": "train-station/next-train/line-3",
+            "grammarPointIDs": [
+              "n5-wa",
+              "n5-ni"
+            ]
+          },
+          {
+            "speaker": "Tourist",
+            "japanese": "じゃあ、急行でお願いします。",
+            "romaji": "Jā, kyūkō de onegai shimasu.",
+            "english": "Then the express, please.",
+            "id": "train-station/next-train/line-4",
+            "grammarPointIDs": [
+              "n5-de-2"
+            ]
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "かしこまりました。",
+            "romaji": "Kashikomarimashita.",
+            "english": "Certainly.",
+            "id": "train-station/next-train/line-5"
+          }
+        ]
+      },
+      "highlights": {
+        "vocabulary": [
+          "次 / つぎ",
+          "電車 / でんしゃ",
+          "何時 / なんじ",
+          "急行 / きゅうこう",
+          "十時十五分",
+          "普通 / ふつう",
+          "〜も",
+          "あります",
+          "半 / はん",
+          "出る / でる"
+        ],
+        "grammarPatterns": [
+          {
+            "label": "〜時〜分 (telling time)",
+            "grammarPointID": "n5-da-desu"
+          },
+          {
+            "label": "〜も (also)",
+            "grammarPointID": "n5-mo"
+          },
+          {
+            "label": "〜に出ます",
+            "grammarPointID": "n5-ni"
+          },
+          {
+            "label": "〜でお願いします",
+            "grammarPointID": "n5-de-2"
+          }
+        ],
+        "contextNotes": [
+          "Time-telling uses 〜時〜分. Listening focus: じゅうじ じゅうごふん back-to-back is a real beginner trap.",
+          "〜も means \"also / too.\" The 急行 (express) vs 普通 (local) distinction is a real traveler decision.",
+          "〜に出ます — に marks the time an action happens. Contrast with へ (direction) and で (means): three particles now in play.",
+          "〜でお願いします again, reused from 現金で → 急行で. じゃあ = \"well then / in that case.\""
+        ]
+      },
+      "grammarPointIDs": [
+        "n5-wa",
+        "n5-mo",
+        "n5-ni",
+        "n5-de-2",
+        "n5-ka-1"
+      ]
+    },
+    {
+      "id": "train-station/missed-train",
+      "menuTitle": "A complication (missed train)",
+      "menuSubtitle": "Expressing a problem + real keigo",
+      "japanese": "電車に乗り遅れてしまいました。",
+      "romaji": "Densha ni noriokurete shimaimashita.",
+      "english": "I missed the train.",
+      "targetSubstring": "乗り遅れてしまいました",
+      "scenario": {
+        "setting": "Back at the desk — the tourist explains a problem and gets reassured.",
+        "lines": [
+          {
+            "speaker": "Tourist",
+            "japanese": "すみません、電車に乗り遅れてしまいました。",
+            "romaji": "Sumimasen, densha ni noriokurete shimaimashita.",
+            "english": "Excuse me, I missed the train.",
+            "id": "train-station/missed-train/line-0",
+            "grammarPointIDs": [
+              "n5-te-iru",
+              "n5-ni"
+            ]
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "あ、それは大変でしたね。大丈夫ですよ。",
+            "romaji": "A, sore wa taihen deshita ne. Daijōbu desu yo.",
+            "english": "Oh, that's too bad. It's okay, don't worry.",
+            "id": "train-station/missed-train/line-1",
+            "grammarPointIDs": [
+              "n5-da-desu"
+            ]
+          },
+          {
+            "speaker": "Tourist",
+            "japanese": "このきっぷは、まだ使えますか。",
+            "romaji": "Kono kippu wa, mada tsukaemasu ka.",
+            "english": "Can I still use this ticket?",
+            "id": "train-station/missed-train/line-2",
+            "grammarPointIDs": [
+              "n5-wa",
+              "n5-ka-1"
+            ]
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "はい、次の電車にお乗りいただけます。",
+            "romaji": "Hai, tsugi no densha ni onori itadakemasu.",
+            "english": "Yes, you can board the next train.",
+            "id": "train-station/missed-train/line-3",
+            "grammarPointIDs": [
+              "n5-ni",
+              "n5-te-kudasai"
+            ]
+          },
+          {
+            "speaker": "Tourist",
+            "japanese": "よかった。ありがとうございます。",
+            "romaji": "Yokatta. Arigatō gozaimasu.",
+            "english": "Oh good. Thank you very much.",
+            "id": "train-station/missed-train/line-4"
+          },
+          {
+            "speaker": "Attendant",
+            "japanese": "次は十一時です。お気をつけて。",
+            "romaji": "Tsugi wa jūichiji desu. Oki o tsukete.",
+            "english": "The next one is at 11:00. Take care.",
+            "id": "train-station/missed-train/line-5",
+            "grammarPointIDs": [
+              "n5-wa",
+              "n5-da-desu"
+            ]
+          }
+        ]
+      },
+      "highlights": {
+        "vocabulary": [
+          "乗り遅れる / のりおくれる",
+          "電車に乗る",
+          "大変 / たいへん",
+          "大丈夫 / だいじょうぶ",
+          "この",
+          "まだ",
+          "使える / つかえる",
+          "よかった",
+          "十一時",
+          "お気をつけて / おきをつけて"
+        ],
+        "grammarPatterns": [
+          {
+            "label": "〜てしまいました",
+            "grammarPointID": "n5-te-iru"
+          },
+          {
+            "label": "〜よ",
+            "grammarPointID": "n5-da-desu"
+          },
+          {
+            "label": "使える (potential)",
+            "grammarPointID": "n5-te-iru"
+          },
+          {
+            "label": "お〜いただけます",
+            "grammarPointID": "n5-te-kudasai"
+          }
+        ],
+        "contextNotes": [
+          "〜てしまいました is completion with regret — not just \"I missed it\" but \"I missed it (oops / and I feel bad).\" This nuance is the whole reason the form exists.",
+          "〜よ gives reassuring new info (\"it's fine, trust me\"). Contrast with ね.",
+          "使える is the potential form of 使う (\"can use\").",
+          "お〜いただけます is polite humble form (\"you may kindly ___\"). Pure recognition for a beginner — pairs with お待ちください and かしこまりました as service language you can now recognize.",
+          "よかった (\"thank goodness / what a relief\") is a high-frequency, natural emotional reaction.",
+          "お気をつけて is a set polite farewell — recognize it, don't dissect it."
+        ]
+      },
+      "grammarPointIDs": [
+        "n5-te-iru",
+        "n5-da-desu",
+        "n5-ka-1",
+        "n5-te-kudasai"
+      ]
+    }
+  ]
+}

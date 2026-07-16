@@ -1,0 +1,30 @@
+{
+  "id": "n5-naru",
+  "orderIndex": 34,
+  "title": "なる",
+  "headlineEnglish": "to become",
+  "blurb": "",
+  "forms": [
+    "なる",
+    "になる",
+    "くなる"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "病気になる。",
+      "romaji": "byouki ni naru.",
+      "english": "To become sick.",
+      "targetSubstring": "なる",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "なる",
+  "shortDefinition": "to become",
+  "reading": "なる"
+}

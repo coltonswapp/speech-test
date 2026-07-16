@@ -1,0 +1,28 @@
+{
+  "id": "n5-na-prohibitive",
+  "orderIndex": 32,
+  "title": "な",
+  "headlineEnglish": "don't do (prohibitive)",
+  "blurb": "",
+  "forms": [
+    "な"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "泣くな。",
+      "romaji": "naku na.",
+      "english": "Don't cry.",
+      "targetSubstring": "な",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "な",
+  "shortDefinition": "don't do (prohibitive)",
+  "reading": "な"
+}

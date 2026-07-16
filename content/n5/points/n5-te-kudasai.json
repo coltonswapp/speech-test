@@ -1,0 +1,29 @@
+{
+  "id": "n5-te-kudasai",
+  "orderIndex": 26,
+  "title": "てください",
+  "headlineEnglish": "please do…",
+  "blurb": "",
+  "forms": [
+    "てください",
+    "でください"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "食べてください。",
+      "romaji": "tabete kudasai.",
+      "english": "Please eat.",
+      "targetSubstring": "てください",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "てください",
+  "shortDefinition": "please do…",
+  "reading": "てください"
+}

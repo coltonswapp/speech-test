@@ -1,0 +1,29 @@
+{
+  "id": "n5-deshou-2",
+  "orderIndex": 28,
+  "title": "でしょう②",
+  "headlineEnglish": "isn't it?; right?",
+  "blurb": "",
+  "forms": [
+    "でしょう",
+    "だろう"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "いいでしょう。",
+      "romaji": "ii deshou.",
+      "english": "It's fine, right?",
+      "targetSubstring": "でしょう",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "でしょう②",
+  "shortDefinition": "isn't it?; right?",
+  "reading": "でしょう"
+}

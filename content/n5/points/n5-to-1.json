@@ -1,0 +1,28 @@
+{
+  "id": "n5-to-1",
+  "orderIndex": 30,
+  "title": "と①",
+  "headlineEnglish": "and (connects nouns)",
+  "blurb": "",
+  "forms": [
+    "と"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "黒と白の猫。",
+      "romaji": "kuro to shiro no neko.",
+      "english": "A black and white cat.",
+      "targetSubstring": "と",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "と①",
+  "shortDefinition": "and (connects nouns)",
+  "reading": "と"
+}

@@ -1,0 +1,488 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		F629EE192FBBBB15006A3F68 /* TTSCore in Frameworks */ = {isa = PBXBuildFile; productRef = F6AA00022F957A880FFF002 /* TTSCore */; };
+		F6713B1630019B3000A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1530019B3000A89257 /* NNKit */; };
+		F6713B1930019E0800A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1830019E0800A89257 /* NNKit */; };
+		F6713B1C30019EC800A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1B30019EC800A89257 /* NNKit */; };
+		F6B950A92FB582D0007030C7 /* CharacterFilter in Frameworks */ = {isa = PBXBuildFile; productRef = F6B950A82FB582D0007030C7 /* CharacterFilter */; };
+		F6B950AB2FB582D0007030C7 /* IPADic in Frameworks */ = {isa = PBXBuildFile; productRef = F6B950AA2FB582D0007030C7 /* IPADic */; };
+		F6B950AD2FB582D0007030C7 /* Mecab-Swift in Frameworks */ = {isa = PBXBuildFile; productRef = F6B950AC2FB582D0007030C7 /* Mecab-Swift */; };
+		F6B950AF2FB582D0007030C7 /* StringTools in Frameworks */ = {isa = PBXBuildFile; productRef = F6B950AE2FB582D0007030C7 /* StringTools */; };
+		F6C0FM012FC0A00100000001 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6C0FM022FC0A00100000002 /* FoundationModels.framework */; };
+		F6DE0FAD2F957A8600FFF413 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F6DE0FAC2F957A8600FFF412 /* GRDB */; };
+		F6SC00102FCONTENT010 /* GrammarContentKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6SC00022FCONTENT002 /* GrammarContentKit */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		F6C0FM022FC0A00100000002 /* FoundationModels.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FoundationModels.framework; path = System/Library/Frameworks/FoundationModels.framework; sourceTree = SDKROOT; };
+		F6DE0F8F2F957A7A00FFF406 /* shizen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = shizen.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		F6DE0FA12F957A8600FFF406 /* Exceptions for "shizen" folder in "shizen" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F6DE0F8E2F957A7A00FFF406 /* shizen */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		F6DE0F912F957A7A00FFF406 /* shizen */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				F6DE0FA12F957A8600FFF406 /* Exceptions for "shizen" folder in "shizen" target */,
+			);
+			path = shizen;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		F6DE0F8C2F957A7A00FFF406 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F6713B1C30019EC800A89257 /* NNKit in Frameworks */,
+				F6C0FM012FC0A00100000001 /* FoundationModels.framework in Frameworks */,
+				F629EE192FBBBB15006A3F68 /* TTSCore in Frameworks */,
+				F6SC00102FCONTENT010 /* GrammarContentKit in Frameworks */,
+				F6713B1630019B3000A89257 /* NNKit in Frameworks */,
+				F6B950A92FB582D0007030C7 /* CharacterFilter in Frameworks */,
+				F6B950AD2FB582D0007030C7 /* Mecab-Swift in Frameworks */,
+				F6DE0FAD2F957A8600FFF413 /* GRDB in Frameworks */,
+				F6B950AF2FB582D0007030C7 /* StringTools in Frameworks */,
+				F6B950AB2FB582D0007030C7 /* IPADic in Frameworks */,
+				F6713B1930019E0800A89257 /* NNKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		F65E31EB2FD4F7E500318D8E /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				F6C0FM022FC0A00100000002 /* FoundationModels.framework */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
+		F6DE0F862F957A7A00FFF406 = {
+			isa = PBXGroup;
+			children = (
+				F6DE0F912F957A7A00FFF406 /* shizen */,
+				F6DE0F902F957A7A00FFF406 /* Products */,
+				F65E31EB2FD4F7E500318D8E /* Recovered References */,
+			);
+			sourceTree = "<group>";
+		};
+		F6DE0F902F957A7A00FFF406 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F6DE0F8F2F957A7A00FFF406 /* shizen.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		F6DE0F8E2F957A7A00FFF406 /* shizen */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F6DE0FA22F957A8600FFF406 /* Build configuration list for PBXNativeTarget "shizen" */;
+			buildPhases = (
+				F6DE0F8B2F957A7A00FFF406 /* Sources */,
+				F6DE0F8C2F957A7A00FFF406 /* Frameworks */,
+				F6DE0F8D2F957A7A00FFF406 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				F6DE0F912F957A7A00FFF406 /* shizen */,
+			);
+			name = shizen;
+			packageProductDependencies = (
+				F6DE0FAC2F957A8600FFF412 /* GRDB */,
+				F6AA00022F957A880FFF002 /* TTSCore */,
+				F6SC00022FCONTENT002 /* GrammarContentKit */,
+				F6B950A82FB582D0007030C7 /* CharacterFilter */,
+				F6B950AA2FB582D0007030C7 /* IPADic */,
+				F6B950AC2FB582D0007030C7 /* Mecab-Swift */,
+				F6B950AE2FB582D0007030C7 /* StringTools */,
+				F6713B1530019B3000A89257 /* NNKit */,
+				F6713B1830019E0800A89257 /* NNKit */,
+				F6713B1B30019EC800A89257 /* NNKit */,
+			);
+			productName = shizen;
+			productReference = F6DE0F8F2F957A7A00FFF406 /* shizen.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		F6DE0F872F957A7A00FFF406 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					F6DE0F8E2F957A7A00FFF406 = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
+				};
+			};
+			buildConfigurationList = F6DE0F8A2F957A7A00FFF406 /* Build configuration list for PBXProject "shizen" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = F6DE0F862F957A7A00FFF406;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F6DE0FAA2F957A8600FFF411 /* XCRemoteSwiftPackageReference "GRDB" */,
+				F6B950A72FB582D0007030C7 /* XCRemoteSwiftPackageReference "Mecab-Swift" */,
+				F6AA00012F957A880FFF001 /* XCLocalSwiftPackageReference "TTSCore" */,
+				F6SC00012FCONTENT001 /* XCLocalSwiftPackageReference "GrammarContentKit" */,
+				F6713B1A30019EC800A89257 /* XCLocalSwiftPackageReference "../cs-ios-style-guide" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = F6DE0F902F957A7A00FFF406 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				F6DE0F8E2F957A7A00FFF406 /* shizen */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		F6DE0F8D2F957A7A00FFF406 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		F6DE0F8B2F957A7A00FFF406 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		F6DE0FA32F957A8600FFF406 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = shizen/Shizen.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = X89M6X46Y8;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = shizen/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Shizen;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Swappfunc.speech-test";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F6DE0FA42F957A8600FFF406 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = shizen/Shizen.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = X89M6X46Y8;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = shizen/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Shizen;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Swappfunc.speech-test";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		F6DE0FA52F957A8600FFF406 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = Y7AZ5HFMT2;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		F6DE0FA62F957A8600FFF406 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = Y7AZ5HFMT2;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		F6DE0F8A2F957A7A00FFF406 /* Build configuration list for PBXProject "shizen" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F6DE0FA52F957A8600FFF406 /* Debug */,
+				F6DE0FA62F957A8600FFF406 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F6DE0FA22F957A8600FFF406 /* Build configuration list for PBXNativeTarget "shizen" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F6DE0FA32F957A8600FFF406 /* Debug */,
+				F6DE0FA42F957A8600FFF406 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		F6713B1A30019EC800A89257 /* XCLocalSwiftPackageReference "../cs-ios-style-guide" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../cs-ios-style-guide";
+		};
+		F6AA00012F957A880FFF001 /* XCLocalSwiftPackageReference "TTSCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = TTSCore;
+		};
+		F6SC00012FCONTENT001 /* XCLocalSwiftPackageReference "GrammarContentKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = GrammarContentKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F6B950A72FB582D0007030C7 /* XCRemoteSwiftPackageReference "Mecab-Swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/shinjukunian/Mecab-Swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.8.0;
+			};
+		};
+		F6DE0FAA2F957A8600FFF411 /* XCRemoteSwiftPackageReference "GRDB" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F6713B1530019B3000A89257 /* NNKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NNKit;
+		};
+		F6713B1830019E0800A89257 /* NNKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NNKit;
+		};
+		F6713B1B30019EC800A89257 /* NNKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NNKit;
+		};
+		F6AA00022F957A880FFF002 /* TTSCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F6AA00012F957A880FFF001 /* XCLocalSwiftPackageReference "TTSCore" */;
+			productName = TTSCore;
+		};
+		F6B950A82FB582D0007030C7 /* CharacterFilter */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F6B950A72FB582D0007030C7 /* XCRemoteSwiftPackageReference "Mecab-Swift" */;
+			productName = CharacterFilter;
+		};
+		F6B950AA2FB582D0007030C7 /* IPADic */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F6B950A72FB582D0007030C7 /* XCRemoteSwiftPackageReference "Mecab-Swift" */;
+			productName = IPADic;
+		};
+		F6B950AC2FB582D0007030C7 /* Mecab-Swift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F6B950A72FB582D0007030C7 /* XCRemoteSwiftPackageReference "Mecab-Swift" */;
+			productName = "Mecab-Swift";
+		};
+		F6B950AE2FB582D0007030C7 /* StringTools */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F6B950A72FB582D0007030C7 /* XCRemoteSwiftPackageReference "Mecab-Swift" */;
+			productName = StringTools;
+		};
+		F6DE0FAC2F957A8600FFF412 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F6DE0FAA2F957A8600FFF411 /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
+		};
+		F6SC00022FCONTENT002 /* GrammarContentKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F6SC00012FCONTENT001 /* XCLocalSwiftPackageReference "GrammarContentKit" */;
+			productName = GrammarContentKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = F6DE0F872F957A7A00FFF406 /* Project object */;
+}

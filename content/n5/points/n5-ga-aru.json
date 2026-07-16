@@ -1,0 +1,29 @@
+{
+  "id": "n5-ga-aru",
+  "orderIndex": 8,
+  "title": "がある",
+  "headlineEnglish": "there is (non-living things)",
+  "blurb": "",
+  "forms": [
+    "がある",
+    "があります"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "川がある。",
+      "romaji": "kawa ga aru.",
+      "english": "There is a river.",
+      "targetSubstring": "がある",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "がある",
+  "shortDefinition": "there is (non-living things)",
+  "reading": "がある"
+}

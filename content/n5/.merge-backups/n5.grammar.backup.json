@@ -1,0 +1,4017 @@
+{
+  "formatVersion": 1,
+  "jlptLevel": 5,
+  "checkpoints": [
+    {
+      "id": "n5-cp-01",
+      "orderIndex": 0,
+      "title": "Core particles",
+      "subtitle": "は, が, か, に, で, and more",
+      "pointIDs": [
+        "n5-wa",
+        "n5-ga-1",
+        "n5-ga-2",
+        "n5-ka-1",
+        "n5-ka-2",
+        "n5-ni",
+        "n5-ni-e",
+        "n5-de-1",
+        "n5-de-2",
+        "n5-mo"
+      ]
+    },
+    {
+      "id": "n5-cp-02",
+      "orderIndex": 1,
+      "title": "Rules & limits",
+      "subtitle": "Prohibition, obligation, and permission",
+      "pointIDs": [
+        "n5-cha-ikenai",
+        "n5-te-wa-ikenai",
+        "n5-nakucha",
+        "n5-na-prohibitive",
+        "n5-naide-kudasai",
+        "n5-te-mo-ii",
+        "n5-te-kudasai",
+        "n5-hou-ga-ii-1",
+        "n5-hou-ga-ii-2"
+      ]
+    },
+    {
+      "id": "n5-cp-03",
+      "orderIndex": 2,
+      "title": "Verbs in motion",
+      "subtitle": "Doing, becoming, wanting, and planning",
+      "pointIDs": [
+        "n5-suru",
+        "n5-da-desu",
+        "n5-te-iru",
+        "n5-te-kara",
+        "n5-tai",
+        "n5-naru",
+        "n5-tsumori",
+        "n5-ni-iku",
+        "n5-ni-suru",
+        "n5-ga-aru"
+      ]
+    },
+    {
+      "id": "n5-cp-04",
+      "orderIndex": 3,
+      "title": "Describing & comparing",
+      "subtitle": "Existence, degree, and skill",
+      "pointIDs": [
+        "n5-ga-iru",
+        "n5-ichiban",
+        "n5-kurai",
+        "n5-dake",
+        "n5-yori-hou-ga",
+        "n5-ta-koto-ga-aru",
+        "n5-no-1",
+        "n5-no-2",
+        "n5-no-ga-heta",
+        "n5-no-ga-jouzu"
+      ]
+    },
+    {
+      "id": "n5-cp-05",
+      "orderIndex": 4,
+      "title": "Time, place & connection",
+      "subtitle": "Because, but, with, and when",
+      "pointIDs": [
+        "n5-no-ga-suki",
+        "n5-kara-1",
+        "n5-kara-2",
+        "n5-kedo",
+        "n5-node",
+        "n5-to-1",
+        "n5-to-2",
+        "n5-mae-ni",
+        "n5-made",
+        "n5-ya"
+      ]
+    },
+    {
+      "id": "n5-cp-06",
+      "orderIndex": 5,
+      "title": "Nuance & everyday speech",
+      "subtitle": "Probably, still, and already",
+      "pointIDs": [
+        "n5-darou-1",
+        "n5-darou-2",
+        "n5-deshou-1",
+        "n5-deshou-2",
+        "n5-mada",
+        "n5-mou"
+      ]
+    }
+  ],
+  "points": [
+    {
+      "id": "n5-cha-ikenai",
+      "orderIndex": 0,
+      "title": "ちゃいけない・じゃいけない",
+      "headlineEnglish": "must not; may not (casual)",
+      "blurb": "Japanese has several ways to tell someone they shouldn't do something — from a parent scolding a child to a formal workplace rule. This lesson covers the casual, spoken end: the kind you'd hear from a friend, a parent, or in everyday conversation. You'll recognize it when someone sets a boundary and know when to say \"you shouldn't\" versus \"you must not.\"",
+      "forms": [
+        "ちゃいけない",
+        "じゃいけない",
+        "ちゃダメ",
+        "じゃダメ"
+      ],
+      "formation": [
+        {
+          "title": "Build from the て-form",
+          "body": "Take the verb's て-form and drop て. Add ちゃ or じゃ, then いけない or ダメ.\n\nたべる → たべて → たべちゃ + いけない"
+        },
+        {
+          "title": "ちゃ vs じゃ",
+          "body": "If the て-form ends in で, use じゃ instead of ちゃ.\n\nのむ → のんで → のんじゃ + いけない"
+        }
+      ],
+      "usage": [],
+      "usageLadders": [
+        {
+          "label": "eat",
+          "levels": [
+            {
+              "japanese": "食べちゃダメ",
+              "register": "Everyday"
+            },
+            {
+              "japanese": "食べちゃいけない",
+              "register": "Casual"
+            },
+            {
+              "japanese": "食べてはいけません",
+              "register": "Formal"
+            }
+          ]
+        },
+        {
+          "label": "drink",
+          "levels": [
+            {
+              "japanese": "飲んじゃダメ",
+              "register": "Everyday"
+            },
+            {
+              "japanese": "飲んじゃいけない",
+              "register": "Casual"
+            },
+            {
+              "japanese": "飲んではいけません",
+              "register": "Formal"
+            }
+          ]
+        },
+        {
+          "label": "say",
+          "levels": [
+            {
+              "japanese": "言っちゃダメ",
+              "register": "Everyday"
+            },
+            {
+              "japanese": "言っちゃいけない",
+              "register": "Casual"
+            },
+            {
+              "japanese": "言ってはいけません",
+              "register": "Formal"
+            }
+          ]
+        }
+      ],
+      "relatedPointIDs": [
+        "n5-te-wa-ikenai"
+      ],
+      "examples": [
+        {
+          "japanese": "寝る前にスマホを見ちゃいけない。",
+          "romaji": "neru mae ni sumaho o micha ikenai.",
+          "english": "You shouldn't look at your smartphone before going to bed.",
+          "targetSubstring": "見ちゃいけない",
+          "scenario": {
+            "setting": "At home — a parent and child settle in before bed.",
+            "payoffSpeaker": "Parent",
+            "lines": [
+              {
+                "speaker": "Child",
+                "japanese": "あと5分だけスマホ見ていい？",
+                "romaji": "ato go-fun dake sumaho mite ii?",
+                "english": "Can I look at my phone for just five more minutes?"
+              },
+              {
+                "speaker": "Parent",
+                "japanese": "だめよ。もう遅いでしょ。",
+                "romaji": "dame yo. mou osoi desho.",
+                "english": "No — it's already late."
+              }
+            ]
+          },
+          "audioKey": "n5-cha-ikenai/ex-0-scenario"
+        },
+        {
+          "japanese": "寝る前にスマホを見ちゃダメよ。",
+          "romaji": "neru mae ni sumaho o micha dame yo.",
+          "english": "You shouldn't look at your smartphone before going to bed.",
+          "targetSubstring": "見ちゃダメ",
+          "scenario": {
+            "setting": "Same bedtime scene — a softer, everyday warning.",
+            "payoffSpeaker": "Parent",
+            "lines": [
+              {
+                "speaker": "Child",
+                "japanese": "ねえ、もう一回だけ見たい。",
+                "romaji": "nee, mou ikkai dake mitai.",
+                "english": "Hey, I just want to check it one more time."
+              },
+              {
+                "speaker": "Parent",
+                "japanese": "もう遅いのに、まだスマホ？",
+                "romaji": "mou osoi noni, mada sumaho?",
+                "english": "It's late — you're still on your phone?"
+              }
+            ]
+          },
+          "audioKey": "n5-cha-ikenai/ex-1-scenario"
+        },
+        {
+          "japanese": "入っちゃだめみたいよ。",
+          "romaji": "haiccha dame mitai yo.",
+          "english": "Looks like we're not supposed to go in.",
+          "targetSubstring": "入っちゃだめ",
+          "scenario": {
+            "setting": "Two friends at a hot spring town spot a roped-off steaming pool.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "ねえ、あそこ入っていこうか？",
+                "romaji": "nee, asoko haitte ikou ka?",
+                "english": "Hey, wanna go in over there?"
+              },
+              {
+                "speaker": "B",
+                "japanese": "いや、ちょっと柵があるでしょ。",
+                "romaji": "iya, chotto saku ga aru desho.",
+                "english": "Nah — there's a fence, right?"
+              }
+            ]
+          },
+          "audioKey": "n5-cha-ikenai/ex-2-scenario"
+        },
+        {
+          "japanese": "やっちゃいけないことをやっちゃった。",
+          "romaji": "yaccha ikenai koto o yacchatta.",
+          "english": "I did something I shouldn't have...",
+          "targetSubstring": "やっちゃいけない",
+          "scenario": {
+            "setting": "A student confesses to a friend after breaking a rule.",
+            "payoffSpeaker": "Student",
+            "lines": [
+              {
+                "speaker": "Friend",
+                "japanese": "どうしたの？元気ないね。",
+                "romaji": "doushita no? genki nai ne.",
+                "english": "What's wrong? You don't look so good."
+              },
+              {
+                "speaker": "Student",
+                "japanese": "うん…先生に怒られちゃって。",
+                "romaji": "un… sensei ni okorarechatte.",
+                "english": "Yeah… I got yelled at by the teacher."
+              }
+            ]
+          },
+          "audioKey": null
+        },
+        {
+          "japanese": "20歳未満の人はお酒を飲んじゃいけません。",
+          "romaji": "hatachi miman no hito wa osake o nonja ikemasen.",
+          "english": "People under 20 cannot drink alcohol.",
+          "targetSubstring": "飲んじゃいけません",
+          "scenario": {
+            "setting": "A clerk checks ID at a convenience store register.",
+            "payoffSpeaker": "Clerk",
+            "lines": [
+              {
+                "speaker": "Customer",
+                "japanese": "すみません、このビールください。",
+                "romaji": "sumimasen, kono biiru kudasai.",
+                "english": "Excuse me, this beer, please."
+              },
+              {
+                "speaker": "Clerk",
+                "japanese": "身分証明書、見せてもらえますか。",
+                "romaji": "mibun shoumeisho, misete moraemasu ka.",
+                "english": "May I see your ID?"
+              }
+            ]
+          },
+          "audioKey": null
+        }
+      ],
+      "drills": [
+        {
+          "kind": "precursorChoice",
+          "instruction": "Select the missing component to make this sentence whole.",
+          "exampleJapanese": "寝る前にスマホを見ちゃいけない。",
+          "targetSubstring": "見ちゃ",
+          "english": "You shouldn't look at your smartphone before going to bed.",
+          "choices": [
+            "みちゃ",
+            "みて",
+            "みる",
+            "みました"
+          ],
+          "correctChoice": "みちゃ"
+        },
+        {
+          "kind": "formChoice",
+          "instruction": "Pick the correct casual prohibition form.",
+          "prompt": "たべる (to eat)",
+          "choices": [
+            "たべちゃいけない",
+            "たべじゃいけない",
+            "たべていけません",
+            "たべないで"
+          ],
+          "correctChoice": "たべちゃいけない"
+        },
+        {
+          "kind": "formChoice",
+          "prompt": "のむ (to drink)",
+          "choices": [
+            "のんじゃいけない",
+            "のんちゃいけない",
+            "のんではいけません",
+            "のんじゃダメ"
+          ],
+          "correctChoice": "のんじゃいけない"
+        },
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "野菜を食べるまでデザートを食べちゃいけないよ。",
+          "choices": [
+            "No dessert until you eat your vegetables.",
+            "You may eat dessert before vegetables.",
+            "Vegetables are dessert.",
+            "Eat dessert first."
+          ],
+          "correctChoice": "No dessert until you eat your vegetables."
+        },
+        {
+          "kind": "sentenceBuilder",
+          "english": "Don't eat that.",
+          "buildComponents": [
+            "それを",
+            "食べちゃ",
+            "いけない"
+          ],
+          "choices": [
+            "それを",
+            "食べちゃ",
+            "いけない",
+            "それに",
+            "食べて",
+            "よ"
+          ],
+          "correctChoice": "それを食べちゃいけない"
+        },
+        {
+          "kind": "contrastChoice",
+          "contrastLabel": "のむ → のんで → ?",
+          "choices": [
+            "のんちゃ",
+            "のんじゃ"
+          ],
+          "correctChoice": "のんじゃ"
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "You shouldn't skip class so much.",
+          "choices": [
+            "そんなに授業をさぼっちゃダメよ。",
+            "そんなに授業をさぼってもいいよ。",
+            "授業をさぼりたいですか。",
+            "授業は楽しいです。"
+          ],
+          "correctChoice": "そんなに授業をさぼっちゃダメよ。"
+        }
+      ]
+    },
+    {
+      "id": "n5-te-wa-ikenai",
+      "orderIndex": 1,
+      "title": "てはいけない",
+      "headlineEnglish": "must not; may not (standard)",
+      "forms": [
+        "てはいけない",
+        "ではいけない",
+        "てはいけません"
+      ],
+      "formation": [
+        {
+          "title": "て-form + はいけない",
+          "body": "Attach はいけない to the verb's て-form.\n\nかく → かいて → かいてはいけない"
+        },
+        {
+          "title": "では for で",
+          "body": "When the て-form is で, は often becomes では.\n\nのむ → のんで → のんではいけない"
+        }
+      ],
+      "usage": [
+        {
+          "title": "Standard prohibition",
+          "body": "Neutral-to-formal \"must not.\" Common in rules, instructions, and textbooks."
+        },
+        {
+          "title": "Compared to ちゃいけない",
+          "body": "Same meaning as ちゃいけない, but less casual. Use てはいけない in writing and polite speech."
+        }
+      ],
+      "relatedPointIDs": [
+        "n5-cha-ikenai"
+      ],
+      "examples": [
+        {
+          "japanese": "ここで写真を撮ってはいけません。",
+          "romaji": "koko de shashin o totte wa ikemasen.",
+          "english": "You must not take photos here.",
+          "targetSubstring": "撮ってはいけません",
+          "scenario": {
+            "setting": "A museum gallery — a visitor raises their phone.",
+            "payoffSpeaker": "Staff",
+            "lines": [
+              {
+                "speaker": "Visitor",
+                "japanese": "すみません、ここ写真撮っていいですか。",
+                "romaji": "sumimasen, koko shashin totte ii desu ka.",
+                "english": "Excuse me, is it okay to take photos here?"
+              },
+              {
+                "speaker": "Staff",
+                "japanese": "申し訳ありません、展示の保護のため…",
+                "romaji": "moushiwake arimasen, tenji no hogo no tame…",
+                "english": "I'm sorry — to protect the exhibits…"
+              }
+            ]
+          },
+          "audioKey": null
+        },
+        {
+          "japanese": "廊下を走ってはいけない。",
+          "romaji": "rouka o hashitte wa ikenai.",
+          "english": "You must not run in the hallway.",
+          "targetSubstring": "走ってはいけない",
+          "scenario": {
+            "setting": "An elementary school hallway between classes.",
+            "payoffSpeaker": "Teacher",
+            "lines": [
+              {
+                "speaker": "Student",
+                "japanese": "先生、遅刻しちゃう！",
+                "romaji": "sensei, chikoku shichau!",
+                "english": "Teacher, I'm going to be late!"
+              },
+              {
+                "speaker": "Teacher",
+                "japanese": "待って。走るのは…",
+                "romaji": "matte. hashiru no wa…",
+                "english": "Wait. Running is…"
+              }
+            ]
+          },
+          "audioKey": null
+        },
+        {
+          "japanese": "宿題を忘れてはいけません。",
+          "romaji": "shukudai o wasurete wa ikemasen.",
+          "english": "You must not forget your homework.",
+          "targetSubstring": "忘れてはいけません",
+          "scenario": {
+            "setting": "A teacher reminds the class at the end of the lesson.",
+            "payoffSpeaker": "Teacher",
+            "lines": [
+              {
+                "speaker": "Student",
+                "japanese": "明日、何持ってきたらいいですか。",
+                "romaji": "ashita, nani motte kitara ii desu ka.",
+                "english": "What should we bring tomorrow?"
+              },
+              {
+                "speaker": "Teacher",
+                "japanese": "ノートはいいですが、大事なのは…",
+                "romaji": "nooto wa ii desu ga, daiji na no wa…",
+                "english": "A notebook is fine, but what's important is…"
+              }
+            ]
+          },
+          "audioKey": null
+        }
+      ],
+      "drills": [
+        {
+          "kind": "formChoice",
+          "prompt": "かく (to write)",
+          "choices": [
+            "かいてはいけません",
+            "かいてちゃいけない",
+            "かくてはいけません",
+            "かいてもいい"
+          ],
+          "correctChoice": "かいてはいけません"
+        },
+        {
+          "kind": "formChoice",
+          "prompt": "のむ (to drink)",
+          "choices": [
+            "のんではいけません",
+            "のんじゃいけない",
+            "のんではいけない",
+            "のんでもいい"
+          ],
+          "correctChoice": "のんではいけません"
+        },
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "ここでタバコを吸ってはいけません。",
+          "choices": [
+            "Smoking is not allowed here.",
+            "Please smoke here.",
+            "Smoking is encouraged here.",
+            "I want a cigarette."
+          ],
+          "correctChoice": "Smoking is not allowed here."
+        },
+        {
+          "kind": "sentenceBuilder",
+          "english": "Don't go there.",
+          "buildComponents": [
+            "そこに",
+            "行って",
+            "はいけない"
+          ],
+          "choices": [
+            "そこに",
+            "行って",
+            "はいけない",
+            "そこを",
+            "行っちゃ",
+            "よ"
+          ],
+          "correctChoice": "そこに行ってはいけない"
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "You must not take photos here.",
+          "choices": [
+            "ここで写真を撮ってはいけません。",
+            "ここで写真を撮ってもいいです。",
+            "ここで写真を撮りましょう。",
+            "写真が好きです。"
+          ],
+          "correctChoice": "ここで写真を撮ってはいけません。"
+        }
+      ]
+    },
+    {
+      "id": "n5-nakucha",
+      "orderIndex": 2,
+      "title": "なくちゃ",
+      "headlineEnglish": "have to; must (casual)",
+      "forms": [
+        "なくちゃ",
+        "なきゃ",
+        "なくちゃいけない",
+        "なきゃいけない"
+      ],
+      "formation": [
+        {
+          "title": "From the negative ない-stem",
+          "body": "Take the verb's negative stem (ない-form without ない) and add ちゃ or きゃ.\n\nいく → いかない → いかなくちゃ"
+        },
+        {
+          "title": "Short forms",
+          "body": "なくちゃ and なきゃ often stand alone as \"gotta / have to.\" You can add いけない for emphasis."
+        }
+      ],
+      "usage": [
+        {
+          "title": "Casual obligation",
+          "body": "Spoken shorthand for なければならない. Used with friends and family."
+        },
+        {
+          "title": "Compared to なければならない",
+          "body": "Same obligation meaning, but なくちゃ is informal. Avoid in formal writing."
+        }
+      ],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "もう行かなくちゃ。",
+          "romaji": "mou ikanakucha.",
+          "english": "I have to go already.",
+          "targetSubstring": "行かなくちゃ",
+          "scenario": {
+            "setting": "A friend checks their watch during a hangout.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "もうちょっといない？",
+                "romaji": "mou chotto inai?",
+                "english": "Can't you stay a little longer?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "ごめん、電車の時間が…",
+                "romaji": "gomen, densha no jikan ga…",
+                "english": "Sorry, my train…"
+              }
+            ]
+          },
+          "audioKey": null
+        },
+        {
+          "japanese": "薬を飲まなくちゃいけない。",
+          "romaji": "kusuri o nomanakucha ikenai.",
+          "english": "I have to take my medicine.",
+          "targetSubstring": "飲まなくちゃ",
+          "scenario": {
+            "setting": "A parent notices their child skipping evening meds.",
+            "payoffSpeaker": "Parent",
+            "lines": [
+              {
+                "speaker": "Child",
+                "japanese": "もう平気だよ。飲まなくていいでしょ。",
+                "romaji": "mou heiki da yo. nomanakute ii desho.",
+                "english": "I'm fine now. I don't need to take it, right?"
+              },
+              {
+                "speaker": "Parent",
+                "japanese": "ダメよ。医者が言ったでしょ。",
+                "romaji": "dame yo. isha ga itta desho.",
+                "english": "No. The doctor said so, remember?"
+              }
+            ]
+          },
+          "audioKey": null
+        },
+        {
+          "japanese": "早く寝なきゃ。",
+          "romaji": "hayaku ne nakya.",
+          "english": "I gotta sleep early.",
+          "targetSubstring": "寝なきゃ",
+          "scenario": {
+            "setting": "Late night — someone is still on the couch scrolling.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "まだ起きてるの？明日早いんでしょ。",
+                "romaji": "mada okiteru no? ashita hayai n desho.",
+                "english": "You're still up? You have an early day tomorrow."
+              },
+              {
+                "speaker": "A",
+                "japanese": "うん、わかってる。でも…",
+                "romaji": "un, wakatte ru. demo…",
+                "english": "Yeah, I know. But…"
+              }
+            ]
+          },
+          "audioKey": null
+        }
+      ],
+      "drills": [
+        {
+          "kind": "formChoice",
+          "prompt": "いく (to go)",
+          "choices": [
+            "いかなくちゃ",
+            "いってなくちゃ",
+            "いきなくちゃ",
+            "いかないちゃ"
+          ],
+          "correctChoice": "いかなくちゃ"
+        },
+        {
+          "kind": "formChoice",
+          "prompt": "のむ (to drink)",
+          "choices": [
+            "のまなくちゃ",
+            "のんでなくちゃ",
+            "のみなくちゃ",
+            "のまないちゃ"
+          ],
+          "correctChoice": "のまなくちゃ"
+        },
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "もう行かなくちゃ。",
+          "choices": [
+            "I have to go already.",
+            "I must not go.",
+            "I went already.",
+            "I want to stay."
+          ],
+          "correctChoice": "I have to go already."
+        },
+        {
+          "kind": "sentenceBuilder",
+          "english": "I gotta eat.",
+          "buildComponents": [
+            "食べ",
+            "なくちゃ"
+          ],
+          "choices": [
+            "食べ",
+            "なくちゃ",
+            "食べて",
+            "ない",
+            "よ",
+            "いけない"
+          ],
+          "correctChoice": "食べなくちゃ"
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "I gotta sleep early.",
+          "choices": [
+            "早く寝なきゃ。",
+            "早く寝ちゃダメ。",
+            "早く寝ました。",
+            "早く起きなきゃ。"
+          ],
+          "correctChoice": "早く寝なきゃ。"
+        }
+      ]
+    },
+    {
+      "id": "n5-ichiban",
+      "orderIndex": 3,
+      "title": "いちばん",
+      "headlineEnglish": "the most",
+      "blurb": "Japanese doesn't bolt -est onto adjectives the way English does — it leans on one word that means 'number one.' Drop いちばん in front of almost any adjective or verb phrase and you instantly have a superlative. You'll hear it everywhere from menu descriptions to sports commentary, and once you've got it, you can rank anything.",
+      "forms": [
+        "いちばん",
+        "一番"
+      ],
+      "formation": [
+        {
+          "title": "いちばん + い-adjective",
+          "body": "Place いちばん directly before the adjective.\n\nこの店がいちばん安い。\nThis shop is the cheapest."
+        },
+        {
+          "title": "いちばん + な-adjective",
+          "body": "Same pattern — いちばん comes before the adjective.\n\n彼女がいちばん元気だ。\nShe is the most energetic."
+        },
+        {
+          "title": "〜の中でいちばん",
+          "body": "Add の中で before いちばん to say 'the most among ~.'\n\nクラスの中でいちばん背が高い。\nThe tallest in the class."
+        }
+      ],
+      "usage": [
+        {
+          "title": "Superlative",
+          "body": "いちばん turns any adjective into its superlative form. Unlike English, the adjective itself doesn't change.\n\nおいしい → いちばんおいしい (most delicious)\n速い → いちばん速い (fastest)"
+        },
+        {
+          "title": "Ranking among a group",
+          "body": "Pair いちばん with 〜の中で to specify the pool you're ranking within.\n\n三つの中でこれがいちばん好き。\nOf the three, I like this one the most."
+        }
+      ],
+      "usageLadders": [
+        {
+          "label": "most delicious",
+          "levels": [
+            {
+              "japanese": "これいちばんうまい",
+              "register": "Rough"
+            },
+            {
+              "japanese": "これがいちばんおいしい",
+              "register": "Casual"
+            },
+            {
+              "japanese": "これがいちばんおいしいです",
+              "register": "Polite"
+            }
+          ]
+        },
+        {
+          "label": "fastest",
+          "levels": [
+            {
+              "japanese": "田中がいちばん速い",
+              "register": "Casual"
+            },
+            {
+              "japanese": "田中さんがいちばん速いです",
+              "register": "Polite"
+            },
+            {
+              "japanese": "田中さんがいちばん速くいらっしゃいます",
+              "register": "Honorific"
+            }
+          ]
+        },
+        {
+          "label": "most fun",
+          "levels": [
+            {
+              "japanese": "これがいちばん楽しい",
+              "register": "Casual"
+            },
+            {
+              "japanese": "これがいちばん楽しいですね",
+              "register": "Polite"
+            },
+            {
+              "japanese": "こちらがいちばん楽しゅうございます",
+              "register": "Very Formal"
+            }
+          ]
+        }
+      ],
+      "relatedPointIDs": [
+        "n5-yori-hou-ga"
+      ],
+      "examples": [
+        {
+          "japanese": "このラーメンがいちばん辛い。",
+          "romaji": "kono raamen ga ichiban karai.",
+          "english": "This ramen is the spiciest.",
+          "targetSubstring": "いちばん",
+          "scenario": {
+            "setting": "Two friends study a ramen shop's spice chart, trying to choose.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "どれにする？全部辛そうだけど。",
+                "romaji": "dore ni suru? zenbu karasou da kedo.",
+                "english": "Which one are you getting? They all look spicy."
+              },
+              {
+                "speaker": "A",
+                "japanese": "辛いの大好きだから、迷う。",
+                "romaji": "karai no daisuki dakara, mayou.",
+                "english": "I love spicy food, so it's hard to choose."
+              }
+            ]
+          },
+          "audioKey": null
+        },
+        {
+          "japanese": "三つの中で、春がいちばん好きな季節だ。",
+          "romaji": "mittsu no naka de, haru ga ichiban sukina kisetsu da.",
+          "english": "Of the three, spring is my favorite season.",
+          "targetSubstring": "いちばん",
+          "scenario": {
+            "setting": "Two coworkers chat by the window as cherry blossoms drift past.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "最近、いい天気が続いてるね。",
+                "romaji": "saikin, ii tenki ga tsuzuiteru ne.",
+                "english": "The weather's been so nice lately."
+              },
+              {
+                "speaker": "B",
+                "japanese": "本当に。四季の中でも…",
+                "romaji": "hontou ni. shiki no naka de mo...",
+                "english": "Really. Of all the seasons..."
+              }
+            ]
+          },
+          "audioKey": null
+        },
+        {
+          "japanese": "この山道の中で、ここがいちばん景色がいい。",
+          "romaji": "kono yamamichi no naka de, koko ga ichiban keshiki ga ii.",
+          "english": "Along this mountain trail, this spot has the best view.",
+          "targetSubstring": "いちばん",
+          "scenario": {
+            "setting": "Two hikers reach a rocky overlook, catching their breath.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "やっと着いた…足が痛い。",
+                "romaji": "yatto tsuita... ashi ga itai.",
+                "english": "We finally made it... my legs ache."
+              },
+              {
+                "speaker": "A",
+                "japanese": "でも振り返ってみて。",
+                "romaji": "demo furikaette mite.",
+                "english": "But turn around and look."
+              }
+            ]
+          },
+          "audioKey": null
+        },
+        {
+          "japanese": "全部食べたけど、チョコレートケーキがいちばんおいしかった。",
+          "romaji": "zenbu tabeta kedo, chokoreeto keeki ga ichiban oishikatta.",
+          "english": "I tried everything, but the chocolate cake was the best.",
+          "targetSubstring": "いちばん",
+          "scenario": {
+            "setting": "Friends walk out of a bakery tasting event, comparing notes.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "どれが好きだった？",
+                "romaji": "dore ga sukidatta?",
+                "english": "Which one did you like?"
+              },
+              {
+                "speaker": "B",
+                "japanese": "全部よかったけど、やっぱり…",
+                "romaji": "zenbu yokatta kedo, yappari...",
+                "english": "They were all good, but honestly..."
+              }
+            ]
+          },
+          "audioKey": null
+        },
+        {
+          "japanese": "クラスの中で田中くんがいちばん足が速い。",
+          "romaji": "kurasu no naka de tanaka-kun ga ichiban ashi ga hayai.",
+          "english": "Tanaka is the fastest runner in the class.",
+          "targetSubstring": "いちばん",
+          "scenario": {
+            "setting": "A coach talks to a teacher before a school sports day.",
+            "payoffSpeaker": "Teacher",
+            "lines": [
+              {
+                "speaker": "Coach",
+                "japanese": "リレーに出せる生徒、誰かいますか。",
+                "romaji": "riree ni daseru seito, dareka imasu ka.",
+                "english": "Do you have a student who could run the relay?"
+              },
+              {
+                "speaker": "Teacher",
+                "japanese": "そうですね、走りなら…",
+                "romaji": "sou desu ne, hashiri nara...",
+                "english": "Let me think — if it's about running..."
+              }
+            ]
+          },
+          "audioKey": null
+        }
+      ],
+      "drills": [
+        {
+          "kind": "precursorChoice",
+          "instruction": "Select the missing component to make this sentence whole.",
+          "exampleJapanese": "このラーメンがいちばん辛い。",
+          "targetSubstring": "いちばん",
+          "english": "This ramen is the spiciest.",
+          "choices": [
+            "いちばん",
+            "もっと",
+            "とても",
+            "すごく"
+          ],
+          "correctChoice": "いちばん"
+        },
+        {
+          "kind": "formChoice",
+          "instruction": "Pick the correct superlative sentence.",
+          "prompt": "This park is the most beautiful.",
+          "choices": [
+            "この公園がいちばんきれいだ。",
+            "この公園がもっときれいだ。",
+            "この公園はきれいいちばんだ。",
+            "この公園がきれいないちばんだ。"
+          ],
+          "correctChoice": "この公園がいちばんきれいだ。"
+        },
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "三つの中でこの本がいちばん面白い。",
+          "choices": [
+            "Of the three, this book is the most interesting.",
+            "This book is more interesting than three others.",
+            "I want to read this book the most.",
+            "This book is interesting, but not the best."
+          ],
+          "correctChoice": "Of the three, this book is the most interesting."
+        },
+        {
+          "kind": "sentenceBuilder",
+          "english": "Spring is the most fun.",
+          "buildComponents": [
+            "春が",
+            "いちばん",
+            "楽しい"
+          ],
+          "choices": [
+            "春が",
+            "いちばん",
+            "楽しい",
+            "もっと",
+            "春は",
+            "楽しかった"
+          ],
+          "correctChoice": "春がいちばん楽しい"
+        },
+        {
+          "kind": "contrastChoice",
+          "contrastLabel": "spicier vs. spiciest",
+          "choices": [
+            "もっと辛い",
+            "いちばん辛い"
+          ],
+          "correctChoice": "いちばん辛い"
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "Tanaka is the fastest in the class.",
+          "choices": [
+            "田中くんがクラスでいちばん速い。",
+            "田中くんはクラスでもっと速い。",
+            "田中くんがクラスで速いです。",
+            "田中くんはいちばん速くなりたい。"
+          ],
+          "correctChoice": "田中くんがクラスでいちばん速い。"
+        },
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "クラスの中でこの問題がいちばん難しかった。",
+          "choices": [
+            "Of all the problems, this one was the hardest.",
+            "This problem is harder than the others in class.",
+            "I found this problem in class very difficult.",
+            "Nobody in class could solve this problem."
+          ],
+          "correctChoice": "Of all the problems, this one was the hardest."
+        }
+      ]
+    },
+    {
+      "id": "n5-ga-1",
+      "orderIndex": 4,
+      "title": "が①",
+      "headlineEnglish": "subject marker; identifies who or what acts",
+      "blurb": "が marks the subject — who or what does the action. Unlike は, which sets the topic, が spotlights the doer, often answering \"who?\" or \"what?\" Use it when you're identifying someone or something for the first time.",
+      "forms": [
+        "が"
+      ],
+      "formation": [
+        {
+          "title": "Noun + が + predicate",
+          "body": "Attach が directly to the noun that performs the action.\n\n猫がいる。\nThere is a cat."
+        },
+        {
+          "title": "Answering 誰が・何が questions",
+          "body": "When a question asks 誰が (who) or 何が (what), the answer uses が.\n\n誰が来た？ → 友達が来た。\nWho came? → A friend came."
+        },
+        {
+          "title": "が in subordinate clauses",
+          "body": "Inside clauses that describe a noun, が is always used — never は.\n\n母が作った料理\nThe food that Mom made"
+        }
+      ],
+      "usage": [
+        {
+          "title": "Identifying the subject",
+          "body": "が points to exactly who or what performs the verb. It often carries a sense of \"it is X that —\" — highlighting the subject."
+        },
+        {
+          "title": "New information vs. known topic",
+          "body": "Use が when the subject is new or being identified. Once established, は often takes over.\n\n犬が来た。犬は大きい。\nA dog came. The dog is big."
+        },
+        {
+          "title": "Compared to は",
+          "body": "は introduces a topic the listener can follow. が identifies the subject. 私は学生です is a self-introduction; 私が学生です singles you out among others."
+        }
+      ],
+      "usageLadders": [
+        {
+          "label": "who arrived",
+          "levels": [
+            {
+              "japanese": "友達が来た",
+              "register": "Casual"
+            },
+            {
+              "japanese": "友達が来ました",
+              "register": "Polite"
+            },
+            {
+              "japanese": "先生が来ました",
+              "register": "Formal"
+            }
+          ]
+        },
+        {
+          "label": "it is raining",
+          "levels": [
+            {
+              "japanese": "雨が降る",
+              "register": "Casual"
+            },
+            {
+              "japanese": "雨が降ります",
+              "register": "Polite"
+            },
+            {
+              "japanese": "雨が降っております",
+              "register": "Formal"
+            }
+          ]
+        },
+        {
+          "label": "the phone rings",
+          "levels": [
+            {
+              "japanese": "電話が鳴る",
+              "register": "Casual"
+            },
+            {
+              "japanese": "電話が鳴ります",
+              "register": "Polite"
+            },
+            {
+              "japanese": "電話が鳴っております",
+              "register": "Formal"
+            }
+          ]
+        }
+      ],
+      "relatedPointIDs": [
+        "n5-wa",
+        "n5-ga-iru",
+        "n5-ga-aru"
+      ],
+      "examples": [
+        {
+          "japanese": "庭に猫がいる。",
+          "romaji": "niwa ni neko ga iru.",
+          "english": "There is a cat in the garden.",
+          "targetSubstring": "が",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Two siblings look out into the yard.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "何かいる？",
+                "romaji": "nanika iru?",
+                "english": "Is something there?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "見て、庭。",
+                "romaji": "mite, niwa.",
+                "english": "Look — the garden."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "誰が来た？友達が来た。",
+          "romaji": "dare ga kita? tomodachi ga kita.",
+          "english": "Who came? A friend came.",
+          "targetSubstring": "が",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Someone hears the doorbell and asks who is visiting.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "あ、来た。",
+                "romaji": "a, kita.",
+                "english": "Oh, someone's here."
+              },
+              {
+                "speaker": "B",
+                "japanese": "誰？",
+                "romaji": "dare?",
+                "english": "Who?"
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "雨が降る。",
+          "romaji": "ame ga furu.",
+          "english": "It is raining.",
+          "targetSubstring": "が",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Two friends step outside and feel raindrops.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "外、どう？",
+                "romaji": "soto, dou?",
+                "english": "How's it outside?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "空、見て。",
+                "romaji": "sora, mite.",
+                "english": "Look at the sky."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "犬が大きい。",
+          "romaji": "inu ga ookii.",
+          "english": "The dog is big.",
+          "targetSubstring": "が",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A child sees a large dog on a walk.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "あの犬、すごい。",
+                "romaji": "ano inu, sugoi.",
+                "english": "That dog is amazing."
+              },
+              {
+                "speaker": "B",
+                "japanese": "ほんと、大きいね。",
+                "romaji": "hontou, ookii ne.",
+                "english": "Yeah, it's really big."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "電話が鳴る。",
+          "romaji": "denwa ga naru.",
+          "english": "The phone is ringing.",
+          "targetSubstring": "が",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A phone rings while two people are talking.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "何の音？",
+                "romaji": "nani no oto?",
+                "english": "What's that sound?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "ちょっと、電話。",
+                "romaji": "chotto, denwa.",
+                "english": "Hang on — the phone."
+              }
+            ]
+          }
+        }
+      ],
+      "drills": [
+        {
+          "kind": "precursorChoice",
+          "instruction": "Select the correct particle to complete the sentence.",
+          "exampleJapanese": "雨___降る。",
+          "targetSubstring": "が",
+          "english": "It is raining.",
+          "choices": [
+            "が",
+            "は",
+            "を",
+            "に"
+          ],
+          "correctChoice": "が"
+        },
+        {
+          "kind": "formChoice",
+          "instruction": "Which sentence correctly identifies who came?",
+          "prompt": "A friend came.",
+          "choices": [
+            "友達が来た。",
+            "友達は来た。",
+            "友達を来た。",
+            "友達に来た。"
+          ],
+          "correctChoice": "友達が来た。"
+        },
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "私が作りました。",
+          "choices": [
+            "I made it. (singling out the speaker as the one who did it)",
+            "As for me, I cooked.",
+            "I want to make it.",
+            "Someone made it for me."
+          ],
+          "correctChoice": "I made it. (singling out the speaker as the one who did it)"
+        },
+        {
+          "kind": "sentenceBuilder",
+          "english": "The phone is ringing.",
+          "buildComponents": [
+            "電話が",
+            "鳴る"
+          ],
+          "choices": [
+            "電話が",
+            "鳴る",
+            "電話は",
+            "鳴った",
+            "電話を",
+            "する"
+          ],
+          "correctChoice": "電話が鳴る"
+        },
+        {
+          "kind": "contrastChoice",
+          "contrastLabel": "Identifying who did it vs. stating a topic",
+          "choices": [
+            "私が行きます",
+            "私は行きます"
+          ],
+          "correctChoice": "私が行きます"
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "Who came? — A friend came.",
+          "choices": [
+            "誰が来た？友達が来た。",
+            "誰は来た？友達は来た。",
+            "誰を来た？友達を来た。",
+            "誰に来た？友達に来た。"
+          ],
+          "correctChoice": "誰が来た？友達が来た。"
+        },
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "母が作った料理",
+          "choices": [
+            "The food that Mom made",
+            "Mom wants to cook",
+            "Food was made for Mom",
+            "Mom is cooking now"
+          ],
+          "correctChoice": "The food that Mom made"
+        }
+      ]
+    },
+    {
+      "id": "n5-ga-2",
+      "orderIndex": 5,
+      "title": "が②",
+      "headlineEnglish": "but; however",
+      "blurb": "When が sits between two adjectives or short clauses, it means \"but\" or \"however.\" It connects contrasting ideas — a slightly more formal cousin of けど. Both sides of が describe the same subject.",
+      "forms": [
+        "が"
+      ],
+      "formation": [
+        {
+          "title": "Adjective + が + adjective",
+          "body": "Link two contrasting descriptions with が between them.\n\n難しいが、楽しい。\nIt's difficult, but fun."
+        }
+      ],
+      "usage": [
+        {
+          "title": "Soft contrast",
+          "body": "が② acknowledges a downside, then adds a positive (or vice versa). The second part is the main point you want to land on."
+        }
+      ],
+      "usageLadders": [],
+      "relatedPointIDs": [
+        "n5-ga-1",
+        "n5-kedo"
+      ],
+      "examples": [
+        {
+          "japanese": "難しいが、楽しい。",
+          "romaji": "muzukashii ga, tanoshii.",
+          "english": "It's difficult, but fun.",
+          "targetSubstring": "が",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A student talks about their Japanese class.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "日本語、どう？",
+                "romaji": "nihongo, dou?",
+                "english": "How's Japanese?"
+              },
+              {
+                "speaker": "B",
+                "japanese": "うん、まあね。",
+                "romaji": "un, maa ne.",
+                "english": "Yeah, well..."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "小さいが、かわいい。",
+          "romaji": "chiisai ga, kawaii.",
+          "english": "It's small, but cute.",
+          "targetSubstring": "が",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Two friends look at a tiny puppy.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "ちいさいね。",
+                "romaji": "chiisai ne.",
+                "english": "It's so small."
+              },
+              {
+                "speaker": "A",
+                "japanese": "でも、かわいい。",
+                "romaji": "demo, kawaii.",
+                "english": "But it's cute."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "高いが、おいしい。",
+          "romaji": "takai ga, oishii.",
+          "english": "It's expensive, but delicious.",
+          "targetSubstring": "が",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Someone tries food at a nice restaurant.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "値段、どう？",
+                "romaji": "nedan, dou?",
+                "english": "What about the price?"
+              },
+              {
+                "speaker": "B",
+                "japanese": "まあ、食べてみて。",
+                "romaji": "maa, tabete mite.",
+                "english": "Well, try it."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "今日は寒いが、行く。",
+          "romaji": "kyou wa samui ga, iku.",
+          "english": "Today is cold, but I'm going.",
+          "targetSubstring": "が",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A friend hesitates before leaving the house.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "寒いよ、今日。",
+                "romaji": "samui yo, kyou.",
+                "english": "It's cold today."
+              },
+              {
+                "speaker": "A",
+                "japanese": "でも、行かなきゃ。",
+                "romaji": "demo, ikanakya.",
+                "english": "But I have to go."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "本は古いが、好きだ。",
+          "romaji": "hon wa furui ga, suki da.",
+          "english": "The book is old, but I like it.",
+          "targetSubstring": "が",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Someone shows a worn book they treasure.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "その本、古いね。",
+                "romaji": "sono hon, furui ne.",
+                "english": "That book is old."
+              },
+              {
+                "speaker": "B",
+                "japanese": "うん、でも好き。",
+                "romaji": "un, demo suki.",
+                "english": "Yeah, but I like it."
+              }
+            ]
+          }
+        }
+      ],
+      "drills": [
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "難しいが、楽しい。",
+          "choices": [
+            "It's difficult, but fun.",
+            "It's difficult and fun.",
+            "It's difficult, so it's fun.",
+            "It's difficult, isn't it fun?"
+          ],
+          "correctChoice": "It's difficult, but fun."
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "It's expensive, but delicious.",
+          "choices": [
+            "高いが、おいしい。",
+            "高いから、おいしい。",
+            "高いけど、おいしくない。",
+            "高いは、おいしい。"
+          ],
+          "correctChoice": "高いが、おいしい。"
+        }
+      ]
+    },
+    {
+      "id": "n5-ka-1",
+      "orderIndex": 6,
+      "title": "か①",
+      "headlineEnglish": "or (choice between two options)",
+      "blurb": "か between two nouns means \"or\" — you're offering a choice. It only works when picking between options, not at the end of a question.",
+      "forms": [
+        "か"
+      ],
+      "formation": [
+        {
+          "title": "A + か + B",
+          "body": "Put か between the two choices.\n\nコーヒーかお茶？\nCoffee or tea?"
+        }
+      ],
+      "usage": [
+        {
+          "title": "Offering a choice",
+          "body": "Use か when presenting two (or more) alternatives. The listener picks one. Often used in casual speech without です."
+        }
+      ],
+      "usageLadders": [],
+      "relatedPointIDs": [
+        "n5-ka-2"
+      ],
+      "examples": [
+        {
+          "japanese": "コーヒーかお茶？",
+          "romaji": "koohii ka ocha?",
+          "english": "Coffee or tea?",
+          "targetSubstring": "か",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A host asks a guest what they'd like to drink.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "何か飲む？",
+                "romaji": "nanika nomu?",
+                "english": "Want something to drink?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "うん、お願い。",
+                "romaji": "un, onegai.",
+                "english": "Yeah, please."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "これかそれ？",
+          "romaji": "kore ka sore?",
+          "english": "This one or that one?",
+          "targetSubstring": "か",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A shop clerk holds up two items.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "どっちがいい？",
+                "romaji": "docchi ga ii?",
+                "english": "Which do you prefer?"
+              },
+              {
+                "speaker": "B",
+                "japanese": "えっと…",
+                "romaji": "etto...",
+                "english": "Um..."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "犬か猫？",
+          "romaji": "inu ka neko?",
+          "english": "A dog or a cat?",
+          "targetSubstring": "か",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Two friends talk about pets.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "何が好き？",
+                "romaji": "nani ga suki?",
+                "english": "What do you like?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "うーん…",
+                "romaji": "uun...",
+                "english": "Hmm..."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "今日か明日？",
+          "romaji": "kyou ka ashita?",
+          "english": "Today or tomorrow?",
+          "targetSubstring": "か",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Friends try to pick a day to meet.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "いつ会う？",
+                "romaji": "itsu au?",
+                "english": "When should we meet?"
+              },
+              {
+                "speaker": "B",
+                "japanese": "来週は？",
+                "romaji": "raishuu wa?",
+                "english": "How about next week?"
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "電車かバス？",
+          "romaji": "densha ka basu?",
+          "english": "Train or bus?",
+          "targetSubstring": "か",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Two travelers decide how to get to the station.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "駅、どう行く？",
+                "romaji": "eki, dou iku?",
+                "english": "How do we get to the station?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "どっちがいい？",
+                "romaji": "docchi ga ii?",
+                "english": "Which is better?"
+              }
+            ]
+          }
+        }
+      ],
+      "drills": [
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "コーヒーかお茶？",
+          "choices": [
+            "Coffee or tea?",
+            "Is it coffee?",
+            "Coffee and tea.",
+            "Coffee because of tea."
+          ],
+          "correctChoice": "Coffee or tea?"
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "Train or bus?",
+          "choices": [
+            "電車かバス？",
+            "電車はバス？",
+            "電車がバス？",
+            "電車をバス？"
+          ],
+          "correctChoice": "電車かバス？"
+        }
+      ]
+    },
+    {
+      "id": "n5-ka-2",
+      "orderIndex": 7,
+      "title": "か②",
+      "headlineEnglish": "question particle",
+      "blurb": "か at the end of a sentence turns a statement into a yes/no question. In polite speech you often add ですか. The question mark in English is optional in Japanese — か already signals a question.",
+      "forms": [
+        "か"
+      ],
+      "formation": [
+        {
+          "title": "Statement + か",
+          "body": "Add か to the end of a sentence to ask a yes/no question.\n\n雨ですか。\nIs it raining?"
+        },
+        {
+          "title": "Polite questions",
+          "body": "With です or ます, か becomes ですか or ますか.\n\n学生ですか。\nAre you a student?"
+        }
+      ],
+      "usage": [
+        {
+          "title": "Yes/no questions",
+          "body": "か asks whether something is true. The listener answers はい or いいえ (or a fuller response)."
+        }
+      ],
+      "usageLadders": [],
+      "relatedPointIDs": [
+        "n5-ka-1"
+      ],
+      "examples": [
+        {
+          "japanese": "雨ですか。",
+          "romaji": "ame desu ka.",
+          "english": "Is it raining?",
+          "targetSubstring": "か",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Someone looks out the window and isn't sure.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "外、見て。",
+                "romaji": "soto, mite.",
+                "english": "Look outside."
+              },
+              {
+                "speaker": "A",
+                "japanese": "あれ、雨？",
+                "romaji": "are, ame?",
+                "english": "Wait, is that rain?"
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "学生ですか。",
+          "romaji": "gakusei desu ka.",
+          "english": "Are you a student?",
+          "targetSubstring": "か",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A new acquaintance asks about someone's job.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "大学に通ってる？",
+                "romaji": "daigaku ni kayotteru?",
+                "english": "Do you go to university?"
+              },
+              {
+                "speaker": "B",
+                "japanese": "え、どうして？",
+                "romaji": "e, doushite?",
+                "english": "Huh, why?"
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "これは本ですか。",
+          "romaji": "kore wa hon desu ka.",
+          "english": "Is this a book?",
+          "targetSubstring": "か",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A teacher holds up an object in class.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "これ、何だと思う？",
+                "romaji": "kore, nan da to omou?",
+                "english": "What do you think this is?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "えっと…",
+                "romaji": "etto...",
+                "english": "Um..."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "大きいですか。",
+          "romaji": "ookii desu ka.",
+          "english": "Is it big?",
+          "targetSubstring": "か",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A child asks about an animal at the zoo.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "あの犬、すごいね。",
+                "romaji": "ano inu, sugoi ne.",
+                "english": "That dog is amazing."
+              },
+              {
+                "speaker": "B",
+                "japanese": "ほんとに大きい？",
+                "romaji": "hontou ni ookii?",
+                "english": "Is it really big?"
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "今、何時ですか。",
+          "romaji": "ima, nanji desu ka.",
+          "english": "What time is it now?",
+          "targetSubstring": "か",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Someone needs to catch a train.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "電車、もうすぐだ。",
+                "romaji": "densha, mou sugu da.",
+                "english": "The train's coming soon."
+              },
+              {
+                "speaker": "A",
+                "japanese": "今、何時？",
+                "romaji": "ima, nanji?",
+                "english": "What time is it now?"
+              }
+            ]
+          }
+        }
+      ],
+      "drills": [
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "雨ですか。",
+          "choices": [
+            "Is it raining?",
+            "It is raining.",
+            "It will rain.",
+            "Rain or shine?"
+          ],
+          "correctChoice": "Is it raining?"
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "Are you a student?",
+          "choices": [
+            "学生ですか。",
+            "学生です。",
+            "学生か。",
+            "学生がいますか。"
+          ],
+          "correctChoice": "学生ですか。"
+        }
+      ]
+    },
+    {
+      "id": "n5-ga-aru",
+      "orderIndex": 8,
+      "title": "がある",
+      "headlineEnglish": "there is (non-living things)",
+      "blurb": "",
+      "forms": [
+        "がある",
+        "があります"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "川がある。",
+          "romaji": "kawa ga aru.",
+          "english": "There is a river.",
+          "targetSubstring": "がある",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-ga-iru",
+      "orderIndex": 9,
+      "title": "がいる",
+      "headlineEnglish": "there is (living things)",
+      "blurb": "",
+      "forms": [
+        "がいる",
+        "がいます"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "可愛い女の子がいる。",
+          "romaji": "kawaii onna no ko ga iru.",
+          "english": "There is a cute girl.",
+          "targetSubstring": "がいる",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-kara-1",
+      "orderIndex": 10,
+      "title": "から①",
+      "headlineEnglish": "because; since",
+      "blurb": "",
+      "forms": [
+        "から"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "車で来ましたから。",
+          "romaji": "kuruma de kimashita kara.",
+          "english": "Because I came by car.",
+          "targetSubstring": "から",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-kara-2",
+      "orderIndex": 11,
+      "title": "から②",
+      "headlineEnglish": "from",
+      "blurb": "",
+      "forms": [
+        "から"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "西からの風。",
+          "romaji": "nishi kara no kaze.",
+          "english": "Wind from the west.",
+          "targetSubstring": "から",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-kurai",
+      "orderIndex": 12,
+      "title": "くらい・ぐらい",
+      "headlineEnglish": "about; approximately",
+      "blurb": "",
+      "forms": [
+        "くらい",
+        "ぐらい"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "東京まで、３０分くらいです。",
+          "romaji": "toukyou made, sanjuppun kurai desu.",
+          "english": "It's about 30 minutes to Tokyo.",
+          "targetSubstring": "くらい",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-kedo",
+      "orderIndex": 13,
+      "title": "けど・けれども",
+      "headlineEnglish": "but; although",
+      "blurb": "",
+      "forms": [
+        "けど",
+        "けれど",
+        "けれども"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "早く寝たけれども、まだ眠たいです。",
+          "romaji": "hayaku neta keredomo, mada nemutai desu.",
+          "english": "I slept early, but I'm still sleepy.",
+          "targetSubstring": "けれども",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-suru",
+      "orderIndex": 14,
+      "title": "する",
+      "headlineEnglish": "to do",
+      "blurb": "",
+      "forms": [
+        "する",
+        "します",
+        "した",
+        "しない"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "質問する。",
+          "romaji": "shitsumon suru.",
+          "english": "To ask a question.",
+          "targetSubstring": "する",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-da-desu",
+      "orderIndex": 15,
+      "title": "だ・です",
+      "headlineEnglish": "there is; this is (copula)",
+      "blurb": "",
+      "forms": [
+        "だ",
+        "です",
+        "でした",
+        "じゃない"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "猫だ。猫です。",
+          "romaji": "neko da. neko desu.",
+          "english": "It's a cat.",
+          "targetSubstring": "だ",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-tai",
+      "orderIndex": 16,
+      "title": "たい",
+      "headlineEnglish": "want to",
+      "blurb": "",
+      "forms": [
+        "たい",
+        "たいです",
+        "たくない"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "何食べたい？",
+          "romaji": "nani tabetai?",
+          "english": "What do you want to eat?",
+          "targetSubstring": "たい",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-dake",
+      "orderIndex": 17,
+      "title": "だけ",
+      "headlineEnglish": "only; just",
+      "blurb": "",
+      "forms": [
+        "だけ"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "これは水だけだ。",
+          "romaji": "kore wa mizu dake da.",
+          "english": "This is just water.",
+          "targetSubstring": "だけ",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-ta-koto-ga-aru",
+      "orderIndex": 18,
+      "title": "たことがある",
+      "headlineEnglish": "have done before",
+      "blurb": "",
+      "forms": [
+        "たことがある",
+        "たことがあります"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "高い肉を食べたことがある。",
+          "romaji": "takai niku o tabeta koto ga aru.",
+          "english": "I have eaten expensive meat before.",
+          "targetSubstring": "たことがある",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-darou-1",
+      "orderIndex": 19,
+      "title": "だろう①",
+      "headlineEnglish": "probably",
+      "blurb": "",
+      "forms": [
+        "だろう",
+        "でしょう"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "ペンがあるだろう。",
+          "romaji": "pen ga aru darou.",
+          "english": "There's probably a pen.",
+          "targetSubstring": "だろう",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-darou-2",
+      "orderIndex": 20,
+      "title": "だろう②",
+      "headlineEnglish": "isn't it?; right?",
+      "blurb": "",
+      "forms": [
+        "だろう",
+        "でしょう"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "ここがいいだろう。",
+          "romaji": "koko ga ii darou.",
+          "english": "This is good, right?",
+          "targetSubstring": "だろう",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-tsumori",
+      "orderIndex": 21,
+      "title": "つもり",
+      "headlineEnglish": "plan to; intend to",
+      "blurb": "",
+      "forms": [
+        "つもりだ",
+        "つもりです"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "日本に行くつもりだ。",
+          "romaji": "nihon ni iku tsumori da.",
+          "english": "I plan to go to Japan.",
+          "targetSubstring": "つもり",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-de-1",
+      "orderIndex": 22,
+      "title": "で①",
+      "headlineEnglish": "at; in (location of action)",
+      "blurb": "で marks where an action happens — the stage, not the destination. With 行く you use に (where you're headed); with 食べる or 勉強する you use で (where you do it).",
+      "forms": [
+        "で"
+      ],
+      "formation": [
+        {
+          "title": "Place + で + action verb",
+          "body": "Attach で to the location where the action takes place.\n\n学校で勉強する。\nTo study at school."
+        }
+      ],
+      "usage": [
+        {
+          "title": "Action location vs. destination",
+          "body": "駅に行く = heading to the station. 駅で待つ = waiting at the station. に is the pin on the map you're moving toward; で is the room you're already acting in."
+        }
+      ],
+      "usageLadders": [],
+      "relatedPointIDs": [
+        "n5-ni",
+        "n5-de-2"
+      ],
+      "examples": [
+        {
+          "japanese": "学校で勉強する。",
+          "romaji": "gakkou de benkyou suru.",
+          "english": "To study at school.",
+          "targetSubstring": "で",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A student explains their daily routine.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "どこで勉強するの？",
+                "romaji": "doko de benkyou suru no?",
+                "english": "Where do you study?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "いつも学校で。",
+                "romaji": "itsumo gakkou de.",
+                "english": "Always at school."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "家で食べる。",
+          "romaji": "ie de taberu.",
+          "english": "To eat at home.",
+          "targetSubstring": "で",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Friends decide where to have dinner.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "外で食べる？",
+                "romaji": "soto de taberu?",
+                "english": "Eat out?"
+              },
+              {
+                "speaker": "B",
+                "japanese": "今日は家でいい。",
+                "romaji": "kyou wa ie de ii.",
+                "english": "Home is fine today."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "駅で待つ。",
+          "romaji": "eki de matsu.",
+          "english": "To wait at the station.",
+          "targetSubstring": "で",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Two friends plan to meet before a trip.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "どこで会う？",
+                "romaji": "doko de au?",
+                "english": "Where should we meet?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "駅で待ってて。",
+                "romaji": "eki de mattete.",
+                "english": "Wait at the station."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "公園で遊ぶ。",
+          "romaji": "kouen de asobu.",
+          "english": "To play at the park.",
+          "targetSubstring": "で",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Children talk about what to do after school.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "今日、何する？",
+                "romaji": "kyou, nani suru?",
+                "english": "What are we doing today?"
+              },
+              {
+                "speaker": "B",
+                "japanese": "公園に行こう。",
+                "romaji": "kouen ni ikou.",
+                "english": "Let's go to the park."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "ここで写真を撮る。",
+          "romaji": "koko de shashin o toru.",
+          "english": "To take a photo here.",
+          "targetSubstring": "で",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Tourists find a good spot for a picture.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "いい景色だね。",
+                "romaji": "ii keshiki da ne.",
+                "english": "Nice view."
+              },
+              {
+                "speaker": "A",
+                "japanese": "写真、撮ろう。",
+                "romaji": "shashin, torou.",
+                "english": "Let's take a photo."
+              }
+            ]
+          }
+        }
+      ],
+      "drills": [
+        {
+          "kind": "precursorChoice",
+          "instruction": "Select the correct particle to complete the sentence.",
+          "exampleJapanese": "学校___勉強する。",
+          "targetSubstring": "で",
+          "english": "To study at school.",
+          "choices": [
+            "で",
+            "に",
+            "を",
+            "は"
+          ],
+          "correctChoice": "で"
+        },
+        {
+          "kind": "contrastChoice",
+          "contrastLabel": "Destination vs. place of action",
+          "choices": [
+            "学校に行く",
+            "学校で勉強する"
+          ],
+          "correctChoice": "学校で勉強する"
+        }
+      ]
+    },
+    {
+      "id": "n5-de-2",
+      "orderIndex": 23,
+      "title": "で②",
+      "headlineEnglish": "with; by (means or method)",
+      "blurb": "で also marks the tool or means — how you get something done. Think \"by bus,\" \"with chopsticks,\" or \"in Japanese.\"",
+      "forms": [
+        "で"
+      ],
+      "formation": [
+        {
+          "title": "Means + で",
+          "body": "Put で after the tool, vehicle, or method.\n\nバスで帰る。\nTo go home by bus."
+        }
+      ],
+      "usage": [
+        {
+          "title": "Instrument or method",
+          "body": "で answers \"how?\" or \"with what?\" — the bus you ride, the language you speak, the chopsticks you eat with."
+        }
+      ],
+      "usageLadders": [],
+      "relatedPointIDs": [
+        "n5-de-1"
+      ],
+      "examples": [
+        {
+          "japanese": "バスで帰る。",
+          "romaji": "basu de kaeru.",
+          "english": "To go home by bus.",
+          "targetSubstring": "で",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Someone chooses how to get home after school.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "どうやって帰る？",
+                "romaji": "dou yatte kaeru?",
+                "english": "How are you getting home?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "バスで行く。",
+                "romaji": "basu de iku.",
+                "english": "I'll take the bus."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "電車で行く。",
+          "romaji": "densha de iku.",
+          "english": "To go by train.",
+          "targetSubstring": "で",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Friends plan a day trip.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "車で行く？",
+                "romaji": "kuruma de iku?",
+                "english": "Go by car?"
+              },
+              {
+                "speaker": "B",
+                "japanese": "電車のほうがいい。",
+                "romaji": "densha no hou ga ii.",
+                "english": "Train is better."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "箸で食べる。",
+          "romaji": "hashi de taberu.",
+          "english": "To eat with chopsticks.",
+          "targetSubstring": "で",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A visitor tries Japanese food for the first time.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "フォークあるよ。",
+                "romaji": "fooku aru yo.",
+                "english": "There's a fork."
+              },
+              {
+                "speaker": "A",
+                "japanese": "箸で食べたい。",
+                "romaji": "hashi de tabetai.",
+                "english": "I want to use chopsticks."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "日本語で話す。",
+          "romaji": "nihongo de hanasu.",
+          "english": "To speak in Japanese.",
+          "targetSubstring": "で",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A teacher encourages a student during conversation practice.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "英語じゃなくて…",
+                "romaji": "eigo ja nakute...",
+                "english": "Not in English..."
+              },
+              {
+                "speaker": "B",
+                "japanese": "日本語で大丈夫。",
+                "romaji": "nihongo de daijoubu.",
+                "english": "Japanese is fine."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "車で行く。",
+          "romaji": "kuruma de iku.",
+          "english": "To go by car.",
+          "targetSubstring": "で",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A family plans a weekend drive.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "電車のほうが早いよ。",
+                "romaji": "densha no hou ga hayai yo.",
+                "english": "The train is faster."
+              },
+              {
+                "speaker": "A",
+                "japanese": "でも、車で行こう。",
+                "romaji": "demo, kuruma de ikou.",
+                "english": "But let's go by car."
+              }
+            ]
+          }
+        }
+      ],
+      "drills": [
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "バスで帰る。",
+          "choices": [
+            "To go home by bus.",
+            "To go home to the bus.",
+            "To go home at the bus.",
+            "To go home from the bus."
+          ],
+          "correctChoice": "To go home by bus."
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "To eat with chopsticks.",
+          "choices": [
+            "箸で食べる。",
+            "箸に食べる。",
+            "箸を食べる。",
+            "箸は食べる。"
+          ],
+          "correctChoice": "箸で食べる。"
+        }
+      ]
+    },
+    {
+      "id": "n5-te-iru",
+      "orderIndex": 24,
+      "title": "ている",
+      "headlineEnglish": "is / are / am doing",
+      "blurb": "",
+      "forms": [
+        "ている",
+        "ています",
+        "てる"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "何をしている？",
+          "romaji": "nani o shite iru?",
+          "english": "What are you doing?",
+          "targetSubstring": "している",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-te-kara",
+      "orderIndex": 25,
+      "title": "てから",
+      "headlineEnglish": "after doing",
+      "blurb": "",
+      "forms": [
+        "てから"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "映画を見てから、帰ります。",
+          "romaji": "eiga o mite kara, kaerimasu.",
+          "english": "After watching the movie, I'll go home.",
+          "targetSubstring": "てから",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-te-kudasai",
+      "orderIndex": 26,
+      "title": "てください",
+      "headlineEnglish": "please do…",
+      "blurb": "",
+      "forms": [
+        "てください",
+        "でください"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "食べてください。",
+          "romaji": "tabete kudasai.",
+          "english": "Please eat.",
+          "targetSubstring": "てください",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-deshou-1",
+      "orderIndex": 27,
+      "title": "でしょう①",
+      "headlineEnglish": "probably",
+      "blurb": "",
+      "forms": [
+        "でしょう",
+        "だろう"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "雨でしょうね。",
+          "romaji": "ame deshou ne.",
+          "english": "It'll probably rain.",
+          "targetSubstring": "でしょう",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-deshou-2",
+      "orderIndex": 28,
+      "title": "でしょう②",
+      "headlineEnglish": "isn't it?; right?",
+      "blurb": "",
+      "forms": [
+        "でしょう",
+        "だろう"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "いいでしょう。",
+          "romaji": "ii deshou.",
+          "english": "It's fine, right?",
+          "targetSubstring": "でしょう",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-te-mo-ii",
+      "orderIndex": 29,
+      "title": "てもいい",
+      "headlineEnglish": "is okay; is alright to",
+      "blurb": "",
+      "forms": [
+        "てもいい",
+        "てもいいです",
+        "でもいい"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "狭くてもいい。",
+          "romaji": "semakute mo ii.",
+          "english": "It's okay if it's small.",
+          "targetSubstring": "てもいい",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-to-1",
+      "orderIndex": 30,
+      "title": "と①",
+      "headlineEnglish": "and (connects nouns)",
+      "blurb": "",
+      "forms": [
+        "と"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "黒と白の猫。",
+          "romaji": "kuro to shiro no neko.",
+          "english": "A black and white cat.",
+          "targetSubstring": "と",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-to-2",
+      "orderIndex": 31,
+      "title": "と②",
+      "headlineEnglish": "with (together with someone)",
+      "blurb": "",
+      "forms": [
+        "と"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "友達と見る。",
+          "romaji": "tomodachi to miru.",
+          "english": "To watch with a friend.",
+          "targetSubstring": "と",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-na-prohibitive",
+      "orderIndex": 32,
+      "title": "な",
+      "headlineEnglish": "don't do (prohibitive)",
+      "blurb": "",
+      "forms": [
+        "な"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "泣くな。",
+          "romaji": "naku na.",
+          "english": "Don't cry.",
+          "targetSubstring": "な",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-naide-kudasai",
+      "orderIndex": 33,
+      "title": "ないでください",
+      "headlineEnglish": "please don't",
+      "blurb": "",
+      "forms": [
+        "ないでください"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "泣かないでください。",
+          "romaji": "nakanaide kudasai.",
+          "english": "Please don't cry.",
+          "targetSubstring": "ないでください",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-naru",
+      "orderIndex": 34,
+      "title": "なる",
+      "headlineEnglish": "to become",
+      "blurb": "",
+      "forms": [
+        "なる",
+        "になる",
+        "くなる"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "病気になる。",
+          "romaji": "byouki ni naru.",
+          "english": "To become sick.",
+          "targetSubstring": "なる",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-ni-e",
+      "orderIndex": 35,
+      "title": "に・へ",
+      "headlineEnglish": "to (direction/destination)",
+      "blurb": "Both に and へ mark direction — where something is headed. に is more common in everyday speech; へ sounds slightly more literary but means the same thing for destinations.",
+      "forms": [
+        "に",
+        "へ"
+      ],
+      "formation": [
+        {
+          "title": "Place + に / へ + movement verb",
+          "body": "Either particle works before verbs like 行く and 帰る.\n\n駅に行く。駅へ行く。\nTo go to the station."
+        }
+      ],
+      "usage": [
+        {
+          "title": "に vs. へ",
+          "body": "For most learners, に and へ are interchangeable with 行く. へ adds a sense of \"toward\" and appears more in writing, signs, and announcements."
+        }
+      ],
+      "usageLadders": [],
+      "relatedPointIDs": [
+        "n5-ni"
+      ],
+      "examples": [
+        {
+          "japanese": "駅に行く。駅へ行く。",
+          "romaji": "eki ni iku. eki e iku.",
+          "english": "To go to the station. / To go toward the station.",
+          "targetSubstring": "に",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A teacher explains two ways to say the same thing.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "どっちも同じ？",
+                "romaji": "docchimo onaji?",
+                "english": "Are both the same?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "うん、だいたいね。",
+                "romaji": "un, daitai ne.",
+                "english": "Yeah, basically."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "学校に行く。学校へ行く。",
+          "romaji": "gakkou ni iku. gakkou e iku.",
+          "english": "To go to school.",
+          "targetSubstring": "に",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A child leaves for school in the morning.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "行ってらっしゃい。",
+                "romaji": "ittekurasshai.",
+                "english": "Have a good day."
+              },
+              {
+                "speaker": "B",
+                "japanese": "行ってきます。",
+                "romaji": "ittekimasu.",
+                "english": "I'm off."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "家に帰る。家へ帰る。",
+          "romaji": "ie ni kaeru. ie e kaeru.",
+          "english": "To go home.",
+          "targetSubstring": "に",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Someone finishes work and heads out.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "もう帰る？",
+                "romaji": "mou kaeru?",
+                "english": "Going home already?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "うん、疲れた。",
+                "romaji": "un, tsukareta.",
+                "english": "Yeah, I'm tired."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "公園に行く。公園へ行く。",
+          "romaji": "kouen ni iku. kouen e iku.",
+          "english": "To go to the park.",
+          "targetSubstring": "に",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Friends plan a weekend outing.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "明日、どこ行く？",
+                "romaji": "ashita, doko iku?",
+                "english": "Where are we going tomorrow?"
+              },
+              {
+                "speaker": "B",
+                "japanese": "公園はどう？",
+                "romaji": "kouen wa dou?",
+                "english": "How about the park?"
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "東京に行く。東京へ行く。",
+          "romaji": "toukyou ni iku. toukyou e iku.",
+          "english": "To go to Tokyo.",
+          "targetSubstring": "に",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Someone talks about a trip.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "夏休み、どこ？",
+                "romaji": "natsuyasumi, doko?",
+                "english": "Where for summer break?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "東京に行きたい。",
+                "romaji": "toukyou ni ikitai.",
+                "english": "I want to go to Tokyo."
+              }
+            ]
+          }
+        }
+      ],
+      "drills": [
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "駅へ行く。",
+          "choices": [
+            "To go to the station.",
+            "To go from the station.",
+            "To go by the station.",
+            "To go at the station."
+          ],
+          "correctChoice": "To go to the station."
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "To go to the park.",
+          "choices": [
+            "公園に行く。",
+            "公園で行く。",
+            "公園を行く。",
+            "公園は行く。"
+          ],
+          "correctChoice": "公園に行く。"
+        }
+      ]
+    },
+    {
+      "id": "n5-ni",
+      "orderIndex": 36,
+      "title": "に",
+      "headlineEnglish": "in; at; to; for (location/time)",
+      "blurb": "に marks a point in time, a destination, or a target. It answers \"when?\", \"where to?\", and \"to whom?\" — like pinning something on a map or a calendar.",
+      "forms": [
+        "に"
+      ],
+      "formation": [
+        {
+          "title": "Destination: place + に + 行く",
+          "body": "Use に with verbs of movement to show where you're headed.\n\n学校に行く。\nTo go to school."
+        },
+        {
+          "title": "Time: clock time + に",
+          "body": "に marks when something happens.\n\n七時に寝る。\nTo sleep at seven o'clock."
+        },
+        {
+          "title": "Target: person + に",
+          "body": "に can mark who receives an action.\n\n友達に電話する。\nTo call a friend."
+        }
+      ],
+      "usage": [
+        {
+          "title": "Location vs. action",
+          "body": "に marks where something exists (駅にいる) or where you're headed (駅に行く). For where an action takes place, use で instead."
+        }
+      ],
+      "usageLadders": [],
+      "relatedPointIDs": [
+        "n5-ni-e",
+        "n5-de-1"
+      ],
+      "examples": [
+        {
+          "japanese": "学校に行く。",
+          "romaji": "gakkou ni iku.",
+          "english": "To go to school.",
+          "targetSubstring": "に",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A parent asks where a child is headed in the morning.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "どこ行くの？",
+                "romaji": "doko iku no?",
+                "english": "Where are you going?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "もう時間だよ。",
+                "romaji": "mou jikan da yo.",
+                "english": "It's time already."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "七時に寝る。",
+          "romaji": "shichiji ni neru.",
+          "english": "To sleep at seven o'clock.",
+          "targetSubstring": "に",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A parent reminds a child about bedtime.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "もう寝なさい。",
+                "romaji": "mou nenasai.",
+                "english": "Go to bed already."
+              },
+              {
+                "speaker": "B",
+                "japanese": "まだ早いよ。",
+                "romaji": "mada hayai yo.",
+                "english": "It's still early."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "家に帰る。",
+          "romaji": "ie ni kaeru.",
+          "english": "To go home.",
+          "targetSubstring": "に",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A student packs up after school.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "もう帰る？",
+                "romaji": "mou kaeru?",
+                "english": "Heading home already?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "うん、もう遅いし。",
+                "romaji": "un, mou osoi shi.",
+                "english": "Yeah, it's getting late."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "友達に電話する。",
+          "romaji": "tomodachi ni denwa suru.",
+          "english": "To call a friend.",
+          "targetSubstring": "に",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Someone picks up their phone to make a call.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "誰に電話？",
+                "romaji": "dare ni denwa?",
+                "english": "Who are you calling?"
+              },
+              {
+                "speaker": "B",
+                "japanese": "ちょっと待って。",
+                "romaji": "chotto matte.",
+                "english": "Hold on a sec."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "駅にいる。",
+          "romaji": "eki ni iru.",
+          "english": "To be at the station.",
+          "targetSubstring": "に",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A friend texts to ask where someone is.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "今、どこ？",
+                "romaji": "ima, doko?",
+                "english": "Where are you now?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "もう着いた。",
+                "romaji": "mou tsuita.",
+                "english": "I already arrived."
+              }
+            ]
+          }
+        }
+      ],
+      "drills": [
+        {
+          "kind": "precursorChoice",
+          "instruction": "Select the correct particle to complete the sentence.",
+          "exampleJapanese": "学校___行く。",
+          "targetSubstring": "に",
+          "english": "To go to school.",
+          "choices": [
+            "に",
+            "で",
+            "を",
+            "は"
+          ],
+          "correctChoice": "に"
+        },
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "七時に寝る。",
+          "choices": [
+            "To sleep at seven o'clock.",
+            "To sleep for seven hours.",
+            "To sleep until seven o'clock.",
+            "To sleep because of seven o'clock."
+          ],
+          "correctChoice": "To sleep at seven o'clock."
+        }
+      ]
+    },
+    {
+      "id": "n5-ni-iku",
+      "orderIndex": 37,
+      "title": "にいく",
+      "headlineEnglish": "to go in order to do…",
+      "blurb": "",
+      "forms": [
+        "にいく",
+        "にいきます"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "エレベーターで５かいにいく。",
+          "romaji": "erebeetaa de go-kai ni iku.",
+          "english": "To go to the 5th floor by elevator.",
+          "targetSubstring": "にいく",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-ni-suru",
+      "orderIndex": 38,
+      "title": "にする",
+      "headlineEnglish": "to decide on",
+      "blurb": "",
+      "forms": [
+        "にする",
+        "にします"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "この音楽にする。",
+          "romaji": "kono ongaku ni suru.",
+          "english": "I'll go with this music.",
+          "targetSubstring": "にする",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-no-1",
+      "orderIndex": 39,
+      "title": "の①",
+      "headlineEnglish": "of (possession)",
+      "blurb": "",
+      "forms": [
+        "の"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "私の犬です。",
+          "romaji": "watashi no inu desu.",
+          "english": "It's my dog.",
+          "targetSubstring": "の",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-no-2",
+      "orderIndex": 40,
+      "title": "の②",
+      "headlineEnglish": "nominalizer (turns verbs into nouns)",
+      "blurb": "",
+      "forms": [
+        "の"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "彼は走るのが速い。",
+          "romaji": "kare wa hashiru no ga hayai.",
+          "english": "He is fast at running.",
+          "targetSubstring": "の",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-no-ga-heta",
+      "orderIndex": 41,
+      "title": "のが下手",
+      "headlineEnglish": "to be bad at",
+      "blurb": "",
+      "forms": [
+        "のが下手",
+        "のが下手です"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "彼は漢字を書くのが下手。",
+          "romaji": "kare wa kanji o kaku no ga heta.",
+          "english": "He is bad at writing kanji.",
+          "targetSubstring": "のが下手",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-no-ga-jouzu",
+      "orderIndex": 42,
+      "title": "のが上手",
+      "headlineEnglish": "to be good at",
+      "blurb": "",
+      "forms": [
+        "のが上手",
+        "のが上手です"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "彼女は歌うのが上手。",
+          "romaji": "kanojo wa utau no ga jouzu.",
+          "english": "She is good at singing.",
+          "targetSubstring": "のが上手",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-no-ga-suki",
+      "orderIndex": 43,
+      "title": "のが好き",
+      "headlineEnglish": "like / love doing",
+      "blurb": "",
+      "forms": [
+        "のが好き",
+        "のが好きです"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "犬と遊ぶのが好き。",
+          "romaji": "inu to asobu no ga suki.",
+          "english": "I love playing with dogs.",
+          "targetSubstring": "のが好き",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-node",
+      "orderIndex": 44,
+      "title": "ので",
+      "headlineEnglish": "because of; the reason is that",
+      "blurb": "",
+      "forms": [
+        "ので"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "太いので、走るのは遅い。",
+          "romaji": "futoi node, hashiru no wa osoi.",
+          "english": "Because I'm big, I'm slow at running.",
+          "targetSubstring": "ので",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-wa",
+      "orderIndex": 45,
+      "title": "は",
+      "headlineEnglish": "as for; topic marker",
+      "blurb": "は marks the topic of your sentence — what you're talking about. Think of it as setting the stage: \"As for X…\" The rest of the sentence tells us something about that topic. It doesn't mean \"is\" on its own.",
+      "forms": [
+        "は"
+      ],
+      "formation": [
+        {
+          "title": "Noun + は",
+          "body": "Place は right after the word you want to talk about.\n\n私は学生です。\nAs for me, (I) am a student."
+        }
+      ],
+      "usage": [
+        {
+          "title": "Topic, not subject",
+          "body": "は frames what the sentence is about. The verb or adjective that follows describes that topic — not necessarily the doer of an action."
+        },
+        {
+          "title": "Compared to が",
+          "body": "が identifies who or what acts (\"a cat came\"). は picks up a topic you keep talking about (\"the cat is small\")."
+        }
+      ],
+      "usageLadders": [],
+      "relatedPointIDs": [
+        "n5-ga-1"
+      ],
+      "examples": [
+        {
+          "japanese": "私は学生です。",
+          "romaji": "watashi wa gakusei desu.",
+          "english": "I am a student.",
+          "targetSubstring": "は",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Two classmates introduce themselves on the first day of school.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "はじめまして。",
+                "romaji": "hajimemashite.",
+                "english": "Nice to meet you."
+              },
+              {
+                "speaker": "A",
+                "japanese": "こちらこそ。",
+                "romaji": "kochira koso.",
+                "english": "Likewise."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "これは本です。",
+          "romaji": "kore wa hon desu.",
+          "english": "This is a book.",
+          "targetSubstring": "は",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A student holds up something from their bag.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "これ、何？",
+                "romaji": "kore, nani?",
+                "english": "What is this?"
+              },
+              {
+                "speaker": "B",
+                "japanese": "見てみて。",
+                "romaji": "mite mite.",
+                "english": "Take a look."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "今日は雨です。",
+          "romaji": "kyou wa ame desu.",
+          "english": "Today it is rainy.",
+          "targetSubstring": "は",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Two friends look out the window in the morning.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "外、どう？",
+                "romaji": "soto, dou?",
+                "english": "How's it outside?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "天気、見て。",
+                "romaji": "tenki, mite.",
+                "english": "Check the weather."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "猫は小さいです。",
+          "romaji": "neko wa chiisai desu.",
+          "english": "The cat is small.",
+          "targetSubstring": "は",
+          "audioKey": null,
+          "scenario": {
+            "setting": "A child points at a kitten in the park.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "あの猫、かわいい。",
+                "romaji": "ano neko, kawaii.",
+                "english": "That cat is cute."
+              },
+              {
+                "speaker": "B",
+                "japanese": "うん、ほんとに。",
+                "romaji": "un, hontou ni.",
+                "english": "Yeah, really."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "母は料理が好きです。",
+          "romaji": "haha wa ryouri ga suki desu.",
+          "english": "My mother likes cooking.",
+          "targetSubstring": "は",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Someone talks about their family at dinner.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "お母さん、何が好き？",
+                "romaji": "okaasan, nani ga suki?",
+                "english": "What does your mom like?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "うちの母ね…",
+                "romaji": "uchi no haha ne...",
+                "english": "My mom, well..."
+              }
+            ]
+          }
+        }
+      ],
+      "drills": [
+        {
+          "kind": "precursorChoice",
+          "instruction": "Select the correct particle to complete the sentence.",
+          "exampleJapanese": "これ___本です。",
+          "targetSubstring": "は",
+          "english": "This is a book.",
+          "choices": [
+            "は",
+            "が",
+            "を",
+            "に"
+          ],
+          "correctChoice": "は"
+        },
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "私は学生です。",
+          "choices": [
+            "I am a student.",
+            "I want to be a student.",
+            "The student is me. (singling me out)",
+            "A student came."
+          ],
+          "correctChoice": "I am a student."
+        },
+        {
+          "kind": "contrastChoice",
+          "contrastLabel": "Topic vs. subject",
+          "choices": [
+            "私は行きます",
+            "私が行きます"
+          ],
+          "correctChoice": "私は行きます"
+        }
+      ]
+    },
+    {
+      "id": "n5-hou-ga-ii-1",
+      "orderIndex": 46,
+      "title": "ほうがいい①",
+      "headlineEnglish": "it'd be better to",
+      "blurb": "",
+      "forms": [
+        "ほうがいい",
+        "ほうがいいです"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "靴を脱いだほうがいいです。",
+          "romaji": "kutsu o nuida hou ga ii desu.",
+          "english": "You'd better take off your shoes.",
+          "targetSubstring": "ほうがいい",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-hou-ga-ii-2",
+      "orderIndex": 47,
+      "title": "ほうがいい②",
+      "headlineEnglish": "it'd be better not to",
+      "blurb": "",
+      "forms": [
+        "ないほうがいい",
+        "ないほうがいいです"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "そのことを言わないほうがいいかもしれない。",
+          "romaji": "sono koto o iwanai hou ga ii kamoshirenai.",
+          "english": "It might be better not to say that.",
+          "targetSubstring": "ないほうがいい",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-mae-ni",
+      "orderIndex": 48,
+      "title": "前に",
+      "headlineEnglish": "before",
+      "blurb": "",
+      "forms": [
+        "前に",
+        "のまえに"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "犬が門の前にいる。",
+          "romaji": "inu ga mon no mae ni iru.",
+          "english": "The dog is in front of the gate.",
+          "targetSubstring": "前に",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-mada",
+      "orderIndex": 49,
+      "title": "まだ",
+      "headlineEnglish": "still; not yet",
+      "blurb": "",
+      "forms": [
+        "まだ"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "娘はまだ起きていません。",
+          "romaji": "musume wa mada okite imasen.",
+          "english": "My daughter still hasn't woken up.",
+          "targetSubstring": "まだ",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-made",
+      "orderIndex": 50,
+      "title": "まで",
+      "headlineEnglish": "until; till; to; even",
+      "blurb": "",
+      "forms": [
+        "まで"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "駅まで、歩く。",
+          "romaji": "eki made, aruku.",
+          "english": "To walk as far as the station.",
+          "targetSubstring": "まで",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-mo",
+      "orderIndex": 51,
+      "title": "も",
+      "headlineEnglish": "also; too; as well",
+      "blurb": "も means \"also\" or \"too\" — it adds something to the set. Unlike は, which sets a topic, も layers on: \"this too,\" \"me too,\" \"also at school.\"",
+      "forms": [
+        "も"
+      ],
+      "formation": [
+        {
+          "title": "Noun + も",
+          "body": "Replace は or が with も to add \"also.\"\n\n私も学生です。\nI am also a student."
+        }
+      ],
+      "usage": [
+        {
+          "title": "Adding to a group",
+          "body": "も includes the marked item in whatever was already mentioned. 猫が好き。犬も好き。 = I like cats. I like dogs too."
+        }
+      ],
+      "usageLadders": [],
+      "relatedPointIDs": [
+        "n5-wa"
+      ],
+      "examples": [
+        {
+          "japanese": "私も学生です。",
+          "romaji": "watashi mo gakusei desu.",
+          "english": "I am also a student.",
+          "targetSubstring": "も",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Two people discover they go to the same school.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "私、学生なんです。",
+                "romaji": "watashi, gakusei nan desu.",
+                "english": "I'm a student."
+              },
+              {
+                "speaker": "B",
+                "japanese": "え、私も！",
+                "romaji": "e, watashi mo!",
+                "english": "Oh, me too!"
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "猫も好きです。",
+          "romaji": "neko mo suki desu.",
+          "english": "I also like cats.",
+          "targetSubstring": "も",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Friends compare favorite animals.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "犬が好き。",
+                "romaji": "inu ga suki.",
+                "english": "I like dogs."
+              },
+              {
+                "speaker": "A",
+                "japanese": "私は猫も好き。",
+                "romaji": "watashi wa neko mo suki.",
+                "english": "I like cats too."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "水も飲む。",
+          "romaji": "mizu mo nomu.",
+          "english": "I'll drink water too.",
+          "targetSubstring": "も",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Someone orders drinks for the table.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "お茶、お願い。",
+                "romaji": "ocha, onegai.",
+                "english": "Tea, please."
+              },
+              {
+                "speaker": "B",
+                "japanese": "水もください。",
+                "romaji": "mizu mo kudasai.",
+                "english": "Water too, please."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "友達も来る。",
+          "romaji": "tomodachi mo kuru.",
+          "english": "My friend is coming too.",
+          "targetSubstring": "も",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Someone clarifies who will join a meetup.",
+            "payoffSpeaker": "A",
+            "lines": [
+              {
+                "speaker": "B",
+                "japanese": "今日、一人？",
+                "romaji": "kyou, hitori?",
+                "english": "Just you today?"
+              },
+              {
+                "speaker": "A",
+                "japanese": "友達も来るよ。",
+                "romaji": "tomodachi mo kuru yo.",
+                "english": "A friend is coming too."
+              }
+            ]
+          }
+        },
+        {
+          "japanese": "これも大きい。",
+          "romaji": "kore mo ookii.",
+          "english": "This one is big too.",
+          "targetSubstring": "も",
+          "audioKey": null,
+          "scenario": {
+            "setting": "Someone compares two items at a shop.",
+            "payoffSpeaker": "B",
+            "lines": [
+              {
+                "speaker": "A",
+                "japanese": "それ、大きいね。",
+                "romaji": "sore, ookii ne.",
+                "english": "That one's big."
+              },
+              {
+                "speaker": "B",
+                "japanese": "これも大きい。",
+                "romaji": "kore mo ookii.",
+                "english": "This one's big too."
+              }
+            ]
+          }
+        }
+      ],
+      "drills": [
+        {
+          "kind": "meaningChoice",
+          "exampleJapanese": "私も学生です。",
+          "choices": [
+            "I am also a student.",
+            "I am a student. (topic)",
+            "Only I am a student.",
+            "I am not a student."
+          ],
+          "correctChoice": "I am also a student."
+        },
+        {
+          "kind": "sentenceChoice",
+          "prompt": "I like cats too.",
+          "choices": [
+            "猫も好きです。",
+            "猫は好きです。",
+            "猫が好きです。",
+            "猫を好きです。"
+          ],
+          "correctChoice": "猫も好きです。"
+        }
+      ]
+    },
+    {
+      "id": "n5-mou",
+      "orderIndex": 52,
+      "title": "もう",
+      "headlineEnglish": "already; anymore",
+      "blurb": "",
+      "forms": [
+        "もう"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "もう帰った。",
+          "romaji": "mou kaetta.",
+          "english": "I already went home.",
+          "targetSubstring": "もう",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-ya",
+      "orderIndex": 53,
+      "title": "や",
+      "headlineEnglish": "and (etc.; non-exhaustive list)",
+      "blurb": "",
+      "forms": [
+        "や"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "鳥や馬が山にいました。",
+          "romaji": "tori ya uma ga yama ni imashita.",
+          "english": "There were birds, horses, and more in the mountains.",
+          "targetSubstring": "や",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    },
+    {
+      "id": "n5-yori-hou-ga",
+      "orderIndex": 54,
+      "title": "より○○のほうが○○",
+      "headlineEnglish": "is more ~ than",
+      "blurb": "",
+      "forms": [
+        "より〜のほうが〜"
+      ],
+      "formation": [],
+      "usage": [],
+      "usageLadders": [],
+      "relatedPointIDs": [],
+      "examples": [
+        {
+          "japanese": "飛行機より電車のほうが遅いです。",
+          "romaji": "hikouki yori densha no hou ga osoi desu.",
+          "english": "Trains are slower than planes.",
+          "targetSubstring": "より",
+          "audioKey": null
+        }
+      ],
+      "drills": []
+    }
+  ]
+}

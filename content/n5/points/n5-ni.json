@@ -1,0 +1,94 @@
+{
+  "id": "n5-ni",
+  "usageLadders": [],
+  "status": "draft",
+  "orderIndex": 36,
+  "title": "に",
+  "pattern": "に",
+  "reading": "に",
+  "shortDefinition": "in; at; to; on (time/place/target)",
+  "headlineEnglish": "in; at; to; for (location/time)",
+  "blurb": "Pins a time, destination, or target — when, where to, or to whom.",
+  "structure": "Time/place/person + に\n\n三時に会う。\nMeet at three o'clock.",
+  "forms": [
+    "に"
+  ],
+  "formation": [
+    {
+      "title": "Destination",
+      "body": "Place + に + movement verb\n\n医者に行く。\nGo to the doctor."
+    },
+    {
+      "title": "Time",
+      "body": "Clock time + に\n\n毎朝六時に起きる。\nWake up at six every morning."
+    },
+    {
+      "title": "Target",
+      "body": "Person + に + give/say/call\n\n彼に借りる。\nBorrow from him."
+    }
+  ],
+  "usage": [
+    {
+      "title": "に vs. で",
+      "body": "に = destination or point in time. で = where an action happens (レストランで食べる)."
+    }
+  ],
+  "relatedPointIDs": [
+    "n5-ni-e",
+    "n5-de-1"
+  ],
+  "examples": [
+    {
+      "japanese": "三時に会う。",
+      "romaji": "sanji ni au.",
+      "english": "Meet at three o'clock.",
+      "targetSubstring": "に",
+      "audioKey": null
+    },
+    {
+      "japanese": "医者に行く。",
+      "romaji": "isha ni iku.",
+      "english": "Go to the doctor.",
+      "targetSubstring": "に",
+      "audioKey": null
+    },
+    {
+      "japanese": "彼に借りる。",
+      "romaji": "kare ni kariru.",
+      "english": "Borrow from him.",
+      "targetSubstring": "に",
+      "audioKey": null
+    },
+    {
+      "japanese": "机の上に本がある。",
+      "romaji": "tsukue no ue ni hon ga aru.",
+      "english": "There is a book on the desk.",
+      "targetSubstring": "に",
+      "audioKey": null
+    },
+    {
+      "japanese": "毎朝六時に起きる。",
+      "romaji": "maiasa rokuji ni okiru.",
+      "english": "Wake up at six every morning.",
+      "targetSubstring": "に",
+      "audioKey": null
+    }
+  ],
+  "drills": [
+    {
+      "kind": "precursorChoice",
+      "instruction": "Select the correct particle.",
+      "exampleJapanese": "学校___行く。",
+      "targetSubstring": "に",
+      "english": "Go to school.",
+      "choices": [
+        "に",
+        "で",
+        "を",
+        "は"
+      ],
+      "correctChoice": "に"
+    }
+  ],
+  "contrastDrills": []
+}

@@ -1,0 +1,28 @@
+{
+  "id": "n5-yori-hou-ga",
+  "orderIndex": 54,
+  "title": "より○○のほうが○○",
+  "headlineEnglish": "is more ~ than",
+  "blurb": "",
+  "forms": [
+    "より〜のほうが〜"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "飛行機より電車のほうが遅いです。",
+      "romaji": "hikouki yori densha no hou ga osoi desu.",
+      "english": "Trains are slower than planes.",
+      "targetSubstring": "より",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "より○○のほうが○○",
+  "shortDefinition": "is more ~ than",
+  "reading": "より〜のほうが〜"
+}

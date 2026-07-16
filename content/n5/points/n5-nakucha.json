@@ -1,0 +1,193 @@
+{
+  "id": "n5-nakucha",
+  "orderIndex": 2,
+  "title": "なくちゃ",
+  "headlineEnglish": "have to; must (casual)",
+  "forms": [
+    "なくちゃ",
+    "なきゃ",
+    "なくちゃいけない",
+    "なきゃいけない"
+  ],
+  "formation": [
+    {
+      "title": "From the negative ない-stem",
+      "body": "Take the verb's negative stem (ない-form without ない) and add ちゃ or きゃ.\n\nいく → いかない → いかなくちゃ"
+    },
+    {
+      "title": "Short forms",
+      "body": "なくちゃ and なきゃ often stand alone as \"gotta / have to.\" You can add いけない for emphasis."
+    }
+  ],
+  "usage": [
+    {
+      "title": "Casual obligation",
+      "body": "Spoken shorthand for なければならない. Used with friends and family."
+    },
+    {
+      "title": "Compared to なければならない",
+      "body": "Same obligation meaning, but なくちゃ is informal. Avoid in formal writing."
+    }
+  ],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "もう行かなくちゃ。",
+      "romaji": "mou ikanakucha.",
+      "english": "I have to go already.",
+      "targetSubstring": "行かなくちゃ",
+      "scenario": {
+        "setting": "A friend checks their watch during a hangout.",
+        "lines": [
+          {
+            "speaker": "B",
+            "japanese": "もうちょっといない？",
+            "romaji": "mou chotto inai?",
+            "english": "Can't you stay a little longer?"
+          },
+          {
+            "speaker": "A",
+            "japanese": "ごめん、電車の時間が…",
+            "romaji": "gomen, densha no jikan ga…",
+            "english": "Sorry, my train…"
+          },
+          {
+            "speaker": "A",
+            "japanese": "もう行かなくちゃ。",
+            "romaji": "mou ikanakucha.",
+            "english": "I have to go already."
+          }
+        ]
+      },
+      "audioKey": null
+    },
+    {
+      "japanese": "薬を飲まなくちゃいけない。",
+      "romaji": "kusuri o nomanakucha ikenai.",
+      "english": "I have to take my medicine.",
+      "targetSubstring": "飲まなくちゃ",
+      "scenario": {
+        "setting": "A parent notices their child skipping evening meds.",
+        "lines": [
+          {
+            "speaker": "Child",
+            "japanese": "もう平気だよ。飲まなくていいでしょ。",
+            "romaji": "mou heiki da yo. nomanakute ii desho.",
+            "english": "I'm fine now. I don't need to take it, right?"
+          },
+          {
+            "speaker": "Parent",
+            "japanese": "ダメよ。医者が言ったでしょ。",
+            "romaji": "dame yo. isha ga itta desho.",
+            "english": "No. The doctor said so, remember?"
+          },
+          {
+            "speaker": "Parent",
+            "japanese": "薬を飲まなくちゃいけない。",
+            "romaji": "kusuri o nomanakucha ikenai.",
+            "english": "I have to take my medicine."
+          }
+        ]
+      },
+      "audioKey": null
+    },
+    {
+      "japanese": "早く寝なきゃ。",
+      "romaji": "hayaku ne nakya.",
+      "english": "I gotta sleep early.",
+      "targetSubstring": "寝なきゃ",
+      "scenario": {
+        "setting": "Late night — someone is still on the couch scrolling.",
+        "lines": [
+          {
+            "speaker": "B",
+            "japanese": "まだ起きてるの？明日早いんでしょ。",
+            "romaji": "mada okiteru no? ashita hayai n desho.",
+            "english": "You're still up? You have an early day tomorrow."
+          },
+          {
+            "speaker": "A",
+            "japanese": "うん、わかってる。でも…",
+            "romaji": "un, wakatte ru. demo…",
+            "english": "Yeah, I know. But…"
+          },
+          {
+            "speaker": "A",
+            "japanese": "早く寝なきゃ。",
+            "romaji": "hayaku ne nakya.",
+            "english": "I gotta sleep early."
+          }
+        ]
+      },
+      "audioKey": null
+    }
+  ],
+  "drills": [
+    {
+      "kind": "formChoice",
+      "prompt": "いく (to go)",
+      "choices": [
+        "いかなくちゃ",
+        "いってなくちゃ",
+        "いきなくちゃ",
+        "いかないちゃ"
+      ],
+      "correctChoice": "いかなくちゃ"
+    },
+    {
+      "kind": "formChoice",
+      "prompt": "のむ (to drink)",
+      "choices": [
+        "のまなくちゃ",
+        "のんでなくちゃ",
+        "のみなくちゃ",
+        "のまないちゃ"
+      ],
+      "correctChoice": "のまなくちゃ"
+    },
+    {
+      "kind": "meaningChoice",
+      "exampleJapanese": "もう行かなくちゃ。",
+      "choices": [
+        "I have to go already.",
+        "I must not go.",
+        "I went already.",
+        "I want to stay."
+      ],
+      "correctChoice": "I have to go already."
+    },
+    {
+      "kind": "sentenceBuilder",
+      "english": "I gotta eat.",
+      "buildComponents": [
+        "食べ",
+        "なくちゃ"
+      ],
+      "choices": [
+        "食べ",
+        "なくちゃ",
+        "食べて",
+        "ない",
+        "よ",
+        "いけない"
+      ],
+      "correctChoice": "食べなくちゃ"
+    },
+    {
+      "kind": "sentenceChoice",
+      "prompt": "I gotta sleep early.",
+      "choices": [
+        "早く寝なきゃ。",
+        "早く寝ちゃダメ。",
+        "早く寝ました。",
+        "早く起きなきゃ。"
+      ],
+      "correctChoice": "早く寝なきゃ。"
+    }
+  ],
+  "status": "draft",
+  "pattern": "なくちゃ",
+  "shortDefinition": "have to; must (casual)",
+  "reading": "なくちゃ",
+  "structure": "Take the verb's negative stem (ない-form without ない) and add ちゃ or きゃ.\n\nいく → いかない → いかなくちゃ\n\nなくちゃ and なきゃ often stand alone as \"gotta / have to.\" You can add いけない for emphasis."
+}

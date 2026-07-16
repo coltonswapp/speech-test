@@ -1,0 +1,124 @@
+{
+  "id": "n5-ga-1",
+  "usageLadders": [
+    {
+      "label": "someone arrived",
+      "levels": [
+        {
+          "japanese": "友達が来た",
+          "register": "Casual"
+        },
+        {
+          "japanese": "友達が来ました",
+          "register": "Polite"
+        }
+      ]
+    }
+  ],
+  "status": "draft",
+  "orderIndex": 4,
+  "title": "が①",
+  "pattern": "が①",
+  "reading": "が",
+  "shortDefinition": "subject marker; who or what acts",
+  "headlineEnglish": "subject marker; identifies who or what acts",
+  "blurb": "Marks the doer — who or what performs the action. Often answers 誰が or 何が.",
+  "structure": "Noun + が + predicate\n\n星が見える。\nYou can see stars.",
+  "register": "casual",
+  "forms": [
+    "が"
+  ],
+  "formation": [
+    {
+      "title": "Noun + が",
+      "body": "Attach が to the noun that performs the verb.\n\n兄が来た。\nMy older brother came."
+    },
+    {
+      "title": "Answering 誰が・何が",
+      "body": "Questions with 誰が or 何が take が in the answer.\n\n誰が来た？ → 友達が来た。"
+    }
+  ],
+  "usage": [
+    {
+      "title": "New information",
+      "body": "Use が when you identify someone or something for the first time. Once they're on the table, は often takes over."
+    }
+  ],
+  "relatedPointIDs": [
+    "n5-wa",
+    "n5-ga-iru"
+  ],
+  "examples": [
+    {
+      "japanese": "星が見える。",
+      "romaji": "hoshi ga mieru.",
+      "english": "You can see stars.",
+      "targetSubstring": "が",
+      "audioKey": null
+    },
+    {
+      "japanese": "お腹が空いた。",
+      "romaji": "onaka ga suita.",
+      "english": "I'm hungry.",
+      "targetSubstring": "が",
+      "audioKey": null
+    },
+    {
+      "japanese": "誰が来た？兄が来た。",
+      "romaji": "dare ga kita? ani ga kita.",
+      "english": "Who came? My brother came.",
+      "targetSubstring": "が",
+      "audioKey": null
+    },
+    {
+      "japanese": "音楽が好きだ。",
+      "romaji": "ongaku ga suki da.",
+      "english": "I like music.",
+      "targetSubstring": "が",
+      "audioKey": null
+    },
+    {
+      "japanese": "問題がある。",
+      "romaji": "mondai ga aru.",
+      "english": "There is a problem.",
+      "targetSubstring": "が",
+      "audioKey": null
+    }
+  ],
+  "drills": [
+    {
+      "kind": "precursorChoice",
+      "instruction": "Select the correct particle.",
+      "exampleJapanese": "雨___降る。",
+      "targetSubstring": "が",
+      "english": "It is raining.",
+      "choices": [
+        "が",
+        "は",
+        "を",
+        "に"
+      ],
+      "correctChoice": "が"
+    },
+    {
+      "kind": "contrastChoice",
+      "contrastLabel": "Identifying who did it vs. stating a topic",
+      "choices": [
+        "私が行きます",
+        "私は行きます"
+      ],
+      "correctChoice": "私が行きます"
+    }
+  ],
+  "contrastDrills": [
+    {
+      "contrastLabel": "Identifying who did it vs. stating a topic",
+      "choices": [
+        "私が行きます",
+        "私は行きます"
+      ],
+      "correctChoice": "私が行きます",
+      "ruleTargeted": null
+    }
+  ]
+}

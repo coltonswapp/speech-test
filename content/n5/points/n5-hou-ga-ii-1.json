@@ -1,0 +1,29 @@
+{
+  "id": "n5-hou-ga-ii-1",
+  "orderIndex": 46,
+  "title": "ほうがいい①",
+  "headlineEnglish": "it'd be better to",
+  "blurb": "",
+  "forms": [
+    "ほうがいい",
+    "ほうがいいです"
+  ],
+  "formation": [],
+  "usage": [],
+  "usageLadders": [],
+  "relatedPointIDs": [],
+  "examples": [
+    {
+      "japanese": "靴を脱いだほうがいいです。",
+      "romaji": "kutsu o nuida hou ga ii desu.",
+      "english": "You'd better take off your shoes.",
+      "targetSubstring": "ほうがいい",
+      "audioKey": null
+    }
+  ],
+  "drills": [],
+  "status": "draft",
+  "pattern": "ほうがいい①",
+  "shortDefinition": "it'd be better to",
+  "reading": "ほうがいい"
+}

@@ -25,33 +25,33 @@ export type SanitizedScenarioGrammar = {
 
 export function sanitizeGeneratedLine(
   line: GeneratedLine,
-  approved: Set<string>
+  known: Set<string>
 ): GeneratedLine {
-  if (approved.size === 0) {
+  if (known.size === 0) {
     const { grammarPointIDs: _unused, ...rest } = line;
     return rest;
   }
   return {
     ...line,
-    grammarPointIDs: filterGrammarPointIds(line.grammarPointIDs, approved),
+    grammarPointIDs: filterGrammarPointIds(line.grammarPointIDs, known),
   };
 }
 
 export function sanitizeGeneratedLines(
   generated: GeneratedLines,
-  approved: Set<string>
+  known: Set<string>
 ): GeneratedLines {
   return {
     ...generated,
-    lines: generated.lines.map((line) => sanitizeGeneratedLine(line, approved)),
+    lines: generated.lines.map((line) => sanitizeGeneratedLine(line, known)),
   };
 }
 
 export function sanitizeExtractedHighlights(
   extracted: ExtractedHighlights,
-  approved: Set<string>
+  known: Set<string>
 ): ExtractedHighlights {
-  if (approved.size === 0) {
+  if (known.size === 0) {
     return {
       ...extracted,
       grammarPatterns: extracted.grammarPatterns?.map(
@@ -65,7 +65,7 @@ export function sanitizeExtractedHighlights(
     grammarPatterns: extracted.grammarPatterns?.map((pattern) => ({
       ...pattern,
       grammarPointID:
-        pattern.grammarPointID && approved.has(pattern.grammarPointID)
+        pattern.grammarPointID && known.has(pattern.grammarPointID)
           ? pattern.grammarPointID
           : undefined,
     })),
@@ -78,7 +78,7 @@ export function sanitizeScenarioGrammarTags(
     highlights: DialogueHighlights | null;
     grammarPointIds: string[];
   },
-  approved: Set<string>
+  known: Set<string>
 ): SanitizedScenarioGrammar {
   const removed: SanitizeGrammarRemoved = {
     scenarioGrammarPointIds: [],
@@ -87,33 +87,33 @@ export function sanitizeScenarioGrammarTags(
   };
 
   for (const id of input.grammarPointIds) {
-    if (!approved.has(id)) {
+    if (!known.has(id)) {
       removed.scenarioGrammarPointIds.push(id);
     }
   }
 
   const lines = input.lines.map((line, lineIndex) => {
     const before = line.grammarPointIDs ?? [];
-    const stripped = before.filter((id) => !approved.has(id));
+    const stripped = before.filter((id) => !known.has(id));
     if (stripped.length > 0) {
       removed.lineTags.push({ lineIndex, ids: stripped });
     }
     return {
       ...line,
-      grammarPointIDs: filterGrammarPointIds(line.grammarPointIDs, approved),
+      grammarPointIDs: filterGrammarPointIds(line.grammarPointIDs, known),
     };
   });
 
   const grammarPointIds = filterGrammarPointIdsRequired(
     input.grammarPointIds,
-    approved
+    known
   );
 
   let highlights = input.highlights;
   if (highlights) {
     const patterns = highlights.grammarPatterns ?? [];
     for (const pattern of patterns) {
-      if (pattern.grammarPointID && !approved.has(pattern.grammarPointID)) {
+      if (pattern.grammarPointID && !known.has(pattern.grammarPointID)) {
         removed.highlightPatternIds.push(pattern.grammarPointID);
       }
     }
@@ -123,7 +123,7 @@ export function sanitizeScenarioGrammarTags(
       grammarPatterns: patterns.map((pattern) => ({
         ...pattern,
         grammarPointID:
-          pattern.grammarPointID && approved.has(pattern.grammarPointID)
+          pattern.grammarPointID && known.has(pattern.grammarPointID)
             ? pattern.grammarPointID
             : undefined,
       })),

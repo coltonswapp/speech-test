@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
-import { listPublicDialogueCollections } from "@/lib/dialogue/public-api";
+import {
+  listPublicCurriculumUnits,
+  listPublicDialogueCollections,
+} from "@/lib/dialogue/public-api";
 
 export async function GET() {
-  const collections = await listPublicDialogueCollections();
+  const [units, collections] = await Promise.all([
+    listPublicCurriculumUnits(),
+    listPublicDialogueCollections(),
+  ]);
   return NextResponse.json(
-    { collections },
+    { units, collections },
     {
       headers: {
         "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",

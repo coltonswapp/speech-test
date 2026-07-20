@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
       title: parsed.data.title,
       subtitle: parsed.data.subtitle ?? null,
       sceneImage: parsed.data.sceneImage ?? null,
+      unitId: parsed.data.unitId ?? null,
     })
     .returning();
 

@@ -4,7 +4,7 @@ import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { grammarPoint } from "@/lib/db/schema";
 import { auditScenarioContent } from "@/lib/dialogue/audit-scenario";
-import { fetchApprovedGrammarPointContext } from "@/lib/dialogue/grammar-catalog";
+import { fetchGrammarPointContext } from "@/lib/dialogue/grammar-catalog";
 import { auditScenarioRequestSchema } from "@/lib/dialogue/types";
 
 export async function POST(request: NextRequest) {
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     ]),
   ];
 
-  const [referencedGrammarPointContext, approvedGrammarPointContext] =
+  const [referencedGrammarPointContext, fullGrammarPointContext] =
     await Promise.all([
       grammarPointIds.length > 0
         ? db.query.grammarPoint.findMany({
@@ -40,13 +40,13 @@ export async function POST(request: NextRequest) {
             },
           })
         : Promise.resolve([]),
-      fetchApprovedGrammarPointContext(),
+      fetchGrammarPointContext(),
     ]);
 
   const grammarPointContext =
     referencedGrammarPointContext.length > 0
       ? referencedGrammarPointContext
-      : approvedGrammarPointContext;
+      : fullGrammarPointContext;
 
   const result = await auditScenarioContent({
     lines: parsed.data.lines,
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     menuTitle: parsed.data.menuTitle,
     grammarPointContext,
     knownGrammarPointIds: new Set(
-      approvedGrammarPointContext.map((point) => point.id)
+      fullGrammarPointContext.map((point) => point.id)
     ),
   });
 

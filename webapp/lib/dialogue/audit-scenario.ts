@@ -29,7 +29,7 @@ export type AuditScenarioParams = {
     pattern?: string | null;
     shortDefinition?: string | null;
   }>;
-  /** Full approved catalog; defaults to ids from grammarPointContext. */
+  /** Full grammar point catalog; defaults to ids from grammarPointContext. */
   knownGrammarPointIds?: Set<string>;
 };
 

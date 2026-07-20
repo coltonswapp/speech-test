@@ -33,7 +33,9 @@ The same `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` used for 
 Published dialogue audio:
 
 ```
-dialogue/{collectionId}/{scenarioSlug}/{contentHash}.m4a
+dialogue/{collectionId}/{scenarioSlug}/{contentHash}-{variantId}.m4a
 ```
+
+Lesson JSON also includes `publishedVariantId`, `publishedContentHash`, and `publishedAt` so Shizen can invalidate stale on-device cache entries when audio is republished.
 
 Only objects written by the **Publish** action in Content Studio appear here. Draft WAVs stay in the private studio bucket.

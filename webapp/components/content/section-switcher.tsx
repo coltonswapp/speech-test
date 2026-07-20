@@ -6,12 +6,13 @@ import { cn } from "@/lib/utils";
 const sections = [
   { key: "dialogues", label: "Dialogues", href: "/content/dialogues" },
   { key: "grammar", label: "Grammar", href: "/content" },
+  { key: "coverage", label: "Coverage", href: "/content/coverage" },
 ] as const;
 
 export function SectionSwitcher({
   active,
 }: {
-  active: "grammar" | "dialogues";
+  active: "grammar" | "dialogues" | "coverage";
 }) {
   return (
     <div className="flex rounded-lg bg-muted p-1 text-sm">

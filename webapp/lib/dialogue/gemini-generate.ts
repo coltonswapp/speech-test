@@ -28,6 +28,7 @@ export class DialogueGenerationError extends Error {}
 
 export type GenerateLinesParams = {
   prompt: string;
+  premise?: string;
   setting?: string;
   speakerNames?: string[];
   grammarPointContext?: Array<{
@@ -57,6 +58,12 @@ function buildPrompt(params: GenerateLinesParams): string {
     dialogueFormalityPrompt(formality),
     `Author brief: ${params.prompt.trim()}`,
   ];
+
+  if (params.premise?.trim()) {
+    sections.push(
+      `Collection premise (keep the setting and characters consistent with the rest of this collection):\n${params.premise.trim()}`
+    );
+  }
 
   if (params.setting?.trim()) {
     sections.push(`Setting: ${params.setting.trim()}`);
@@ -224,6 +231,7 @@ export async function generateDialogueLines(
 
 export type GenerateScenarioIdeaParams = {
   prompt: string;
+  premise?: string;
   existingSlugs: string[];
   grammarPointCatalog: Array<{
     id: string;
@@ -247,6 +255,12 @@ function buildScenarioPrompt(params: GenerateScenarioIdeaParams): string {
     dialogueFormalityPrompt(formality),
     `Author brief: ${params.prompt.trim()}`,
   ];
+
+  if (params.premise?.trim()) {
+    sections.push(
+      `Collection premise (this scenario must fit the same setting and reuse the same recurring characters):\n${params.premise.trim()}`
+    );
+  }
 
   if (params.existingSlugs.length > 0) {
     sections.push(

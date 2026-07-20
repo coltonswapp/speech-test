@@ -7,7 +7,9 @@ import { dialogueCollection, dialogueScenario, ttsProject, ttsVariant } from "@/
 import {
   buildCollectionFile,
   serializeCollectionFile,
+  type ExportableScenario,
 } from "@/lib/dialogue/export";
+import { toExportableScenario } from "@/lib/dialogue/public-api";
 import { renderVariantM4a } from "@/lib/tts/variant-audio";
 
 // One-stop export: the shizen collection JSON plus each scenario's selected
@@ -55,7 +57,7 @@ export async function GET(
   );
 
   const zip = new JSZip();
-  const exportScenarios = [];
+  const exportScenarios: ExportableScenario[] = [];
   for (const scenario of scenarios) {
     const project = projectByScenarioId.get(scenario.id);
     // A dangling selectedVariantId (take deleted) counts as no take.
@@ -63,12 +65,12 @@ export async function GET(
       ? variantById.get(project.selectedVariantId)
       : undefined;
     if (!variant) {
-      exportScenarios.push(scenario);
+      exportScenarios.push(toExportableScenario(scenario));
       continue;
     }
     const m4a = await renderVariantM4a(variant);
     zip.file(`Audio/${scenario.id}.m4a`, m4a);
-    exportScenarios.push({ ...scenario, audioKey: scenario.id });
+    exportScenarios.push({ ...toExportableScenario(scenario), audioKey: scenario.id });
   }
 
   const file = buildCollectionFile(collection, exportScenarios);

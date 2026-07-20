@@ -10,12 +10,19 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FileJson, Plus } from "lucide-react";
+import { FileJson, FolderPlus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -23,42 +30,49 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { dialogueApi, scenarioSlug } from "@/lib/dialogue/client";
+import {
+  dialogueApi,
+  scenarioSlug,
+  type UnitSummary,
+} from "@/lib/dialogue/client";
 import { SectionSwitcher } from "@/components/content/section-switcher";
-import { CollectionTemplatePicker } from "@/components/dialogue/collection-template-picker";
+import { CreateCollectionDialog } from "@/components/dialogue/create-collection-dialog";
 
 export function DialogueList({ activeId }: { activeId?: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const importInputRef = useRef<HTMLInputElement>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [newId, setNewId] = useState("");
-  const [newTitle, setNewTitle] = useState("");
-  const [newSubtitle, setNewSubtitle] = useState("");
-  const [newSceneImage, setNewSceneImage] = useState("");
+  const [createUnitOpen, setCreateUnitOpen] = useState(false);
+  const [newUnitSlug, setNewUnitSlug] = useState("");
+  const [newUnitTitle, setNewUnitTitle] = useState("");
+  const [newUnitJlpt, setNewUnitJlpt] = useState("5");
 
   const { data, isLoading } = useQuery({
     queryKey: ["dialogue-collections"],
     queryFn: dialogueApi.listCollections,
   });
 
-  const createMutation = useMutation({
+  const { data: unitsData } = useQuery({
+    queryKey: ["curriculum-units"],
+    queryFn: dialogueApi.listUnits,
+  });
+
+  const createUnitMutation = useMutation({
     mutationFn: () =>
-      dialogueApi.createCollection({
-        id: newId.trim(),
-        title: newTitle.trim(),
-        subtitle: newSubtitle.trim() || undefined,
-        sceneImage: newSceneImage.trim() || undefined,
+      dialogueApi.createUnit({
+        id: newUnitSlug.trim(),
+        title: newUnitTitle.trim(),
+        jlptLevel: Number(newUnitJlpt),
+        orderIndex: unitsData?.units.length ?? 0,
       }),
-    onSuccess: ({ collection }) => {
-      queryClient.invalidateQueries({ queryKey: ["dialogue-collections"] });
-      setCreateOpen(false);
-      setNewId("");
-      setNewTitle("");
-      setNewSubtitle("");
-      setNewSceneImage("");
-      toast.success(`Collection "${collection.title}" created.`);
-      router.push(`/content/dialogues/${collection.id}`);
+    onSuccess: ({ unit }) => {
+      queryClient.invalidateQueries({ queryKey: ["curriculum-units"] });
+      setCreateUnitOpen(false);
+      setNewUnitSlug("");
+      setNewUnitTitle("");
+      setNewUnitJlpt("5");
+      toast.success(`Unit "${unit.title}" created.`);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -76,6 +90,28 @@ export function DialogueList({ activeId }: { activeId?: string }) {
   });
 
   const collections = data?.collections ?? [];
+  const units = unitsData?.units ?? [];
+
+  // One group per curriculum unit (in unit order), plus an unfiled group for
+  // collections without a unit (or whose unit no longer exists).
+  const groups = [
+    ...units.map((unit) => ({
+      key: unit.id,
+      label: unit.title,
+      jlptLevel: unit.jlptLevel as number | null,
+      unit,
+      collections: collections.filter((c) => c.unitId === unit.id),
+    })),
+    {
+      key: "__unfiled__",
+      label: units.length > 0 ? "Unfiled" : null,
+      jlptLevel: null,
+      unit: null as UnitSummary | null,
+      collections: collections.filter(
+        (c) => !units.some((unit) => unit.id === c.unitId),
+      ),
+    },
+  ];
 
   const audioStatusQueries = useQueries({
     queries: collections.map((collection) => ({
@@ -85,8 +121,8 @@ export function DialogueList({ activeId }: { activeId?: string }) {
   });
   const audioStatusById = new Map(
     audioStatusQueries.flatMap(
-      (query) => query.data?.scenarios.map((s) => [s.id, s] as const) ?? []
-    )
+      (query) => query.data?.scenarios.map((s) => [s.id, s] as const) ?? [],
+    ),
   );
 
   return (
@@ -110,6 +146,15 @@ export function DialogueList({ activeId }: { activeId?: string }) {
       >
         <FileJson className="size-4" />
         {importMutation.isPending ? "Importing…" : "Import collection JSON"}
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        className="w-full justify-start gap-2"
+        onClick={() => setCreateUnitOpen(true)}
+      >
+        <FolderPlus className="size-4" />
+        New unit
       </Button>
       <input
         ref={importInputRef}
@@ -137,102 +182,154 @@ export function DialogueList({ activeId }: { activeId?: string }) {
             </p>
           )}
 
-          {collections.map((collection) => (
-            <div key={collection.id} className="flex flex-col gap-1">
-              <Link
-                href={`/content/dialogues/${collection.id}`}
-                className={cn(
-                  "flex flex-col rounded-md px-3 py-2 text-sm transition-colors",
-                  collection.id === activeId
-                    ? "bg-accent text-accent-foreground"
-                    : "hover:bg-accent/50"
-                )}
-              >
-                <span className="truncate font-medium">{collection.title}</span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {collection.id} · {collection.scenarios.length} scenarios
-                </span>
-              </Link>
-              {collection.scenarios.map((scenario) => (
-                <Link
-                  key={scenario.id}
-                  href={`/content/dialogues/${collection.id}/${scenarioSlug(scenario)}`}
-                  className={cn(
-                    "ml-3 flex items-center justify-between gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
-                    scenario.id === activeId
-                      ? "bg-accent text-accent-foreground"
-                      : "hover:bg-accent/50"
+          {groups.map((group) => (
+            <div key={group.key} className="flex flex-col gap-2">
+              {group.label && (
+                <div className="flex items-center justify-between gap-2 px-2 pt-1">
+                  {group.unit ? (
+                    <Link
+                      href={`/content/dialogues/units/${group.unit.id}`}
+                      className={cn(
+                        "truncate text-xs font-semibold uppercase tracking-wide transition-colors",
+                        group.unit.id === activeId
+                          ? "text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {group.label}
+                    </Link>
+                  ) : (
+                    <span className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {group.label}
+                    </span>
                   )}
-                >
-                  <span className="truncate">{scenario.menuTitle}</span>
-                  {(() => {
-                    const status = audioStatusById.get(scenario.id);
-                    if (!status?.hasSelectedTake) {
-                      return (
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          no audio
-                        </span>
-                      );
-                    }
-                    return status.stale ? (
-                      <span className="shrink-0 text-xs text-amber-600 dark:text-amber-400">
-                        audio stale
-                      </span>
-                    ) : null;
-                  })()}
-                </Link>
+                  {group.jlptLevel != null && (
+                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      N{group.jlptLevel}
+                    </span>
+                  )}
+                </div>
+              )}
+              {group.label && group.collections.length === 0 && (
+                <p className="px-2 text-xs text-muted-foreground">
+                  No collections yet
+                </p>
+              )}
+              {group.collections.map((collection) => (
+                <div key={collection.id} className="flex flex-col gap-1">
+                  <Link
+                    href={`/content/dialogues/${collection.id}`}
+                    className={cn(
+                      "flex flex-col rounded-md px-3 py-2 text-sm transition-colors",
+                      collection.id === activeId
+                        ? "bg-accent text-accent-foreground"
+                        : "hover:bg-accent/50",
+                    )}
+                  >
+                    <span className="truncate font-medium">
+                      {collection.title}
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {collection.id} · {collection.scenarios.length} scenarios
+                    </span>
+                  </Link>
+                  {collection.scenarios.map((scenario) => (
+                    <Link
+                      key={scenario.id}
+                      href={`/content/dialogues/${collection.id}/${scenarioSlug(scenario)}`}
+                      className={cn(
+                        "ml-3 flex items-center justify-between gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
+                        scenario.id === activeId
+                          ? "bg-accent text-accent-foreground"
+                          : "hover:bg-accent/50",
+                      )}
+                    >
+                      <span className="truncate">{scenario.menuTitle}</span>
+                      {(() => {
+                        const status = audioStatusById.get(scenario.id);
+                        if (!status?.hasSelectedTake) {
+                          return (
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              no audio
+                            </span>
+                          );
+                        }
+                        return status.stale ? (
+                          <span className="shrink-0 text-xs text-amber-600 dark:text-amber-400">
+                            audio stale
+                          </span>
+                        ) : null;
+                      })()}
+                    </Link>
+                  ))}
+                </div>
               ))}
             </div>
           ))}
         </div>
       </ScrollArea>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <CreateCollectionDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        units={units}
+      />
+
+      <Dialog open={createUnitOpen} onOpenChange={setCreateUnitOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>New dialogue collection</DialogTitle>
+            <DialogTitle>New curriculum unit</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-muted-foreground">
+              Units are the grammar bands that group collections into a
+              sequenced curriculum. Collections without a unit stay under
+              Unfiled.
+            </p>
             <div className="flex flex-col gap-2">
-              <Label className="text-xs text-muted-foreground">
-                Quick start
-              </Label>
-              <CollectionTemplatePicker
-                onSelect={(template) => {
-                  setNewId(template.collectionId);
-                  setNewTitle(template.collectionTitle);
-                  setNewSubtitle(template.collectionSubtitle ?? "");
-                  setNewSceneImage(template.sceneImage ?? "");
-                }}
+              <Label>ID (slug, immutable)</Label>
+              <Input
+                value={newUnitSlug}
+                onChange={(e) => setNewUnitSlug(e.target.value)}
+                placeholder="n5-foundations"
               />
             </div>
-
-            <div className="flex flex-col gap-3 border-t border-border/60 pt-4">
-              <div className="flex flex-col gap-2">
-                <Label>ID (slug, immutable)</Label>
-                <Input
-                  value={newId}
-                  onChange={(e) => setNewId(e.target.value)}
-                  placeholder="train-station"
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label>Title</Label>
-                <Input
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="At the Train Station"
-                />
-              </div>
-              <Button
-                onClick={() => createMutation.mutate()}
-                disabled={
-                  createMutation.isPending || !newId.trim() || !newTitle.trim()
-                }
-              >
-                Create
-              </Button>
+            <div className="flex flex-col gap-2">
+              <Label>Title</Label>
+              <Input
+                value={newUnitTitle}
+                onChange={(e) => setNewUnitTitle(e.target.value)}
+                placeholder="N5 Foundations"
+              />
             </div>
+            <div className="flex flex-col gap-2">
+              <Label>JLPT level</Label>
+              <Select
+                value={newUnitJlpt}
+                onValueChange={(value) => setNewUnitJlpt(value ?? "5")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[5, 4, 3, 2, 1].map((level) => (
+                    <SelectItem key={level} value={String(level)}>
+                      N{level}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              onClick={() => createUnitMutation.mutate()}
+              disabled={
+                createUnitMutation.isPending ||
+                !newUnitSlug.trim() ||
+                !newUnitTitle.trim()
+              }
+            >
+              Create
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -5,6 +5,7 @@ import type {
   DialogueLine,
   ExtractedHighlights,
   GeneratedLines,
+  GeneratedQuiz,
   GeneratedScenario,
   QuizQuestion,
   ReviseLinesResult,
@@ -43,13 +44,28 @@ export type ScenarioSummary = {
 
 export type CollectionSummary = {
   id: string;
+  unitId: string | null;
   title: string;
   subtitle: string | null;
+  premise: string | null;
   sceneImage: string | null;
   thumbnailUrl: string | null;
   orderIndex: number;
   updatedAt: string;
   scenarios: ScenarioSummary[];
+};
+
+export type Unit = {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  jlptLevel: number;
+  orderIndex: number;
+  updatedAt: string;
+};
+
+export type UnitSummary = Unit & {
+  collections: Array<{ id: string; unitId: string | null; title: string }>;
 };
 
 export type DialogueScenario = {
@@ -94,7 +110,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(
       typeof body?.error === "string"
         ? body.error
-        : body?.error?.formErrors?.join(", ") ?? `Request failed: ${res.status}`
+        : (body?.error?.formErrors?.join(", ") ??
+            `Request failed: ${res.status}`),
     );
   }
   return res.json();
@@ -103,11 +120,43 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const dialogueApi = {
   listCollections: () =>
     request<{ collections: CollectionSummary[] }>("/api/content/dialogues"),
+  listUnits: () => request<{ units: UnitSummary[] }>("/api/content/units"),
+  createUnit: (body: {
+    id: string;
+    title: string;
+    subtitle?: string;
+    jlptLevel?: number;
+    orderIndex?: number;
+  }) =>
+    request<{ unit: Unit }>("/api/content/units", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateUnit: (
+    unitId: string,
+    body: {
+      title?: string;
+      subtitle?: string | null;
+      jlptLevel?: number;
+      orderIndex?: number;
+      collectionOrder?: string[];
+    },
+  ) =>
+    request<{ unit: Unit }>(`/api/content/units/${unitId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteUnit: (unitId: string) =>
+    request<{ ok: true }>(`/api/content/units/${unitId}`, {
+      method: "DELETE",
+    }),
   createCollection: (body: {
     id: string;
     title: string;
     subtitle?: string;
+    premise?: string;
     sceneImage?: string;
+    unitId?: string;
   }) =>
     request<{ collection: DialogueCollection }>("/api/content/dialogues", {
       method: "POST",
@@ -115,34 +164,38 @@ export const dialogueApi = {
     }),
   getCollection: (collectionId: string) =>
     request<{ collection: DialogueCollection }>(
-      `/api/content/dialogues/${collectionId}`
+      `/api/content/dialogues/${collectionId}`,
     ),
   updateCollection: (
     collectionId: string,
     body: {
       title?: string;
+      unitId?: string | null;
       subtitle?: string | null;
+      premise?: string | null;
       sceneImage?: string | null;
       thumbnailUrl?: string | null;
       orderIndex?: number;
       scenarioOrder?: string[];
-    }
+    },
   ) =>
     request<{ collection: DialogueCollection }>(
       `/api/content/dialogues/${collectionId}`,
-      { method: "PATCH", body: JSON.stringify(body) }
+      { method: "PATCH", body: JSON.stringify(body) },
     ),
   uploadThumbnail: async (collectionId: string, file: File) => {
     const formData = new FormData();
     formData.append("file", file);
     const res = await fetch(
       `/api/content/dialogues/${collectionId}/thumbnail`,
-      { method: "POST", body: formData }
+      { method: "POST", body: formData },
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(
-        typeof body?.error === "string" ? body.error : "Thumbnail upload failed"
+        typeof body?.error === "string"
+          ? body.error
+          : "Thumbnail upload failed",
       );
     }
     return res.json() as Promise<{
@@ -153,12 +206,12 @@ export const dialogueApi = {
   clearThumbnail: (collectionId: string) =>
     request<{ collection: DialogueCollection }>(
       `/api/content/dialogues/${collectionId}/thumbnail`,
-      { method: "DELETE" }
+      { method: "DELETE" },
     ),
   replaceCollection: (collectionId: string, file: CollectionFile) =>
     request<{ collection: DialogueCollection }>(
       `/api/content/dialogues/${collectionId}`,
-      { method: "PUT", body: JSON.stringify(file) }
+      { method: "PUT", body: JSON.stringify(file) },
     ),
   deleteCollection: (collectionId: string) =>
     request<{ ok: true }>(`/api/content/dialogues/${collectionId}`, {
@@ -171,29 +224,29 @@ export const dialogueApi = {
       menuTitle: string;
       menuSubtitle?: string;
       setting?: string;
-    }
+    },
   ) =>
     request<{ scenario: DialogueScenario }>(
       `/api/content/dialogues/${collectionId}/scenarios`,
-      { method: "POST", body: JSON.stringify(body) }
+      { method: "POST", body: JSON.stringify(body) },
     ),
   getScenario: (collectionId: string, slug: string) =>
     request<{ scenario: DialogueScenario }>(
-      `/api/content/dialogues/${collectionId}/scenarios/${slug}`
+      `/api/content/dialogues/${collectionId}/scenarios/${slug}`,
     ),
   updateScenario: (
     collectionId: string,
     slug: string,
-    body: Partial<Omit<DialogueScenario, "id" | "collectionId" | "updatedAt">>
+    body: Partial<Omit<DialogueScenario, "id" | "collectionId" | "updatedAt">>,
   ) =>
     request<{ scenario: DialogueScenario }>(
       `/api/content/dialogues/${collectionId}/scenarios/${slug}`,
-      { method: "PATCH", body: JSON.stringify(body) }
+      { method: "PATCH", body: JSON.stringify(body) },
     ),
   deleteScenario: (collectionId: string, slug: string) =>
     request<{ ok: true }>(
       `/api/content/dialogues/${collectionId}/scenarios/${slug}`,
-      { method: "DELETE" }
+      { method: "DELETE" },
     ),
   importCollection: async (file: File) => {
     const formData = new FormData();
@@ -205,7 +258,7 @@ export const dialogueApi = {
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(
-        typeof body?.error === "string" ? body.error : "Import failed"
+        typeof body?.error === "string" ? body.error : "Import failed",
       );
     }
     return res.json() as Promise<{
@@ -216,6 +269,7 @@ export const dialogueApi = {
   },
   generateLines: (body: {
     prompt: string;
+    collectionId?: string;
     setting?: string;
     speakerNames?: string[];
     grammarPointIds?: string[];
@@ -229,7 +283,7 @@ export const dialogueApi = {
   }) =>
     request<{ generated: GeneratedLines }>(
       "/api/content/dialogues/generate-lines",
-      { method: "POST", body: JSON.stringify(body) }
+      { method: "POST", body: JSON.stringify(body) },
     ),
   generateScenario: (body: {
     prompt: string;
@@ -240,20 +294,20 @@ export const dialogueApi = {
   }) =>
     request<{ generated: GeneratedScenario }>(
       "/api/content/dialogues/generate-scenario",
-      { method: "POST", body: JSON.stringify(body) }
+      { method: "POST", body: JSON.stringify(body) },
     ),
   getScenarioAudio: (collectionId: string, slug: string) =>
     request<ScenarioAudio>(
-      `/api/content/dialogues/${collectionId}/scenarios/${slug}/audio`
+      `/api/content/dialogues/${collectionId}/scenarios/${slug}/audio`,
     ),
   ensureScenarioAudio: (
     collectionId: string,
     slug: string,
-    body: { speaker1Voice?: string; speaker2Voice?: string } = {}
+    body: { speaker1Voice?: string; speaker2Voice?: string } = {},
   ) =>
     request<ScenarioAudio>(
       `/api/content/dialogues/${collectionId}/scenarios/${slug}/audio`,
-      { method: "POST", body: JSON.stringify(body) }
+      { method: "POST", body: JSON.stringify(body) },
     ),
   reviseLines: (body: {
     lines: DialogueLine[];
@@ -268,7 +322,7 @@ export const dialogueApi = {
   }) =>
     request<{ result: ReviseLinesResult }>(
       "/api/content/dialogues/revise-lines",
-      { method: "POST", body: JSON.stringify(body) }
+      { method: "POST", body: JSON.stringify(body) },
     ),
   extractHighlights: (body: {
     lines: DialogueLine[];
@@ -278,7 +332,18 @@ export const dialogueApi = {
   }) =>
     request<{ extracted: ExtractedHighlights }>(
       "/api/content/dialogues/extract-highlights",
-      { method: "POST", body: JSON.stringify(body) }
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  generateQuiz: (body: {
+    lines: DialogueLine[];
+    setting?: string;
+    menuTitle?: string;
+    existingQuiz?: QuizQuestion[];
+    count?: number;
+  }) =>
+    request<{ generated: GeneratedQuiz }>(
+      "/api/content/dialogues/generate-quiz",
+      { method: "POST", body: JSON.stringify(body) },
     ),
   auditScenario: (body: {
     lines: DialogueLine[];
@@ -287,10 +352,10 @@ export const dialogueApi = {
     setting?: string;
     menuTitle?: string;
   }) =>
-    request<{ result: AuditScenarioResult }>(
-      "/api/content/dialogues/audit",
-      { method: "POST", body: JSON.stringify(body) }
-    ),
+    request<{ result: AuditScenarioResult }>("/api/content/dialogues/audit", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   sanitizeGrammarTags: (body: {
     lines: DialogueLine[];
     highlights?: DialogueHighlights | null;
@@ -298,11 +363,11 @@ export const dialogueApi = {
   }) =>
     request<{ result: SanitizeGrammarResult }>(
       "/api/content/dialogues/sanitize-grammar",
-      { method: "POST", body: JSON.stringify(body) }
+      { method: "POST", body: JSON.stringify(body) },
     ),
   audioStatus: (collectionId: string) =>
     request<{ scenarios: ScenarioAudioStatus[] }>(
-      `/api/content/dialogues/${collectionId}/audio-status`
+      `/api/content/dialogues/${collectionId}/audio-status`,
     ),
   publishScenario: (collectionId: string, slug: string) =>
     request<{
@@ -315,7 +380,7 @@ export const dialogueApi = {
   unpublishScenario: (collectionId: string, slug: string) =>
     request<{ scenario: DialogueScenario }>(
       `/api/content/dialogues/${collectionId}/scenarios/${slug}/publish`,
-      { method: "DELETE" }
+      { method: "DELETE" },
     ),
   publishLesson: (collectionId: string) =>
     request<{

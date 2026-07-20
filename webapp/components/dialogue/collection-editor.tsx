@@ -31,6 +31,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   dialogueApi,
   scenarioSlug,
   type DialogueCollection,
@@ -81,7 +88,9 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
 
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
+  const [premise, setPremise] = useState("");
   const [sceneImage, setSceneImage] = useState("");
+  const [unitId, setUnitId] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [newSlug, setNewSlug] = useState("");
   const [newMenuTitle, setNewMenuTitle] = useState("");
@@ -115,11 +124,19 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
     if (collection) {
       setTitle(collection.title);
       setSubtitle(collection.subtitle ?? "");
+      setPremise(collection.premise ?? "");
       setSceneImage(collection.sceneImage ?? "");
+      setUnitId(collection.unitId ?? "");
       setRawText(collectionToRawJson(collection));
       setRawError(null);
     }
   }, [collection]);
+
+  const { data: unitsData } = useQuery({
+    queryKey: ["curriculum-units"],
+    queryFn: dialogueApi.listUnits,
+  });
+  const units = unitsData?.units ?? [];
 
   function invalidate() {
     queryClient.invalidateQueries({
@@ -136,10 +153,13 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
       dialogueApi.updateCollection(collectionId, {
         title: title.trim(),
         subtitle: subtitle.trim() || null,
+        premise: premise.trim() || null,
         sceneImage: sceneImage.trim() || null,
+        unitId: unitId || null,
       }),
     onSuccess: () => {
       invalidate();
+      queryClient.invalidateQueries({ queryKey: ["curriculum-units"] });
       toast.success("Collection saved.");
     },
     onError: (error) => toast.error(error.message),
@@ -153,7 +173,7 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
   });
 
   const addScenarioMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (withAi: boolean) => {
       const slug = newSlug.trim();
       const menuTitle = newMenuTitle.trim();
       const setting = newSetting.trim();
@@ -165,13 +185,14 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
         setting: setting || undefined,
       });
 
-      if (!setting || grammarPointIds.length === 0) {
-        return { scenario, generated: false };
+      if (!withAi || !setting || grammarPointIds.length === 0) {
+        return { scenario, generated: false, withAi };
       }
 
       try {
         const { generated } = await dialogueApi.generateLines({
           prompt: generationBriefFromSetting(setting, menuTitle),
+          collectionId,
           setting,
           grammarPointIds,
           mode: "replace",
@@ -190,17 +211,17 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
             setting,
           }
         );
-        return { scenario: updated, generated: true };
+        return { scenario: updated, generated: true, withAi };
       } catch (error) {
         toast.warning(
           error instanceof Error
             ? `Scenario created, but generation failed: ${error.message}`
             : "Scenario created, but line generation failed."
         );
-        return { scenario, generated: false };
+        return { scenario, generated: false, withAi };
       }
     },
-    onSuccess: ({ scenario, generated }) => {
+    onSuccess: ({ scenario, generated, withAi }) => {
       invalidate();
       queryClient.invalidateQueries({ queryKey: ["dialogue-scenario"] });
       setAddOpen(false);
@@ -215,8 +236,12 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
           ? "Scenario created with generated dialogue."
           : "Scenario created."
       );
+      // If the user opted out of AI generation, tell the scenario editor not
+      // to auto-generate dialogue just because a setting/grammar points
+      // happen to be filled in.
+      const query = withAi ? "?tab=lines" : "?tab=lines&autogen=0";
       router.push(
-        `/content/dialogues/${collectionId}/${scenarioSlug(scenario)}?tab=lines`
+        `/content/dialogues/${collectionId}/${scenarioSlug(scenario)}${query}`
       );
     },
     onError: (error) => toast.error(error.message),
@@ -438,6 +463,47 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
             value={subtitle}
             onChange={(e) => setSubtitle(e.target.value)}
           />
+        </div>
+        <div className="col-span-2 flex flex-col gap-2">
+          <Label>Premise</Label>
+          <Textarea
+            rows={4}
+            value={premise}
+            onChange={(e) => setPremise(e.target.value)}
+            placeholder="e.g. Aiko and Ren are next-door neighbors in a Tokyo apartment building who keep running into each other. Aiko: curious, upbeat. Ren: reserved, polite."
+          />
+          <p className="text-xs text-muted-foreground">
+            Admin-only. Describe the recurring setting and cast for this
+            collection&apos;s scenarios — it&apos;s passed to dialogue and
+            scenario generation to keep characters and tone consistent across
+            conversations, but it never ships in exported collection files or
+            the app.
+          </p>
+        </div>
+        <div className="col-span-2 flex flex-col gap-2">
+          <Label>Curriculum unit</Label>
+          <Select
+            value={unitId || "__unfiled__"}
+            onValueChange={(value) =>
+              setUnitId(!value || value === "__unfiled__" ? "" : value)
+            }
+          >
+            <SelectTrigger className="max-w-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__unfiled__">Unfiled</SelectItem>
+              {units.map((unit) => (
+                <SelectItem key={unit.id} value={unit.id}>
+                  {unit.title} (N{unit.jlptLevel})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Groups this collection under a grammar band in the lesson list and
+            the Shizen app. Saved with the collection.
+          </p>
         </div>
         <div className="col-span-2 flex flex-col gap-3 rounded-md border p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -795,26 +861,42 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
           </div>
 
           <div className="flex flex-col gap-2 border-t border-border/60 pt-4">
-            <Button
-              onClick={() => addScenarioMutation.mutate()}
-              disabled={
-                addScenarioMutation.isPending ||
-                !newSlug.trim() ||
-                !newMenuTitle.trim() ||
-                !newSetting.trim() ||
-                newGrammarPointIds.length === 0
-              }
-            >
-              {addScenarioMutation.isPending
-                ? "Adding & generating…"
-                : "Add & generate dialogue"}
-            </Button>
-            {!newSetting.trim() || newGrammarPointIds.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                Pick a scenario idea above, then choose grammar points. Lines
-                are generated automatically from the setting.
-              </p>
-            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => addScenarioMutation.mutate(true)}
+                disabled={
+                  addScenarioMutation.isPending ||
+                  !newSlug.trim() ||
+                  !newMenuTitle.trim() ||
+                  !newSetting.trim() ||
+                  newGrammarPointIds.length === 0
+                }
+              >
+                <Sparkles className="size-4" />
+                {addScenarioMutation.isPending
+                  ? "Adding & generating…"
+                  : "Add & generate dialogue"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => addScenarioMutation.mutate(false)}
+                disabled={
+                  addScenarioMutation.isPending ||
+                  !newSlug.trim() ||
+                  !newMenuTitle.trim()
+                }
+              >
+                {addScenarioMutation.isPending
+                  ? "Adding…"
+                  : "Add scenario, write lines manually"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Setting and grammar points are required to generate dialogue
+              automatically. Skip them and use &quot;write lines
+              manually&quot; to add lines yourself after creating the
+              scenario.
+            </p>
           </div>
         </DialogContent>
       </Dialog>

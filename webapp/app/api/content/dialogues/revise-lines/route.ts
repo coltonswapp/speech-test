@@ -6,7 +6,7 @@ import { grammarPoint } from "@/lib/db/schema";
 import { reviseLinesRequestSchema } from "@/lib/dialogue/types";
 import { DialogueGenerationError } from "@/lib/dialogue/gemini-generate";
 import { reviseDialogueLines } from "@/lib/dialogue/gemini-revise";
-import { fetchApprovedGrammarPointIdSet } from "@/lib/dialogue/grammar-catalog";
+import { fetchGrammarPointIdSet } from "@/lib/dialogue/grammar-catalog";
 import { sanitizeGeneratedLine } from "@/lib/dialogue/sanitize-grammar-tags";
 
 export async function POST(request: NextRequest) {
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
           },
         })
       : Promise.resolve([]),
-    fetchApprovedGrammarPointIdSet(),
+    fetchGrammarPointIdSet(),
   ]);
 
   try {

@@ -28,6 +28,9 @@ export type ExportableScenario = {
   targetSubstring: string | null;
   audioKey: string | null;
   publishedAudioUrl: string | null;
+  publishedVariantId: string | null;
+  publishedContentHash: string | null;
+  publishedAt: string | null;
   grammarPointIds: string[];
   setting: string | null;
   lines: unknown;
@@ -103,6 +106,9 @@ export function buildScenarioFile(scenario: ExportableScenario): ScenarioFile {
     targetSubstring: scenario.targetSubstring ?? undefined,
     audioKey: scenario.audioKey ?? undefined,
     publishedAudioUrl: scenario.publishedAudioUrl ?? undefined,
+    publishedVariantId: scenario.publishedVariantId ?? undefined,
+    publishedContentHash: scenario.publishedContentHash ?? undefined,
+    publishedAt: scenario.publishedAt ?? undefined,
     scenario: {
       setting: scenario.setting ?? undefined,
       lines: lines.map((line, index) => exportLine(line, scenario.id, index)),

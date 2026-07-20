@@ -189,16 +189,37 @@ export const recentPointView = pgTable("recent_point_view", {
     .defaultNow(),
 });
 
+// Curriculum units — the grammar-band layer above dialogue collections.
+// jlptLevel ties a unit to the grammar catalog's spine (5 = N5 … 4 = N4);
+// orderIndex sequences units across the whole curriculum.
+export const curriculumUnit = pgTable("curriculum_unit", {
+  id: text("id").primaryKey(), // slug, immutable after create
+  title: text("title").notNull(),
+  subtitle: text("subtitle"),
+  jlptLevel: integer("jlpt_level").notNull().default(5),
+  orderIndex: integer("order_index").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // Shizen dialogue collections (e.g. train-station.json) — one row per
 // collection plus one row per scenario. Scenario ids store the full slug
 // ("train-station/buying-a-ticket") exactly as exported.
 export const dialogueCollection = pgTable("dialogue_collection", {
   id: text("id").primaryKey(), // slug, immutable after create
+  unitId: text("unit_id").references(() => curriculumUnit.id, {
+    onDelete: "set null",
+  }), // null = unfiled (experiments, legacy content)
   title: text("title").notNull(),
   subtitle: text("subtitle"),
+  // Admin-only: setting + recurring cast, kept out of exported collection
+  // files. Fed into scenario/line generation so new scenarios in this
+  // collection stay consistent with established characters and voices.
+  premise: text("premise"),
   sceneImage: text("scene_image"), // optional bundled asset-catalog name (legacy / fallback)
   thumbnailUrl: text("thumbnail_url"), // public CDN URL for lesson card thumbnail
-  orderIndex: integer("order_index").notNull().default(0),
+  orderIndex: integer("order_index").notNull().default(0), // position within unit (or unfiled list)
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

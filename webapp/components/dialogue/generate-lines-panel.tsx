@@ -39,6 +39,7 @@ type DialogueVariant = {
 
 export function GenerateLinesPanel({
   existingLines,
+  collectionId,
   setting,
   menuTitle,
   grammarPointIds,
@@ -47,6 +48,7 @@ export function GenerateLinesPanel({
   triggerGenerateCount = 0,
 }: {
   existingLines: DialogueLine[];
+  collectionId?: string;
   setting: string;
   menuTitle?: string;
   grammarPointIds: string[];
@@ -130,6 +132,7 @@ export function GenerateLinesPanel({
     const speakerNames = [speaker1.trim(), speaker2.trim()].filter(Boolean);
     const baseRequest = {
       prompt: effectiveBrief,
+      collectionId,
       setting: setting.trim() || undefined,
       speakerNames: speakerNames.length > 0 ? speakerNames : undefined,
       grammarPointIds:

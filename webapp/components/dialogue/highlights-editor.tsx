@@ -52,8 +52,8 @@ export function HighlightsEditor({
   );
 
   const { data: pointsData } = useQuery({
-    queryKey: ["content-points", "approved-labels"],
-    queryFn: () => contentApi.listPoints({ status: "approved" }),
+    queryKey: ["content-points", "all-labels"],
+    queryFn: () => contentApi.listPoints(),
     staleTime: 5 * 60 * 1000,
   });
 

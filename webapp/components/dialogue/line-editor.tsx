@@ -1,12 +1,27 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowDown, ArrowUp, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  ArrowDown,
+  ArrowUp,
+  CornerDownRight,
+  Plus,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { GrammarPointPicker } from "@/components/content/grammar-point-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { dialogueApi } from "@/lib/dialogue/client";
 import type { DialogueLine, GeneratedLine } from "@/lib/dialogue/types";
@@ -56,6 +71,70 @@ export function LineEditor({
   const [revisingLine, setRevisingLine] = useState<number | null>(null);
   const [isRevising, setIsRevising] = useState(false);
 
+  const initialSpeakers = [
+    ...new Set(lines.map((line) => line.speaker).filter(Boolean)),
+  ];
+  const [speaker1, setSpeaker1] = useState(initialSpeakers[0] ?? "");
+  const [speaker2, setSpeaker2] = useState(initialSpeakers[1] ?? "");
+
+  // Lines can be replaced wholesale from outside (generation, whole-dialogue
+  // revise). If the current top-of-form names no longer cover what's
+  // actually on the lines, resync from the data during render (the
+  // React-blessed way to adjust state in response to a prop change).
+  // Renaming via the fields below keeps every line in sync, so this never
+  // fires from an in-app edit.
+  const [prevLines, setPrevLines] = useState(lines);
+  if (lines !== prevLines) {
+    setPrevLines(lines);
+    const distinct = [
+      ...new Set(lines.map((line) => line.speaker).filter(Boolean)),
+    ];
+    const covered = new Set([speaker1, speaker2].filter(Boolean));
+    const uncovered = distinct.some((name) => !covered.has(name));
+    if (uncovered) {
+      setSpeaker1(distinct[0] ?? "");
+      setSpeaker2(distinct[1] ?? "");
+    }
+  }
+
+  const speakerOptions = useMemo(() => {
+    const names = new Set<string>();
+    if (speaker1) names.add(speaker1);
+    if (speaker2) names.add(speaker2);
+    for (const line of lines) {
+      if (line.speaker) names.add(line.speaker);
+    }
+    return [...names];
+  }, [speaker1, speaker2, lines]);
+
+  function renameSpeaker(oldName: string, newName: string) {
+    if (!oldName || oldName === newName) return;
+    onChange(
+      lines.map((line) =>
+        line.speaker === oldName ? { ...line, speaker: newName } : line
+      )
+    );
+  }
+
+  function handleSpeaker1Change(value: string) {
+    renameSpeaker(speaker1, value);
+    setSpeaker1(value);
+  }
+
+  function handleSpeaker2Change(value: string) {
+    renameSpeaker(speaker2, value);
+    setSpeaker2(value);
+  }
+
+  function otherSpeakerFor(current?: string) {
+    return (
+      [speaker1, speaker2].find((name) => name && name !== current) ??
+      current ??
+      speaker1 ??
+      ""
+    );
+  }
+
   function update(index: number, patch: Partial<DialogueLine>) {
     const next = lines.slice();
     next[index] = { ...next[index], ...patch };
@@ -78,16 +157,27 @@ export function LineEditor({
 
   function add() {
     const lastSpeaker = lines[lines.length - 1]?.speaker;
-    const otherSpeaker = lines.find((l) => l.speaker !== lastSpeaker)?.speaker;
     onChange([
       ...lines,
       {
-        speaker: otherSpeaker ?? lastSpeaker ?? "",
+        speaker: otherSpeakerFor(lastSpeaker),
         japanese: "",
         romaji: "",
         english: "",
       },
     ]);
+  }
+
+  function insertAfter(index: number) {
+    const next = lines.slice();
+    next.splice(index + 1, 0, {
+      speaker: otherSpeakerFor(lines[index]?.speaker),
+      japanese: "",
+      romaji: "",
+      english: "",
+    });
+    onChange(next);
+    clearRevisionState();
   }
 
   // Pending revisions and selections are keyed by index, so any structural
@@ -209,6 +299,30 @@ export function LineEditor({
   return (
     <div className="flex flex-col gap-3">
       <Label>Lines</Label>
+
+      <div className="flex flex-col gap-2 rounded-md border border-border/60 p-3 sm:flex-row sm:items-end sm:gap-4">
+        <div className="flex flex-1 flex-col gap-1.5">
+          <Label className="text-xs">Speaker 1</Label>
+          <Input
+            value={speaker1}
+            onChange={(e) => handleSpeaker1Change(e.target.value)}
+            placeholder="e.g. Aiko"
+          />
+        </div>
+        <div className="flex flex-1 flex-col gap-1.5">
+          <Label className="text-xs">Speaker 2</Label>
+          <Input
+            value={speaker2}
+            onChange={(e) => handleSpeaker2Change(e.target.value)}
+            placeholder="e.g. Ren"
+          />
+        </div>
+      </div>
+      <p className="-mt-1 text-xs text-muted-foreground">
+        Renaming a speaker here updates every line using that name. Assign
+        each line&apos;s speaker from the dropdown below.
+      </p>
+
       {lines.length === 0 && (
         <p className="text-sm text-muted-foreground">
           No lines yet. Add them by hand or generate below.
@@ -230,12 +344,23 @@ export function LineEditor({
               />
             )}
             <span className="text-xs text-muted-foreground">#{index + 1}</span>
-            <Input
-              className="w-40"
-              value={line.speaker}
-              onChange={(e) => update(index, { speaker: e.target.value })}
-              placeholder="Speaker"
-            />
+            <Select
+              value={line.speaker || undefined}
+              onValueChange={(value) =>
+                update(index, { speaker: value ?? "" })
+              }
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Speaker" />
+              </SelectTrigger>
+              <SelectContent>
+                {speakerOptions.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <div className="flex-1" />
             {reviseEnabled && (
               <Button
@@ -274,6 +399,15 @@ export function LineEditor({
               aria-label="Move line down"
             >
               <ArrowDown className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => insertAfter(index)}
+              aria-label="Insert line below"
+              title="Insert a new line below this one"
+            >
+              <CornerDownRight className="size-3.5" />
             </Button>
             <Button
               variant="ghost"

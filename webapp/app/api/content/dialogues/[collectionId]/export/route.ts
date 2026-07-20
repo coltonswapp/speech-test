@@ -7,6 +7,7 @@ import {
   buildCollectionFile,
   serializeCollectionFile,
 } from "@/lib/dialogue/export";
+import { toExportableScenario } from "@/lib/dialogue/public-api";
 
 export async function GET(
   _request: NextRequest,
@@ -26,7 +27,7 @@ export async function GET(
     orderBy: [asc(dialogueScenario.orderIndex)],
   });
 
-  const file = buildCollectionFile(collection, scenarios);
+  const file = buildCollectionFile(collection, scenarios.map(toExportableScenario));
 
   return new NextResponse(serializeCollectionFile(file), {
     headers: {

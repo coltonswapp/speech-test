@@ -63,6 +63,25 @@ function buildSentenceMap(
   return { rows, usesMarks };
 }
 
+/** Returns the sentence-map row index that contains the playhead, or null. */
+function activeSentenceIndexForTime(
+  rows: SentenceMapRow[],
+  currentTime: number,
+  sampleRate: number,
+  usesMarks: boolean
+): number | null {
+  if (!usesMarks || rows.length === 0 || !Number.isFinite(currentTime)) return null;
+  const sample = Math.round(currentTime * sampleRate);
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const isLast = i === rows.length - 1;
+    if (sample >= row.sampleLower && (isLast ? sample <= row.sampleUpper : sample < row.sampleUpper)) {
+      return i;
+    }
+  }
+  return null;
+}
+
 export function WaveformEditor({
   projectId,
   variant,
@@ -107,6 +126,12 @@ export function WaveformEditor({
     spokenLines,
     marks,
     totalSamples
+  );
+  const activeRowIndex = activeSentenceIndexForTime(
+    sentenceRows,
+    currentTime,
+    variant.sampleRate,
+    usesMarks
   );
 
   function patchVariantInCache(next: Variant) {
@@ -381,7 +406,7 @@ export function WaveformEditor({
       if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
       if (e.code === "Space") {
         e.preventDefault();
-        wavesurferRef.current?.playPause();
+        toggleMainPlayback();
       } else if (e.key === "m" || e.key === "M") {
         e.preventDefault();
         markLineSwitchAtPlayhead();
@@ -406,6 +431,12 @@ export function WaveformEditor({
     ws.setTime(row.sampleLower / variant.sampleRate);
     setLoopingRowIndex(row.index);
     void ws.play();
+  }
+
+  /** Main transport: clears per-row loop so full-track QC can run through the map. */
+  function toggleMainPlayback() {
+    setLoopingRowIndex(null);
+    wavesurferRef.current?.playPause();
   }
 
   useEffect(() => {
@@ -627,7 +658,8 @@ export function WaveformEditor({
             {usesMarks ? (
               <p className="text-xs text-emerald-600 dark:text-emerald-400">
                 One row per audio segment ({sentenceRows.length} lines, {marks.length}{" "}
-                breaks). Ranges follow your marks.
+                breaks). Ranges follow your marks. Playhead highlights the active
+                sentence for QC.
               </p>
             ) : spokenLines.length > 1 ? (
               <p className="text-xs text-muted-foreground">
@@ -640,12 +672,14 @@ export function WaveformEditor({
           <div className="flex flex-col gap-1.5">
             {sentenceRows.map((row) => {
               const isLooping = loopingRowIndex === row.index;
+              const isActive = activeRowIndex === row.index;
+              const isHighlighted = isLooping || isActive;
               return (
                 <div
                   key={row.index}
                   className={cn(
-                    "flex items-start gap-2 rounded-md border px-2 py-1.5 text-xs",
-                    isLooping
+                    "flex items-start gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors",
+                    isHighlighted
                       ? "border-primary bg-primary/10"
                       : "border-border/40"
                   )}
@@ -664,6 +698,15 @@ export function WaveformEditor({
                   </button>
                   <div className="flex flex-1 flex-col gap-1">
                     <div className="flex items-center gap-1.5">
+                      <span
+                        className={cn(
+                          "size-1.5 shrink-0 rounded-full transition-opacity",
+                          isHighlighted
+                            ? "bg-primary opacity-100"
+                            : "bg-transparent opacity-0"
+                        )}
+                        aria-hidden
+                      />
                       <span className="font-mono text-[10px] text-muted-foreground">
                         #{row.index + 1}
                       </span>
@@ -682,8 +725,13 @@ export function WaveformEditor({
                           marked
                         </span>
                       )}
+                      {isActive && (
+                        <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                          {isPlaying ? "playing" : "playhead"}
+                        </span>
+                      )}
                     </div>
-                    <span>{row.text}</span>
+                    <span className={cn(isHighlighted && "font-medium")}>{row.text}</span>
                     {usesMarks && (
                       <span className="font-mono text-[10px] text-muted-foreground">
                         {(row.sampleLower / variant.sampleRate).toFixed(2)}s –{" "}
@@ -774,7 +822,7 @@ export function WaveformEditor({
         <Button
           size="icon-sm"
           variant="outline"
-          onClick={() => wavesurferRef.current?.playPause()}
+          onClick={() => toggleMainPlayback()}
         >
           {isPlaying ? (
             <Pause className="size-3.5" />

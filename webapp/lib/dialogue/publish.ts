@@ -28,9 +28,10 @@ export function scenarioSlugFromId(scenarioId: string, collectionId: string): st
 export function publishedDialogueAudioKey(
   collectionId: string,
   scenarioSlug: string,
-  contentHash: string
+  contentHash: string,
+  variantId: string
 ): string {
-  return `dialogue/${collectionId}/${scenarioSlug}/${contentHash}.m4a`;
+  return `dialogue/${collectionId}/${scenarioSlug}/${contentHash}-${variantId}.m4a`;
 }
 
 export type PublishScenarioResult = {
@@ -76,7 +77,12 @@ export async function publishScenarioAudio(
   );
   const contentHash = variant.contentHash ?? currentHash;
   const scenarioSlug = scenarioSlugFromId(scenarioId, collectionId);
-  const objectKey = publishedDialogueAudioKey(collectionId, scenarioSlug, contentHash);
+  const objectKey = publishedDialogueAudioKey(
+    collectionId,
+    scenarioSlug,
+    contentHash,
+    variant.id
+  );
   const m4a = await renderVariantM4a(variant);
   await putPublishedObject(objectKey, m4a, "audio/mp4");
   const publishedAudioUrl = publishedObjectPublicUrl(objectKey);

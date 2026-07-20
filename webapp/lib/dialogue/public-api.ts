@@ -1,6 +1,10 @@
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { dialogueCollection, dialogueScenario } from "@/lib/db/schema";
+import {
+  curriculumUnit,
+  dialogueCollection,
+  dialogueScenario,
+} from "@/lib/db/schema";
 import {
   buildCollectionFile,
   type ExportableCollection,
@@ -9,6 +13,7 @@ import {
 
 export type PublicDialogueCollectionSummary = {
   id: string;
+  unitId: string | null;
   title: string;
   subtitle: string | null;
   sceneImage: string | null;
@@ -17,6 +22,29 @@ export type PublicDialogueCollectionSummary = {
   updatedAt: string;
   scenarioCount: number;
 };
+
+export type PublicCurriculumUnitSummary = {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  jlptLevel: number;
+  orderIndex: number;
+};
+
+export async function listPublicCurriculumUnits(): Promise<
+  PublicCurriculumUnitSummary[]
+> {
+  const units = await db.query.curriculumUnit.findMany({
+    orderBy: [asc(curriculumUnit.orderIndex), asc(curriculumUnit.id)],
+  });
+  return units.map((unit) => ({
+    id: unit.id,
+    title: unit.title,
+    subtitle: unit.subtitle,
+    jlptLevel: unit.jlptLevel,
+    orderIndex: unit.orderIndex,
+  }));
+}
 
 export function toExportableScenario(
   scenario: typeof dialogueScenario.$inferSelect
@@ -32,6 +60,9 @@ export function toExportableScenario(
     targetSubstring: scenario.targetSubstring,
     audioKey: scenario.audioKey,
     publishedAudioUrl: scenario.publishedAudioUrl,
+    publishedVariantId: scenario.publishedVariantId,
+    publishedContentHash: scenario.publishedContentHash,
+    publishedAt: scenario.publishedAt?.toISOString() ?? null,
     grammarPointIds: scenario.grammarPointIds,
     setting: scenario.setting,
     lines: scenario.lines,
@@ -58,6 +89,7 @@ export async function listPublicDialogueCollections(): Promise<
   }
   return collections.map((collection) => ({
     id: collection.id,
+    unitId: collection.unitId,
     title: collection.title,
     subtitle: collection.subtitle,
     sceneImage: collection.sceneImage,

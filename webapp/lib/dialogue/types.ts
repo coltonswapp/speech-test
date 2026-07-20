@@ -23,9 +23,7 @@ export const grammarPatternSchema = z
     z.string(),
     z.object({ label: z.string(), grammarPointID: z.string().optional() }),
   ])
-  .transform((value) =>
-    typeof value === "string" ? { label: value } : value
-  );
+  .transform((value) => (typeof value === "string" ? { label: value } : value));
 export type GrammarPatternRef = z.output<typeof grammarPatternSchema>;
 
 export const highlightsSchema = z.object({
@@ -62,6 +60,9 @@ export const scenarioFileSchema = z.object({
   targetSubstring: z.string().optional(),
   audioKey: z.string().optional(),
   publishedAudioUrl: z.string().url().optional(),
+  publishedVariantId: z.string().optional(),
+  publishedContentHash: z.string().optional(),
+  publishedAt: z.string().optional(),
   grammarPointIDs: z.array(z.string()).optional(),
   scenario: scenarioBodySchema,
   highlights: highlightsSchema.optional(),
@@ -82,13 +83,34 @@ export type CollectionFile = z.output<typeof collectionFileSchema>;
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const slugSchema = z
   .string()
-  .regex(slugPattern, "Use lowercase letters, digits, and hyphens (e.g. train-station)");
+  .regex(
+    slugPattern,
+    "Use lowercase letters, digits, and hyphens (e.g. train-station)",
+  );
 
 export const createCollectionSchema = z.object({
   id: slugSchema,
   title: z.string().min(1),
   subtitle: z.string().optional(),
+  premise: z.string().optional(),
   sceneImage: z.string().optional(),
+  unitId: z.string().optional(),
+});
+
+export const createUnitSchema = z.object({
+  id: slugSchema,
+  title: z.string().min(1),
+  subtitle: z.string().optional(),
+  jlptLevel: z.number().int().min(1).max(5).default(5),
+  orderIndex: z.number().int().optional(),
+});
+
+export const updateUnitSchema = z.object({
+  title: z.string().min(1).optional(),
+  subtitle: z.string().nullable().optional(),
+  jlptLevel: z.number().int().min(1).max(5).optional(),
+  orderIndex: z.number().int().optional(),
+  collectionOrder: z.array(z.string()).optional(),
 });
 
 export const createScenarioSchema = z.object({
@@ -103,7 +125,9 @@ export const createScenarioSchema = z.object({
 // silently zero out fields like `lines`/`quiz` on any partial update.
 export const updateCollectionSchema = z.object({
   title: z.string().min(1).optional(),
+  unitId: z.string().nullable().optional(),
   subtitle: z.string().nullable().optional(),
+  premise: z.string().nullable().optional(),
   sceneImage: z.string().nullable().optional(),
   thumbnailUrl: z.string().url().nullable().optional(),
   orderIndex: z.number().int().optional(),
@@ -127,6 +151,7 @@ export const updateScenarioSchema = z.object({
 
 export const generateLinesRequestSchema = z.object({
   prompt: z.string().min(1),
+  collectionId: z.string().optional(),
   setting: z.string().optional(),
   speakerNames: z.array(z.string().min(1)).max(2).optional(),
   grammarPointIds: z.array(z.string()).optional(),
@@ -206,6 +231,22 @@ export type ReviseLinesResult =
   | { scope: "all"; generated: GeneratedLines };
 
 // LLM extraction of learner highlights (vocab + grammar labels) from dialogue.
+// LLM-authored quiz question candidates, generated from dialogue lines so
+// editors can pick which ones to keep rather than hand-writing every question.
+export const generateQuizRequestSchema = z.object({
+  lines: z.array(dialogueLineSchema).min(1),
+  setting: z.string().optional(),
+  menuTitle: z.string().optional(),
+  existingQuiz: z.array(quizQuestionSchema).optional(),
+  count: z.number().int().min(1).max(10).default(6),
+});
+export type GenerateQuizRequest = z.infer<typeof generateQuizRequestSchema>;
+
+export const generatedQuizSchema = z.object({
+  questions: z.array(quizQuestionSchema).min(1),
+});
+export type GeneratedQuiz = z.infer<typeof generatedQuizSchema>;
+
 export const extractHighlightsRequestSchema = z.object({
   lines: z.array(dialogueLineSchema).min(1),
   setting: z.string().optional(),
@@ -223,7 +264,7 @@ export const extractedHighlightsSchema = z.object({
       z.object({
         label: z.string().min(1),
         grammarPointID: z.string().optional(),
-      })
+      }),
     )
     .max(12)
     .optional(),
@@ -290,7 +331,7 @@ export const llmAuditResultSchema = z.object({
         lineIndex: z.number().int().min(0),
         grammarPointID: z.string().min(1),
         reason: z.string().min(1),
-      })
+      }),
     )
     .default([]),
 });

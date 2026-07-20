@@ -89,7 +89,40 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export type CoverageScenarioRef = {
+  scenarioId: string;
+  menuTitle: string;
+  collectionId: string;
+  collectionTitle: string;
+  unitId: string | null;
+  unitTitle: string | null;
+  jlptLevel: number | null;
+  taggedLineCount: number;
+};
+
+export type CoveragePoint = {
+  id: string;
+  orderIndex: number;
+  title: string;
+  pattern: string | null;
+  headlineEnglish: string;
+  status: "draft" | "needsRevision" | "approved";
+  coverage: CoverageScenarioRef[];
+};
+
+export type CoverageReport = {
+  points: CoveragePoint[];
+  totals: {
+    pointCount: number;
+    coveredCount: number;
+    uncoveredCount: number;
+    scenarioCount: number;
+  };
+  unknownTags: Array<{ tag: string; scenarioIds: string[] }>;
+};
+
 export const contentApi = {
+  getCoverage: () => request<CoverageReport>("/api/content/coverage"),
   listPoints: (params?: { status?: string; search?: string }) => {
     const qs = new URLSearchParams();
     if (params?.status) qs.set("status", params.status);

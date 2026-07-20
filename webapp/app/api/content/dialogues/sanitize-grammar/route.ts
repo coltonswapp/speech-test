@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { sanitizeGrammarRequestSchema } from "@/lib/dialogue/types";
-import { fetchApprovedGrammarPointIdSet } from "@/lib/dialogue/grammar-catalog";
+import { fetchGrammarPointIdSet } from "@/lib/dialogue/grammar-catalog";
 import {
   countRemovedGrammarTags,
   sanitizeScenarioGrammarTags,
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const approvedIds = await fetchApprovedGrammarPointIdSet();
+  const approvedIds = await fetchGrammarPointIdSet();
   const sanitized = sanitizeScenarioGrammarTags(
     {
       lines: parsed.data.lines,

@@ -78,8 +78,8 @@ export function GrammarPointPicker({
   const debouncedSearch = useDebouncedValue(search, 250);
 
   const { data: allData } = useQuery({
-    queryKey: ["content-points", "approved-labels"],
-    queryFn: () => contentApi.listPoints({ status: "approved" }),
+    queryKey: ["content-points", "all-labels"],
+    queryFn: () => contentApi.listPoints(),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -87,7 +87,6 @@ export function GrammarPointPicker({
     queryKey: ["content-points", "picker-search", debouncedSearch],
     queryFn: () =>
       contentApi.listPoints({
-        status: "approved",
         search: debouncedSearch || undefined,
       }),
     enabled: open,

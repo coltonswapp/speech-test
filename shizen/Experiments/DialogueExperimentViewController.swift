@@ -123,6 +123,34 @@ enum DialoguePresentationContext {
     case nestedPagingHost
 }
 
+/// How the transcript renders its lines.
+enum DialogueTranscriptDisplayMode {
+    /// Japanese bubbles with English translations.
+    case full
+    /// Japanese bubbles only; English translations hidden.
+    case japaneseOnly
+    /// Listening mode: one static bubble per speaker holding a live meter.
+    case listeningSpeakers
+    /// Listening mode: normal transcript layout, but every line's bubble
+    /// holds a live meter instead of text.
+    case listeningLines
+    /// Progressive reveal per line: live meter → Japanese → English.
+    case reveal
+}
+
+private enum DialogueLineRevealLevel {
+    case audioOnly
+    case japanese
+    case english
+}
+
+/// Direction along the reveal ladder. Reverses at each end so swipes cycle
+/// meter → Japanese → English → Japanese → meter → …
+private enum DialogueLineRevealTravel {
+    case revealing
+    case concealing
+}
+
 // MARK: - View controller
 
 final class DialogueExperimentViewController: UIViewController {
@@ -152,6 +180,21 @@ final class DialogueExperimentViewController: UIViewController {
     /// Prefer CDN thumbnail when the lesson was loaded from the CMS.
     var sceneImageURL: URL?
 
+    /// Hosts set this false for quiz-backed scenarios, where completion is
+    /// earned by passing the quiz instead of finishing playback.
+    var recordsCompletionOnPlaybackFinish = true
+
+    /// Transcript rendering mode; listening variants replace text with
+    /// speaker-tinted live meters. See ``DialogueTranscriptDisplayMode``.
+    var transcriptDisplayMode: DialogueTranscriptDisplayMode = .full {
+        didSet {
+            guard transcriptDisplayMode != oldValue, isViewLoaded else { return }
+            updateSceneImageWidthForCurrentMode()
+            rebuildTranscriptRows()
+            resetScrollPositionForNewTranscript()
+        }
+    }
+
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
     private var contentStackTopConstraint: NSLayoutConstraint!
@@ -159,6 +202,37 @@ final class DialogueExperimentViewController: UIViewController {
     private var japaneseBubbles: [DialogueJapaneseBubbleView] = []
     private var japaneseLabels: [FuriganaTranscriptLabel] = []
     private var englishLabels: [UILabel] = []
+    /// One bubble+meter per speaker in `.listeningSpeakers` mode; empty otherwise.
+    private var listeningSpeakerSlots: [ListeningSpeakerSlot] = []
+    /// One meter per line in `.listeningLines` / `.reveal` modes; empty otherwise.
+    private var listeningLineMeters: [AudioLevelBarsView] = []
+    /// Slow-tracking level baseline; the gap between the live level and this
+    /// baseline marks syllable onsets for the listening meters.
+    private var listeningMeterBaseline: Float = 0
+    /// Per-line reveal ladder in `.reveal` mode; empty otherwise.
+    private var lineRevealLevels: [DialogueLineRevealLevel] = []
+    /// Per-line travel direction for cycling the reveal ladder.
+    private var lineRevealTravels: [DialogueLineRevealTravel] = []
+    /// UI handles for animating meter → Japanese → English in `.reveal` mode.
+    private var lineRevealSlots: [LineRevealSlot] = []
+
+    private struct ListeningSpeakerSlot {
+        let speaker: String
+        let side: DialogueSpeakerSide
+        let bubble: DialogueJapaneseBubbleView
+        let meter: AudioLevelBarsView
+    }
+
+    private struct LineRevealSlot {
+        let meter: AudioLevelBarsView
+        /// Edge pins that make the bubble size to the meter (audio-only).
+        let meterBubbleSizingConstraints: [NSLayoutConstraint]
+        /// Keeps the meter laid out (centered, fixed size) while Japanese text owns the bubble.
+        let meterParkConstraints: [NSLayoutConstraint]
+        let englishWrapper: UIView?
+        var textMinWidthConstraint: NSLayoutConstraint?
+    }
+
     private var bubbleMinWidthConstraints: [NSLayoutConstraint] = []
     private var appliedBubbleMinWidthColumnWidth: CGFloat = -1
     private var bubbleSwipeContainers: [DialogueBubbleSwipeRevealContainer] = []
@@ -169,7 +243,7 @@ final class DialogueExperimentViewController: UIViewController {
         let column: UIStackView
         let viewBeforeBubble: UIView
         let bubbleView: UIView
-        let hasEnglish: Bool
+        var hasEnglish: Bool
     }
 
     private let transportBarContainer = UIView()
@@ -212,11 +286,15 @@ final class DialogueExperimentViewController: UIViewController {
     private var emphasisAnimationStartTime: CFTimeInterval = 0
     private var followAlongScrollDirection: FollowAlongScrollDirection?
     private var followAlongScrollStartY: CGFloat = 0
-    /// Emphasis value each row's Japanese text was last rendered with; re-rendering
-    /// furigana is expensive, so unchanged rows are skipped.
-    private var appliedRowTextEmphasis: [CGFloat] = []
+    /// Emphasis value each row's message-column spacing was last set from; `setCustomSpacing`
+    /// dirties the whole stack view's layout regardless of whether the value actually moved, so
+    /// unchanged rows are skipped to avoid forcing a full-window layout pass every animation frame.
+    private var appliedRowSpacingEmphasis: [CGFloat] = []
     private var seekTargetLineIndex: Int?
     private var playbackResumeStartedAt: CFTimeInterval = 0
+    /// Invalidates in-flight async audio-session activations when a newer play
+    /// request supersedes them; only the latest completion may start the player.
+    private var playbackActivationGeneration = 0
     private var nestedPagingTopContentInset: CGFloat = 0
     private var nestedPagingTransportProgress: CGFloat = 0
     /// Set by `DialogueExperimentHarnessViewController` to print alignment / switch diagnostics.
@@ -576,11 +654,27 @@ final class DialogueExperimentViewController: UIViewController {
             ),
         ])
         if sceneImageWidthConstraint == nil {
-            sceneImageWidthConstraint = sceneImageContainer.widthAnchor.constraint(
-                equalTo: scrollHeaderStack.widthAnchor,
-                multiplier: 0.92
-            )
+            sceneImageWidthConstraint = makeSceneImageWidthConstraint()
         }
+    }
+
+    /// Speaker-listening mode shrinks the hero image so the header and both
+    /// speaker bubbles fit the viewport without scrolling; the other modes
+    /// scroll, so they keep the wide image.
+    private func makeSceneImageWidthConstraint() -> NSLayoutConstraint {
+        sceneImageContainer.widthAnchor.constraint(
+            equalTo: scrollHeaderStack.widthAnchor,
+            multiplier: transcriptDisplayMode == .listeningSpeakers ? 0.72 : 0.92
+        )
+    }
+
+    private func updateSceneImageWidthForCurrentMode() {
+        guard let existing = sceneImageWidthConstraint else { return }
+        let wasActive = existing.isActive
+        existing.isActive = false
+        let updated = makeSceneImageWidthConstraint()
+        sceneImageWidthConstraint = updated
+        updated.isActive = wasActive
     }
 
     private func applySceneImage(_ image: UIImage) {
@@ -594,10 +688,7 @@ final class DialogueExperimentViewController: UIViewController {
         // Pinned to the header stack, so it can only be activated once the
         // container has actually been added to that stack (see header build).
         if sceneImageWidthConstraint == nil {
-            sceneImageWidthConstraint = sceneImageContainer.widthAnchor.constraint(
-                equalTo: scrollHeaderStack.widthAnchor,
-                multiplier: 0.92
-            )
+            sceneImageWidthConstraint = makeSceneImageWidthConstraint()
         }
     }
 
@@ -783,15 +874,31 @@ final class DialogueExperimentViewController: UIViewController {
         japaneseBubbles.removeAll()
         japaneseLabels.removeAll()
         englishLabels.removeAll()
+        listeningSpeakerSlots.removeAll()
+        listeningLineMeters.removeAll()
+        lineRevealLevels.removeAll()
+        lineRevealTravels.removeAll()
+        lineRevealSlots.removeAll()
         bubbleMinWidthConstraints.removeAll()
         bubbleSwipeContainers.removeAll()
         messageColumnLayouts.removeAll()
         lineEmphasis = Array(repeating: 0, count: displayLines.count)
-        appliedRowTextEmphasis.removeAll()
+        appliedRowSpacingEmphasis.removeAll()
         appliedBubbleMinWidthColumnWidth = -1
 
         contentStack.addArrangedSubview(scrollHeaderStack)
         contentStack.setCustomSpacing(64, after: scrollHeaderStack)
+
+        if transcriptDisplayMode == .listeningSpeakers {
+            buildListeningSpeakerRows()
+            applyListeningSpeakerFocus(animated: false)
+            return
+        }
+
+        if transcriptDisplayMode == .reveal {
+            lineRevealLevels = Array(repeating: .audioOnly, count: displayLines.count)
+            lineRevealTravels = Array(repeating: .revealing, count: displayLines.count)
+        }
 
         for (idx, line) in displayLines.enumerated() {
             let row = makeLineRow(line: line, index: idx)
@@ -804,9 +911,284 @@ final class DialogueExperimentViewController: UIViewController {
                 contentStack.setCustomSpacing(spacing, after: row)
             }
         }
-        applyBubbleBackgroundStyleToAllBubbles()
+        if transcriptDisplayMode != .listeningLines, transcriptDisplayMode != .reveal {
+            // Line-meter bubbles carry their own tinted underglow from the row
+            // builder; the generic pass would stomp it with the default config.
+            applyBubbleBackgroundStyleToAllBubbles()
+        }
         syncLineEmphasisToActiveIndex(animated: false)
         applyRowStylesFromEmphasis()
+    }
+
+    // MARK: - Listening mode (hidden dialogue text)
+
+    private static let listeningInactiveBubbleEmphasis: CGFloat = 0.4
+
+    /// One static bubble per speaker: name label plus a speaker-tinted live
+    /// meter. Leading speaker sits left with the name above the bubble;
+    /// trailing sits right with the name below, mirroring the mock.
+    private func buildListeningSpeakerRows() {
+        var orderedSpeakers: [(speaker: String, side: DialogueSpeakerSide)] = []
+        for line in displayLines where !orderedSpeakers.contains(where: { $0.speaker == line.speaker }) {
+            orderedSpeakers.append((line.speaker, line.speakerSide))
+        }
+
+        for (slotIndex, entry) in orderedSpeakers.enumerated() {
+            let container = UIView()
+            container.translatesAutoresizingMaskIntoConstraints = false
+
+            let column = UIStackView()
+            column.translatesAutoresizingMaskIntoConstraints = false
+            column.axis = .vertical
+            column.spacing = 10
+            column.alignment = entry.side == .leading ? .leading : .trailing
+
+            let nameLabel = UILabel()
+            nameLabel.font = GrammarJapaneseTypography.scenarioSpeakerFont
+            nameLabel.textColor = .secondaryLabel
+            nameLabel.text = Self.speakerPrefix(for: entry.speaker)
+            let nameWrapper = Self.insetMetadataWrapper(around: nameLabel, side: entry.side)
+
+            let placeholderLabel = FuriganaTranscriptLabel()
+            placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
+            placeholderLabel.alpha = 0
+            let bubble = DialogueJapaneseBubbleView(label: placeholderLabel)
+            bubble.setBackgroundStyle(.glass)
+            var glowConfig = DialogueBubbleUnderglowConfiguration.default
+            glowConfig.color = entry.side == .leading ? .blue : .yellow
+            // The default glow is tuned for wide text bubbles; on this small
+            // pill its blur/shadow bleeds past the silhouette. Tuck it inside.
+            glowConfig.horizontalInset = 12
+            glowConfig.blurRadius = 8
+            glowConfig.offsetX = 0
+            bubble.setUnderglowConfiguration(glowConfig)
+
+            let meter = makeListeningMeterView(for: entry.side)
+            bubble.addSubview(meter)
+
+            if entry.side == .leading {
+                column.addArrangedSubview(nameWrapper)
+                column.addArrangedSubview(bubble)
+            } else {
+                column.addArrangedSubview(bubble)
+                column.addArrangedSubview(nameWrapper)
+            }
+
+            container.addSubview(column)
+
+            var constraints: [NSLayoutConstraint] = [
+                // The empty-labeled bubble sizes to the meter plus padding.
+                meter.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 36),
+                meter.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -36),
+                meter.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 16),
+                meter.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -16),
+
+                column.topAnchor.constraint(equalTo: container.topAnchor),
+                column.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ]
+            switch entry.side {
+            case .leading:
+                constraints += [
+                    column.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                    column.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor),
+                ]
+            case .trailing:
+                constraints += [
+                    column.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                    column.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor),
+                ]
+            }
+            NSLayoutConstraint.activate(constraints)
+
+            contentStack.addArrangedSubview(container)
+            if slotIndex < orderedSpeakers.count - 1 {
+                contentStack.setCustomSpacing(48, after: container)
+            }
+            listeningSpeakerSlots.append(
+                ListeningSpeakerSlot(speaker: entry.speaker, side: entry.side, bubble: bubble, meter: meter)
+            )
+        }
+    }
+
+    /// Bar geometry and shaping mirror the tuned Speaking Meters experiment
+    /// (8pt bars / 6pt gaps, curve 1.05, wobble 0.25, diamond 0.25); min height
+    /// matches bar width so resting bars read as dots. Gain and smoothing are
+    /// adapted for the AVAudioPlayer metering driver, which runs quieter and
+    /// smoother than the experiment's FFT tap — smoothing sits high so attack
+    /// lands the syllable it belongs to and release stays quick.
+    private func makeListeningMeterView(for side: DialogueSpeakerSide) -> AudioLevelBarsView {
+        let meter = AudioLevelBarsView()
+        meter.translatesAutoresizingMaskIntoConstraints = false
+        meter.barWidth = 8
+        meter.barSpacing = 6
+        meter.meterHeight = 52
+        meter.minBarHeight = 8
+        meter.heightFill = 0.95
+        meter.levelGain = 1.6
+        meter.displayCurve = 1.05
+        meter.smoothing = 0.66
+        // Keep decorative motion minimal — visible movement should come from
+        // the audio itself, or sustained speech reads as random floating.
+        meter.wobbleAmount = 0.08
+        meter.diamondFalloff = 0.25
+        meter.springiness = 0.5
+        meter.historyStride = 2
+        meter.barColor = side == .leading ? .systemBlue : .systemYellow
+        return meter
+    }
+
+    private var activeListeningSpeaker: String? {
+        guard let index = activeLineIndex, displayLines.indices.contains(index) else { return nil }
+        return displayLines[index].speaker
+    }
+
+    /// Glass + underglow + scale pull focus to whichever speaker is talking.
+    private func applyListeningSpeakerFocus(animated: Bool) {
+        guard !listeningSpeakerSlots.isEmpty else { return }
+        let activeSpeaker = activeListeningSpeaker
+        let apply = {
+            for slot in self.listeningSpeakerSlots {
+                let isActive = slot.speaker == activeSpeaker
+                slot.bubble.setEmphasis(isActive ? 1 : Self.listeningInactiveBubbleEmphasis)
+                self.applyBubbleEmphasisTransform(
+                    to: slot.bubble,
+                    emphasis: isActive ? 1 : 0,
+                    side: slot.side
+                )
+            }
+        }
+        guard animated else {
+            apply()
+            return
+        }
+        UIView.animate(
+            withDuration: 0.34,
+            delay: 0,
+            usingSpringWithDamping: 0.9,
+            initialSpringVelocity: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState],
+            animations: apply
+        )
+    }
+
+    private func updateListeningMetersFromPlayback(_ player: AVAudioPlayer) {
+        guard !listeningSpeakerSlots.isEmpty || !listeningLineMeters.isEmpty else { return }
+        player.updateMeters()
+
+        // Take the hottest channel: dialogue clips can pan speakers apart,
+        // which starves a single-channel read for one side of the conversation.
+        var averageDB: Float = -160
+        var peakDB: Float = -160
+        for channel in 0..<max(1, player.numberOfChannels) {
+            averageDB = max(averageDB, player.averagePower(forChannel: channel))
+            peakDB = max(peakDB, player.peakPower(forChannel: channel))
+        }
+
+        // Telemetry showed AVAudioPlayer's peakPower is a slow-decay peak-hold
+        // (frozen near -3dB for seconds), so it only added a constant offset —
+        // averagePower alone carries the word rhythm. Normalize in the decibel
+        // domain, then expand the speech band (≈-28…-5dB → 0…1) to full swing;
+        // without the expansion a 23dB word swing moved the bars ~4pt.
+        let avgNorm = Self.normalizedMeterLevel(averageDB)
+        let expanded = max(0, min(1, (avgNorm - 0.18) / 0.62))
+
+        // Rising-edge emphasis stands in for the transients the (unusable)
+        // peak meter was meant to provide: compare against a slow baseline so
+        // syllable onsets overshoot briefly.
+        listeningMeterBaseline += (expanded - listeningMeterBaseline) * 0.06
+        let attack = max(0, expanded - listeningMeterBaseline)
+        let level = min(1, expanded + attack * 0.5)
+
+        // Before the first aligned line there is no active index yet; attribute
+        // clip-intro audio to the opening speaker so the bars never sit dead
+        // while sound is audible.
+        let activeSpeaker = activeListeningSpeaker ?? displayLines.first?.speaker
+        for slot in listeningSpeakerSlots {
+            if slot.speaker == activeSpeaker {
+                slot.meter.setLevel(level)
+            } else if !slot.meter.isIdle {
+                slot.meter.releaseToRest()
+            }
+        }
+
+        // Per-line mode: only the active line's meter animates. In reveal mode,
+        // skip lines that have already advanced past the audio-only level.
+        let activeLine = activeLineIndex ?? (listeningLineMeters.isEmpty ? nil : 0)
+        for (index, meter) in listeningLineMeters.enumerated() {
+            let isAudioOnlyReveal = transcriptDisplayMode != .reveal
+                || (lineRevealLevels.indices.contains(index) && lineRevealLevels[index] == .audioOnly)
+            if index == activeLine, isAudioOnlyReveal {
+                meter.setLevel(level)
+            } else if !meter.isIdle {
+                meter.releaseToRest()
+            }
+        }
+
+        #if DEBUG
+        logListeningMeterTelemetry(
+            player: player,
+            averageDB: averageDB,
+            peakDB: peakDB,
+            level: level,
+            activeSpeaker: activeSpeaker
+        )
+        #endif
+    }
+
+    #if DEBUG
+    /// Set false to silence the ~10Hz meter telemetry in listening mode.
+    private static let logsListeningMeterTelemetry = true
+    private static var meterTelemetryTickCounter = 0
+
+    private func logListeningMeterTelemetry(
+        player: AVAudioPlayer,
+        averageDB: Float,
+        peakDB: Float,
+        level: Float,
+        activeSpeaker: String?
+    ) {
+        guard Self.logsListeningMeterTelemetry else { return }
+        Self.meterTelemetryTickCounter += 1
+        guard Self.meterTelemetryTickCounter % 6 == 0 else { return }
+        guard let slot = listeningSpeakerSlots.first(where: { $0.speaker == activeSpeaker }) else { return }
+        print(String(
+            format: "[meter] t=%6.2f %@ avg=%6.1fdB peak=%6.1fdB lvl=%.2f %@",
+            player.currentTime,
+            (activeSpeaker ?? "?").padding(toLength: 10, withPad: " ", startingAt: 0),
+            averageDB,
+            peakDB,
+            level,
+            slot.meter.debugBarSnapshot()
+        ))
+    }
+    #endif
+
+    /// Maps meter decibels onto 0…1. The floor sits just under conversational
+    /// consonant level so intra-word dips actually pull the bars down —
+    /// a deeper floor keeps sustained speech pinned in a narrow mid band.
+    private static func normalizedMeterLevel(_ decibels: Float) -> Float {
+        let floorDB: Float = -38
+        return max(0, min(1, (decibels - floorDB) / -floorDB))
+    }
+
+    private func releaseListeningMetersToRest() {
+        listeningSpeakerSlots.forEach { $0.meter.releaseToRest() }
+        listeningLineMeters.forEach { $0.releaseToRest() }
+        listeningMeterBaseline = 0
+    }
+
+    /// Single scroll at play start so both speaker bubbles sit in frame (the
+    /// scene image may push the second bubble below the fold).
+    private func scrollListeningBubblesIntoView() {
+        guard transcriptDisplayMode == .listeningSpeakers, !listeningSpeakerSlots.isEmpty,
+              let lastRow = contentStack.arrangedSubviews.last else { return }
+        scrollView.layoutIfNeeded()
+        let rowFrame = rowBoundsInScrollableContent(lastRow)
+        let inset = scrollView.adjustedContentInset
+        let targetY = rowFrame.maxY - scrollView.bounds.height + inset.bottom + Self.followAlongBottomBuffer
+        guard let clamped = scrollView.clampedContentOffsetY(targetY, allowNoScroll: true),
+              clamped > scrollView.contentOffset.y + 1 else { return }
+        scrollView.setContentOffset(CGPoint(x: 0, y: clamped), animated: true)
     }
 
     private func applyBubbleBackgroundStyleToAllBubbles() {
@@ -840,45 +1222,118 @@ final class DialogueExperimentViewController: UIViewController {
         )
         speakerWrapper.isHidden = !line.showsSpeakerLabel
 
-        let japaneseFont = Self.dialogueJapaneseFont(emphasis: 0)
+        let japaneseFont = Self.dialogueJapaneseBaseFont
 
         var displayInsets = JapaneseFuriganaBuilder.dialogueBubbleDisplayInsets(for: japaneseFont)
         displayInsets.top += 2
+
+        let isListeningLineMeterRow = transcriptDisplayMode == .listeningLines
+        let isRevealMode = transcriptDisplayMode == .reveal
+        /// Meter chrome that owns bubble sizing (listening-lines, or reveal at audio-only).
+        let installsLineMeter = isListeningLineMeterRow || isRevealMode
+        /// Nested paging: swipe right expands any non-listening-lines bubble.
+        /// Reveal mode also wraps meter bubbles so expand + left-swipe peel work.
+        let allowsBubbleSwipe = presentationContext == .nestedPagingHost
+            && (isRevealMode || !isListeningLineMeterRow)
 
         let japaneseLabel = FuriganaTranscriptLabel()
         japaneseLabel.translatesAutoresizingMaskIntoConstraints = false
         japaneseLabel.clipsToBounds = false
         japaneseLabel.numberOfLines = 0
         japaneseLabel.textAlignment = .natural
-        japaneseLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         japaneseLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-        JapaneseFuriganaBuilder.applyScrubDisplay(
-            to: japaneseLabel,
-            attributed: JapaneseFuriganaBuilder.dialogueBubbleAttributedString(
-                for: line.japanese,
-                font: japaneseFont,
-                textColor: Self.inactiveJapaneseColor
-            ),
-            contentInsets: displayInsets
-        )
+        if installsLineMeter {
+            // The bubble sizes to the meter instead; keep the label empty and
+            // its hugging low so it can't out-vote the meter's width.
+            // Reveal mode fills the label when the line advances to Japanese.
+            japaneseLabel.alpha = 0
+        } else {
+            japaneseLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+            JapaneseFuriganaBuilder.applyScrubDisplay(
+                to: japaneseLabel,
+                attributed: JapaneseFuriganaBuilder.dialogueBubbleAttributedString(
+                    for: line.japanese,
+                    font: japaneseFont,
+                    textColor: Self.inactiveJapaneseColor
+                ),
+                contentInsets: displayInsets
+            )
+        }
 
         let japaneseBubble = DialogueJapaneseBubbleView(label: japaneseLabel)
         japaneseBubble.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         japaneseBubble.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        let minBubbleWidth = Self.minimumBubbleWidth(
-            for: line,
-            columnMaxWidth: availableMessageColumnWidth()
-        )
+        var revealMeterBubbleSizingConstraints: [NSLayoutConstraint] = []
+        var revealMeterParkConstraints: [NSLayoutConstraint] = []
+        var revealMeter: AudioLevelBarsView?
+        if installsLineMeter {
+            // Meter owns bubble size; detach the empty label so its edge pins
+            // can't fight the meter (critical when cycling back from Japanese).
+            japaneseBubble.setLabelContributesToLayout(false)
+            japaneseBubble.setBackgroundStyle(.glass)
+            var glowConfig = DialogueBubbleUnderglowConfiguration.default
+            glowConfig.color = line.speakerSide == .leading ? .blue : .yellow
+            glowConfig.horizontalInset = 12
+            glowConfig.blurRadius = 8
+            glowConfig.offsetX = 0
+            japaneseBubble.setUnderglowConfiguration(glowConfig)
+
+            let meter = makeListeningMeterView(for: line.speakerSide)
+            meter.meterHeight = 36
+            japaneseBubble.addSubview(meter)
+
+            let meterIntrinsic = meter.intrinsicContentSize
+            let parkConstraints = [
+                meter.centerXAnchor.constraint(equalTo: japaneseBubble.centerXAnchor),
+                meter.centerYAnchor.constraint(equalTo: japaneseBubble.centerYAnchor),
+                meter.widthAnchor.constraint(equalToConstant: meterIntrinsic.width),
+                meter.heightAnchor.constraint(equalToConstant: meter.meterHeight),
+            ]
+            let bubbleSizingConstraints = [
+                japaneseBubble.widthAnchor.constraint(
+                    equalTo: meter.widthAnchor,
+                    constant: 56
+                ),
+                japaneseBubble.heightAnchor.constraint(
+                    equalTo: meter.heightAnchor,
+                    constant: 24
+                ),
+            ]
+
+            if isRevealMode {
+                // Park (center + fixed size) is always on so the meter has a
+                // valid layout. Bubble-sizing constraints are only for audio-only.
+                NSLayoutConstraint.activate(parkConstraints + bubbleSizingConstraints)
+                revealMeter = meter
+                revealMeterBubbleSizingConstraints = bubbleSizingConstraints
+                revealMeterParkConstraints = parkConstraints
+            } else {
+                // Listening-lines: meter edge-pins the bubble (label stays detached).
+                NSLayoutConstraint.activate([
+                    meter.leadingAnchor.constraint(equalTo: japaneseBubble.leadingAnchor, constant: 28),
+                    meter.trailingAnchor.constraint(equalTo: japaneseBubble.trailingAnchor, constant: -28),
+                    meter.topAnchor.constraint(equalTo: japaneseBubble.topAnchor, constant: 12),
+                    meter.bottomAnchor.constraint(equalTo: japaneseBubble.bottomAnchor, constant: -12),
+                ])
+            }
+            listeningLineMeters.append(meter)
+        }
 
         messageColumn.addArrangedSubview(speakerWrapper)
 
         let bubbleLayoutTarget: UIView
-        if presentationContext == .nestedPagingHost {
+        if allowsBubbleSwipe {
             let swipeContainer = DialogueBubbleSwipeRevealContainer(bubbleView: japaneseBubble)
             swipeContainer.hostScrollView = scrollView
             swipeContainer.onCommit = { [weak self] in
                 self?.presentSentenceFocus(forLineAt: index)
+            }
+            if isRevealMode {
+                swipeContainer.allowsProgressiveReveal = true
+                swipeContainer.onProgressiveRevealCommit = { [weak self] in
+                    self?.advanceRevealLevel(at: index, animated: true)
+                }
             }
             swipeContainer.configureContentPopGestureDeferral(from: self)
             bubbleSwipeContainers.append(swipeContainer)
@@ -890,33 +1345,72 @@ final class DialogueExperimentViewController: UIViewController {
             messageColumn.addArrangedSubview(japaneseBubble)
         }
 
-        let minBubbleWidthConstraint = bubbleLayoutTarget.widthAnchor.constraint(
-            greaterThanOrEqualToConstant: minBubbleWidth
-        )
-        minBubbleWidthConstraint.priority = .required
-        minBubbleWidthConstraint.isActive = true
-        bubbleMinWidthConstraints.append(minBubbleWidthConstraint)
+        var revealTextMinWidthConstraint: NSLayoutConstraint?
+        if !installsLineMeter {
+            let minBubbleWidth = Self.minimumBubbleWidth(
+                for: line,
+                columnMaxWidth: availableMessageColumnWidth()
+            )
+            let minBubbleWidthConstraint = bubbleLayoutTarget.widthAnchor.constraint(
+                greaterThanOrEqualToConstant: minBubbleWidth
+            )
+            minBubbleWidthConstraint.priority = .required
+            minBubbleWidthConstraint.isActive = true
+            bubbleMinWidthConstraints.append(minBubbleWidthConstraint)
+        } else if isRevealMode {
+            let minBubbleWidth = Self.minimumBubbleWidth(
+                for: line,
+                columnMaxWidth: availableMessageColumnWidth()
+            )
+            let minBubbleWidthConstraint = bubbleLayoutTarget.widthAnchor.constraint(
+                greaterThanOrEqualToConstant: minBubbleWidth
+            )
+            minBubbleWidthConstraint.priority = .required
+            minBubbleWidthConstraint.isActive = false
+            revealTextMinWidthConstraint = minBubbleWidthConstraint
+            bubbleMinWidthConstraints.append(minBubbleWidthConstraint)
+        }
 
         japaneseLabels.append(japaneseLabel)
         japaneseBubbles.append(japaneseBubble)
 
         var hasEnglishTranslation = false
-        if let english = line.english?.trimmingCharacters(in: .whitespacesAndNewlines), !english.isEmpty {
-            hasEnglishTranslation = true
+        var revealEnglishWrapper: UIView?
+        let englishText = line.english?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let shouldBuildEnglish = (transcriptDisplayMode == .full || isRevealMode) && !englishText.isEmpty
+        if shouldBuildEnglish {
             let englishLabel = UILabel()
             englishLabel.font = Self.englishFont
             englishLabel.textColor = Self.englishColor
             englishLabel.numberOfLines = 0
             englishLabel.textAlignment = line.speakerSide == .trailing ? .right : .left
-            englishLabel.text = english
+            englishLabel.text = englishText
             let englishWrapper = Self.insetMetadataWrapper(
                 around: englishLabel,
                 side: line.speakerSide
             )
+            if isRevealMode {
+                englishWrapper.isHidden = true
+                englishWrapper.alpha = 0
+                revealEnglishWrapper = englishWrapper
+            } else {
+                hasEnglishTranslation = true
+            }
             messageColumn.addArrangedSubview(englishWrapper)
             englishLabels.append(englishLabel)
         } else {
             englishLabels.append(UILabel())
+        }
+
+        if isRevealMode, let meter = revealMeter {
+            var slot = LineRevealSlot(
+                meter: meter,
+                meterBubbleSizingConstraints: revealMeterBubbleSizingConstraints,
+                meterParkConstraints: revealMeterParkConstraints,
+                englishWrapper: revealEnglishWrapper
+            )
+            slot.textMinWidthConstraint = revealTextMinWidthConstraint
+            lineRevealSlots.append(slot)
         }
 
         messageColumnLayouts.append(
@@ -964,7 +1458,8 @@ final class DialogueExperimentViewController: UIViewController {
     private func resolveLessonAudio() {
         GrammarAudioCatalog.ensureLocalURL(
             publishedAudioUrl: example.publishedAudioUrl,
-            audioKey: example.audioKey
+            audioKey: example.audioKey,
+            cacheMetadata: example.remoteAudioCacheMetadata
         ) { [weak self] url in
             guard let self else { return }
             self.resolvedAudioURL = url
@@ -1015,6 +1510,7 @@ final class DialogueExperimentViewController: UIViewController {
             return audioPlayer.duration
         }
         guard let player = try? AVAudioPlayer(contentsOf: url), player.duration > 0 else { return 0 }
+        player.isMeteringEnabled = true
         audioPlayer = player
         player.prepareToPlay()
         return player.duration
@@ -1030,6 +1526,7 @@ final class DialogueExperimentViewController: UIViewController {
         }
         guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
         player.enableRate = true
+        player.isMeteringEnabled = true
         player.prepareToPlay()
         audioPlayer = player
         return player
@@ -1043,38 +1540,63 @@ final class DialogueExperimentViewController: UIViewController {
     private func startPlayback(fromBeginning: Bool) {
         guard let player = makePlayer() else { return }
 
-        do {
-            try PlaybackAudioSession.activateForPlayback()
-        } catch {
-            return
-        }
-
         seekTargetLineIndex = nil
 
         if fromBeginning {
             player.currentTime = 0
+        }
+        if transcriptDisplayMode == .listeningSpeakers {
+            scrollListeningBubblesIntoView()
+        } else if fromBeginning {
             scrollToTranscriptTop(animated: true)
         }
 
-        playbackResumeStartedAt = CACurrentMediaTime()
-        player.play()
-        applyPlaybackSpeedToPlayer()
         playbackPhase = .playing
-        startProgressDisplayLink()
         updateTransportControls()
         syncActiveLineFromPlaybackTime(player.currentTime, animated: true)
+        startPlayerAfterSessionActivation(player)
+    }
+
+    /// Activates the audio session off the main thread, then starts `player` once
+    /// it completes. The synchronous `setActive` blocks long enough to drop frames
+    /// of the line-emphasis animation, so UI state flips to `.playing` immediately
+    /// and the player starts when the session is ready. The completion no-ops if
+    /// playback was paused/stopped or superseded by a newer request in the gap.
+    private func startPlayerAfterSessionActivation(_ player: AVAudioPlayer) {
+        playbackActivationGeneration += 1
+        let generation = playbackActivationGeneration
+        // Stamped at request time as well as at play() so handleProgressTick's
+        // finished-playback fallback (phase == .playing but player stopped for
+        // >0.12s) doesn't fire while session activation is still in flight.
+        playbackResumeStartedAt = CACurrentMediaTime()
+
+        PlaybackAudioSession.activateForPlayback { [weak self] success in
+            guard let self, self.playbackActivationGeneration == generation else { return }
+            guard self.playbackPhase == .playing else { return }
+            guard success else {
+                self.playbackPhase = .idle
+                self.updateTransportControls()
+                return
+            }
+            self.playbackResumeStartedAt = CACurrentMediaTime()
+            player.play()
+            self.applyPlaybackSpeedToPlayer()
+            self.startProgressDisplayLink()
+        }
     }
 
     private func pausePlayback() {
         audioPlayer?.pause()
         playbackPhase = .paused
         stopProgressDisplayLink()
+        releaseListeningMetersToRest()
         updateTransportControls()
     }
 
     private func resumePlayback() {
         guard let player = audioPlayer else { return }
         seekTargetLineIndex = nil
+        scrollListeningBubblesIntoView()
         playbackResumeStartedAt = CACurrentMediaTime()
         player.play()
         applyPlaybackSpeedToPlayer()
@@ -1084,7 +1606,12 @@ final class DialogueExperimentViewController: UIViewController {
     }
 
     private func stopPlayback(resetPosition: Bool) {
+        // With resetPosition false the phase is left as-is, so the phase guard in
+        // startPlayerAfterSessionActivation wouldn't catch a pending activation;
+        // invalidate it by generation so stopped audio can't restart itself.
+        playbackActivationGeneration += 1
         stopProgressDisplayLink()
+        releaseListeningMetersToRest()
         seekTargetLineIndex = nil
         audioPlayer?.stop()
         if resetPosition {
@@ -1098,6 +1625,7 @@ final class DialogueExperimentViewController: UIViewController {
 
     private func handlePlaybackFinished() {
         stopProgressDisplayLink()
+        releaseListeningMetersToRest()
         playbackPhase = .finished
         setActiveLine(nil, animated: true)
         updateElapsedLabel(currentTime: clipDuration)
@@ -1106,7 +1634,7 @@ final class DialogueExperimentViewController: UIViewController {
     }
 
     private func recordScenarioCompletionIfNeeded() {
-        guard let scenarioID else { return }
+        guard recordsCompletionOnPlaybackFinish, let scenarioID else { return }
         DialogueProgressStore.shared.markCompleted(scenarioID: scenarioID)
         GrammarMasteryStore.shared.recordEncounter(
             grammarIDs: grammarPointIDs,
@@ -1138,6 +1666,7 @@ final class DialogueExperimentViewController: UIViewController {
         let time = player.currentTime
         updateElapsedLabel(currentTime: time)
         syncActiveLineFromPlaybackTime(time, animated: true)
+        updateListeningMetersFromPlayback(player)
     }
 
     private func syncActiveLineFromPlaybackTime(_ time: TimeInterval, animated: Bool) {
@@ -1191,6 +1720,7 @@ final class DialogueExperimentViewController: UIViewController {
         activeLineIndex = newIndex
 
         syncLineEmphasisToActiveIndex(animated: animated)
+        applyListeningSpeakerFocus(animated: animated)
 
         if let index = newIndex, !scrollView.isTracking, !scrollView.isDecelerating {
             if animated {
@@ -1353,48 +1883,43 @@ final class DialogueExperimentViewController: UIViewController {
         return scrollView.clampedContentOffsetY(targetY, allowNoScroll: true)
     }
 
+    /// Emphasis never touches the rendered text: labels are rendered once at the
+    /// base font when rows are built, and focus is conveyed by the bubble transform
+    /// scale, bubble visuals, and row spacing — so focused lines never re-wrap.
     private func applyRowStylesFromEmphasis() {
-        if appliedRowTextEmphasis.count != japaneseBubbles.count {
-            appliedRowTextEmphasis = Array(repeating: -1, count: japaneseBubbles.count)
-        }
-
         for (i, bubble) in japaneseBubbles.enumerated() {
             let emphasis = lineEmphasis.indices.contains(i) ? lineEmphasis[i] : 0
-            let line = displayLines[i]
-
-            // Re-rendering furigana text costs several ms per row; only the emphasis
-            // affects the rendered string, so skip rows where it hasn't moved.
-            if abs(emphasis - appliedRowTextEmphasis[i]) > 0.0005 {
-                appliedRowTextEmphasis[i] = emphasis
-                let japaneseFont = Self.dialogueJapaneseFont(emphasis: emphasis)
-                let textColor = Self.japaneseTextColor(emphasis: emphasis, backgroundStyle: .glass)
-
-                var displayInsets = JapaneseFuriganaBuilder.dialogueBubbleDisplayInsets(for: japaneseFont)
-                displayInsets.top += 2
-                JapaneseFuriganaBuilder.applyScrubDisplay(
-                    to: japaneseLabels[i],
-                    attributed: JapaneseFuriganaBuilder.dialogueBubbleAttributedString(
-                        for: line.japanese,
-                        font: japaneseFont,
-                        textColor: textColor
-                    ),
-                    contentInsets: displayInsets
-                )
-            }
-
-            bubble.setEmphasis(emphasis)
+            // Meter bubbles have no text, so a fully de-emphasized glass
+            // background (alpha 0) would leave nothing visible; keep the same
+            // inactive floor the speaker-listening bubbles use.
+            let usesMeterEmphasisFloor = transcriptDisplayMode == .listeningLines
+                || (transcriptDisplayMode == .reveal
+                    && lineRevealLevels.indices.contains(i)
+                    && lineRevealLevels[i] == .audioOnly)
+            let visualEmphasis = usesMeterEmphasisFloor
+                ? Self.listeningInactiveBubbleEmphasis
+                    + (1 - Self.listeningInactiveBubbleEmphasis) * emphasis
+                : emphasis
+            bubble.setEmphasis(visualEmphasis)
             applyBubbleEmphasisTransform(
                 to: bubble,
                 emphasis: emphasis,
-                side: line.speakerSide
+                side: displayLines[i].speakerSide
             )
         }
         applyMessageColumnSpacingFromEmphasis()
     }
 
     private func applyMessageColumnSpacingFromEmphasis() {
+        if appliedRowSpacingEmphasis.count != messageColumnLayouts.count {
+            appliedRowSpacingEmphasis = Array(repeating: -1, count: messageColumnLayouts.count)
+        }
+
         for (index, layout) in messageColumnLayouts.enumerated() {
             let emphasis = lineEmphasis.indices.contains(index) ? lineEmphasis[index] : 0
+            guard abs(emphasis - appliedRowSpacingEmphasis[index]) > 0.0005 else { continue }
+            appliedRowSpacingEmphasis[index] = emphasis
+
             let spacing = Self.messageColumnBaseSpacing
                 + Self.emphasizedMessageColumnExtraSpacing * emphasis
             layout.column.setCustomSpacing(spacing, after: layout.viewBeforeBubble)
@@ -1427,7 +1952,7 @@ final class DialogueExperimentViewController: UIViewController {
     }
 
     private func applyScrollContentInsets() {
-        let transportInset = max(transportBarContainer.bounds.height, 0)
+        let transportInset = max(transportBarContainer.bounds.height, 0) + Self.scrollBottomContentInsetExtra
         let topInset = presentationContext == .nestedPagingHost ? nestedPagingTopContentInset : 0
         scrollView.contentInset = UIEdgeInsets(top: topInset, left: 0, bottom: transportInset, right: 0)
         scrollView.verticalScrollIndicatorInsets = UIEdgeInsets(
@@ -1462,6 +1987,7 @@ final class DialogueExperimentViewController: UIViewController {
             dialogueLineAudio = DialogueLineAudioReference(
                 publishedAudioUrl: example.publishedAudioUrl,
                 audioKey: example.audioKey ?? "",
+                cacheMetadata: example.remoteAudioCacheMetadata,
                 lineIndex: index,
                 dialogueLines: spokenLineTexts
             )
@@ -1471,6 +1997,7 @@ final class DialogueExperimentViewController: UIViewController {
 
         let scrub = SentenceScrubExperimentViewController(
             sentence: sentence,
+            englishTranslation: displayLines[index].english,
             dialogueLineAudio: dialogueLineAudio
         )
         navigationController?.pushViewController(scrub, animated: true)
@@ -1482,23 +2009,234 @@ final class DialogueExperimentViewController: UIViewController {
         guard alignedLines.indices.contains(index) else { return }
 
         guard let player = makePlayer() else { return }
-        do {
-            try PlaybackAudioSession.activateForPlayback()
-        } catch {
-            return
-        }
 
         let range = alignedLines[index].timeRange
         seekTargetLineIndex = index
         player.currentTime = range.lowerBound
-        playbackResumeStartedAt = CACurrentMediaTime()
-        player.play()
-        applyPlaybackSpeedToPlayer()
         playbackPhase = .playing
-        startProgressDisplayLink()
         updateTransportControls()
         updateElapsedLabel(currentTime: range.lowerBound)
         setActiveLine(index, animated: true)
+        startPlayerAfterSessionActivation(player)
+    }
+
+    /// Steps one notch along the reveal ladder, reversing at each end so swipes
+    /// cycle meter → Japanese → English → Japanese → meter → …
+    private func advanceRevealLevel(at index: Int, animated: Bool) {
+        guard transcriptDisplayMode == .reveal,
+              lineRevealLevels.indices.contains(index),
+              lineRevealTravels.indices.contains(index),
+              lineRevealSlots.indices.contains(index),
+              japaneseLabels.indices.contains(index),
+              japaneseBubbles.indices.contains(index),
+              displayLines.indices.contains(index) else { return }
+
+        let current = lineRevealLevels[index]
+        let hasEnglish = lineRevealSlots[index].englishWrapper != nil
+        var travel = lineRevealTravels[index]
+
+        // Flip direction at the ends before taking the step.
+        switch (current, travel) {
+        case (.english, .revealing):
+            travel = .concealing
+        case (.japanese, .revealing) where !hasEnglish:
+            // No translation — Japanese is the deepest level for this line.
+            travel = .concealing
+        case (.audioOnly, .concealing):
+            travel = .revealing
+        default:
+            break
+        }
+        lineRevealTravels[index] = travel
+
+        lineChangeHaptic.impactOccurred()
+
+        switch travel {
+        case .revealing:
+            switch current {
+            case .audioOnly:
+                lineRevealLevels[index] = .japanese
+                revealJapanese(at: index, animated: animated)
+            case .japanese:
+                guard hasEnglish else { return }
+                lineRevealLevels[index] = .english
+                revealEnglish(at: index, animated: animated)
+            case .english:
+                break
+            }
+        case .concealing:
+            switch current {
+            case .english:
+                lineRevealLevels[index] = .japanese
+                concealEnglish(at: index, animated: animated)
+            case .japanese:
+                lineRevealLevels[index] = .audioOnly
+                concealJapanese(at: index, animated: animated)
+            case .audioOnly:
+                break
+            }
+        }
+    }
+
+    private func revealJapanese(at index: Int, animated: Bool) {
+        let line = displayLines[index]
+        let label = japaneseLabels[index]
+        let bubble = japaneseBubbles[index]
+        var slot = lineRevealSlots[index]
+
+        let japaneseFont = Self.dialogueJapaneseBaseFont
+        var displayInsets = JapaneseFuriganaBuilder.dialogueBubbleDisplayInsets(for: japaneseFont)
+        displayInsets.top += 2
+        label.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        JapaneseFuriganaBuilder.applyScrubDisplay(
+            to: label,
+            attributed: JapaneseFuriganaBuilder.dialogueBubbleAttributedString(
+                for: line.japanese,
+                font: japaneseFont,
+                textColor: Self.inactiveJapaneseColor
+            ),
+            contentInsets: displayInsets
+        )
+
+        NSLayoutConstraint.deactivate(slot.meterBubbleSizingConstraints)
+        slot.textMinWidthConstraint?.isActive = true
+        lineRevealSlots[index] = slot
+
+        // Hand sizing back to the label before fading text in.
+        // Meter stays parked (centered) under the text while hidden.
+        label.alpha = 0
+        bubble.setLabelContributesToLayout(true)
+        bubble.setUnderglowConfiguration(.default)
+        slot.meter.releaseToRest()
+
+        let apply = {
+            slot.meter.alpha = 0
+            label.alpha = 1
+            self.view.layoutIfNeeded()
+            self.applyRowStylesFromEmphasis()
+        }
+
+        if animated {
+            UIView.animate(
+                withDuration: 0.34,
+                delay: 0,
+                usingSpringWithDamping: 0.9,
+                initialSpringVelocity: 0,
+                options: [.allowUserInteraction, .beginFromCurrentState],
+                animations: apply
+            ) { _ in
+                slot.meter.isHidden = true
+            }
+        } else {
+            apply()
+            slot.meter.isHidden = true
+        }
+    }
+
+    private func revealEnglish(at index: Int, animated: Bool) {
+        guard messageColumnLayouts.indices.contains(index) else { return }
+        let slot = lineRevealSlots[index]
+        guard let englishWrapper = slot.englishWrapper else { return }
+
+        englishWrapper.isHidden = false
+        messageColumnLayouts[index].hasEnglish = true
+
+        let apply = {
+            englishWrapper.alpha = 1
+            self.view.layoutIfNeeded()
+            self.applyMessageColumnSpacingFromEmphasis()
+        }
+
+        if animated {
+            UIView.animate(
+                withDuration: 0.34,
+                delay: 0,
+                usingSpringWithDamping: 0.9,
+                initialSpringVelocity: 0,
+                options: [.allowUserInteraction, .beginFromCurrentState],
+                animations: apply
+            )
+        } else {
+            apply()
+        }
+    }
+
+    private func concealEnglish(at index: Int, animated: Bool) {
+        guard messageColumnLayouts.indices.contains(index) else { return }
+        guard let englishWrapper = lineRevealSlots[index].englishWrapper else { return }
+
+        messageColumnLayouts[index].hasEnglish = false
+
+        let apply = {
+            englishWrapper.alpha = 0
+            self.view.layoutIfNeeded()
+            self.applyMessageColumnSpacingFromEmphasis()
+        }
+
+        let finish = {
+            englishWrapper.isHidden = true
+        }
+
+        if animated {
+            UIView.animate(
+                withDuration: 0.34,
+                delay: 0,
+                usingSpringWithDamping: 0.9,
+                initialSpringVelocity: 0,
+                options: [.allowUserInteraction, .beginFromCurrentState],
+                animations: apply
+            ) { _ in
+                finish()
+            }
+        } else {
+            apply()
+            finish()
+        }
+    }
+
+    private func concealJapanese(at index: Int, animated: Bool) {
+        let label = japaneseLabels[index]
+        let bubble = japaneseBubbles[index]
+        var slot = lineRevealSlots[index]
+        let side = displayLines[index].speakerSide
+
+        // Detach the label from layout first so only the meter sizes the pill.
+        label.textInsets = .zero
+        label.attributedText = nil
+        label.alpha = 0
+        bubble.setLabelContributesToLayout(false)
+
+        slot.meter.isHidden = false
+        slot.meter.alpha = 0
+        slot.textMinWidthConstraint?.isActive = false
+        NSLayoutConstraint.activate(slot.meterBubbleSizingConstraints)
+        lineRevealSlots[index] = slot
+
+        var glowConfig = DialogueBubbleUnderglowConfiguration.default
+        glowConfig.color = side == .leading ? .blue : .yellow
+        glowConfig.horizontalInset = 12
+        glowConfig.blurRadius = 8
+        glowConfig.offsetX = 0
+        bubble.setUnderglowConfiguration(glowConfig)
+
+        let apply = {
+            slot.meter.alpha = 1
+            self.view.layoutIfNeeded()
+            self.applyRowStylesFromEmphasis()
+        }
+
+        if animated {
+            UIView.animate(
+                withDuration: 0.34,
+                delay: 0,
+                usingSpringWithDamping: 0.9,
+                initialSpringVelocity: 0,
+                options: [.allowUserInteraction, .beginFromCurrentState],
+                animations: apply
+            )
+        } else {
+            apply()
+        }
     }
 
     private func togglePlayPause() {
@@ -1637,7 +2375,8 @@ final class DialogueExperimentViewController: UIViewController {
     private static let followAlongTopBuffer: CGFloat = 56
     /// Extra space kept below the active line's bottom edge when follow-along scrolling.
     private static let followAlongBottomBuffer: CGFloat = 72
-    private static let activeJapaneseColor: UIColor = .white
+    /// Breathing room between the last dialogue row and the transport bar.
+    private static let scrollBottomContentInsetExtra: CGFloat = 16
     private static let inactiveJapaneseColor: UIColor = .label
 
     private static let englishFont: UIFont = .preferredFont(forTextStyle: .subheadline)
@@ -1670,7 +2409,7 @@ final class DialogueExperimentViewController: UIViewController {
         for line: DialogueLineDisplay,
         columnMaxWidth: CGFloat
     ) -> CGFloat {
-        let layoutFont = dialogueJapaneseFont(emphasis: 1)
+        let layoutFont = dialogueJapaneseBaseFont
         let attributed = JapaneseFuriganaBuilder.dialogueBubbleAttributedString(
             for: line.japanese,
             font: layoutFont,
@@ -1694,25 +2433,6 @@ final class DialogueExperimentViewController: UIViewController {
         return min(columnMaxWidth, textWidth + horizontalPadding)
     }
 
-    private static func dialogueJapaneseFont(emphasis: CGFloat) -> UIFont {
-        let amount = max(0, min(1, emphasis))
-        let minWeight = UIFont.Weight.medium.rawValue
-        let maxWeight = UIFont.Weight.bold.rawValue
-        let weightValue = minWeight + (maxWeight - minWeight) * amount
-        return .systemFont(ofSize: dialogueJapaneseBaseFont.pointSize, weight: UIFont.Weight(weightValue))
-    }
-
-    private static func japaneseTextColor(
-        emphasis: CGFloat,
-        backgroundStyle: DialogueBubbleBackgroundStyle
-    ) -> UIColor {
-        switch backgroundStyle {
-        case .solid:
-            return blendColors(from: inactiveJapaneseColor, to: activeJapaneseColor, amount: emphasis)
-        case .glass:
-            return inactiveJapaneseColor
-        }
-    }
 
     private static func emphasisEase(_ progress: CGFloat) -> CGFloat {
         let t = max(0, min(1, progress))
@@ -1720,26 +2440,6 @@ final class DialogueExperimentViewController: UIViewController {
             return 4 * t * t * t
         }
         return 1 - pow(-2 * t + 2, 3) / 2
-    }
-
-    private static func blendColors(from start: UIColor, to end: UIColor, amount: CGFloat) -> UIColor {
-        let t = max(0, min(1, amount))
-        var sr: CGFloat = 0
-        var sg: CGFloat = 0
-        var sb: CGFloat = 0
-        var sa: CGFloat = 0
-        var er: CGFloat = 0
-        var eg: CGFloat = 0
-        var eb: CGFloat = 0
-        var ea: CGFloat = 0
-        start.getRed(&sr, green: &sg, blue: &sb, alpha: &sa)
-        end.getRed(&er, green: &eg, blue: &eb, alpha: &ea)
-        return UIColor(
-            red: sr + (er - sr) * t,
-            green: sg + (eg - sg) * t,
-            blue: sb + (eb - sb) * t,
-            alpha: sa + (ea - sa) * t
-        )
     }
 
     private static let transportButtonSize: CGFloat = 50

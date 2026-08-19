@@ -34,8 +34,8 @@ private final class NestedVerticalScrollHandoffCoordinator: NSObject, UIScrollVi
         outerScrollView: UIScrollView,
         innerScrollViews: [UIScrollView],
         boundaryEpsilon: CGFloat = 0.5,
-        pageCommitThreshold: CGFloat = 0.22,
-        velocityThreshold: CGFloat = 0.3
+        pageCommitThreshold: CGFloat = 0.42,
+        velocityThreshold: CGFloat = 0.85
     ) {
         self.outerScrollView = outerScrollView
         self.innerScrollViews = innerScrollViews
@@ -384,6 +384,10 @@ private final class NestedVerticalScrollHandoffCoordinator: NSObject, UIScrollVi
 final class DialogueNestedPagingExperimentViewController: UIViewController {
 
     private static let boundaryEpsilon: CGFloat = 0.5
+    /// Fraction of a page the outer pager must travel (without a strong flick) before committing.
+    private static let pageCommitThreshold: CGFloat = 0.42
+    /// Vertical flick speed that commits a neighboring page even below `pageCommitThreshold`.
+    private static let pageVelocityThreshold: CGFloat = 0.85
     private static let pageNavigationControlHeight: CGFloat = 52
     private static let pageNavigationSymbolPointSize: CGFloat = 22
     private static let highlightsSecondPageTopInsetExtra: CGFloat = 56
@@ -400,8 +404,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private let quizPageView = UIView()
     private let highlightsPageView = UIView()
     private var dialogueViewController: DialogueExperimentViewController!
-    private let quizScrollView = UIScrollView()
-    private let quizContentView = DialogueQuizContentView()
+    private var quizViewController: DialogueQuizViewController!
     private let quizCheckButton = UIButton(type: .system)
     private let highlightsScrollView = UIScrollView()
     private let highlightsContentView = DialogueLearningHighlightsContentView()
@@ -420,15 +423,48 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         return interaction
     }()
 
-    /// Host-owned anchor for the top edge effect, mirroring how the bottom
-    /// effect is hosted by the (reparented) transport bar. Attaching the
-    /// interaction to the system nav bar proved unreliable here, so we host a
-    /// thin, non-interactive strip across the top of our own view instead.
+    /// Bottom edge interaction for quiz / highlights. Same API as dialogue's
+    /// transport-bar setup and ProgressiveStep's `buttonContainer`:
+    /// `interaction.scrollView = scrollView` + container that *contains* glass controls.
+    private let bottomScrollEdgeInteraction: UIScrollEdgeElementContainerInteraction = {
+        let interaction = UIScrollEdgeElementContainerInteraction()
+        interaction.edge = .bottom
+        return interaction
+    }()
+
+    /// Per-chevron edge interactions so the bottom-rail control itself shapes the
+    /// soft effect (Apple: controls overlaying the edge must participate).
+    private let firstSeamScrollEdgeInteraction: UIScrollEdgeElementContainerInteraction = {
+        let interaction = UIScrollEdgeElementContainerInteraction()
+        interaction.edge = .bottom
+        return interaction
+    }()
+
+    private let secondSeamScrollEdgeInteraction: UIScrollEdgeElementContainerInteraction = {
+        let interaction = UIScrollEdgeElementContainerInteraction()
+        interaction.edge = .bottom
+        return interaction
+    }()
+
+    /// Host-owned anchor for the top edge effect. Attaching the interaction to
+    /// the system nav bar proved unreliable here, so we host a thin,
+    /// non-interactive strip across the top of our own view instead.
     private let topScrollEdgeContainer: UIView = {
         let view = UIView()
         view.translatesAutoresizingMaskIntoConstraints = false
         view.backgroundColor = .clear
         view.isUserInteractionEnabled = false
+        return view
+    }()
+
+    /// Bottom chrome host for quiz / highlights — mirrors ProgressiveStep's
+    /// `buttonContainer` / dialogue's `transportBarContainer`. Must contain
+    /// glass controls (Check + bottom-rail chevrons) so the soft edge effect
+    /// has descendants to shape against; an empty container does nothing.
+    private let bottomScrollEdgeContainer: UIView = {
+        let view = UIView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.backgroundColor = .clear
         return view
     }()
 
@@ -443,6 +479,8 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private let usesLegacyCatalog: Bool
     private var selectedScenarioID: String
     private var prefersNextIncompleteScenario: Bool
+    /// How the dialogue transcript renders (full text, Japanese only, live meters).
+    private var transcriptDisplayMode: DialogueTranscriptDisplayMode = .full
     private var appliedTopContentInset: CGFloat = -1
     private var appliedBottomContentInset: CGFloat = -1
     private var pageTransitionProgress: CGFloat = 0
@@ -474,7 +512,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             return dialogueViewController.handoffScrollView
         }
         if hasQuizPage {
-            return index == 1 ? quizScrollView : highlightsScrollView
+            return index == 1 ? quizViewController.handoffScrollView : highlightsScrollView
         }
         return highlightsScrollView
     }
@@ -486,7 +524,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private func innerScrollViewsForCurrentScenario() -> [UIScrollView] {
         var scrollViews = [dialogueViewController.handoffScrollView]
         if hasQuizPage {
-            scrollViews.append(quizScrollView)
+            scrollViews.append(quizViewController.handoffScrollView)
         }
         scrollViews.append(highlightsScrollView)
         return scrollViews
@@ -598,7 +636,9 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             return
         }
         guard view.bounds.size != lastKnownViewSize else {
-            bringPageChromeToFront()
+            // Chrome ordering only changes at the specific call sites that add/reorder
+            // subviews (embedDialogue, content reveal, page build) — they already call
+            // bringPageChromeToFront() themselves, so this pass doesn't need to.
             return
         }
         lastKnownViewSize = view.bounds.size
@@ -779,12 +819,12 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         pagesStack.addArrangedSubview(quizPageView)
         pagesStack.addArrangedSubview(highlightsPageView)
 
-        // Host the top edge effect on our own strip, mirroring the bottom
-        // effect's transport-bar host. Spans from the top of the view down to
-        // the safe-area top so the soft blur sits where the nav bar overlaps
-        // the scrolling content.
+        // Top edge: host-owned strip under the nav bar.
+        // Bottom edge for quiz / highlights: ProgressiveStep-style buttonContainer
+        // on this host (dialogue keeps its reparented transport bar).
         view.addSubview(topScrollEdgeContainer)
         topScrollEdgeContainer.addInteraction(topScrollEdgeInteraction)
+        installBottomScrollEdgeContainer()
 
         NSLayoutConstraint.activate([
             outerScrollView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -806,6 +846,25 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             dialoguePageView.heightAnchor.constraint(equalTo: outerScrollView.frameLayoutGuide.heightAnchor),
             quizPageView.heightAnchor.constraint(equalTo: outerScrollView.frameLayoutGuide.heightAnchor),
             highlightsPageView.heightAnchor.constraint(equalTo: outerScrollView.frameLayoutGuide.heightAnchor),
+        ])
+    }
+
+    /// ProgressiveStep / dialogue pattern:
+    /// ```
+    /// interaction.scrollView = scrollView
+    /// interaction.edge = .bottom
+    /// buttonContainer.addInteraction(interaction)
+    /// ```
+    /// Container height comes from its glass control descendants (Check), same as
+    /// the transport bar sizing itself from its buttons.
+    private func installBottomScrollEdgeContainer() {
+        view.addSubview(bottomScrollEdgeContainer)
+        bottomScrollEdgeContainer.addInteraction(bottomScrollEdgeInteraction)
+
+        NSLayoutConstraint.activate([
+            bottomScrollEdgeContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            bottomScrollEdgeContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            bottomScrollEdgeContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
     }
 
@@ -871,11 +930,41 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
                 self?.selectScenario(id: item.id)
             }
         }
-        return UIMenu(
-            title: collection?.title ?? "Scenarios",
-            options: .singleSelection,
+        let scenariosSection = UIMenu(
+            options: [.singleSelection, .displayInline],
             children: actions
         )
+        let displayOptions: [(DialogueTranscriptDisplayMode, String, String)] = [
+            (.full, "Full transcript", "text.bubble"),
+            (.japaneseOnly, "Hide English", "eye.slash"),
+            (.listeningSpeakers, "Live meters", "waveform"),
+            (.listeningLines, "Live meters · every line", "waveform.path"),
+            (.reveal, "Reveal Mode", "hand.tap"),
+        ]
+        let displayActions = displayOptions.map { mode, title, symbol in
+            UIAction(
+                title: title,
+                image: UIImage(systemName: symbol),
+                state: transcriptDisplayMode == mode ? .on : .off
+            ) { [weak self] _ in
+                self?.selectTranscriptDisplayMode(mode)
+            }
+        }
+        let settingsSection = UIMenu(
+            options: [.singleSelection, .displayInline],
+            children: displayActions
+        )
+        return UIMenu(
+            title: collection?.title ?? "Scenarios",
+            children: [scenariosSection, settingsSection]
+        )
+    }
+
+    private func selectTranscriptDisplayMode(_ mode: DialogueTranscriptDisplayMode) {
+        guard mode != transcriptDisplayMode else { return }
+        transcriptDisplayMode = mode
+        dialogueViewController?.transcriptDisplayMode = mode
+        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
     }
 
     private func selectScenario(id: String) {
@@ -897,6 +986,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private func embedDialogue(for item: ScenarioItem) {
         if let existing = dialogueViewController {
             existing.stopHostedPlaybackIfDisappearing()
+            existing.recordsCompletionOnPlaybackFinish = item.quiz.isEmpty
             existing.reloadScenario(
                 pointTitle: item.pointTitle,
                 example: item.example,
@@ -919,6 +1009,8 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         )
         dialogue.sceneImageName = collection?.sceneImageName
         dialogue.sceneImageURL = collection?.thumbnailURL
+        dialogue.transcriptDisplayMode = transcriptDisplayMode
+        dialogue.recordsCompletionOnPlaybackFinish = item.quiz.isEmpty
         addChild(dialogue)
         dialogue.view.translatesAutoresizingMaskIntoConstraints = false
         dialoguePageView.addSubview(dialogue.view)
@@ -947,44 +1039,36 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         quizPageView.clipsToBounds = true
         quizPageView.isHidden = true
 
-        quizScrollView.translatesAutoresizingMaskIntoConstraints = false
-        quizScrollView.backgroundColor = .clear
-        quizScrollView.showsVerticalScrollIndicator = true
-        quizScrollView.alwaysBounceVertical = true
-        quizScrollView.bounces = true
-        quizScrollView.decelerationRate = .normal
-        quizScrollView.delaysContentTouches = false
-        quizScrollView.contentInsetAdjustmentBehavior = .never
-        quizPageView.addSubview(quizScrollView)
-
-        quizContentView.translatesAutoresizingMaskIntoConstraints = false
-        quizContentView.onSelectionChanged = { [weak self] in
+        let quiz = DialogueQuizViewController()
+        quiz.onSelectionChanged = { [weak self] in
             self?.updateQuizCheckButtonState()
         }
-        quizScrollView.addSubview(quizContentView)
+        quiz.onQuizPassed = { [weak self] in
+            self?.recordQuizCompletion()
+        }
+        quiz.onHandoffScrollViewChanged = { [weak self] in
+            self?.refreshHandoffCoordinatorInnerScrollViews()
+        }
 
+        addChild(quiz)
+        quiz.view.translatesAutoresizingMaskIntoConstraints = false
+        quizPageView.addSubview(quiz.view)
         NSLayoutConstraint.activate([
-            quizScrollView.topAnchor.constraint(equalTo: quizPageView.topAnchor),
-            quizScrollView.leadingAnchor.constraint(equalTo: quizPageView.leadingAnchor),
-            quizScrollView.trailingAnchor.constraint(equalTo: quizPageView.trailingAnchor),
-            quizScrollView.bottomAnchor.constraint(equalTo: quizPageView.bottomAnchor),
-
-            quizContentView.topAnchor.constraint(equalTo: quizScrollView.contentLayoutGuide.topAnchor, constant: 8),
-            quizContentView.leadingAnchor.constraint(equalTo: quizScrollView.contentLayoutGuide.leadingAnchor, constant: 20),
-            quizContentView.trailingAnchor.constraint(equalTo: quizScrollView.contentLayoutGuide.trailingAnchor, constant: -20),
-            quizContentView.bottomAnchor.constraint(equalTo: quizScrollView.contentLayoutGuide.bottomAnchor, constant: -32),
-            quizContentView.widthAnchor.constraint(
-                equalTo: quizScrollView.frameLayoutGuide.widthAnchor,
-                constant: -40
-            ),
+            quiz.view.topAnchor.constraint(equalTo: quizPageView.topAnchor),
+            quiz.view.leadingAnchor.constraint(equalTo: quizPageView.leadingAnchor),
+            quiz.view.trailingAnchor.constraint(equalTo: quizPageView.trailingAnchor),
+            quiz.view.bottomAnchor.constraint(equalTo: quizPageView.bottomAnchor),
         ])
+        quiz.didMove(toParent: self)
+        quizViewController = quiz
     }
 
     private func reloadQuizContent() {
         let questions = currentScenarioItem?.quiz ?? []
-        quizContentView.configure(questions: questions)
+        quizViewController.configure(questions: questions)
         updateQuizCheckButtonState()
         applyQuizCheckButtonProgress(pageTransitionProgress)
+        applyQuizScrollInsetsForPageTransition()
     }
 
     private func configureQuizCheckButton() {
@@ -1007,15 +1091,24 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         quizCheckButton.addAction(UIAction { [weak self] _ in
             self?.quizCheckTapped()
         }, for: .primaryActionTriggered)
-        view.addSubview(quizCheckButton)
+
+        // Glass control must be a descendant of the edge-effect container
+        // (Apple: labels / images / glass views / controls shape the effect).
+        bottomScrollEdgeContainer.addSubview(quizCheckButton)
 
         NSLayoutConstraint.activate([
+            // Same intrinsic sizing as dialogue's transport bar controls:
+            // top padding + control + bottom padding against the safe area.
+            quizCheckButton.topAnchor.constraint(
+                equalTo: bottomScrollEdgeContainer.topAnchor,
+                constant: 8
+            ),
             quizCheckButton.trailingAnchor.constraint(
-                equalTo: view.trailingAnchor,
+                equalTo: bottomScrollEdgeContainer.trailingAnchor,
                 constant: -Self.quizCheckButtonHorizontalInset
             ),
             quizCheckButton.bottomAnchor.constraint(
-                equalTo: view.safeAreaLayoutGuide.bottomAnchor,
+                equalTo: bottomScrollEdgeContainer.safeAreaLayoutGuide.bottomAnchor,
                 constant: -Self.quizCheckButtonBottomInset
             ),
             quizCheckButton.heightAnchor.constraint(equalToConstant: Self.quizCheckButtonHeight),
@@ -1023,14 +1116,25 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     }
 
     private func quizCheckTapped() {
-        quizContentView.checkAnswers()
+        quizViewController.checkAnswers()
         updateQuizCheckButtonState()
         applyQuizCheckButtonProgress(pageTransitionProgress)
         applyQuizScrollInsetsForPageTransition()
     }
 
+    /// Quiz-backed scenarios complete through comprehension, not playback:
+    /// answering every question correctly is what marks the scenario done.
+    private func recordQuizCompletion() {
+        guard let item = currentScenarioItem else { return }
+        DialogueProgressStore.shared.markCompleted(scenarioID: item.id)
+        GrammarMasteryStore.shared.recordEncounter(
+            grammarIDs: item.grammarPointIDs,
+            scenarioID: item.id
+        )
+    }
+
     private func updateQuizCheckButtonState() {
-        quizCheckButton.isEnabled = quizContentView.canCheckAnswers
+        quizCheckButton.isEnabled = quizViewController.canCheckAnswers
     }
 
     private func updateQuizPageVisibility() {
@@ -1069,13 +1173,22 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         highlightsContentView.translatesAutoresizingMaskIntoConstraints = false
         highlightsContentView.onSelectVocabulary = { [weak self] word in
             guard let self else { return }
-            WordDictionaryDetailSheetPresenter.push(surface: word, from: self)
+            WordDictionaryDetailSheetPresenter.push(
+                surface: word,
+                sentence: self.contextSentence(containing: word),
+                from: self
+            )
         }
         highlightsContentView.onSelectGrammar = { [weak self] grammarPointID in
             guard let self else { return }
             GrammarReferencePresenter.open(grammarPointID: grammarPointID, from: self)
         }
         highlightsScrollView.addSubview(highlightsContentView)
+
+        highlightsScrollView.topEdgeEffect.style = .soft
+        highlightsScrollView.topEdgeEffect.isHidden = false
+        highlightsScrollView.bottomEdgeEffect.style = .soft
+        highlightsScrollView.bottomEdgeEffect.isHidden = false
 
         NSLayoutConstraint.activate([
             highlightsScrollView.topAnchor.constraint(equalTo: highlightsPageView.topAnchor),
@@ -1099,6 +1212,24 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         highlightsContentView.configure(highlights: highlights)
     }
 
+    /// Prefer a dialogue line that contains the vocabulary surface so the dictionary
+    /// sheet can request a contextual (Gemini / on-device) gloss — especially for
+    /// compounds that have no single JMdict entry (e.g. いいところ).
+    private func contextSentence(containing vocabulary: String) -> String? {
+        let word = vocabulary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !word.isEmpty, let item = currentScenarioItem else { return nil }
+
+        if let line = item.example.scenario?.lines.first(where: {
+            $0.japanese.contains(word)
+        }) {
+            return line.japanese
+        }
+        if item.example.japanese.contains(word) {
+            return item.example.japanese
+        }
+        return nil
+    }
+
     private func applyScrollLayoutIfNeeded(force: Bool = false) {
         let dialogueTopInset = view.safeAreaInsets.top
         let bottomInset = view.safeAreaInsets.bottom + 16
@@ -1115,16 +1246,24 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private func applyQuizScrollInsetsForPageTransition() {
         guard hasQuizPage else { return }
 
-        let topInset = quizTopContentInset(for: pageTransitionProgress)
-        let bottomInset = quizBottomContentInset(for: pageTransitionProgress)
-
-        quizScrollView.contentInset = UIEdgeInsets(top: topInset, left: 0, bottom: bottomInset, right: 0)
-        quizScrollView.verticalScrollIndicatorInsets = UIEdgeInsets(
-            top: topInset,
-            left: 0,
-            bottom: bottomInset,
-            right: 0
+        // Same edge-to-edge contentInset pattern as dialogue, but with the
+        // secondary-page extra used by highlights so content clears the top chevron.
+        quizViewController.applyNestedPagingTopContentInset(
+            quizTopContentInset(for: pageTransitionProgress)
         )
+        quizViewController.applyNestedPagingBottomContentInset(
+            quizBottomContentInset(for: pageTransitionProgress)
+        )
+        // Keep the page control parked above the Check band even after grading
+        // removes Check clearance from the scroll inset.
+        quizViewController.applyPageControlBottomInset(quizPageControlBottomInset())
+    }
+
+    private func quizPageControlBottomInset() -> CGFloat {
+        let base = appliedBottomContentInset >= 0
+            ? appliedBottomContentInset
+            : view.safeAreaInsets.bottom + 16
+        return base + Self.quizCheckButtonHeight + 16
     }
 
     private func quizTopContentInset(for outerPageOffset: CGFloat) -> CGFloat {
@@ -1147,7 +1286,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         let base = appliedBottomContentInset >= 0
             ? appliedBottomContentInset
             : view.safeAreaInsets.bottom + 16
-        guard hasQuizPage, !quizContentView.hasCheckedAnswers else { return base }
+        guard hasQuizPage, !quizViewController.hasCheckedAnswers else { return base }
 
         let visibility = quizCheckButtonVisibility(for: outerPageOffset)
         let checkButtonClearance = Self.quizCheckButtonHeight + 16
@@ -1165,7 +1304,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     }
 
     private func applyQuizCheckButtonProgress(_ outerPageOffset: CGFloat) {
-        guard hasQuizPage, !quizContentView.hasCheckedAnswers else {
+        guard hasQuizPage, !quizViewController.hasCheckedAnswers else {
             quizCheckButton.alpha = 0
             quizCheckButton.isUserInteractionEnabled = false
             return
@@ -1175,7 +1314,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         let translationX = -Self.quizCheckSlideDistance * visibility.slideProgress
         quizCheckButton.alpha = visibility.alpha
         quizCheckButton.transform = CGAffineTransform(translationX: translationX, y: 0)
-        quizCheckButton.isEnabled = quizContentView.canCheckAnswers
+        quizCheckButton.isEnabled = quizViewController.canCheckAnswers
         quizCheckButton.isUserInteractionEnabled = visibility.alpha > 0.65
     }
 
@@ -1217,6 +1356,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private func applyPageTransitionProgress(_ progress: CGFloat) {
         pageTransitionProgress = max(progress, 0)
         updatePageChevrons()
+        updateBottomScrollEdgeHostVisibility()
 
         applyQuizScrollInsetsForPageTransition()
         applyHighlightsScrollInsetsForPageTransition()
@@ -1224,8 +1364,8 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         dialogueViewController.applyNestedPagingTransportProgress(activePageIndex == 0 ? 0 : 1)
 
         let settledOnQuiz = hasQuizPage && activePageIndex == 1
-        if settledOnQuiz, !didSettleQuizScrollAtTop, quizScrollView.contentOffset.y <= 1 {
-            quizScrollView.contentOffset.y = -quizScrollView.adjustedContentInset.top
+        if settledOnQuiz, !didSettleQuizScrollAtTop {
+            quizViewController.settleHandoffScrollAtTopIfNeeded()
         }
         didSettleQuizScrollAtTop = settledOnQuiz
 
@@ -1347,9 +1487,38 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             applyChevronDirection(to: button, pointsUp: shouldPointUp)
         }
 
+        syncSeamChevronScrollEdgeInteraction(
+            button: button,
+            lowerPageIndex: lowerPageIndex,
+            pointsUp: shouldPointUp,
+            isVisible: visibility > 0.01
+        )
+
         button.accessibilityLabel = shouldPointUp
             ? "Return to previous section"
             : "Show next section"
+    }
+
+    private func syncSeamChevronScrollEdgeInteraction(
+        button: UIButton,
+        lowerPageIndex: Int,
+        pointsUp: Bool,
+        isVisible: Bool
+    ) {
+        let interaction = lowerPageIndex == 0
+            ? firstSeamScrollEdgeInteraction
+            : secondSeamScrollEdgeInteraction
+        if !button.interactions.contains(where: { $0 === interaction }) {
+            button.addInteraction(interaction)
+        }
+        interaction.edge = pointsUp ? .top : .bottom
+        // Only drive the edge effect while the chevron overlays quiz / highlights
+        // content; dialogue keeps the transport bar as its bottom host.
+        if isVisible, activePageIndex > 0 {
+            interaction.scrollView = activeInnerScrollView
+        } else {
+            interaction.scrollView = nil
+        }
     }
 
     private func applyChevronDirection(to button: UIButton, pointsUp: Bool) {
@@ -1366,7 +1535,11 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
 
     private func configureScrollEdgeEffects() {
         for scrollView in innerScrollViewsForCurrentScenario() {
-            scrollView.delaysContentTouches = false
+            // Quiz keeps delaysContentTouches so scrolling over answers is easy;
+            // dialogue / highlights prefer immediate control response.
+            if !quizViewController.ownsScrollView(scrollView) {
+                scrollView.delaysContentTouches = false
+            }
             scrollView.topEdgeEffect.style = .soft
             scrollView.topEdgeEffect.isHidden = false
             scrollView.bottomEdgeEffect.style = .soft
@@ -1380,7 +1553,26 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     }
 
     private func updateScrollEdgeInteractionsForActivePage() {
-        topScrollEdgeInteraction.scrollView = activeInnerScrollView
+        let scrollView = activeInnerScrollView
+        topScrollEdgeInteraction.scrollView = scrollView
+        // Dialogue page: transport bar owns the bottom edge (glass controls inside).
+        // Quiz / highlights: our bottomScrollEdgeContainer owns it — same call:
+        // bottomScrollEdgeInteraction.scrollView = scrollView
+        if activePageIndex == 0 {
+            bottomScrollEdgeInteraction.scrollView = nil
+            bottomScrollEdgeContainer.isHidden = true
+        } else {
+            bottomScrollEdgeInteraction.scrollView = scrollView
+            bottomScrollEdgeContainer.isHidden = false
+        }
+    }
+
+    private func updateBottomScrollEdgeHostVisibility() {
+        let onSecondaryPage = activePageIndex > 0
+        bottomScrollEdgeContainer.isHidden = !onSecondaryPage
+        if onSecondaryPage {
+            bottomScrollEdgeInteraction.scrollView = activeInnerScrollView
+        }
     }
 
     private func configurePageChevrons() {
@@ -1437,13 +1629,14 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     }
 
     private func bringPageChromeToFront() {
-        // Keep the top edge strip above the scrolling content so its soft blur
-        // renders over the pager (mirrors the transport bar staying frontmost).
+        // Edge hosts above the pager (same stacking as the reparented transport bar).
         view.bringSubviewToFront(topScrollEdgeContainer)
+        view.bringSubviewToFront(bottomScrollEdgeContainer)
         if let transportBar = dialogueViewController?.nestedPagingTransportBarView {
             view.bringSubviewToFront(transportBar)
         }
-        view.bringSubviewToFront(quizCheckButton)
+        // Chevrons stay above the bottom edge host so they remain tappable while
+        // still sitting in the soft-effect zone (same as over the transport bar).
         view.bringSubviewToFront(firstSeamChevron)
         view.bringSubviewToFront(secondSeamChevron)
         loadingCoordinator.bringOverlayToFront()
@@ -1453,7 +1646,9 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         let coordinator = NestedVerticalScrollHandoffCoordinator(
             outerScrollView: outerScrollView,
             innerScrollViews: innerScrollViewsForCurrentScenario(),
-            boundaryEpsilon: Self.boundaryEpsilon
+            boundaryEpsilon: Self.boundaryEpsilon,
+            pageCommitThreshold: Self.pageCommitThreshold,
+            velocityThreshold: Self.pageVelocityThreshold
         )
         coordinator.onPageTransitionProgressChanged = { [weak self] progress in
             self?.applyPageTransitionProgress(progress)

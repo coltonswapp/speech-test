@@ -90,8 +90,7 @@ export function GenerateLinesPanel({
     .filter(Boolean)
     .join("\n\n");
 
-  const canGenerate =
-    effectiveBrief.length > 0 && selectedGrammarPointIds.length > 0;
+  const canGenerate = effectiveBrief.length > 0;
 
   function insertGenerated(
     generated: GeneratedLines,
@@ -331,15 +330,7 @@ export function GenerateLinesPanel({
         ) : null}
       </div>
 
-      {!canGenerate && selectedGrammarPointIds.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Select at least one grammar point to generate dialogue.
-        </p>
-      ) : null}
-      {!canGenerate &&
-      selectedGrammarPointIds.length > 0 &&
-      !setting.trim() &&
-      !extraInstructions.trim() ? (
+      {!canGenerate ? (
         <p className="text-xs text-muted-foreground">
           Add a setting on Overview or describe the conversation above.
         </p>

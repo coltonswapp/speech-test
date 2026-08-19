@@ -185,7 +185,7 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
         setting: setting || undefined,
       });
 
-      if (!withAi || !setting || grammarPointIds.length === 0) {
+      if (!withAi || !setting) {
         return { scenario, generated: false, withAi };
       }
 
@@ -843,7 +843,7 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
 
               <GrammarPointPicker
                 label="Grammar points"
-                description="Required to generate dialogue from the setting when you add this scenario."
+                description="Optional. Practiced points to weave into the generated dialogue."
                 value={newGrammarPointIds}
                 onChange={setNewGrammarPointIds}
               />
@@ -868,8 +868,7 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
                   addScenarioMutation.isPending ||
                   !newSlug.trim() ||
                   !newMenuTitle.trim() ||
-                  !newSetting.trim() ||
-                  newGrammarPointIds.length === 0
+                  !newSetting.trim()
                 }
               >
                 <Sparkles className="size-4" />
@@ -892,10 +891,10 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Setting and grammar points are required to generate dialogue
-              automatically. Skip them and use &quot;write lines
-              manually&quot; to add lines yourself after creating the
-              scenario.
+              A setting is required to generate dialogue automatically;
+              grammar points are optional. Skip the setting and use
+              &quot;write lines manually&quot; to add lines yourself after
+              creating the scenario.
             </p>
           </div>
         </DialogContent>

@@ -1,3 +1,5 @@
+import { formatApiError } from "@/lib/api-error";
+
 export type PointSummary = {
   id: string;
   orderIndex: number;
@@ -80,11 +82,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(
-      typeof body?.error === "string"
-        ? body.error
-        : body?.error?.formErrors?.join(", ") ?? `Request failed: ${res.status}`
-    );
+    throw new Error(formatApiError(body, res.status));
   }
   return res.json();
 }

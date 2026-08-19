@@ -2,8 +2,7 @@
 //  CharacterSpeakingExperimentViewController.swift
 //  shizen
 //
-//  DEBUG experiment: compare speaking-character visualizers driven by
-//  encouragement tutor audio clips.
+//  DEBUG experiment: tune the live speaking meter driven by encouragement tutor clips.
 //
 
 import UIKit
@@ -15,27 +14,11 @@ final class CharacterSpeakingExperimentViewController: UIViewController {
 
     private let liveMeterCard = CharacterCardView(
         title: "Live meter",
-        subtitle: "Diamond silhouette — center bar tallest, edges clamped — with smooth grow and decay."
-    )
-    private let speechMeterCard = CharacterCardView(
-        title: "Speech profile",
-        subtitle: "Same diamond shape · envelope rhythm in the middle, live punch and attacks on the sides."
-    )
-    private let dotFieldCard = CharacterCardView(
-        title: "Dot field",
-        subtitle: "Random dots scale with audio inside a circular character."
-    )
-    private let audioBlobCard = CharacterCardView(
-        title: "Audio blob",
-        subtitle: "Glowing icosahedron wireframe — Perlin noise displacement driven by audio level."
+        subtitle: "Fidelity: spectral bands low→high. Off: diamond VU with staggered history."
     )
 
     private let levelBars = AudioLevelBarsView()
-    private let speechBars = SpeechEnvelopeBarsView()
-    private let dotFieldCharacter = DotFieldCharacterView()
-    private let audioBlobCharacter = AudioBlobCharacterView()
     private let liveDebugLabel = UILabel()
-    private let speechDebugLabel = UILabel()
 
     private let widthSlider = UISlider()
     private let spacingSlider = UISlider()
@@ -46,46 +29,37 @@ final class CharacterSpeakingExperimentViewController: UIViewController {
     private let heightFillSlider = UISlider()
     private let diamondSlider = UISlider()
 
-    private let speechWidthSlider = UISlider()
-    private let speechHeightSlider = UISlider()
-    private let envelopeGainSlider = UISlider()
-    private let liveGainSlider = UISlider()
-    private let attackGainSlider = UISlider()
-    private let speechSmoothingSlider = UISlider()
-    private let speechDiamondSlider = UISlider()
-
-    private let blobNoiseSlider = UISlider()
-    private let blobDisplacementSlider = UISlider()
     private var liveMeterHeightConstraint: NSLayoutConstraint?
-    private var speechMeterHeightConstraint: NSLayoutConstraint?
 
     private let floatingDock = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
     private let clipSelector = UISegmentedControl(items: (1...6).map { "\($0)" })
+    private let fidelitySwitch = UISwitch()
     private let playButton = UIButton(type: .system)
 
     private let audioPlayer = MeteredAudioPlayer()
     private var selectedClipIndex = 0
     private var playingClipIndex: Int?
     private var lastLiveLevel: Float = 0
-    private var lastPlaybackTime: TimeInterval = 0
-    private var lastPlaybackEnvelope: PlaybackEnvelope?
+    private var lastBands: [Float] = Array(repeating: 0, count: MeteredAudioPlayer.bandCount)
+    private var fidelityMode = true
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "Speaking characters"
+        title = "Speaking meters"
         navigationItem.largeTitleDisplayMode = .never
         view.backgroundColor = ExperimentPalette.pageBackground
 
-        audioPlayer.onPlaybackUpdate = { [weak self] time, envelope, liveLevel in
-            self?.pushPlayback(time: time, envelope: envelope, liveLevel: liveLevel)
+        audioPlayer.onPlaybackUpdate = { [weak self] frame in
+            self?.pushPlayback(frame)
         }
         audioPlayer.onFinished = { [weak self] in
             self?.handlePlaybackFinished()
         }
 
         configureScrollView()
-        configureCharacters()
+        configureMeters()
         configureFloatingDock()
+        applyFidelityMode()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -119,64 +93,30 @@ final class CharacterSpeakingExperimentViewController: UIViewController {
         ])
     }
 
-    private func configureCharacters() {
+    private func configureMeters() {
         let intro = UILabel()
-        intro.text = "Pick a clip and tap play below. Compare two VU-meter personalities on the same audio."
+        intro.text = "Pick a clip and tap play. Fidelity mode drives bars from the live tap — player time, level history, and FFT bands."
         intro.font = .preferredFont(forTextStyle: .subheadline)
         intro.textColor = .secondaryLabel
         intro.numberOfLines = 0
         contentStack.addArrangedSubview(intro)
 
         configureLiveMeterCard()
-        configureSpeechMeterCard()
-        configureAudioBlobCard()
-
-        dotFieldCharacter.translatesAutoresizingMaskIntoConstraints = false
-        dotFieldCard.setCharacterContent(dotFieldCharacter)
-        contentStack.addArrangedSubview(dotFieldCard)
-
-        NSLayoutConstraint.activate([
-            dotFieldCharacter.heightAnchor.constraint(equalToConstant: 210),
-        ])
-    }
-
-    private func configureAudioBlobCard() {
-        audioBlobCharacter.translatesAutoresizingMaskIntoConstraints = false
-        audioBlobCharacter.noiseScale = 3.2
-        audioBlobCharacter.displacementScale = 1.25
-
-        let stack = UIStackView()
-        stack.axis = .vertical
-        stack.spacing = 12
-        stack.alignment = .fill
-
-        configureSlider(blobNoiseSlider, min: 1.0, max: 6.0, value: audioBlobCharacter.noiseScale, action: #selector(blobNoiseChanged))
-        configureSlider(blobDisplacementSlider, min: 0.4, max: 2.5, value: audioBlobCharacter.displacementScale, action: #selector(blobDisplacementChanged))
-
-        stack.addArrangedSubview(audioBlobCharacter)
-        stack.addArrangedSubview(ExperimentSliderRow.make(title: "Noise roughness", slider: blobNoiseSlider, format: "%.1f"))
-        stack.addArrangedSubview(ExperimentSliderRow.make(title: "Displacement", slider: blobDisplacementSlider, format: "%.1f"))
-        audioBlobCard.setCharacterContent(stack)
-        contentStack.addArrangedSubview(audioBlobCard)
-
-        NSLayoutConstraint.activate([
-            audioBlobCharacter.heightAnchor.constraint(equalToConstant: 240),
-        ])
     }
 
     private func configureLiveMeterCard() {
         levelBars.translatesAutoresizingMaskIntoConstraints = false
         levelBars.barColor = .systemYellow
         levelBars.barWidth = 8
-        levelBars.barSpacing = 12
-        levelBars.meterHeight = 72
+        levelBars.barSpacing = 6
+        levelBars.meterHeight = 77
         levelBars.minBarHeight = 8
-        levelBars.heightFill = 0.92
-        levelBars.levelGain = 1.35
-        levelBars.displayCurve = 0.72
-        levelBars.smoothing = 0.34
-        levelBars.wobbleAmount = 0.08
-        levelBars.diamondFalloff = 0.52
+        levelBars.heightFill = 0.82
+        levelBars.levelGain = 0.6
+        levelBars.displayCurve = 1.05
+        levelBars.smoothing = 0.08
+        levelBars.wobbleAmount = 0.25
+        levelBars.diamondFalloff = 0.25
 
         let meterContainer = UIView()
         meterContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -225,66 +165,6 @@ final class CharacterSpeakingExperimentViewController: UIViewController {
         ])
     }
 
-    private func configureSpeechMeterCard() {
-        speechBars.translatesAutoresizingMaskIntoConstraints = false
-        speechBars.barColor = .systemYellow
-        speechBars.barWidth = 7
-        speechBars.barSpacing = 10
-        speechBars.meterHeight = 80
-        speechBars.minBarHeight = 7
-        speechBars.heightFill = 0.94
-        speechBars.envelopeGain = 1.25
-        speechBars.liveGain = 1.15
-        speechBars.attackGain = 1.7
-        speechBars.smoothing = 0.38
-        speechBars.wobbleAmount = 0.05
-        speechBars.diamondFalloff = 0.52
-
-        let meterContainer = UIView()
-        meterContainer.translatesAutoresizingMaskIntoConstraints = false
-        meterContainer.addSubview(speechBars)
-
-        let stack = UIStackView()
-        stack.axis = .vertical
-        stack.spacing = 12
-        stack.alignment = .fill
-
-        speechDebugLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-        speechDebugLabel.textColor = .secondaryLabel
-        speechDebugLabel.numberOfLines = 0
-        speechDebugLabel.textAlignment = .center
-        speechDebugLabel.text = "envelope: 0.00  live: 0.00  attack: 0.00"
-
-        configureSlider(speechWidthSlider, min: 3, max: 18, value: Float(speechBars.barWidth), action: #selector(speechWidthChanged))
-        configureSlider(speechHeightSlider, min: 24, max: 160, value: Float(speechBars.meterHeight), action: #selector(speechHeightChanged))
-        configureSlider(envelopeGainSlider, min: 0.4, max: 3.5, value: speechBars.envelopeGain, action: #selector(envelopeGainChanged))
-        configureSlider(liveGainSlider, min: 0.4, max: 3.5, value: speechBars.liveGain, action: #selector(liveGainChanged))
-        configureSlider(attackGainSlider, min: 0, max: 3.5, value: speechBars.attackGain, action: #selector(attackGainChanged))
-        configureSlider(speechSmoothingSlider, min: 0.08, max: 0.75, value: Float(speechBars.smoothing), action: #selector(speechSmoothingChanged))
-        configureSlider(speechDiamondSlider, min: 0, max: 1.0, value: Float(speechBars.diamondFalloff), action: #selector(speechDiamondChanged))
-
-        stack.addArrangedSubview(meterContainer)
-        stack.addArrangedSubview(speechDebugLabel)
-        stack.addArrangedSubview(ExperimentSliderRow.make(title: "Bar width", slider: speechWidthSlider, format: "%.0f"))
-        stack.addArrangedSubview(ExperimentSliderRow.make(title: "Meter height", slider: speechHeightSlider, format: "%.0f"))
-        stack.addArrangedSubview(ExperimentSliderRow.make(title: "Envelope gain", slider: envelopeGainSlider, format: "%.2f"))
-        stack.addArrangedSubview(ExperimentSliderRow.make(title: "Live gain", slider: liveGainSlider, format: "%.2f"))
-        stack.addArrangedSubview(ExperimentSliderRow.make(title: "Attack gain", slider: attackGainSlider, format: "%.2f"))
-        stack.addArrangedSubview(ExperimentSliderRow.make(title: "Smoothing", slider: speechSmoothingSlider, format: "%.2f"))
-        stack.addArrangedSubview(ExperimentSliderRow.make(title: "Diamond clamp", slider: speechDiamondSlider, format: "%.2f"))
-        speechMeterCard.setCharacterContent(stack)
-        contentStack.addArrangedSubview(speechMeterCard)
-
-        speechMeterHeightConstraint = meterContainer.heightAnchor.constraint(equalToConstant: speechBars.meterHeight)
-        NSLayoutConstraint.activate([
-            speechBars.centerXAnchor.constraint(equalTo: meterContainer.centerXAnchor),
-            speechBars.centerYAnchor.constraint(equalTo: meterContainer.centerYAnchor),
-            speechBars.leadingAnchor.constraint(greaterThanOrEqualTo: meterContainer.leadingAnchor),
-            speechBars.trailingAnchor.constraint(lessThanOrEqualTo: meterContainer.trailingAnchor),
-            speechMeterHeightConstraint!,
-        ])
-    }
-
     private func configureSlider(_ slider: UISlider, min: Float, max: Float, value: Float, action: Selector) {
         slider.minimumValue = min
         slider.maximumValue = max
@@ -305,6 +185,19 @@ final class CharacterSpeakingExperimentViewController: UIViewController {
         clipSelector.selectedSegmentIndex = selectedClipIndex
         clipSelector.addTarget(self, action: #selector(clipSelectionChanged), for: .valueChanged)
 
+        fidelitySwitch.isOn = fidelityMode
+        fidelitySwitch.addTarget(self, action: #selector(fidelityToggled), for: .valueChanged)
+
+        let fidelityRow = UIStackView()
+        fidelityRow.axis = .horizontal
+        fidelityRow.alignment = .center
+        fidelityRow.distribution = .equalSpacing
+        let fidelityLabel = UILabel()
+        fidelityLabel.text = "Fidelity mode"
+        fidelityLabel.font = .preferredFont(forTextStyle: .subheadline)
+        fidelityRow.addArrangedSubview(fidelityLabel)
+        fidelityRow.addArrangedSubview(fidelitySwitch)
+
         var playConfig = UIButton.Configuration.filled()
         playConfig.cornerStyle = .capsule
         playConfig.image = UIImage(systemName: "play.fill")
@@ -317,6 +210,7 @@ final class CharacterSpeakingExperimentViewController: UIViewController {
         playButton.addTarget(self, action: #selector(playTapped), for: .touchUpInside)
 
         dockStack.addArrangedSubview(clipSelector)
+        dockStack.addArrangedSubview(fidelityRow)
         dockStack.addArrangedSubview(playButton)
 
         NSLayoutConstraint.activate([
@@ -364,49 +258,50 @@ final class CharacterSpeakingExperimentViewController: UIViewController {
         playingClipIndex = index
         updatePlayButtonAppearance()
 
-        levelBars.reset()
-        speechBars.reset()
-        audioBlobCharacter.reset()
+        levelBars.releaseToRest()
         lastLiveLevel = 0
-        lastPlaybackEnvelope = nil
-        dotFieldCharacter.reset()
+        lastBands = Array(repeating: 0, count: MeteredAudioPlayer.bandCount)
 
         let assetName = MeteredAudioPlayer.encouragementClipNames[index]
         audioPlayer.play(assetNamed: assetName)
     }
 
-    private func pushPlayback(time: TimeInterval, envelope: PlaybackEnvelope, liveLevel: Float) {
-        lastLiveLevel = liveLevel
-        lastPlaybackTime = time
-        lastPlaybackEnvelope = envelope
+    private func pushPlayback(_ frame: PlaybackMeterFrame) {
+        lastLiveLevel = frame.liveLevel
+        lastBands = frame.bands
 
-        let envelopeNow = envelope.level(at: time)
-        let envPrev = envelope.level(at: max(0, time - 0.045))
-        let attack = max(0, liveLevel - envPrev * 0.88)
-
-        levelBars.setLevel(liveLevel)
-        speechBars.setPlayback(envelope: envelope, at: time, liveLevel: liveLevel)
-
-        liveDebugLabel.text = String(format: "live: %.2f", liveLevel)
-        speechDebugLabel.text = String(
-            format: "envelope: %.2f  live: %.2f  attack: %.2f",
-            envelopeNow,
-            liveLevel,
-            attack
-        )
-        dotFieldCharacter.setLevel(max(liveLevel, envelopeNow))
-        audioBlobCharacter.setLevel(max(liveLevel, envelopeNow))
+        if fidelityMode {
+            levelBars.setBands(frame.bands)
+            liveDebugLabel.text = String(
+                format: "bands: %.2f %.2f %.2f %.2f %.2f",
+                frame.bands.count > 0 ? frame.bands[0] : 0,
+                frame.bands.count > 1 ? frame.bands[1] : 0,
+                frame.bands.count > 2 ? frame.bands[2] : 0,
+                frame.bands.count > 3 ? frame.bands[3] : 0,
+                frame.bands.count > 4 ? frame.bands[4] : 0
+            )
+        } else {
+            levelBars.setLevel(frame.liveLevel)
+            liveDebugLabel.text = String(format: "live: %.2f", frame.liveLevel)
+        }
     }
 
     private func handlePlaybackFinished() {
         playingClipIndex = nil
         updatePlayButtonAppearance()
-        levelBars.reset()
-        speechBars.releaseToRest()
-        audioBlobCharacter.reset()
+        levelBars.releaseToRest()
         lastLiveLevel = 0
-        lastPlaybackEnvelope = nil
-        dotFieldCharacter.reset()
+        lastBands = Array(repeating: 0, count: MeteredAudioPlayer.bandCount)
+    }
+
+    @objc private func fidelityToggled() {
+        fidelityMode = fidelitySwitch.isOn
+        applyFidelityMode()
+        refreshLiveMeter()
+    }
+
+    private func applyFidelityMode() {
+        levelBars.fidelityMode = fidelityMode
     }
 
     private func updatePlayButtonAppearance() {
@@ -420,12 +315,11 @@ final class CharacterSpeakingExperimentViewController: UIViewController {
     }
 
     private func refreshLiveMeter() {
-        levelBars.setLevel(lastLiveLevel)
-    }
-
-    private func refreshSpeechMeter() {
-        guard let envelope = lastPlaybackEnvelope else { return }
-        speechBars.setPlayback(envelope: envelope, at: lastPlaybackTime, liveLevel: lastLiveLevel)
+        if fidelityMode {
+            levelBars.setBands(lastBands)
+        } else {
+            levelBars.setLevel(lastLiveLevel)
+        }
     }
 
     @objc private func widthChanged() {
@@ -464,48 +358,6 @@ final class CharacterSpeakingExperimentViewController: UIViewController {
 
     @objc private func diamondChanged() {
         levelBars.diamondFalloff = CGFloat(diamondSlider.value)
-    }
-
-    @objc private func speechWidthChanged() {
-        speechBars.barWidth = CGFloat(speechWidthSlider.value)
-        refreshSpeechMeter()
-    }
-
-    @objc private func speechHeightChanged() {
-        speechBars.meterHeight = CGFloat(speechHeightSlider.value)
-        speechMeterHeightConstraint?.constant = speechBars.meterHeight
-        refreshSpeechMeter()
-    }
-
-    @objc private func envelopeGainChanged() {
-        speechBars.envelopeGain = envelopeGainSlider.value
-        refreshSpeechMeter()
-    }
-
-    @objc private func liveGainChanged() {
-        speechBars.liveGain = liveGainSlider.value
-        refreshSpeechMeter()
-    }
-
-    @objc private func attackGainChanged() {
-        speechBars.attackGain = attackGainSlider.value
-        refreshSpeechMeter()
-    }
-
-    @objc private func speechSmoothingChanged() {
-        speechBars.smoothing = CGFloat(speechSmoothingSlider.value)
-    }
-
-    @objc private func speechDiamondChanged() {
-        speechBars.diamondFalloff = CGFloat(speechDiamondSlider.value)
-    }
-
-    @objc private func blobNoiseChanged() {
-        audioBlobCharacter.noiseScale = blobNoiseSlider.value
-    }
-
-    @objc private func blobDisplacementChanged() {
-        audioBlobCharacter.displacementScale = blobDisplacementSlider.value
     }
 }
 

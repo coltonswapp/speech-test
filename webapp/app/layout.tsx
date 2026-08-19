@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/components/theme-provider";
+import {
+  DesignModeProvider,
+  DESIGN_MODE_INLINE_SCRIPT,
+} from "@/components/design-mode-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,10 +30,18 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{ __html: DESIGN_MODE_INLINE_SCRIPT }}
+        />
+      </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        {children}
+        <ThemeProvider>
+          <DesignModeProvider>{children}</DesignModeProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

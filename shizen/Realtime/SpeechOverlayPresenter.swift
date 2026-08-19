@@ -51,8 +51,8 @@ final class SpeechOverlayPresenter {
     private var overlayHostController: UIViewController?
 
     private init() {
-        audioPlayer.onPlaybackUpdate = { [weak self] time, envelope, liveLevel in
-            self?.overlay.pushPlayback(envelope: envelope, at: time, liveLevel: liveLevel)
+        audioPlayer.onPlaybackUpdate = { [weak self] frame in
+            self?.overlay.pushPlayback(envelope: frame.envelope, at: frame.time, liveLevel: frame.liveLevel)
         }
         audioPlayer.onFinished = { [weak self] in
             self?.handlePlaybackFinished()

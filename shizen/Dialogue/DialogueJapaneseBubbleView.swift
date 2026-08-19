@@ -26,6 +26,9 @@ final class DialogueJapaneseBubbleView: UIView {
     private var swipeRevealAmount: CGFloat = 0
     private var backgroundStyle: DialogueBubbleBackgroundStyle = .glass
     private var underglowConfiguration = DialogueBubbleUnderglowConfiguration.default
+    /// Label edge pins that size the bubble. Deactivated while a live meter owns layout.
+    private var labelEdgeConstraints: [NSLayoutConstraint] = []
+    private var labelContributesToLayout = true
 
     private static let cornerRadius: CGFloat = 18
     private static let contentPadding = UIEdgeInsets(top: 6, left: 12, bottom: 3, right: 12)
@@ -68,6 +71,13 @@ final class DialogueJapaneseBubbleView: UIView {
         addSubview(glassBackgroundView)
         addSubview(label)
 
+        labelEdgeConstraints = [
+            label.topAnchor.constraint(equalTo: topAnchor, constant: Self.contentPadding.top),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.contentPadding.left),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.contentPadding.right),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.contentPadding.bottom),
+        ]
+
         NSLayoutConstraint.activate([
             solidBackgroundView.topAnchor.constraint(equalTo: topAnchor),
             solidBackgroundView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -78,12 +88,19 @@ final class DialogueJapaneseBubbleView: UIView {
             glassBackgroundView.leadingAnchor.constraint(equalTo: leadingAnchor),
             glassBackgroundView.trailingAnchor.constraint(equalTo: trailingAnchor),
             glassBackgroundView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ] + labelEdgeConstraints)
+    }
 
-            label.topAnchor.constraint(equalTo: topAnchor, constant: Self.contentPadding.top),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.contentPadding.left),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.contentPadding.right),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.contentPadding.bottom),
-        ])
+    /// When false, the label stops driving bubble size so a sibling (e.g. live
+    /// meter) can own layout without fighting the label's edge pins.
+    func setLabelContributesToLayout(_ contributes: Bool) {
+        guard labelContributesToLayout != contributes else { return }
+        labelContributesToLayout = contributes
+        labelEdgeConstraints.forEach { $0.isActive = contributes }
+        // Keep the label out of hit-testing / drawing while it's detached from layout.
+        label.isHidden = !contributes
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
     }
 
     required init?(coder: NSCoder) {

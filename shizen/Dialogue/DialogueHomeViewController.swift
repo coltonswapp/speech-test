@@ -16,9 +16,9 @@ final class DialogueHomeViewController: UIViewController, MainTabScrollable {
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
     private let dailyDialogueCard = DailyDialogueCardView()
-    private let lessonsGridController = LessonWaterfallGridController()
-    private var lessonsGridHeightConstraint: NSLayoutConstraint?
-    private var lessons: [WaterfallLesson] = DialogueHomeViewController.curatedLessons
+    /// Holds the "Lessons" header plus one (header + grid) block per unit.
+    private let lessonSectionsStack = UIStackView()
+    private var sectionGridControllers: [LessonWaterfallGridController] = []
 
     private static let horizontalInset: CGFloat = 16
 
@@ -73,6 +73,7 @@ final class DialogueHomeViewController: UIViewController, MainTabScrollable {
         configureLessonsSection()
         layoutViews()
         refreshDailyDialogueCard()
+        fetchCMSLessons()
 
         if #available(iOS 26.0, *) {
             scrollView.topEdgeEffect.style = .soft
@@ -87,7 +88,9 @@ final class DialogueHomeViewController: UIViewController, MainTabScrollable {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        lessonsGridController.refreshContentHeightIfNeeded()
+        for controller in sectionGridControllers {
+            controller.refreshContentHeightIfNeeded()
+        }
     }
 
     // MARK: - Layout
@@ -111,32 +114,73 @@ final class DialogueHomeViewController: UIViewController, MainTabScrollable {
     }
 
     private func configureLessonsSection() {
+        lessonSectionsStack.axis = .vertical
+        lessonSectionsStack.spacing = 12
+        lessonSectionsStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.addArrangedSubview(lessonSectionsStack)
+
+        // Curated fallback shows immediately; CMS units replace it when fetched.
+        renderLessonSections([
+            LessonUnitSection(title: nil, subtitle: nil, lessons: Self.curatedLessons)
+        ])
+    }
+
+    /// Rebuilds the lessons area: top-level "Lessons" header, then one
+    /// sub-header + waterfall grid per curriculum unit.
+    private func renderLessonSections(_ sections: [LessonUnitSection]) {
+        for view in lessonSectionsStack.arrangedSubviews {
+            lessonSectionsStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        sectionGridControllers = []
+
         let header = makeSectionHeader(
             title: "Lessons",
             subtitle: "Curated dialogue, vocab, grammar"
         )
+        lessonSectionsStack.addArrangedSubview(header)
 
-        let collectionView = lessonsGridController.collectionView
-        collectionView.translatesAutoresizingMaskIntoConstraints = false
-        collectionView.isScrollEnabled = false
-        collectionView.clipsToBounds = false
-        lessonsGridController.onSelect = { [weak self] _, lesson in
-            self?.openLesson(lesson)
+        for section in sections {
+            if let title = section.title {
+                if let previous = lessonSectionsStack.arrangedSubviews.last {
+                    lessonSectionsStack.setCustomSpacing(20, after: previous)
+                }
+                let unitHeader = makeSectionHeader(title: title, subtitle: section.subtitle)
+                lessonSectionsStack.addArrangedSubview(unitHeader)
+            }
+
+            let gridController = LessonWaterfallGridController()
+            let collectionView = gridController.collectionView
+            collectionView.translatesAutoresizingMaskIntoConstraints = false
+            collectionView.isScrollEnabled = false
+            collectionView.clipsToBounds = false
+
+            let heightConstraint = collectionView.heightAnchor.constraint(equalToConstant: 1)
+            heightConstraint.isActive = true
+            gridController.onContentHeightChanged = { height in
+                heightConstraint.constant = height
+            }
+            gridController.onSelect = { [weak self] _, lesson in
+                self?.openLesson(lesson)
+            }
+
+            lessonSectionsStack.addArrangedSubview(collectionView)
+            sectionGridControllers.append(gridController)
+            gridController.setLessons(section.lessons)
         }
-        lessonsGridController.onContentHeightChanged = { [weak self] height in
-            self?.lessonsGridHeightConstraint?.constant = height
+    }
+
+    private func fetchCMSLessons() {
+        guard ContentCMSClient.isConfigured else { return }
+        ContentCMSClient.fetchDialogueLessonIndex { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self,
+                      case .success(let index) = result,
+                      !index.lessons.isEmpty
+                else { return }
+                self.renderLessonSections(LessonUnitSectionBuilder.sections(from: index))
+            }
         }
-        lessonsGridController.setLessons(lessons)
-
-        let sectionStack = UIStackView(arrangedSubviews: [header, collectionView])
-        sectionStack.axis = .vertical
-        sectionStack.spacing = 12
-        sectionStack.translatesAutoresizingMaskIntoConstraints = false
-        contentStack.addArrangedSubview(sectionStack)
-
-        let heightConstraint = collectionView.heightAnchor.constraint(equalToConstant: 1)
-        heightConstraint.isActive = true
-        lessonsGridHeightConstraint = heightConstraint
     }
 
     private func layoutViews() {
@@ -206,17 +250,16 @@ final class DialogueHomeViewController: UIViewController, MainTabScrollable {
 
     private func openLesson(_ lesson: WaterfallLesson) {
         if lesson.isLocked { return }
-        if let id = lesson.id {
-            openDialogueCollection(id: id)
+        let id: String
+        if let lessonID = lesson.id {
+            id = lessonID
+        } else if lesson.thumbnailName == "train-station" {
+            id = DialogueScenarioCollectionCatalog.trainStationID
+        } else {
             return
         }
-        guard lesson.thumbnailName == "train-station" else { return }
-        openDialogueCollection(id: DialogueScenarioCollectionCatalog.trainStationID)
-    }
-
-    private func openDialogueCollection(id: String) {
-        let dialogue = DialogueNestedPagingExperimentViewController(collectionID: id)
-        navigationController?.pushViewController(dialogue, animated: true)
+        let picker = LessonScenarioPickerViewController(collectionID: id, fallbackTitle: lesson.title)
+        navigationController?.pushViewController(picker, animated: true)
     }
 }
 

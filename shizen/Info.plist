@@ -8,6 +8,8 @@
 	<string>This app records microphone audio to demonstrate English and Japanese speech-to-text.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>This app uses Apple’s on-device speech recognition to transcribe what you say.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save exported kanji decomposition cards to your photo library.</string>
 	<key>SHIZEN_CMS_BASE_URL</key>
 	<string>https://shizen-studio.vercel.app</string>
 	<key>NSAppTransportSecurity</key>

@@ -17,11 +17,13 @@ struct GeminiUsageMetadata: Decodable {
 enum GeminiUsageFeature: String, Codable, CaseIterable, Hashable {
     case tokenizer
     case contextualGloss
+    case registerLadder
 
     var displayName: String {
         switch self {
         case .tokenizer: return "Tokenizer"
         case .contextualGloss: return "Contextual gloss"
+        case .registerLadder: return "Register ladder"
         }
     }
 }
@@ -51,6 +53,7 @@ enum GeminiPricing {
 
     private static let rates: [String: Rate] = [
         "gemini-2.5-flash-lite": Rate(inputPerMillion: 0.10, outputPerMillion: 0.40),
+        "gemini-3.6-flash": Rate(inputPerMillion: 1.50, outputPerMillion: 7.50),
     ]
 
     static func costUSD(model: String, promptTokens: Int, candidatesTokens: Int) -> Double? {

@@ -2,8 +2,9 @@
 //  CMSLessonsViewController.swift
 //  shizen
 //
-//  Fetches dialogue lessons from the CMS and displays them in the same
-//  waterfall card grid used by DialogueHomeViewController.
+//  Fetches dialogue lessons from the CMS and displays them grouped by
+//  curriculum unit, each section using the same waterfall card grid as
+//  DialogueHomeViewController.
 //
 
 import UIKit
@@ -12,10 +13,9 @@ final class CMSLessonsViewController: UIViewController {
 
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
-    private let lessonsGridController = LessonWaterfallGridController()
-    private var lessonsGridHeightConstraint: NSLayoutConstraint?
     private let statusLabel = UILabel()
-    private var lessons: [WaterfallLesson] = []
+    private var sectionGridControllers: [LessonWaterfallGridController] = []
+    private var sectionViews: [UIView] = []
 
     private static let horizontalInset: CGFloat = 16
 
@@ -31,7 +31,7 @@ final class CMSLessonsViewController: UIViewController {
             action: #selector(refreshTapped)
         )
         configureScrollView()
-        configureLessonsSection()
+        configureHeader()
         layoutViews()
         fetchLessons()
 
@@ -42,7 +42,9 @@ final class CMSLessonsViewController: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        lessonsGridController.refreshContentHeightIfNeeded()
+        for controller in sectionGridControllers {
+            controller.refreshContentHeightIfNeeded()
+        }
     }
 
     // MARK: - Layout
@@ -57,7 +59,7 @@ final class CMSLessonsViewController: UIViewController {
         scrollView.addSubview(contentStack)
     }
 
-    private func configureLessonsSection() {
+    private func configureHeader() {
         let header = makeSectionHeader(
             title: "Lessons",
             subtitle: "Fetched from the Content Studio CMS"
@@ -67,17 +69,6 @@ final class CMSLessonsViewController: UIViewController {
         statusLabel.textColor = .secondaryLabel
         statusLabel.numberOfLines = 0
         statusLabel.text = "Loading…"
-
-        let collectionView = lessonsGridController.collectionView
-        collectionView.translatesAutoresizingMaskIntoConstraints = false
-        collectionView.isScrollEnabled = false
-        collectionView.clipsToBounds = false
-        lessonsGridController.onSelect = { [weak self] _, lesson in
-            self?.openLesson(lesson)
-        }
-        lessonsGridController.onContentHeightChanged = { [weak self] height in
-            self?.lessonsGridHeightConstraint?.constant = height
-        }
 
         let statusWrap = UIView()
         statusWrap.translatesAutoresizingMaskIntoConstraints = false
@@ -92,11 +83,6 @@ final class CMSLessonsViewController: UIViewController {
 
         contentStack.addArrangedSubview(header)
         contentStack.addArrangedSubview(statusWrap)
-        contentStack.addArrangedSubview(collectionView)
-
-        let heightConstraint = collectionView.heightAnchor.constraint(equalToConstant: 1)
-        heightConstraint.isActive = true
-        lessonsGridHeightConstraint = heightConstraint
     }
 
     private func layoutViews() {
@@ -160,6 +146,49 @@ final class CMSLessonsViewController: UIViewController {
         return stack
     }
 
+    // MARK: - Sections
+
+    private func renderSections(_ sections: [LessonUnitSection]) {
+        for view in sectionViews {
+            contentStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        sectionViews = []
+        sectionGridControllers = []
+
+        for section in sections {
+            if let title = section.title {
+                // Extra breathing room between the previous section and this header.
+                if let previous = sectionViews.last {
+                    contentStack.setCustomSpacing(24, after: previous)
+                }
+                let header = makeSectionHeader(title: title, subtitle: section.subtitle)
+                contentStack.addArrangedSubview(header)
+                sectionViews.append(header)
+            }
+
+            let gridController = LessonWaterfallGridController()
+            let collectionView = gridController.collectionView
+            collectionView.translatesAutoresizingMaskIntoConstraints = false
+            collectionView.isScrollEnabled = false
+            collectionView.clipsToBounds = false
+
+            let heightConstraint = collectionView.heightAnchor.constraint(equalToConstant: 1)
+            heightConstraint.isActive = true
+            gridController.onContentHeightChanged = { height in
+                heightConstraint.constant = height
+            }
+            gridController.onSelect = { [weak self] _, lesson in
+                self?.openLesson(lesson)
+            }
+
+            contentStack.addArrangedSubview(collectionView)
+            sectionViews.append(collectionView)
+            sectionGridControllers.append(gridController)
+            gridController.setLessons(section.lessons)
+        }
+    }
+
     // MARK: - Data
 
     @objc private func refreshTapped() {
@@ -174,29 +203,19 @@ final class CMSLessonsViewController: UIViewController {
         navigationItem.rightBarButtonItem?.isEnabled = false
 
         guard ContentCMSClient.isConfigured else {
-            lessons = []
-            lessonsGridController.setLessons([])
+            renderSections([])
             return
         }
 
-        ContentCMSClient.fetchDialogueLessons { [weak self] result in
+        ContentCMSClient.fetchDialogueLessonIndex { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.navigationItem.rightBarButtonItem?.isEnabled = true
                 switch result {
-                case .success(let summaries):
-                    self.lessons = summaries.map { summary in
-                        WaterfallLesson(
-                            id: summary.id,
-                            title: summary.title,
-                            conversationCount: summary.scenarioCount,
-                            thumbnailName: summary.sceneImage ?? summary.id,
-                            thumbnailURL: summary.thumbnailUrl.flatMap(URL.init(string:)),
-                            isLocked: false
-                        )
-                    }
-                    self.lessonsGridController.setLessons(self.lessons)
-                    if summaries.isEmpty {
+                case .success(let index):
+                    let sections = LessonUnitSectionBuilder.sections(from: index)
+                    self.renderSections(sections)
+                    if index.lessons.isEmpty {
                         self.statusLabel.isHidden = false
                         self.statusLabel.text = "No lessons in CMS yet"
                     } else {
@@ -204,8 +223,7 @@ final class CMSLessonsViewController: UIViewController {
                         self.statusLabel.text = nil
                     }
                 case .failure(let error):
-                    self.lessons = []
-                    self.lessonsGridController.setLessons([])
+                    self.renderSections([])
                     self.statusLabel.isHidden = false
                     self.statusLabel.text = error.localizedDescription
                 }
@@ -215,7 +233,7 @@ final class CMSLessonsViewController: UIViewController {
 
     private func openLesson(_ lesson: WaterfallLesson) {
         guard let id = lesson.id else { return }
-        let dialogue = DialogueNestedPagingExperimentViewController(collectionID: id)
-        navigationController?.pushViewController(dialogue, animated: true)
+        let picker = LessonScenarioPickerViewController(collectionID: id, fallbackTitle: lesson.title)
+        navigationController?.pushViewController(picker, animated: true)
     }
 }

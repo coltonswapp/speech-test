@@ -12,6 +12,7 @@ import type {
   SanitizeGrammarResult,
 } from "@/lib/dialogue/types";
 import type { Project as TtsProject } from "@/lib/tts/client";
+import { formatApiError } from "@/lib/api-error";
 
 export type ScenarioAudio = {
   project: TtsProject | null;
@@ -107,12 +108,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(
-      typeof body?.error === "string"
-        ? body.error
-        : (body?.error?.formErrors?.join(", ") ??
-            `Request failed: ${res.status}`),
-    );
+    throw new Error(formatApiError(body, res.status));
   }
   return res.json();
 }

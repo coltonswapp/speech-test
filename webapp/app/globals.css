@@ -39,6 +39,7 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-subtle-foreground: var(--subtle-foreground);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -81,6 +82,7 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --subtle-foreground: var(--muted-foreground);
 }
 
 /* elevenlabs.io-style dark theme: near-black base, off-white text, single warm accent */
@@ -116,6 +118,81 @@
   --sidebar-accent-foreground: oklch(0.96 0 0);
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.94 0.19 95 / 50%);
+}
+
+/*
+  New Design: SF Pro system stack, a 12/13/14/24px type scale, and a
+  three-step #292929/#5D5D5D/#9E9E9E ink hierarchy. Overriding the
+  Tailwind theme variables here re-skins every existing text-*, font-*
+  and tracking-* utility in place, so no component markup changes.
+*/
+html[data-design="new"] {
+  --font-geist-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+
+  --text-base: 14px;
+  --text-base--line-height: 1.4;
+  --text-sm: 13px;
+  --text-sm--line-height: 1.4;
+  --text-lg: 14px;
+  --text-lg--line-height: 1.4;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 1.25;
+
+  --tracking-tight: -0.15px;
+  --tracking-wide: -0.15px;
+
+  --font-weight-semibold: 500;
+  --font-weight-bold: 500;
+
+  --foreground: #292929;
+  --card-foreground: #292929;
+  --popover-foreground: #292929;
+  --secondary-foreground: #292929;
+  --accent-foreground: #292929;
+  --sidebar-foreground: #292929;
+  --muted-foreground: #5D5D5D;
+  --sidebar-accent-foreground: #5D5D5D;
+  --subtle-foreground: #9E9E9E;
+}
+
+[data-design="new"] body {
+  letter-spacing: -0.15px;
+}
+
+html.dark[data-design="new"] {
+  --foreground: #F2F2F2;
+  --card-foreground: #F2F2F2;
+  --popover-foreground: #F2F2F2;
+  --secondary-foreground: #F2F2F2;
+  --accent-foreground: #F2F2F2;
+  --sidebar-foreground: #F2F2F2;
+  --muted-foreground: #A3A3A3;
+  --sidebar-accent-foreground: #A3A3A3;
+  --subtle-foreground: #707070;
+}
+
+/* Nav: 8px rhythm, 14px icons, hidden unless New Design is active */
+[data-design="new"] [data-slot="studio-nav"] {
+  gap: 8px;
+}
+[data-slot="nav-icon"] {
+  display: none;
+}
+[data-design="new"] [data-slot="nav-icon"] {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+}
+
+/* Cards: icons settle at 20px, CTAs inside cards stay pill-shaped */
+[data-design="new"] [data-slot="card"] svg:not([class*="size-"]) {
+  width: 20px;
+  height: 20px;
+}
+
+/* CTAs: pill radius, everything else keeps its normal radius */
+[data-design="new"] [data-slot="button"][data-variant="default"] {
+  border-radius: 9999px;
 }
 
 @layer base {

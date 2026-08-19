@@ -174,7 +174,7 @@ final class LiveWaveformView: UIView {
     private func startDisplayLink() {
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(tick))
-        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 120)
         link.add(to: .main, forMode: .common)
         displayLink = link
     }
@@ -361,8 +361,26 @@ final class AudioLevelBarsView: UIView {
 
     private var targetLevels: [CGFloat]
     private var displayedLevels: [CGFloat]
+    private var barVelocities: [CGFloat]
     private var animationTime: CGFloat = 0
     private var displayLink: CADisplayLink?
+
+    /// Fast time constant used while dropping to rest after playback ends —
+    /// much snappier than the in-audio release so the meter doesn't linger.
+    private let settleSeconds: CGFloat = 0.07
+    private var isSettlingToRest = false
+
+    /// 0 keeps the exponential follower; above 0 bars chase targets with an
+    /// underdamped spring, overshooting slightly for a bouncier feel.
+    var springiness: CGFloat = 0 {
+        didSet { springiness = max(0, min(1, springiness)) }
+    }
+
+    /// Multiplies the per-bar history stagger. 1 is the default tight stagger;
+    /// higher values spread bars further back in time so they differ more.
+    var historyStride: Int = 1 {
+        didSet { historyStride = max(1, min(3, historyStride)) }
+    }
 
     var barWidth: CGFloat = 6 {
         didSet {
@@ -418,9 +436,25 @@ final class AudioLevelBarsView: UIView {
         didSet { displayCurve = max(0.2, min(3, displayCurve)) }
     }
 
-    /// How quickly bars chase their targets (higher = snappier).
-    var smoothing: CGFloat = 0.31 {
-        didSet { smoothing = max(0.05, min(0.85, smoothing)) }
+    /// Attack time constant in seconds (how quickly bars rise).
+    var attackSeconds: CGFloat = 0.04 {
+        didSet { attackSeconds = max(0.015, min(0.4, attackSeconds)) }
+    }
+
+    /// Release time constant in seconds (how slowly bars fall).
+    var releaseSeconds: CGFloat = 0.16 {
+        didSet { releaseSeconds = max(0.05, min(0.8, releaseSeconds)) }
+    }
+
+    /// How quickly bars chase their targets (higher = snappier). Kept for slider compatibility.
+    var smoothing: CGFloat = 0.22 {
+        didSet {
+            smoothing = max(0.05, min(0.85, smoothing))
+            // Fast attack so syllables land the frame they happen; release ~3x
+            // longer gives the classic meter fall without mushing transients.
+            attackSeconds = 0.02 + (0.75 - min(0.75, smoothing)) * 0.12
+            releaseSeconds = attackSeconds * 3.4
+        }
     }
 
     /// Live wobble amplitude while speaking.
@@ -436,6 +470,15 @@ final class AudioLevelBarsView: UIView {
         }
     }
 
+    /// When true, bars map directly to live history / bands — no idle breathe or wobble.
+    /// The diamond profile still applies so the silhouette keeps its center peak.
+    var fidelityMode = false {
+        didSet {
+            guard fidelityMode != oldValue else { return }
+            setNeedsDisplay()
+        }
+    }
+
     var barColor: UIColor = UIColor(red: 0.45, green: 0.78, blue: 0.98, alpha: 1) {
         didSet { setNeedsDisplay() }
     }
@@ -445,6 +488,7 @@ final class AudioLevelBarsView: UIView {
     override init(frame: CGRect) {
         targetLevels = Array(repeating: 0, count: barCount)
         displayedLevels = Array(repeating: 0, count: barCount)
+        barVelocities = Array(repeating: 0, count: barCount)
         super.init(frame: frame)
         backgroundColor = .clear
         isOpaque = false
@@ -453,6 +497,7 @@ final class AudioLevelBarsView: UIView {
     required init?(coder: NSCoder) {
         targetLevels = Array(repeating: 0, count: barCount)
         displayedLevels = Array(repeating: 0, count: barCount)
+        barVelocities = Array(repeating: 0, count: barCount)
         super.init(coder: coder)
         backgroundColor = .clear
         isOpaque = false
@@ -474,7 +519,7 @@ final class AudioLevelBarsView: UIView {
 
     /// Push a new RMS level in [0, 1].
     func setLevel(_ level: Float) {
-        let boosted = max(0, min(1, level * levelGain))
+        let boosted = Self.displayLevel(level, gain: levelGain)
         let wasIdle = isIdle
 
         levelHistory.append(boosted)
@@ -483,16 +528,72 @@ final class AudioLevelBarsView: UIView {
         }
 
         for i in 0..<barCount {
-            let offset = min(barHistoryOffsets[i], max(0, levelHistory.count - 1))
+            let offset = min(barHistoryOffsets[i] * historyStride, max(0, levelHistory.count - 1))
             let sampleIndex = levelHistory.count - 1 - offset
             let sample = CGFloat(levelHistory[sampleIndex])
             targetLevels[i] = sample * barGain[i]
         }
 
         isIdle = boosted < 0.012
+        if !isIdle {
+            isSettlingToRest = false
+        }
         if isIdle != wasIdle || !isIdle {
             setNeedsDisplay()
         }
+    }
+
+    /// Map spectral bands (low→high) directly onto the five bars.
+    func setBands(_ bands: [Float]) {
+        let wasIdle = isIdle
+        var peak: Float = 0
+        for i in 0..<barCount {
+            let raw = i < bands.count ? bands[i] : 0
+            let boosted = Self.displayLevel(raw, gain: levelGain)
+            targetLevels[i] = CGFloat(boosted)
+            peak = max(peak, boosted)
+        }
+        isIdle = peak < 0.012
+        if !isIdle {
+            isSettlingToRest = false
+        }
+        if isIdle != wasIdle || !isIdle {
+            setNeedsDisplay()
+        }
+    }
+
+    /// Map a live-level ring (oldest→newest) onto bars as recent history.
+    func setLiveHistory(_ history: [Float]) {
+        let wasIdle = isIdle
+        guard !history.isEmpty else {
+            targetLevels = Array(repeating: 0, count: barCount)
+            isIdle = true
+            if !wasIdle { setNeedsDisplay() }
+            return
+        }
+
+        var peak: Float = 0
+        for i in 0..<barCount {
+            // Left = older, right = newest.
+            let historyIndex = max(0, history.count - barCount + i)
+            let sample = historyIndex < history.count ? history[historyIndex] : history.last!
+            let boosted = Self.displayLevel(sample, gain: levelGain)
+            targetLevels[i] = CGFloat(boosted)
+            peak = max(peak, boosted)
+        }
+        isIdle = peak < 0.012
+        if !isIdle {
+            isSettlingToRest = false
+        }
+        if isIdle != wasIdle || !isIdle {
+            setNeedsDisplay()
+        }
+    }
+
+    /// Soft-compress so boosted levels rarely pin at full height.
+    fileprivate static func displayLevel(_ level: Float, gain: Float) -> Float {
+        let x = max(0, level * gain)
+        return min(0.95, x / (x + 0.5))
     }
 
     /// Decays all bar targets toward silence.
@@ -508,16 +609,28 @@ final class AudioLevelBarsView: UIView {
     func reset() {
         targetLevels = Array(repeating: 0, count: barCount)
         displayedLevels = Array(repeating: 0, count: barCount)
+        barVelocities = Array(repeating: 0, count: barCount)
         levelHistory.removeAll(keepingCapacity: true)
         animationTime = 0
         isIdle = true
+        isSettlingToRest = false
+        setNeedsDisplay()
+    }
+
+    /// Zeroes targets but keeps displayed heights, so bars ease down — using the
+    /// fast settle constant — instead of snapping to rest.
+    func releaseToRest() {
+        targetLevels = Array(repeating: 0, count: barCount)
+        levelHistory.removeAll(keepingCapacity: true)
+        isIdle = true
+        isSettlingToRest = (displayedLevels.max() ?? 0) > 0.015
         setNeedsDisplay()
     }
 
     private func startDisplayLink() {
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(tick))
-        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 120)
         link.add(to: .main, forMode: .common)
         displayLink = link
     }
@@ -528,30 +641,99 @@ final class AudioLevelBarsView: UIView {
     }
 
     @objc private func tick(_ link: CADisplayLink) {
-        animationTime += CGFloat(link.duration > 0 ? link.duration : 1.0 / 60.0)
+        let dt = CGFloat(link.duration > 0 ? link.duration : 1.0 / 60.0)
+        animationTime += dt
+
+        let attackAlpha = 1 - exp(-dt / max(0.02, attackSeconds))
+        let releaseAlpha = 1 - exp(-dt / max(0.05, releaseSeconds))
+        let settleAlpha = 1 - exp(-dt / settleSeconds)
+
+        if isSettlingToRest, (displayedLevels.max() ?? 0) <= 0.015 {
+            isSettlingToRest = false
+        }
 
         var changed = false
         for i in 0..<barCount {
             var target = targetLevels[i]
-            if isIdle {
-                // Gentle idle breathing so the dots feel alive between turns.
-                let breathe = sin(animationTime * 1.6 + barWobblePhase[i]) * 0.5 + 0.5
-                target = breathe * 0.018
-            } else if target > 0.02 {
-                let wobble = sin(animationTime * barWobbleSpeed[i] + barWobblePhase[i])
-                target += wobble * wobbleAmount * target
+            if !fidelityMode {
+                if isIdle {
+                    if isSettlingToRest {
+                        // Hold at zero until the drop completes, then breathe.
+                        target = 0
+                    } else {
+                        // Gentle idle breathing between turns.
+                        let breathe = sin(animationTime * 1.6 + barWobblePhase[i]) * 0.5 + 0.5
+                        target = breathe * 0.018
+                    }
+                } else if target > 0.02 {
+                    let wobble = sin(animationTime * barWobbleSpeed[i] + barWobblePhase[i])
+                    target += wobble * wobbleAmount * target * 0.45
+                }
             }
 
             let delta = target - displayedLevels[i]
-            if abs(delta) > 0.001 {
-                displayedLevels[i] += delta * smoothing
+            if springiness > 0.001 {
+                // Underdamped spring toward the target; the damping ratio drops
+                // with springiness so bars overshoot and bounce slightly.
+                let tau: CGFloat
+                if isSettlingToRest, delta < 0 {
+                    tau = settleSeconds
+                } else if delta > 0 {
+                    tau = max(0.02, attackSeconds)
+                } else {
+                    tau = max(0.05, releaseSeconds)
+                }
+                let omega = 1 / tau
+                let zeta = 1 - 0.45 * springiness
+                var velocity = barVelocities[i]
+                velocity += (omega * omega * delta - 2 * zeta * omega * velocity) * dt
+                displayedLevels[i] += velocity * dt
+                barVelocities[i] = velocity
+                if abs(delta) > 0.0008 || abs(velocity) > 0.004 {
+                    changed = true
+                } else {
+                    barVelocities[i] = 0
+                }
+            } else if abs(delta) > 0.0008 {
+                let alpha: CGFloat
+                if isSettlingToRest, delta < 0 {
+                    alpha = settleAlpha
+                } else if delta > 0 {
+                    alpha = attackAlpha
+                } else {
+                    alpha = releaseAlpha
+                }
+                displayedLevels[i] += delta * alpha
                 changed = true
             }
         }
-        if changed || isIdle {
+        if changed || (!fidelityMode && isIdle) {
             setNeedsDisplay()
         }
     }
+
+    #if DEBUG
+    /// One-line tuning snapshot: raw targets, displayed (post-easing) levels,
+    /// and the actual drawn bar heights in points.
+    func debugBarSnapshot() -> String {
+        let drawableHeight = min(bounds.height, meterHeight)
+        let maxBarHeight = max(minBarHeight, drawableHeight * heightFill - 2)
+        let heights = displayedLevels.enumerated().map { index, level -> String in
+            let normalized = max(0, min(1, level))
+            let eased = pow(normalized, CGFloat(displayCurve))
+            let scale = VUMeterDiamond.heightScale(
+                barIndex: index,
+                barCount: barCount,
+                falloff: diamondFalloff
+            )
+            let barHeight = minBarHeight + eased * (maxBarHeight - minBarHeight) * scale
+            return String(format: "%2.0f", barHeight)
+        }.joined(separator: " ")
+        let targets = targetLevels.map { String(format: "%.2f", $0) }.joined(separator: " ")
+        let displayed = displayedLevels.map { String(format: "%.2f", $0) }.joined(separator: " ")
+        return "tgt[\(targets)] disp[\(displayed)] px[\(heights)]"
+    }
+    #endif
 
     override func draw(_ rect: CGRect) {
         guard let ctx = UIGraphicsGetCurrentContext() else { return }
@@ -563,15 +745,17 @@ final class AudioLevelBarsView: UIView {
         ctx.setFillColor(barColor.cgColor)
         let drawableHeight = min(rect.height, meterHeight)
         let maxBarHeight = max(minBarHeight, drawableHeight * heightFill - 2)
+        let falloff = diamondFalloff
 
         for (index, level) in displayedLevels.enumerated() {
             let normalized = max(0, min(1, level))
-            let curved = pow(normalized, CGFloat(displayCurve))
-            let eased = curved * curved * (3 - 2 * curved)
+            // displayCurve alone shapes the response — a smoothstep here flattens
+            // quiet passages (and the idle breathe) into invisibility.
+            let eased = pow(normalized, CGFloat(displayCurve))
             let diamondScale = VUMeterDiamond.heightScale(
                 barIndex: index,
                 barCount: barCount,
-                falloff: diamondFalloff
+                falloff: falloff
             )
             let barHeight = minBarHeight + eased * (maxBarHeight - minBarHeight) * diamondScale
             let barRect = CGRect(
@@ -664,8 +848,22 @@ final class SpeechEnvelopeBarsView: UIView {
         didSet { displayCurve = max(0.2, min(3, displayCurve)) }
     }
 
-    var smoothing: CGFloat = 0.38 {
-        didSet { smoothing = max(0.05, min(0.85, smoothing)) }
+    /// Attack time constant in seconds.
+    var attackSeconds: CGFloat = 0.045 {
+        didSet { attackSeconds = max(0.015, min(0.4, attackSeconds)) }
+    }
+
+    /// Release time constant in seconds.
+    var releaseSeconds: CGFloat = 0.16 {
+        didSet { releaseSeconds = max(0.05, min(0.8, releaseSeconds)) }
+    }
+
+    var smoothing: CGFloat = 0.22 {
+        didSet {
+            smoothing = max(0.05, min(0.85, smoothing))
+            attackSeconds = 0.025 + (0.75 - min(0.75, smoothing)) * 0.12
+            releaseSeconds = attackSeconds * 3.2
+        }
     }
 
     /// Slower smoothing while bars fall back to rest after audio stops.
@@ -681,6 +879,14 @@ final class SpeechEnvelopeBarsView: UIView {
     var diamondFalloff: CGFloat = 0.48 {
         didSet {
             diamondFalloff = max(0, min(1, diamondFalloff))
+            setNeedsDisplay()
+        }
+    }
+
+    /// When true, bars follow live history + spectral bands — no idle breathe, wobble, or diamond.
+    var fidelityMode = false {
+        didSet {
+            guard fidelityMode != oldValue else { return }
             setNeedsDisplay()
         }
     }
@@ -728,16 +934,56 @@ final class SpeechEnvelopeBarsView: UIView {
         let attack = max(0, liveLevel - envPrev * 0.88)
         let speaking = max(envNow, liveLevel)
 
-        targetLevels[0] = CGFloat(envelope.level(at: max(0, time - lookbackOffsets[0])) * envelopeGain)
-        targetLevels[1] = CGFloat(envelope.level(at: max(0, time - lookbackOffsets[1])) * envelopeGain)
-        targetLevels[2] = CGFloat(envNow * envelopeGain)
-        targetLevels[3] = CGFloat(liveLevel * liveGain)
-        targetLevels[4] = CGFloat(attack * attackGain)
+        targetLevels[0] = CGFloat(AudioLevelBarsView.displayLevel(
+            envelope.level(at: max(0, time - lookbackOffsets[0])),
+            gain: envelopeGain
+        ))
+        targetLevels[1] = CGFloat(AudioLevelBarsView.displayLevel(
+            envelope.level(at: max(0, time - lookbackOffsets[1])),
+            gain: envelopeGain
+        ))
+        targetLevels[2] = CGFloat(AudioLevelBarsView.displayLevel(envNow, gain: envelopeGain))
+        targetLevels[3] = CGFloat(AudioLevelBarsView.displayLevel(liveLevel, gain: liveGain))
+        targetLevels[4] = CGFloat(AudioLevelBarsView.displayLevel(attack, gain: attackGain * 0.7))
 
         let wasIdle = isIdle
         isIdle = speaking < 0.015
         if isIdle, !wasIdle {
             beginSettlingToRest()
+        } else if !isIdle {
+            // New audio interrupts any in-flight settle; go back to normal attack/release.
+            isSettlingToRest = false
+        }
+        if isIdle != wasIdle || !isIdle {
+            setNeedsDisplay()
+        }
+    }
+
+    /// Fidelity path: bars 0–2 from recent live history, bar 3 live, bar 4 spectral energy.
+    func setFidelity(liveHistory: [Float], liveLevel: Float, bands: [Float]) {
+        let wasIdle = isIdle
+
+        func historySample(offsetFromNewest: Int) -> Float {
+            guard !liveHistory.isEmpty else { return 0 }
+            let index = liveHistory.count - 1 - offsetFromNewest
+            guard index >= 0 else { return liveHistory.first! }
+            return liveHistory[index]
+        }
+
+        let bandEnergy = bands.isEmpty ? liveLevel : bands.reduce(0, +) / Float(bands.count)
+        targetLevels[0] = CGFloat(AudioLevelBarsView.displayLevel(historySample(offsetFromNewest: 4), gain: envelopeGain))
+        targetLevels[1] = CGFloat(AudioLevelBarsView.displayLevel(historySample(offsetFromNewest: 2), gain: envelopeGain))
+        targetLevels[2] = CGFloat(AudioLevelBarsView.displayLevel(historySample(offsetFromNewest: 0), gain: envelopeGain))
+        targetLevels[3] = CGFloat(AudioLevelBarsView.displayLevel(liveLevel, gain: liveGain))
+        targetLevels[4] = CGFloat(AudioLevelBarsView.displayLevel(bandEnergy, gain: attackGain * 0.65))
+
+        let speaking = max(liveLevel, bandEnergy, historySample(offsetFromNewest: 0))
+        isIdle = speaking < 0.015
+        if isIdle, !wasIdle {
+            beginSettlingToRest()
+        } else if !isIdle {
+            // New audio interrupts any in-flight settle; go back to normal attack/release.
+            isSettlingToRest = false
         }
         if isIdle != wasIdle || !isIdle {
             setNeedsDisplay()
@@ -777,7 +1023,7 @@ final class SpeechEnvelopeBarsView: UIView {
     private func startDisplayLink() {
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(tick))
-        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 120)
         link.add(to: .main, forMode: .common)
         displayLink = link
     }
@@ -788,41 +1034,62 @@ final class SpeechEnvelopeBarsView: UIView {
     }
 
     @objc private func tick(_ link: CADisplayLink) {
-        animationTime += CGFloat(link.duration > 0 ? link.duration : 1.0 / 60.0)
+        let dt = CGFloat(link.duration > 0 ? link.duration : 1.0 / 60.0)
+        animationTime += dt
+
+        let attackAlpha = 1 - exp(-dt / max(0.02, attackSeconds))
+        let releaseAlpha = 1 - exp(-dt / max(0.05, releaseSeconds))
+        let settleAlpha = 1 - exp(-dt / max(0.08, releaseSeconds * 1.35))
 
         var changed = false
         for i in 0..<barCount {
             var target = targetLevels[i]
-            if isIdle {
-                if isSettlingToRest {
-                    let peak = displayedLevels.max() ?? 0
-                    if peak > 0.015 {
-                        target = 0
-                    } else {
-                        if isSettlingToRest {
-                            isSettlingToRest = false
-                            notifySettleIfNeeded()
+            if !fidelityMode {
+                if isIdle {
+                    if isSettlingToRest {
+                        let peak = displayedLevels.max() ?? 0
+                        if peak > 0.015 {
+                            target = 0
+                        } else {
+                            if isSettlingToRest {
+                                isSettlingToRest = false
+                                notifySettleIfNeeded()
+                            }
+                            let breathe = sin(animationTime * 1.5 + barWobblePhase[i]) * 0.5 + 0.5
+                            target = breathe * 0.016
                         }
+                    } else {
                         let breathe = sin(animationTime * 1.5 + barWobblePhase[i]) * 0.5 + 0.5
                         target = breathe * 0.016
                     }
-                } else {
-                    let breathe = sin(animationTime * 1.5 + barWobblePhase[i]) * 0.5 + 0.5
-                    target = breathe * 0.016
+                } else if target > 0.02 {
+                    let wobble = sin(animationTime * barWobbleSpeed[i] + barWobblePhase[i])
+                    target += wobble * wobbleAmount * target * 0.4
                 }
-            } else if target > 0.02 {
-                let wobble = sin(animationTime * barWobbleSpeed[i] + barWobblePhase[i])
-                target += wobble * wobbleAmount * target
+            } else if isIdle, isSettlingToRest {
+                target = 0
+                let peak = displayedLevels.max() ?? 0
+                if peak <= 0.015 {
+                    isSettlingToRest = false
+                    notifySettleIfNeeded()
+                }
             }
 
             let delta = target - displayedLevels[i]
-            if abs(delta) > 0.001 {
-                let rate = delta > 0 ? smoothing : decaySmoothing
-                displayedLevels[i] += delta * rate
+            if abs(delta) > 0.0008 {
+                let alpha: CGFloat
+                if isSettlingToRest {
+                    alpha = settleAlpha
+                } else if delta > 0 {
+                    alpha = attackAlpha
+                } else {
+                    alpha = releaseAlpha
+                }
+                displayedLevels[i] += delta * alpha
                 changed = true
             }
         }
-        if changed || isIdle {
+        if changed || (!fidelityMode && isIdle) {
             setNeedsDisplay()
         }
     }
@@ -837,15 +1104,17 @@ final class SpeechEnvelopeBarsView: UIView {
         ctx.setFillColor(barColor.cgColor)
         let drawableHeight = min(rect.height, meterHeight)
         let maxBarHeight = max(minBarHeight, drawableHeight * heightFill - 2)
+        let falloff = fidelityMode ? 0 : diamondFalloff
 
         for (index, level) in displayedLevels.enumerated() {
             let normalized = max(0, min(1, level))
-            let curved = pow(normalized, CGFloat(displayCurve))
-            let eased = curved * curved * (3 - 2 * curved)
+            // displayCurve alone shapes the response — a smoothstep here flattens
+            // quiet passages (and the idle breathe) into invisibility.
+            let eased = pow(normalized, CGFloat(displayCurve))
             let diamondScale = VUMeterDiamond.heightScale(
                 barIndex: index,
                 barCount: barCount,
-                falloff: diamondFalloff
+                falloff: falloff
             )
             let barHeight = minBarHeight + eased * (maxBarHeight - minBarHeight) * diamondScale
             let barRect = CGRect(

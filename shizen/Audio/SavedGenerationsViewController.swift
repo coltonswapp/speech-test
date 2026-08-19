@@ -74,6 +74,7 @@ final class SavedGenerationsViewController: UIViewController {
         case contextualGlossBackend(subtitle: String?)
         case aiUsageSummary(subtitle: String?)
         case soundsEnabled
+        case clearAudioCache(subtitle: String)
         case debugDestination(DebugSettingsRow)
     }
 
@@ -108,6 +109,9 @@ final class SavedGenerationsViewController: UIViewController {
         case dialogueExperimentHarness
         case dialogueNestedPaging
         case dialogueBubbleUnderglow
+        case kanjiDecomposition
+        case registerLadder
+        case quickLookPDF
 
         var title: String {
             switch self {
@@ -134,13 +138,16 @@ final class SavedGenerationsViewController: UIViewController {
             case .vocabSpeaking: return "Vocab speaking"
             case .realtimeTutor: return "Realtime tutor"
             case .tutorConversations: return "Tutor conversations"
-            case .characterSpeaking: return "Speaking characters"
+            case .characterSpeaking: return "Speaking meters"
             case .speechProfileOverlay: return "Speech profile overlay"
             case .glassProgressVoiceOverlay: return "Glass progress + voice"
             case .glassNotchShelf: return "Notch shelf glass"
             case .dialogueExperimentHarness: return "Dialogue lyrics harness"
             case .dialogueNestedPaging: return "Dialogue nested paging"
             case .dialogueBubbleUnderglow: return "Bubble underglow tuner"
+            case .kanjiDecomposition: return "Kanji decomposition"
+            case .registerLadder: return "Register ladder"
+            case .quickLookPDF: return "QuickLook PDF repro"
             }
         }
 
@@ -169,13 +176,16 @@ final class SavedGenerationsViewController: UIViewController {
             case .vocabSpeaking: return "3 steps · speak the word with the mic"
             case .realtimeTutor: return "Speech-to-speech Japanese tutor · gpt-realtime-2"
             case .tutorConversations: return "Saved tutor transcripts"
-            case .characterSpeaking: return "Waveform vs orb · encouragement clips"
+            case .characterSpeaking: return "Live meters · encouragement clips"
             case .speechProfileOverlay: return "Liquid-glass capsule · drops in while audio plays"
             case .glassProgressVoiceOverlay: return "Progress chrome in glass container · toggle voice overlay"
             case .glassNotchShelf: return "Shelf under notch · voice meter peels out"
             case .dialogueExperimentHarness: return "Scenario audio · UIMenu clip switch · alignment QA"
             case .dialogueNestedPaging: return "Nested vertical scroll · boundary handoff · rectangles → circles"
             case .dialogueBubbleUnderglow: return "Single glass bubble · sliders for underglow tuning"
+            case .kanjiDecomposition: return "Character-by-character compound breakdown · export cards"
+            case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
+            case .quickLookPDF: return "App Support PDF · QLPreview vs tmp / share / PDFKit"
             }
         }
 
@@ -211,6 +221,9 @@ final class SavedGenerationsViewController: UIViewController {
             case .dialogueExperimentHarness: return "waveform.path"
             case .dialogueNestedPaging: return "rectangle.arrowtriangle.2.inward"
             case .dialogueBubbleUnderglow: return "bubble.left.fill"
+            case .kanjiDecomposition: return "puzzlepiece.extension"
+            case .registerLadder: return "text.badge.star"
+            case .quickLookPDF: return "doc.richtext"
             }
         }
     }
@@ -356,6 +369,13 @@ final class SavedGenerationsViewController: UIViewController {
             }, for: .valueChanged)
             cell.accessories = [.customView(configuration: .init(customView: toggle, placement: .trailing()))]
 
+        case .clearAudioCache(let subtitle):
+            content.text = "Clear audio cache"
+            content.secondaryText = subtitle
+            content.image = UIImage(systemName: "arrow.clockwise.circle")
+            content.imageProperties.tintColor = .secondaryLabel
+            cell.accessories = [.disclosureIndicator()]
+
         case .debugDestination(let row):
             content.text = row.title
             content.secondaryText = row.subtitle
@@ -419,7 +439,10 @@ final class SavedGenerationsViewController: UIViewController {
         )
 
         snapshot.appendItems(
-            [.soundsEnabled] + DebugSettingsRow.allCases.map(Item.debugDestination),
+            [
+                .clearAudioCache(subtitle: audioCacheSubtitle()),
+                .soundsEnabled,
+            ] + DebugSettingsRow.allCases.map(Item.debugDestination),
             toSection: .debug
         )
 
@@ -456,6 +479,15 @@ final class SavedGenerationsViewController: UIViewController {
             text += " · \(GeminiCostFormatter.string(from: cost))\(summary.hasUnpricedRecords ? "+" : "")"
         }
         return text
+    }
+
+    private func audioCacheSubtitle() -> String {
+        let count = RemoteAudioCache.cachedFileCount()
+        if count == 0 {
+            return "No cached CDN clips · progress and saved generations unaffected"
+        }
+        let clipLabel = count == 1 ? "clip" : "clips"
+        return "\(count) cached \(clipLabel) · re-downloads on next play"
     }
 
     private func makeEmptyLabel() -> UILabel {
@@ -500,8 +532,60 @@ final class SavedGenerationsViewController: UIViewController {
         case .soundsEnabled:
             break
 
+        case .clearAudioCache:
+            presentClearAudioCacheConfirmation()
+
         case .debugDestination(let row):
             handleDebugSelection(row)
+        }
+    }
+
+    private func presentClearAudioCacheConfirmation() {
+        let count = RemoteAudioCache.cachedFileCount()
+        let message: String
+        if count == 0 {
+            message = "There is no cached lesson audio on disk."
+        } else {
+            let clipLabel = count == 1 ? "clip" : "clips"
+            message = "Remove \(count) cached \(clipLabel)? Lesson audio will be re-downloaded from the CDN the next time you play a scenario. Dialogue progress and saved generations are not affected."
+        }
+
+        let alert = UIAlertController(
+            title: "Clear audio cache?",
+            message: message,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        if count > 0 {
+            alert.addAction(UIAlertAction(title: "Clear", style: .destructive) { [weak self] _ in
+                self?.performClearAudioCache()
+            })
+        }
+        present(alert, animated: true)
+    }
+
+    private func performClearAudioCache() {
+        do {
+            let removed = try RemoteAudioCache.clearAllCachedFiles()
+            applySnapshot()
+            let clipLabel = removed == 1 ? "clip" : "clips"
+            let alert = UIAlertController(
+                title: "Audio cache cleared",
+                message: removed == 0
+                    ? "There was nothing to remove."
+                    : "Removed \(removed) cached \(clipLabel).",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
+        } catch {
+            let alert = UIAlertController(
+                title: "Couldn’t clear cache",
+                message: error.localizedDescription,
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
         }
     }
 
@@ -638,6 +722,21 @@ final class SavedGenerationsViewController: UIViewController {
         case .dialogueBubbleUnderglow:
             navigationController?.pushViewController(
                 DialogueBubbleUnderglowExperimentViewController(),
+                animated: true
+            )
+        case .kanjiDecomposition:
+            navigationController?.pushViewController(
+                KanjiDecompositionListViewController(),
+                animated: true
+            )
+        case .registerLadder:
+            navigationController?.pushViewController(
+                RegisterLadderPromptViewController(),
+                animated: true
+            )
+        case .quickLookPDF:
+            navigationController?.pushViewController(
+                QuickLookPDFReproViewController(),
                 animated: true
             )
         }

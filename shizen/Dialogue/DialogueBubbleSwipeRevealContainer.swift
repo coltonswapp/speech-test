@@ -2,8 +2,9 @@
 //  DialogueBubbleSwipeRevealContainer.swift
 //  shizen
 //
-//  Swipe a dialogue bubble right to reveal a magnifying glass on the leading edge;
-//  commit past a threshold to enter sentence focus mode.
+//  Swipe a dialogue bubble right to reveal a magnifying glass and enter sentence
+//  focus. In reveal mode, swipe left to peel back the next detail level (meter →
+//  Japanese → English), with a yellow sparkles affordance on the trailing edge.
 //
 
 import UIKit
@@ -12,14 +13,20 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
 
     static let commitThreshold: CGFloat = 30
     static let visualMax: CGFloat = 44
+    /// A fast flick commits from a shorter travel — without this, a quick swipe
+    /// that lifts before `commitThreshold` snaps back and the gesture reads as
+    /// dropped.
+    private static let flickCommitVelocity: CGFloat = 650
+    private static let flickCommitMinTranslation: CGFloat = 12
     private static let rubberBandFactor: CGFloat = 0.12
     private static let edgeExclusionWidth: CGFloat = 35
     private static let horizontalVelocityDominance: CGFloat = 1.5
-    private static let magnifierMinScale: CGFloat = 0.38
-    private static let magnifierMaxScale: CGFloat = 1.0
+    private static let iconMinScale: CGFloat = 0.38
+    private static let iconMaxScale: CGFloat = 1.0
 
     private static let inactiveIconColor = UIColor.secondaryLabel
-    private static let activeIconColor = UIColor.systemBlue
+    private static let expandActiveIconColor = UIColor.systemBlue
+    private static let progressiveRevealActiveIconColor = UIColor.systemYellow
 
     /// Only one bubble may stay offset at a time.
     private static weak var activelyDragging: DialogueBubbleSwipeRevealContainer?
@@ -29,7 +36,17 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
         committedContainer?.reset(animated: animated)
     }
 
+    /// Swipe right past threshold → sentence focus.
     var onCommit: (() -> Void)?
+    /// Swipe left past threshold → progressive reveal (reveal mode only).
+    var onProgressiveRevealCommit: (() -> Void)?
+
+    /// When true, leftward pans drive the progressive-reveal affordance.
+    var allowsProgressiveReveal = false {
+        didSet {
+            updateAccessibilityHint()
+        }
+    }
 
     /// Disabled while a horizontal swipe is active so vertical scroll does not fight the reveal.
     weak var hostScrollView: UIScrollView?
@@ -37,13 +54,16 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
     var panGestureRecognizer: UIPanGestureRecognizer { panGesture }
 
     private let bubbleView: UIView
-    private let magnifierBackdrop = LiquidGlassEffectView.makeContainer()
-    private let magnifierIcon = UIImageView()
+    private let expandBackdrop = LiquidGlassEffectView.makeContainer()
+    private let expandIcon = UIImageView()
+    private let progressiveRevealBackdrop = LiquidGlassEffectView.makeContainer()
+    private let progressiveRevealIcon = UIImageView()
     private let panGesture = UIPanGestureRecognizer()
 
     private let thresholdHaptic = UIImpactFeedbackGenerator(style: .light)
     private let commitHaptic = UIImpactFeedbackGenerator(style: .medium)
 
+    /// Signed: positive = swipe right (expand), negative = swipe left (progressive reveal).
     private var rawTranslation: CGFloat = 0
     private var didCrossThreshold = false
     private var hostScrollWasEnabled = true
@@ -56,20 +76,21 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
         translatesAutoresizingMaskIntoConstraints = false
         clipsToBounds = false
 
-        LiquidGlassEffectView.applyBubbleStyle(to: magnifierBackdrop, cornerRadius: 16)
-        magnifierBackdrop.isUserInteractionEnabled = false
-        magnifierBackdrop.alpha = 0
+        configureIconChrome(
+            backdrop: expandBackdrop,
+            icon: expandIcon,
+            systemName: "magnifyingglass"
+        )
+        configureIconChrome(
+            backdrop: progressiveRevealBackdrop,
+            icon: progressiveRevealIcon,
+            systemName: "sparkles"
+        )
 
-        let symbolConfig = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
-        magnifierIcon.translatesAutoresizingMaskIntoConstraints = false
-        magnifierIcon.image = UIImage(systemName: "magnifyingglass", withConfiguration: symbolConfig)
-        magnifierIcon.tintColor = Self.inactiveIconColor
-        magnifierIcon.contentMode = .scaleAspectFit
-        magnifierIcon.isUserInteractionEnabled = false
-        magnifierIcon.alpha = 0
-
-        addSubview(magnifierBackdrop)
-        addSubview(magnifierIcon)
+        addSubview(expandBackdrop)
+        addSubview(expandIcon)
+        addSubview(progressiveRevealBackdrop)
+        addSubview(progressiveRevealIcon)
         addSubview(bubbleView)
 
         NSLayoutConstraint.activate([
@@ -78,15 +99,25 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
             bubbleView.trailingAnchor.constraint(equalTo: trailingAnchor),
             bubbleView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            magnifierBackdrop.widthAnchor.constraint(equalToConstant: 32),
-            magnifierBackdrop.heightAnchor.constraint(equalToConstant: 32),
-            magnifierBackdrop.leadingAnchor.constraint(equalTo: leadingAnchor),
-            magnifierBackdrop.centerYAnchor.constraint(equalTo: centerYAnchor),
+            expandBackdrop.widthAnchor.constraint(equalToConstant: 32),
+            expandBackdrop.heightAnchor.constraint(equalToConstant: 32),
+            expandBackdrop.leadingAnchor.constraint(equalTo: leadingAnchor),
+            expandBackdrop.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            magnifierIcon.centerXAnchor.constraint(equalTo: magnifierBackdrop.centerXAnchor),
-            magnifierIcon.centerYAnchor.constraint(equalTo: magnifierBackdrop.centerYAnchor),
-            magnifierIcon.widthAnchor.constraint(equalToConstant: 18),
-            magnifierIcon.heightAnchor.constraint(equalToConstant: 18),
+            expandIcon.centerXAnchor.constraint(equalTo: expandBackdrop.centerXAnchor),
+            expandIcon.centerYAnchor.constraint(equalTo: expandBackdrop.centerYAnchor),
+            expandIcon.widthAnchor.constraint(equalToConstant: 18),
+            expandIcon.heightAnchor.constraint(equalToConstant: 18),
+
+            progressiveRevealBackdrop.widthAnchor.constraint(equalToConstant: 32),
+            progressiveRevealBackdrop.heightAnchor.constraint(equalToConstant: 32),
+            progressiveRevealBackdrop.trailingAnchor.constraint(equalTo: trailingAnchor),
+            progressiveRevealBackdrop.centerYAnchor.constraint(equalTo: centerYAnchor),
+
+            progressiveRevealIcon.centerXAnchor.constraint(equalTo: progressiveRevealBackdrop.centerXAnchor),
+            progressiveRevealIcon.centerYAnchor.constraint(equalTo: progressiveRevealBackdrop.centerYAnchor),
+            progressiveRevealIcon.widthAnchor.constraint(equalToConstant: 18),
+            progressiveRevealIcon.heightAnchor.constraint(equalToConstant: 18),
         ])
 
         panGesture.addTarget(self, action: #selector(handlePan(_:)))
@@ -95,8 +126,7 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
 
         thresholdHaptic.prepare()
         commitHaptic.prepare()
-
-        accessibilityHint = "Swipe right to focus this sentence"
+        updateAccessibilityHint()
     }
 
     required init?(coder: NSCoder) {
@@ -161,19 +191,40 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
                 Self.activelyDragging?.reset(animated: false)
             }
             Self.activelyDragging = self
-            didCrossThreshold = rawTranslation >= Self.commitThreshold
+            didCrossThreshold = abs(rawTranslation) >= Self.commitThreshold
             lockHostScrollIfNeeded()
 
         case .changed:
-            let translation = max(0, gesture.translation(in: self).x)
-            rawTranslation = translation
-            applyVisuals(forRawTranslation: translation)
-            updateThresholdHaptic(for: translation)
+            let translation = gesture.translation(in: self).x
+            if allowsProgressiveReveal {
+                rawTranslation = translation
+            } else {
+                rawTranslation = max(0, translation)
+            }
+            applyVisuals(forRawTranslation: rawTranslation)
+            updateThresholdHaptic(for: abs(rawTranslation))
 
         case .ended:
-            let shouldCommit = rawTranslation >= Self.commitThreshold
-            if shouldCommit {
-                commit(animated: true)
+            let velocityX = gesture.velocity(in: self).x
+            if rawTranslation > 0 {
+                let isFlick = velocityX >= Self.flickCommitVelocity
+                    && rawTranslation >= Self.flickCommitMinTranslation
+                let shouldCommit = rawTranslation >= Self.commitThreshold || isFlick
+                if shouldCommit {
+                    commitExpand(animated: true)
+                } else {
+                    reset(animated: true)
+                }
+            } else if allowsProgressiveReveal, rawTranslation < 0 {
+                let travel = abs(rawTranslation)
+                let isFlick = velocityX <= -Self.flickCommitVelocity
+                    && travel >= Self.flickCommitMinTranslation
+                let shouldCommit = travel >= Self.commitThreshold || isFlick
+                if shouldCommit {
+                    commitProgressiveReveal(animated: true)
+                } else {
+                    reset(animated: true)
+                }
             } else {
                 reset(animated: true)
             }
@@ -190,7 +241,7 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
         }
     }
 
-    private func commit(animated: Bool) {
+    private func commitExpand(animated: Bool) {
         isCommitted = true
         Self.committedContainer = self
         Self.activelyDragging = nil
@@ -225,34 +276,65 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
         }
     }
 
+    private func commitProgressiveReveal(animated: Bool) {
+        Self.activelyDragging = nil
+        didCrossThreshold = true
+        commitHaptic.impactOccurred(intensity: 0.9)
+        restoreHostScrollIfNeeded()
+        onProgressiveRevealCommit?()
+        // Snap back after peeling a level — progressive reveal does not stay open.
+        reset(animated: animated)
+    }
+
     private func applyVisuals(forRawTranslation raw: CGFloat) {
         let mapped = Self.mappedTranslation(raw)
         bubbleView.transform = CGAffineTransform(translationX: mapped, y: 0)
 
-        let progress = min(1, max(raw, 0) / Self.visualMax)
-        magnifierBackdrop.alpha = progress
-        magnifierIcon.alpha = progress
-        magnifierIcon.tintColor = Self.inactiveIconColor.interpolated(
-            to: Self.activeIconColor,
-            progress: progress
+        let expandProgress = min(1, max(raw, 0) / Self.visualMax)
+        let progressiveProgress = min(1, max(-raw, 0) / Self.visualMax)
+
+        expandBackdrop.alpha = expandProgress
+        expandIcon.alpha = expandProgress
+        expandIcon.tintColor = Self.inactiveIconColor.interpolated(
+            to: Self.expandActiveIconColor,
+            progress: expandProgress
+        )
+        let expandScale = Self.iconMinScale
+            + (Self.iconMaxScale - Self.iconMinScale) * expandProgress
+        expandBackdrop.transform = CGAffineTransform(scaleX: expandScale, y: expandScale)
+        expandIcon.transform = CGAffineTransform(scaleX: expandScale, y: expandScale)
+
+        progressiveRevealBackdrop.alpha = progressiveProgress
+        progressiveRevealIcon.alpha = progressiveProgress
+        progressiveRevealIcon.tintColor = Self.inactiveIconColor.interpolated(
+            to: Self.progressiveRevealActiveIconColor,
+            progress: progressiveProgress
+        )
+        let progressiveScale = Self.iconMinScale
+            + (Self.iconMaxScale - Self.iconMinScale) * progressiveProgress
+        progressiveRevealBackdrop.transform = CGAffineTransform(
+            scaleX: progressiveScale,
+            y: progressiveScale
+        )
+        progressiveRevealIcon.transform = CGAffineTransform(
+            scaleX: progressiveScale,
+            y: progressiveScale
         )
 
-        let scale = Self.magnifierMinScale + (Self.magnifierMaxScale - Self.magnifierMinScale) * progress
-        magnifierBackdrop.transform = CGAffineTransform(scaleX: scale, y: scale)
-        magnifierIcon.transform = CGAffineTransform(scaleX: scale, y: scale)
-
-        (bubbleView as? DialogueJapaneseBubbleView)?.setSwipeRevealAmount(isCommitted ? 1 : progress)
+        let glassAmount = isCommitted ? 1 : max(expandProgress, progressiveProgress)
+        (bubbleView as? DialogueJapaneseBubbleView)?.setSwipeRevealAmount(glassAmount)
     }
 
     private static func mappedTranslation(_ raw: CGFloat) -> CGFloat {
-        let clamped = max(0, raw)
-        guard clamped > visualMax else { return clamped }
-        let excess = clamped - visualMax
-        return visualMax + excess * rubberBandFactor
+        let magnitude = abs(raw)
+        let sign: CGFloat = raw < 0 ? -1 : 1
+        guard magnitude > visualMax else { return raw }
+        let excess = magnitude - visualMax
+        return sign * (visualMax + excess * rubberBandFactor)
     }
 
-    private func updateThresholdHaptic(for translation: CGFloat) {
-        let crossed = translation >= Self.commitThreshold
+    private func updateThresholdHaptic(for travel: CGFloat) {
+        let crossed = travel >= Self.commitThreshold
         guard crossed != didCrossThreshold else { return }
         didCrossThreshold = crossed
         if crossed {
@@ -272,6 +354,32 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
         hostScrollView.isScrollEnabled = hostScrollWasEnabled
     }
 
+    private func configureIconChrome(
+        backdrop: UIVisualEffectView,
+        icon: UIImageView,
+        systemName: String
+    ) {
+        LiquidGlassEffectView.applyBubbleStyle(to: backdrop, cornerRadius: 16)
+        backdrop.isUserInteractionEnabled = false
+        backdrop.alpha = 0
+
+        let symbolConfig = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.image = UIImage(systemName: systemName, withConfiguration: symbolConfig)
+        icon.tintColor = Self.inactiveIconColor
+        icon.contentMode = .scaleAspectFit
+        icon.isUserInteractionEnabled = false
+        icon.alpha = 0
+    }
+
+    private func updateAccessibilityHint() {
+        if allowsProgressiveReveal {
+            accessibilityHint = "Swipe right to focus this sentence, or swipe left to reveal more"
+        } else {
+            accessibilityHint = "Swipe right to focus this sentence"
+        }
+    }
+
     // MARK: UIGestureRecognizerDelegate
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -284,7 +392,13 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
         guard location.x > Self.edgeExclusionWidth else { return false }
 
         let velocity = pan.velocity(in: self)
-        return velocity.x > 0 && abs(velocity.x) > abs(velocity.y) * Self.horizontalVelocityDominance
+        let isHorizontal = abs(velocity.x) > abs(velocity.y) * Self.horizontalVelocityDominance
+        guard isHorizontal else { return false }
+
+        if allowsProgressiveReveal {
+            return abs(velocity.x) > 0
+        }
+        return velocity.x > 0
     }
 }
 

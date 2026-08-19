@@ -14,7 +14,17 @@ import AVFoundation
 /// (``.playAndRecord``), only reactivates that session so the mic stays live.
 final class WordUtteranceSpeaker: NSObject {
 
-    private let synthesizer = AVSpeechSynthesizer()
+    /// Created on first speak — AVSpeechSynthesizer init blocks on a speech-service
+    /// XPC handshake, which stalls push transitions on screens that construct
+    /// speakers eagerly (sentence scrub builds three of them via nested views).
+    private var loadedSynthesizer: AVSpeechSynthesizer?
+
+    private var synthesizer: AVSpeechSynthesizer {
+        if let loadedSynthesizer { return loadedSynthesizer }
+        let created = AVSpeechSynthesizer()
+        loadedSynthesizer = created
+        return created
+    }
 
     /// Only match **the same locale tag** (`ja‑JP`, `en‑US`, …). Treating everything with language `ja` as
     /// interchangeable can hand `speak(languageIdentifier: "ja‑JP")` a `ja‑CN`/other‑region premium voice —
@@ -77,9 +87,8 @@ final class WordUtteranceSpeaker: NSObject {
     }
 
     private func stopImmediately() {
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
-        }
+        guard let loadedSynthesizer, loadedSynthesizer.isSpeaking else { return }
+        loadedSynthesizer.stopSpeaking(at: .immediate)
     }
 
     func speak(_ text: String, languageIdentifier: String = "ja-JP") {

@@ -152,17 +152,30 @@ final class WordDictionaryDetailView: UIView {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         rebuildKanjiChips(surface: surface)
-        rebuildDefinitionContent(surface: surface, entries: entries)
         rebuildCompoundContent(surface: surface)
 
+        let willRequestContextualGloss = Self.shouldRequestContextualGloss(
+            sentence: sentence,
+            hasDictionaryMatch: !entries.isEmpty,
+            providerAvailable: contextualGlossProvider.isAvailable
+        )
+        // When JMdict misses (compounds / set phrases), prefer the contextual card over
+        // an empty DEFINITIONS section — fall back to the empty label if gloss fails.
+        rebuildDefinitionContent(
+            surface: surface,
+            entries: entries,
+            suppressEmptyState: willRequestContextualGloss
+        )
+
         dividerAfterWord.isHidden = false
-        definitionsSectionTitle.isHidden = false
+        definitionsSectionTitle.isHidden = entries.isEmpty && willRequestContextualGloss
+        definitionStack.isHidden = entries.isEmpty && willRequestContextualGloss
         let showKanji = !kanjiChipsScrollView.isHidden
         kanjiSectionStack.isHidden = !showKanji
-        dividerBeforeDefinitions.isHidden = !showKanji
+        dividerBeforeDefinitions.isHidden = !showKanji || definitionsSectionTitle.isHidden
         let showCompounds = !compoundStack.arrangedSubviews.isEmpty
         compoundsSectionStack.isHidden = !showCompounds
-        dividerBeforeCompounds.isHidden = !showCompounds
+        dividerBeforeCompounds.isHidden = !showCompounds || definitionsSectionTitle.isHidden
 
         loadContextualGloss(
             surface: surface,
@@ -172,6 +185,19 @@ final class WordDictionaryDetailView: UIView {
         )
     }
 
+    private static func shouldRequestContextualGloss(
+        sentence: String?,
+        hasDictionaryMatch: Bool,
+        providerAvailable: Bool
+    ) -> Bool {
+        guard providerAvailable else { return false }
+        let trimmedSentence = sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // Sentence scrub / dialogue context: always explain the token in situ.
+        if !trimmedSentence.isEmpty { return true }
+        // Vocabulary highlights without a dialogue line: still ask when JMdict has no hit.
+        return !hasDictionaryMatch
+    }
+
     private func loadContextualGloss(
         surface: String,
         sentence: String?,
@@ -179,10 +205,21 @@ final class WordDictionaryDetailView: UIView {
         primaryEntry: JMDictEntry?
     ) {
         let trimmedSentence = sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmedSentence.isEmpty, contextualGlossProvider.isAvailable else {
+        let hasDictionaryMatch = !lookup.entries.isEmpty
+        guard Self.shouldRequestContextualGloss(
+            sentence: sentence,
+            hasDictionaryMatch: hasDictionaryMatch,
+            providerAvailable: contextualGlossProvider.isAvailable
+        ) else {
             contextualCardContainer.isHidden = true
             return
         }
+
+        // Providers require a non-empty sentence; for unmatched compounds with no
+        // dialogue line, treat the surface itself as the span to explain.
+        let contextSentence = trimmedSentence.isEmpty ? surface : trimmedSentence
+        let hasBroaderSentence = !trimmedSentence.isEmpty && trimmedSentence != surface
+        contextualSectionTitle.text = hasBroaderSentence ? "IN THIS SENTENCE" : "MEANING"
 
         let requestID = UUID()
         contextualRequestID = requestID
@@ -192,7 +229,7 @@ final class WordDictionaryDetailView: UIView {
             .flatMap { $0.isEmpty ? nil : $0 }
 
         let request = ContextualGlossRequest(
-            sentence: trimmedSentence,
+            sentence: contextSentence,
             surface: surface,
             dictionaryForm: lookup.dictionaryForm,
             dictionaryGloss: dictionaryGloss
@@ -227,9 +264,21 @@ final class WordDictionaryDetailView: UIView {
                 await MainActor.run {
                     guard let self, self.contextualRequestID == requestID else { return }
                     self.contextualCardContainer.isHidden = true
+                    if !hasDictionaryMatch {
+                        self.showDictionaryMissFallback()
+                    }
                 }
             }
         }
+    }
+
+    /// Restores the DEFINITIONS empty state when a no-match contextual gloss fails.
+    private func showDictionaryMissFallback() {
+        definitionsSectionTitle.isHidden = false
+        definitionStack.isHidden = false
+        dividerBeforeDefinitions.isHidden = kanjiSectionStack.isHidden
+        rebuildDefinitionContent(surface: lastConfiguredSurface, entries: [], suppressEmptyState: false)
+        setNeedsLayout()
     }
 
     private func showContextualGlossLoading() {
@@ -564,7 +613,11 @@ final class WordDictionaryDetailView: UIView {
         }
     }
 
-    private func rebuildDefinitionContent(surface: String, entries: [JMDictEntry]) {
+    private func rebuildDefinitionContent(
+        surface: String,
+        entries: [JMDictEntry],
+        suppressEmptyState: Bool = false
+    ) {
         definitionStack.arrangedSubviews.forEach {
             definitionStack.removeArrangedSubview($0)
             $0.removeFromSuperview()
@@ -575,6 +628,7 @@ final class WordDictionaryDetailView: UIView {
         let caption = UIFont.preferredFont(forTextStyle: .caption1)
 
         if entries.isEmpty {
+            guard !suppressEmptyState else { return }
             let empty = UILabel()
             empty.text = "No dictionary entry found for this word."
             empty.font = bodyFont

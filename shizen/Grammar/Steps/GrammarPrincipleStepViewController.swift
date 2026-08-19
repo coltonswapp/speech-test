@@ -118,6 +118,7 @@ final class GrammarPrincipleStepViewController: LessonStepViewController {
         audioPlayer.play(
             publishedAudioUrl: example.publishedAudioUrl,
             audioKey: example.audioKey,
+            cacheMetadata: example.remoteAudioCacheMetadata,
             dialogueLines: dialogueLines,
             fallbackText: example.japanese
         )

@@ -1,16 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
   CornerDownRight,
+  FileJson,
   Plus,
   Sparkles,
   Trash2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { GrammarPointPicker } from "@/components/content/grammar-point-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,8 +26,27 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { dialogueApi } from "@/lib/dialogue/client";
-import type { DialogueLine, GeneratedLine } from "@/lib/dialogue/types";
+import {
+  dialogueLineSchema,
+  type DialogueLine,
+  type GeneratedLine,
+} from "@/lib/dialogue/types";
 import { LineRevisionDiff } from "@/components/dialogue/line-revision-diff";
+
+// Accepts a bare line array, `{ lines: [...] }` (a scenario body), or a full
+// exported scenario file (`{ scenario: { lines: [...] } }`) — the same
+// shapes lines already appear in across export/import elsewhere in the app.
+function extractLinesArray(parsed: unknown): unknown[] | null {
+  if (Array.isArray(parsed)) return parsed;
+  if (!parsed || typeof parsed !== "object") return null;
+  const obj = parsed as Record<string, unknown>;
+  if (Array.isArray(obj.lines)) return obj.lines;
+  if (obj.scenario && typeof obj.scenario === "object") {
+    const scenario = obj.scenario as Record<string, unknown>;
+    if (Array.isArray(scenario.lines)) return scenario.lines;
+  }
+  return null;
+}
 
 export type ReviseContext = {
   setting?: string;
@@ -70,6 +91,9 @@ export function LineEditor({
   >(new Map());
   const [revisingLine, setRevisingLine] = useState<number | null>(null);
   const [isRevising, setIsRevising] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [pasteImportOpen, setPasteImportOpen] = useState(false);
+  const [pasteImportText, setPasteImportText] = useState("");
 
   const initialSpeakers = [
     ...new Set(lines.map((line) => line.speaker).filter(Boolean)),
@@ -166,6 +190,57 @@ export function LineEditor({
         english: "",
       },
     ]);
+  }
+
+  // Shared by both the file-upload and paste-JSON import paths.
+  function importParsedLines(parsed: unknown): boolean {
+    const rawLines = extractLinesArray(parsed);
+    if (!rawLines) {
+      toast.error(
+        "Couldn't find a lines array — expected a JSON array of lines, or an object with a `lines` field."
+      );
+      return false;
+    }
+    const result = z.array(dialogueLineSchema).safeParse(rawLines);
+    if (!result.success) {
+      toast.error(`Invalid line data: ${result.error.issues[0]?.message ?? "validation failed"}`);
+      return false;
+    }
+    if (result.data.length === 0) {
+      toast.error("No lines found in that JSON.");
+      return false;
+    }
+    const next = result.data;
+    onChange(next);
+    onLinesCommitted?.(next);
+    clearRevisionState();
+    toast.success(`Replaced with ${result.data.length} line(s). Save to persist.`);
+    return true;
+  }
+
+  async function importLinesFromFile(file: File) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Invalid JSON.");
+      return;
+    }
+    importParsedLines(parsed);
+  }
+
+  function importLinesFromPastedText() {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(pasteImportText);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Invalid JSON.");
+      return;
+    }
+    if (importParsedLines(parsed)) {
+      setPasteImportText("");
+      setPasteImportOpen(false);
+    }
   }
 
   function insertAfter(index: number) {
@@ -501,10 +576,74 @@ export function LineEditor({
           )}
         </div>
       ))}
-      <Button variant="outline" size="sm" className="w-fit gap-2" onClick={add}>
-        <Plus className="size-4" />
-        Add line
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" className="gap-2" onClick={add}>
+          <Plus className="size-4" />
+          Add line
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => importInputRef.current?.click()}
+        >
+          <FileJson className="size-4" />
+          Import lines from JSON
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => setPasteImportOpen((open) => !open)}
+        >
+          <FileJson className="size-4" />
+          Paste JSON
+        </Button>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void importLinesFromFile(file);
+            e.target.value = "";
+          }}
+        />
+      </div>
+
+      {pasteImportOpen && (
+        <div className="flex flex-col gap-2 rounded-md border border-border/60 p-3">
+          <Label className="text-xs">Paste lines JSON</Label>
+          <Textarea
+            rows={8}
+            value={pasteImportText}
+            onChange={(e) => setPasteImportText(e.target.value)}
+            className="font-mono text-xs"
+            spellCheck={false}
+            placeholder='[{ "speaker": "Aiko", "japanese": "...", "romaji": "...", "english": "..." }]'
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={importLinesFromPastedText}
+              disabled={!pasteImportText.trim()}
+            >
+              Import
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setPasteImportOpen(false);
+                setPasteImportText("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {reviseEnabled && (
         <div className="flex flex-col gap-3 rounded-md border border-border/60 p-4">

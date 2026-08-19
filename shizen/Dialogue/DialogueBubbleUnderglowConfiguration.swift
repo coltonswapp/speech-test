@@ -100,7 +100,7 @@ struct DialogueBubbleUnderglowConfiguration {
         opacity: \(format(opacity))
         cornerRadius: \(format(cornerRadius))
         blurRadius: \(format(blurRadius))
-        color: .\(color == .yellow ? "yellow" : "blue")
+        color: .\(color.title.lowercased())
         """
     }
 

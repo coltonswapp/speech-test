@@ -1,3 +1,5 @@
+import { formatApiError } from "@/lib/api-error";
+
 export type ProjectSummary = {
   id: string;
   displayName: string;
@@ -79,7 +81,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body?.error?.formErrors?.join(", ") ?? `Request failed: ${res.status}`);
+    throw new Error(formatApiError(body, res.status));
   }
   return res.json();
 }

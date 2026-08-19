@@ -107,9 +107,19 @@ final class RealtimeService: NSObject {
     private let sendQueue = DispatchQueue(label: "RealtimeService.send")
     private let conversationRecorder = RealtimeConversationRecorder()
 
+    private var sessionInstructions = RealtimeTutorPrompt.sessionInstructions
+    /// When false, the WebSocket session is established but mic capture waits for ``resumeSession()``.
+    private var startListeningOnConnect = true
+
     // MARK: - Lifecycle
 
-    func connect() {
+    /// - Parameter startListening: When `false`, connects the session without capturing the mic
+    ///   (and without switching the audio session to play-and-record). Call ``resumeSession()``
+    ///   when ready for the student to speak — useful while reference audio is still playing.
+    func connect(sessionInstructions: String? = nil, startListening: Bool = true) {
+        if let sessionInstructions {
+            self.sessionInstructions = sessionInstructions
+        }
         switch connectionState {
         case .disconnected:
             break
@@ -119,9 +129,11 @@ final class RealtimeService: NSObject {
             return
         }
 
+        startListeningOnConnect = startListening
         connectionState = .connecting
         conversationTurn = .connecting
         isMicMuted = false
+        isSessionPaused = false
         cumulativeUsage = RealtimeTokenUsage()
         assistantTranscriptBuffer = ""
         pendingAssistantTranscript = nil
@@ -189,6 +201,15 @@ final class RealtimeService: NSObject {
         startMicCapture()
     }
 
+    /// If the socket is still connecting with listening deferred, open the mic as soon as
+    /// ``session.updated`` arrives. If already connected and paused, resumes immediately.
+    func enableListeningWhenReady() {
+        startListeningOnConnect = true
+        if connectionState == .connected, isSessionPaused {
+            resumeSession()
+        }
+    }
+
     func setMicMuted(_ muted: Bool) {
         guard isMicMuted != muted else { return }
         isMicMuted = muted
@@ -245,9 +266,15 @@ final class RealtimeService: NSObject {
         case "session.updated":
             if connectionState == .connecting {
                 connectionState = .connected
-                isSessionPaused = false
-                setTurn(.yourTurn)
-                startMicCapture()
+                if startListeningOnConnect {
+                    isSessionPaused = false
+                    setTurn(.yourTurn)
+                    startMicCapture()
+                } else {
+                    // Keep the playback audio session intact until resumeSession().
+                    isSessionPaused = true
+                    setTurn(.paused)
+                }
             }
 
         case "conversation.item.input_audio_transcription.delta":
@@ -438,7 +465,7 @@ final class RealtimeService: NSObject {
             "session": [
                 "type": "realtime",
                 "output_modalities": ["audio"],
-                "instructions": RealtimeTutorPrompt.sessionInstructions,
+                "instructions": sessionInstructions,
                 "audio": [
                     "input": [
                         "format": [

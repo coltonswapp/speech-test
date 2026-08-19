@@ -425,8 +425,16 @@ final class LessonWaterfallGridController: NSObject {
     func setLessons(_ lessons: [WaterfallLesson]) {
         self.lessons = lessons
         heightCache.removeAll()
+        lastReportedContentHeight = -1
         collectionView.reloadData()
         layout.invalidateLayout()
+        // Push the measured height on the next runloop pass as well: when
+        // lessons arrive after the host's initial layout (async CMS fetch in an
+        // embedded child controller), the host's viewDidLayoutSubviews may not
+        // fire again, leaving the embedding height constraint stale.
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshContentHeightIfNeeded()
+        }
     }
 
     /// Call from the parent's `viewDidLayoutSubviews` when embedding non-scrolling.

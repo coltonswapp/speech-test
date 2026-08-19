@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin, { type Region } from "wavesurfer.js/dist/plugins/regions.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -42,8 +42,9 @@ function buildSentenceMap(
   lines: EditableDialogueLine[],
   marks: number[],
   totalSamples: number
-): { rows: SentenceMapRow[]; usesMarks: boolean } {
-  if (lines.length === 0 || totalSamples <= 0) return { rows: [], usesMarks: false };
+): { rows: SentenceMapRow[]; usesMarks: boolean; validMarkCount: number } {
+  if (lines.length === 0 || totalSamples <= 0)
+    return { rows: [], usesMarks: false, validMarkCount: 0 };
 
   const sortedMarks = [...marks].filter((m) => m > 0 && m < totalSamples).sort((a, b) => a - b);
   const usesMarks = sortedMarks.length > 0 && sortedMarks.length + 1 === lines.length;
@@ -60,26 +61,31 @@ function buildSentenceMap(
     sampleUpper: usesMarks ? ends[i] : 0,
   }));
 
-  return { rows, usesMarks };
+  return { rows, usesMarks, validMarkCount: sortedMarks.length };
 }
 
-/** Returns the sentence-map row index that contains the playhead, or null. */
+/**
+ * Which line is currently playing, counted from the marks placed so far.
+ * Deliberately not gated on every line having a mark yet — while a line is
+ * being marked one at a time, the boundary already placed for line N still
+ * tells us the playhead has moved on to line N+1, so the highlight (and
+ * auto-scroll) keeps tracking mid-session, not just once fully marked.
+ */
 function activeSentenceIndexForTime(
-  rows: SentenceMapRow[],
+  marks: number[],
   currentTime: number,
   sampleRate: number,
-  usesMarks: boolean
+  totalLines: number
 ): number | null {
-  if (!usesMarks || rows.length === 0 || !Number.isFinite(currentTime)) return null;
+  if (totalLines === 0 || !Number.isFinite(currentTime)) return null;
   const sample = Math.round(currentTime * sampleRate);
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const isLast = i === rows.length - 1;
-    if (sample >= row.sampleLower && (isLast ? sample <= row.sampleUpper : sample < row.sampleUpper)) {
-      return i;
-    }
+  const sortedMarks = [...marks].filter((m) => m > 0).sort((a, b) => a - b);
+  let index = 0;
+  for (const mark of sortedMarks) {
+    if (sample >= mark) index++;
+    else break;
   }
-  return null;
+  return Math.min(index, totalLines - 1);
 }
 
 export function WaveformEditor({
@@ -98,6 +104,11 @@ export function WaveformEditor({
   const regionsRef = useRef<RegionsPlugin | null>(null);
   const trimRegionRef = useRef<Region | null>(null);
   const cutRegionRef = useRef<Region | null>(null);
+  const rowRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const playerBarRef = useRef<HTMLDivElement>(null);
+  const playerSpacerRef = useRef<HTMLDivElement>(null);
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const sectionHeaderRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isTrimMode, setIsTrimMode] = useState(false);
@@ -114,6 +125,8 @@ export function WaveformEditor({
   const [dragging, setDragging] = useState<
     { kind: "mark" | "suggested"; index: number } | null
   >(null);
+  const [playerBarHeight, setPlayerBarHeight] = useState(0);
+  const [sectionHeaderHeight, setSectionHeaderHeight] = useState(0);
 
   // Bust the media URL whenever the take's bytes change (cut / commit-trim /
   // insert-line-break). WaveSurfer only remounts when this string changes, and
@@ -122,17 +135,46 @@ export function WaveformEditor({
   const marks = variant.dialogueLineSwitchSamples ?? [];
   const spokenLines = spokenLinesFor(dialogueLines ?? []);
   const totalSamples = Math.round(duration * variant.sampleRate);
-  const { rows: sentenceRows, usesMarks } = buildSentenceMap(
+  const { rows: sentenceRows, usesMarks, validMarkCount } = buildSentenceMap(
     spokenLines,
     marks,
     totalSamples
   );
   const activeRowIndex = activeSentenceIndexForTime(
-    sentenceRows,
+    marks,
     currentTime,
     variant.sampleRate,
-    usesMarks
+    spokenLines.length
   );
+
+  // Keep the currently-playing line in view as the page scrolls — the pinned
+  // waveform dock at the bottom would otherwise cover rows near the edge.
+  useEffect(() => {
+    if (activeRowIndex == null) return;
+    rowRefs.current[activeRowIndex]?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    });
+  }, [activeRowIndex]);
+
+  // Track chrome heights for scroll-margin on active sentence rows.
+  useEffect(() => {
+    const playerEl = playerBarRef.current;
+    const headerEl = sectionHeaderRef.current;
+    if (!playerEl && !headerEl) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === playerEl) {
+          setPlayerBarHeight(entry.contentRect.height);
+        } else if (entry.target === headerEl) {
+          setSectionHeaderHeight(entry.contentRect.height);
+        }
+      }
+    });
+    if (playerEl) observer.observe(playerEl);
+    if (headerEl) observer.observe(headerEl);
+    return () => observer.disconnect();
+  }, []);
 
   function patchVariantInCache(next: Variant) {
     queryClient.setQueryData<{ variants: Variant[] }>(
@@ -165,7 +207,8 @@ export function WaveformEditor({
   }
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
     // Guards against React StrictMode's dev-only double-invoke of this effect: the
     // first mount's cleanup destroys this instance before its "ready" (or any other
     // async) callback runs, so those callbacks must no-op instead of touching state
@@ -174,7 +217,7 @@ export function WaveformEditor({
 
     const regions = RegionsPlugin.create();
     const ws = WaveSurfer.create({
-      container: containerRef.current,
+      container,
       waveColor: "oklch(0.5 0 0)",
       progressColor: "oklch(0.94 0.19 95)",
       cursorColor: "oklch(0.94 0.19 95)",
@@ -190,6 +233,47 @@ export function WaveformEditor({
     regionsRef.current = regions;
     // Prior cut selection belonged to the destroyed instance.
     setHasCutRegion(false);
+
+    // Sticky layout can briefly report clientWidth 0 while the browser
+    // recomputes stick/unstick. WaveSurfer's own ResizeObserver then reRenders
+    // with width 0, clears its canvases, and never paints again if width snaps
+    // back to the same non-zero value. Detect an empty canvas host and redraw.
+    let lastDrawnWidth = 0;
+    let scrollRedrawTimer = 0;
+    function waveformCanvasesMissing() {
+      const host = container.firstElementChild as HTMLElement | null;
+      const canvases = host?.shadowRoot?.querySelectorAll("canvas");
+      return !canvases || canvases.length === 0;
+    }
+    function ensureWaveformPainted() {
+      if (cancelled || !container.isConnected) return;
+      const width = container.clientWidth;
+      if (width <= 0) {
+        lastDrawnWidth = 0;
+        return;
+      }
+      if (!ws.getDecodedData()) return;
+      if (!waveformCanvasesMissing() && width === lastDrawnWidth) return;
+      lastDrawnWidth = width;
+      ws.setOptions({});
+    }
+
+    const resizeObserver = new ResizeObserver(() => ensureWaveformPainted());
+    resizeObserver.observe(container);
+    const intersectionObserver = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          ensureWaveformPainted();
+        }
+      },
+      { threshold: 0 }
+    );
+    intersectionObserver.observe(container);
+    function onScroll() {
+      window.clearTimeout(scrollRedrawTimer);
+      scrollRedrawTimer = window.setTimeout(ensureWaveformPainted, 50);
+    }
+    window.addEventListener("scroll", onScroll, true);
 
     ws.on("ready", (d) => {
       if (cancelled) return;
@@ -207,6 +291,10 @@ export function WaveformEditor({
       });
       trimRegionRef.current = region;
       if (region.element) region.element.style.pointerEvents = "none";
+      lastDrawnWidth = 0;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(ensureWaveformPainted);
+      });
     });
 
     ws.on("audioprocess", (t) => !cancelled && setCurrentTime(t));
@@ -267,6 +355,10 @@ export function WaveformEditor({
 
     return () => {
       cancelled = true;
+      resizeObserver.disconnect();
+      intersectionObserver.disconnect();
+      window.removeEventListener("scroll", onScroll, true);
+      window.clearTimeout(scrollRedrawTimer);
       cancelAnimationFrame(rafId);
       audioCtx?.close().catch(() => {});
       // Drop region refs — the plugin/DOM are about to go away. Cut-mode
@@ -386,12 +478,12 @@ export function WaveformEditor({
     mutationFn: () => ttsApi.insertLineBreak(projectId, variant.id, currentEditSample()),
     onSuccess: ({ variant: next }) => {
       patchVariantInCache(next);
-      toast.success("Inserted 0.15s line-break marker.");
+      toast.success("Inserted 0.15s silence.");
     },
     onError: (error) => toast.error(error.message),
   });
 
-  function insertLineBreakMarker() {
+  function insertLineBreak() {
     const sample = currentEditSample();
     if (sample <= 0 || sample >= totalSamples) {
       toast.error("Move the playhead to a spot between lines, not at the very start or end.");
@@ -649,107 +741,63 @@ export function WaveformEditor({
 
   const isConversation = (dialogueLines?.length ?? 0) > 0;
 
-  return (
-    <div className="flex flex-col gap-3">
-      {isConversation && (
-        <div className="flex flex-col gap-2">
-          <div>
-            <p className="text-sm font-medium">Sentence map</p>
-            {usesMarks ? (
-              <p className="text-xs text-emerald-600 dark:text-emerald-400">
-                One row per audio segment ({sentenceRows.length} lines, {marks.length}{" "}
-                breaks). Ranges follow your marks. Playhead highlights the active
-                sentence for QC.
-              </p>
-            ) : spokenLines.length > 1 ? (
-              <p className="text-xs text-muted-foreground">
-                One row per spoken line. Place {spokenLines.length - 1 - marks.length} more
-                line break{spokenLines.length - 1 - marks.length === 1 ? "" : "s"} to align
-                audio with marks.
-              </p>
-            ) : null}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {sentenceRows.map((row) => {
-              const isLooping = loopingRowIndex === row.index;
-              const isActive = activeRowIndex === row.index;
-              const isHighlighted = isLooping || isActive;
-              return (
-                <div
-                  key={row.index}
-                  className={cn(
-                    "flex items-start gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors",
-                    isHighlighted
-                      ? "border-primary bg-primary/10"
-                      : "border-border/40"
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => playRow(row)}
-                    disabled={!usesMarks}
-                    className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-30"
-                  >
-                    {isLooping ? (
-                      <Pause className="size-3.5" />
-                    ) : (
-                      <Play className="size-3.5" />
-                    )}
-                  </button>
-                  <div className="flex flex-1 flex-col gap-1">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={cn(
-                          "size-1.5 shrink-0 rounded-full transition-opacity",
-                          isHighlighted
-                            ? "bg-primary opacity-100"
-                            : "bg-transparent opacity-0"
-                        )}
-                        aria-hidden
-                      />
-                      <span className="font-mono text-[10px] text-muted-foreground">
-                        #{row.index + 1}
-                      </span>
-                      <span
-                        className={cn(
-                          "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                          usesMarks
-                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                            : "bg-muted-foreground/15 text-muted-foreground"
-                        )}
-                      >
-                        {usesMarks ? "ready" : "pending"}
-                      </span>
-                      {usesMarks && (
-                        <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                          marked
-                        </span>
-                      )}
-                      {isActive && (
-                        <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                          {isPlaying ? "playing" : "playhead"}
-                        </span>
-                      )}
-                    </div>
-                    <span className={cn(isHighlighted && "font-medium")}>{row.text}</span>
-                    {usesMarks && (
-                      <span className="font-mono text-[10px] text-muted-foreground">
-                        {(row.sampleLower / variant.sampleRate).toFixed(2)}s –{" "}
-                        {(row.sampleUpper / variant.sampleRate).toFixed(2)}s ·{" "}
-                        {((row.sampleUpper - row.sampleLower) / variant.sampleRate).toFixed(2)}
-                        s
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+  // Pin the waveform to the viewport bottom only while this section still
+  // extends past the viewport. Releases as soon as the section end enters
+  // view so the following page content is never covered.
+  useLayoutEffect(() => {
+    if (!isConversation) return;
+    const section = sectionRef.current;
+    const player = playerBarRef.current;
+    const spacer = playerSpacerRef.current;
+    if (!section || !player || !spacer) return;
 
+    function updatePin() {
+      const sectionRect = section.getBoundingClientRect();
+      const playerHeight = player.offsetHeight;
+      const viewH = window.innerHeight;
+      const shouldPin =
+        sectionRect.bottom > viewH && sectionRect.top < viewH - playerHeight;
+
+      if (shouldPin) {
+        player.style.position = "fixed";
+        player.style.bottom = "0px";
+        player.style.left = `${sectionRect.left}px`;
+        player.style.width = `${sectionRect.width}px`;
+        player.style.zIndex = "30";
+        spacer.style.height = `${playerHeight}px`;
+      } else {
+        player.style.position = "";
+        player.style.bottom = "";
+        player.style.left = "";
+        player.style.width = "";
+        player.style.zIndex = "";
+        spacer.style.height = "0px";
+      }
+    }
+
+    updatePin();
+    window.addEventListener("scroll", updatePin, true);
+    window.addEventListener("resize", updatePin);
+    const observer = new ResizeObserver(updatePin);
+    observer.observe(section);
+    observer.observe(player);
+    return () => {
+      window.removeEventListener("scroll", updatePin, true);
+      window.removeEventListener("resize", updatePin);
+      observer.disconnect();
+      player.style.position = "";
+      player.style.bottom = "";
+      player.style.left = "";
+      player.style.width = "";
+      player.style.zIndex = "";
+      spacer.style.height = "";
+    };
+  }, [isConversation, sentenceRows.length, playerBarHeight]);
+
+  const playerTools = (
+    <>
       <div className="relative w-full">
-        <div ref={containerRef} className="w-full" />
+        <div ref={containerRef} className="h-[72px] w-full" />
         {isConversation && duration > 0 && (
           <div className="pointer-events-none absolute inset-0 z-[1]">
             {suggested.samples.map((sample, i) => (
@@ -933,7 +981,7 @@ export function WaveformEditor({
             <Button
               size="sm"
               variant="outline"
-              onClick={insertLineBreakMarker}
+              onClick={insertLineBreak}
               disabled={insertLineBreakMutation.isPending}
             >
               Insert line break (0.15s)
@@ -960,6 +1008,146 @@ export function WaveformEditor({
           Drag across the waveform to select the section to cut, then drag its edges to
           fine-tune. The selected audio is deleted and the remaining audio spliced together.
         </p>
+      )}
+    </>
+  );
+
+  return (
+    <div className="flex flex-col gap-3">
+      {isConversation ? (
+        <div ref={sectionRef} className="relative flex flex-col">
+          <div
+            ref={sectionHeaderRef}
+            className="sticky top-14 z-20 bg-background pb-2"
+          >
+            <p className="text-sm font-medium">Sentence map</p>
+            {usesMarks ? (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                One row per audio segment ({sentenceRows.length} lines, {marks.length}{" "}
+                breaks). Ranges follow your marks. Playhead highlights the active
+                sentence for QC.
+              </p>
+            ) : spokenLines.length > 1 ? (
+              (() => {
+                const needed = spokenLines.length - 1;
+                const delta = needed - validMarkCount;
+                if (delta > 0) {
+                  return (
+                    <p className="text-xs text-muted-foreground">
+                      One row per spoken line. Place {delta} more line break
+                      {delta === 1 ? "" : "s"} ({validMarkCount} of {needed} placed) to
+                      align audio with marks.
+                    </p>
+                  );
+                }
+                return (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    {-delta} extra mark{-delta === 1 ? "" : "s"} for {spokenLines.length}{" "}
+                    lines ({validMarkCount} placed, {needed} needed). Remove the extra
+                    mark{-delta === 1 ? "" : "s"}, or check whether the script changed
+                    since these were placed.
+                  </p>
+                );
+              })()
+            ) : null}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {sentenceRows.map((row) => {
+              const isLooping = loopingRowIndex === row.index;
+              const isActive = activeRowIndex === row.index;
+              const isHighlighted = isLooping || isActive;
+              return (
+                <div
+                  key={row.index}
+                  ref={(el) => {
+                    rowRefs.current[row.index] = el;
+                  }}
+                  className={cn(
+                    "flex items-start gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors",
+                    isHighlighted
+                      ? "border-primary bg-primary/10"
+                      : "border-border/40"
+                  )}
+                  style={{
+                    scrollMarginTop: 56 + sectionHeaderHeight + 16,
+                    scrollMarginBottom: playerBarHeight + 24,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => playRow(row)}
+                    disabled={!usesMarks}
+                    className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                  >
+                    {isLooping ? (
+                      <Pause className="size-3.5" />
+                    ) : (
+                      <Play className="size-3.5" />
+                    )}
+                  </button>
+                  <div className="flex flex-1 flex-col gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={cn(
+                          "size-1.5 shrink-0 rounded-full transition-opacity",
+                          isHighlighted
+                            ? "bg-primary opacity-100"
+                            : "bg-transparent opacity-0"
+                        )}
+                        aria-hidden
+                      />
+                      <span className="font-mono text-[10px] text-muted-foreground">
+                        #{row.index + 1}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                          usesMarks
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                            : "bg-muted-foreground/15 text-muted-foreground"
+                        )}
+                      >
+                        {usesMarks ? "ready" : "pending"}
+                      </span>
+                      {usesMarks && (
+                        <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                          marked
+                        </span>
+                      )}
+                      {isActive && (
+                        <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                          {isPlaying ? "playing" : "playhead"}
+                        </span>
+                      )}
+                    </div>
+                    <span className={cn(isHighlighted && "font-medium")}>{row.text}</span>
+                    {usesMarks && (
+                      <span className="font-mono text-[10px] text-muted-foreground">
+                        {(row.sampleLower / variant.sampleRate).toFixed(2)}s –{" "}
+                        {(row.sampleUpper / variant.sampleRate).toFixed(2)}s ·{" "}
+                        {(
+                          (row.sampleUpper - row.sampleLower) /
+                          variant.sampleRate
+                        ).toFixed(2)}
+                        s
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {/* Holds layout space while the player is fixed to the viewport bottom. */}
+          <div ref={playerSpacerRef} aria-hidden />
+          <div
+            ref={playerBarRef}
+            className="flex flex-col gap-3 border-t border-border/60 bg-background pt-3 pb-3 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.35)]"
+          >
+            {playerTools}
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">{playerTools}</div>
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">

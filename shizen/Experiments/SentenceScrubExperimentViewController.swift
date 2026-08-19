@@ -5,61 +5,14 @@
 //  Pan horizontally across a tokenized sentence to change the selection; haptics + JMdict gloss.
 //
 
-import Combine
-import SwiftUI
 import Translation
 import UIKit
-
-private final class SentenceEnglishTranslationModel: ObservableObject {
-    /// On the simulator, system Translation APIs prompt for language setup repeatedly; we skip the task entirely and leave this empty.
-    @Published var labelText: String = {
-        #if targetEnvironment(simulator)
-        ""
-        #else
-        "Translating…"
-        #endif
-    }()
-}
-
-private struct SentenceEnglishTranslationHost: View {
-    let sentence: String
-    @ObservedObject var model: SentenceEnglishTranslationModel
-
-    var body: some View {
-        Color.clear
-            .frame(width: 1, height: 1)
-            .accessibilityHidden(true)
-            .translationTask(
-                source: Locale.Language(identifier: "ja"),
-                target: Locale.Language(identifier: "en")
-            ) { session in
-                await translate(using: session)
-            }
-    }
-
-    private func translate(using session: TranslationSession) async {
-        do {
-            let response = try await session.translate(sentence)
-            await MainActor.run {
-                model.labelText = response.targetText
-            }
-        } catch {
-            await MainActor.run {
-                #if targetEnvironment(simulator)
-                model.labelText = ""
-                #else
-                model.labelText =
-                    "Couldn’t translate. Add Japanese and English in Settings → General → Language & Region → Translation Languages."
-                #endif
-            }
-        }
-    }
-}
 
 /// Bundled or CDN dialogue-clip segment for sentence scrub play.
 struct DialogueLineAudioReference {
     let publishedAudioUrl: String?
     let audioKey: String
+    let cacheMetadata: RemoteAudioCacheMetadata?
     let lineIndex: Int
     let dialogueLines: [String]
 }
@@ -79,6 +32,9 @@ final class SentenceScrubExperimentViewController: UIViewController {
     ]
 
     private var currentSentence: String
+    /// Curated English for `currentSentence` (e.g. from dialogue content). When
+    /// present, shown immediately — no system translation runs at all.
+    private var providedEnglish: String?
     private let recordedClip: RealtimeAudioClip?
     private let onReplayClip: ((RealtimeAudioClip) -> Void)?
     private let dialogueLineAudio: DialogueLineAudioReference?
@@ -86,11 +42,14 @@ final class SentenceScrubExperimentViewController: UIViewController {
 
     init(
         sentence: String,
+        englishTranslation: String? = nil,
         recordedClip: RealtimeAudioClip? = nil,
         onReplayClip: ((RealtimeAudioClip) -> Void)? = nil,
         dialogueLineAudio: DialogueLineAudioReference? = nil
     ) {
         currentSentence = sentence
+        let trimmedEnglish = englishTranslation?.trimmingCharacters(in: .whitespacesAndNewlines)
+        providedEnglish = (trimmedEnglish?.isEmpty ?? true) ? nil : trimmedEnglish
         self.recordedClip = recordedClip
         self.onReplayClip = onReplayClip
         self.dialogueLineAudio = dialogueLineAudio
@@ -125,10 +84,13 @@ final class SentenceScrubExperimentViewController: UIViewController {
 
     private let speakSentenceButton = UIButton(type: .system)
     private let speakSentenceGlyphView = UIImageView()
+    private let repeatAfterMeButton = UIButton(type: .system)
+    private let repeatAfterMeGlyphView = UIImageView()
 
-    private let translationModel = SentenceEnglishTranslationModel()
-    private var translationHost: UIHostingController<SentenceEnglishTranslationHost>?
-    private var translationCancellable: AnyCancellable?
+    /// Direct (non-SwiftUI) system translation, iOS 26+. Reused across
+    /// sentences — the ja→en pair never changes for this screen.
+    private var translationSession: TranslationSession?
+    private var translationTask: Task<Void, Never>?
 
     private let wordSpeaker = WordUtteranceSpeaker()
     private let wordDictionaryDetailView: WordDictionaryDetailView = {
@@ -200,6 +162,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         ) { [weak self] _ in
             guard let self else { return }
             self.scrubbableSentenceView.showCalloutOnScrub.toggle()
+            ExperimentSettings.sentenceScrubGlossOverlayEnabled = self.scrubbableSentenceView.showCalloutOnScrub
             self.refreshOptionsMenu()
         }
 
@@ -220,30 +183,11 @@ final class SentenceScrubExperimentViewController: UIViewController {
     private func applyExampleSentence(_ text: String) {
         guard text != currentSentence else { return }
         currentSentence = text
+        providedEnglish = nil
         wordSpeaker.stop()
         grammarAudioPlayer.stop()
         updateSpeakButtonAccessibility()
-
-        #if !targetEnvironment(simulator)
-        if let host = translationHost {
-            host.willMove(toParent: nil)
-            host.view.removeFromSuperview()
-            host.removeFromParent()
-            translationHost = nil
-        }
-        #endif
-
-        translationModel.labelText = {
-            #if targetEnvironment(simulator)
-            ""
-            #else
-            "Translating…"
-            #endif
-        }()
-
-        #if !targetEnvironment(simulator)
-        installTranslationHost()
-        #endif
+        beginEnglishTranslationIfNeeded()
 
         scrubbableSentenceView.configure(
             sentence: currentSentence,
@@ -280,7 +224,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         contentStack.alignment = .fill
         contentStack.spacing = 16
 
-        scrubbableSentenceView.showCalloutOnScrub = true
+        scrubbableSentenceView.showCalloutOnScrub = ExperimentSettings.sentenceScrubGlossOverlayEnabled
         scrubbableSentenceView.sentenceLineView.textAlignment = .natural
         scrubbableSentenceView.onSelectionChanged = { [weak self] index, surface in
             self?.handleSelectionChanged(index: index, surface: surface)
@@ -310,7 +254,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         englishTranslationLabel.textColor = .secondaryLabel
         englishTranslationLabel.textAlignment = .natural
         englishTranslationLabel.numberOfLines = 0
-        englishTranslationLabel.text = translationModel.labelText
+        setEnglishLabelText(providedEnglish ?? "")
 
         sentenceContentStack.axis = .vertical
         sentenceContentStack.alignment = .leading
@@ -326,6 +270,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         sentenceSectionRowStack.spacing = 16
         sentenceSectionRowStack.distribution = .fill
         sentenceSectionRowStack.addArrangedSubview(sentenceContentStack)
+        sentenceSectionRowStack.addArrangedSubview(repeatAfterMeButton)
         sentenceSectionRowStack.addArrangedSubview(speakSentenceButton)
 
         speakSentenceButton.setContentHuggingPriority(.required, for: .horizontal)
@@ -338,12 +283,25 @@ final class SentenceScrubExperimentViewController: UIViewController {
             accessibilityLabel: "Speak sentence"
         )
         speakSentenceButton.accessibilityHint = "Plays audio of the Japanese example sentence"
-
         speakSentenceButton.addTarget(self, action: #selector(speakFullSentenceTapped), for: .touchUpInside)
+
+        repeatAfterMeButton.setContentHuggingPriority(.required, for: .horizontal)
+        repeatAfterMeButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        Self.configureGlassAudioButton(
+            repeatAfterMeButton,
+            glyphView: repeatAfterMeGlyphView,
+            symbolName: "person.wave.2.fill",
+            glyphPointSize: 20,
+            accessibilityLabel: "Repeat after me"
+        )
+        repeatAfterMeButton.accessibilityHint = "Listen to the sentence, then repeat it with the tutor"
+        repeatAfterMeButton.addTarget(self, action: #selector(repeatAfterMeTapped), for: .touchUpInside)
 
         NSLayoutConstraint.activate([
             speakSentenceButton.topAnchor.constraint(equalTo: scrubbableSentenceView.sentenceLineView.topAnchor),
             speakSentenceButton.trailingAnchor.constraint(equalTo: sentenceSectionRowStack.trailingAnchor),
+            repeatAfterMeButton.topAnchor.constraint(equalTo: scrubbableSentenceView.sentenceLineView.topAnchor),
+            repeatAfterMeButton.trailingAnchor.constraint(equalTo: speakSentenceButton.leadingAnchor, constant: -10),
         ])
 
         hintIcon.translatesAutoresizingMaskIntoConstraints = false
@@ -398,19 +356,15 @@ final class SentenceScrubExperimentViewController: UIViewController {
             contentStack.trailingAnchor.constraint(equalTo: frame.trailingAnchor, constant: -inset),
         ])
 
-        #if !targetEnvironment(simulator)
-        installTranslationHost()
-        #endif
-        translationCancellable = translationModel.$labelText
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] text in
-                guard let self else { return }
-                self.englishTranslationLabel.text = text
-                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                self.englishTranslationLabel.isHidden = trimmed.isEmpty
-            }
-
         updateSpeakButtonAccessibility()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Deferred from viewDidLoad: session availability checks and model
+        // warm-up shouldn't delay the first frame of the push transition. When
+        // curated English was provided this is a no-op.
+        beginEnglishTranslationIfNeeded()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -418,12 +372,14 @@ final class SentenceScrubExperimentViewController: UIViewController {
         if isMovingFromParent || isBeingDismissed {
             grammarAudioPlayer.stop()
             wordSpeaker.stop()
+            translationTask?.cancel()
         }
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         speakSentenceButton.bringSubviewToFront(speakSentenceGlyphView)
+        repeatAfterMeButton.bringSubviewToFront(repeatAfterMeGlyphView)
     }
 
     private var canPlayDialogueLineAudio: Bool {
@@ -450,23 +406,61 @@ final class SentenceScrubExperimentViewController: UIViewController {
         }
     }
 
-    private func installTranslationHost() {
-        let host = UIHostingController(
-            rootView: SentenceEnglishTranslationHost(sentence: currentSentence, model: translationModel)
-        )
-        translationHost = host
-        host.view.backgroundColor = .clear
-        host.view.isUserInteractionEnabled = false
-        addChild(host)
-        view.addSubview(host.view)
-        host.view.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            host.view.widthAnchor.constraint(equalToConstant: 1),
-            host.view.heightAnchor.constraint(equalToConstant: 1),
-            host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            host.view.topAnchor.constraint(equalTo: view.topAnchor),
-        ])
-        host.didMove(toParent: self)
+    private func setEnglishLabelText(_ text: String) {
+        englishTranslationLabel.text = text
+        englishTranslationLabel.isHidden = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+    }
+
+    /// Translates `currentSentence` via a direct `TranslationSession` (iOS 26 —
+    /// no SwiftUI host needed). Skipped when curated English was provided.
+    /// On the simulator, system Translation prompts for language setup
+    /// repeatedly, so translation is skipped and the label stays empty.
+    private func beginEnglishTranslationIfNeeded() {
+        if let providedEnglish {
+            translationTask?.cancel()
+            setEnglishLabelText(providedEnglish)
+            return
+        }
+
+        #if targetEnvironment(simulator)
+        setEnglishLabelText("")
+        #else
+        setEnglishLabelText("Translating…")
+        translationTask?.cancel()
+        let sentence = currentSentence
+        translationTask = Task { @MainActor [weak self] in
+            let japanese = Locale.Language(identifier: "ja")
+            let english = Locale.Language(identifier: "en")
+
+            let status = await LanguageAvailability().status(from: japanese, to: english)
+            guard let self, !Task.isCancelled else { return }
+            guard status == .installed else {
+                self.setEnglishLabelText(
+                    status == .supported
+                        ? "Couldn’t translate. Add Japanese and English in Settings → General → Language & Region → Translation Languages."
+                        : ""
+                )
+                return
+            }
+
+            let session = self.translationSession
+                ?? TranslationSession(installedSource: japanese, target: english)
+            self.translationSession = session
+
+            do {
+                let response = try await session.translate(sentence)
+                guard !Task.isCancelled, self.currentSentence == sentence else { return }
+                self.setEnglishLabelText(response.targetText)
+            } catch {
+                guard !Task.isCancelled, self.currentSentence == sentence else { return }
+                self.setEnglishLabelText(
+                    "Couldn’t translate. Add Japanese and English in Settings → General → Language & Region → Translation Languages."
+                )
+            }
+        }
+        #endif
     }
 
     private func handleSelectionChanged(index: Int?, surface: String?) {
@@ -505,11 +499,27 @@ final class SentenceScrubExperimentViewController: UIViewController {
                 at: dialogueLineAudio.lineIndex,
                 publishedAudioUrl: dialogueLineAudio.publishedAudioUrl,
                 audioKey: dialogueLineAudio.audioKey,
+                cacheMetadata: dialogueLineAudio.cacheMetadata,
                 dialogueLines: dialogueLineAudio.dialogueLines,
                 fallbackText: trimmed
             )
             return
         }
         wordSpeaker.speak(trimmed)
+    }
+
+    @objc private func repeatAfterMeTapped() {
+        let trimmed = currentSentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        grammarAudioPlayer.stop()
+        wordSpeaker.stop()
+
+        let repeatVC = RepeatAfterMeViewController(
+            sentence: trimmed,
+            englishTranslation: providedEnglish ?? englishTranslationLabel.text,
+            recordedClip: recordedClip,
+            dialogueLineAudio: dialogueLineAudio
+        )
+        navigationController?.pushViewController(repeatVC, animated: true)
     }
 }

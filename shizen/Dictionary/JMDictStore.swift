@@ -205,6 +205,15 @@ final class JMDictStore {
             return corrected
         }
 
+        if let corrected = Self.correctKataHouRubyReading(
+            rubySurface: trimmedRuby,
+            rubyReading: rubyReading,
+            range: range,
+            in: sentence
+        ) {
+            return corrected
+        }
+
         // MeCab may emit a lone kanji stem (行こう → 行 + こう); trust its kanji-only ruby for that token.
         if trimmedWord == trimmedRuby,
            Self.isSingleUnifiedKanjiExpression(trimmedRuby) {
@@ -442,6 +451,47 @@ final class JMDictStore {
         let numericPrefix = String(rubySurface.dropLast())
         guard isNumericTimePrefix(numericPrefix), !numericPrefix.hasPrefix("何") else { return nil }
         return oclockJiReading(from: rubyReading)
+    }
+
+    /// Prefixes after 方 that favor direction/comparison ほう over person-honorific かた.
+    private static let houReadingAfterKataCues = [
+        "がいい", "が良い", "がよい", "がよか", "が良かっ", "が良さ",
+        "へ", "へと", "向き",
+    ]
+
+    /// Prefixes after 〜の方 that confidently mark honorific person かた.
+    private static let kataReadingAfterNoCues = [
+        "です", "だ", "でござ", "でした", "だった",
+        "も", "を", "と", "から", "まで", "ね", "よ", "わ", "さ",
+        "、", "。", "！", "？", "!", "?", "\n",
+        "が来", "がいら", "がおっしゃ", "が言", "が教え",
+    ]
+
+    /// MeCab/IPADic defaults lone 方 to ほう; honorific person 〜の方 should be かた
+    /// (転勤の方) unless comparison/direction cues favor ほう (の方がいい, 右の方へ, より〜の方).
+    private static func correctKataHouRubyReading(
+        rubySurface: String,
+        rubyReading: String,
+        range: Range<String.Index>?,
+        in sentence: String
+    ) -> String? {
+        guard rubySurface == "方" else { return nil }
+        if rubyReading == "かた" || rubyReading == "がた" { return nil }
+        guard let range, range.lowerBound > sentence.startIndex else { return nil }
+        let before = sentence[sentence.index(before: range.lowerBound)]
+        guard before == "の" else { return nil }
+
+        let after = String(sentence[range.upperBound...])
+        if houReadingAfterKataCues.contains(where: { after.hasPrefix($0) }) {
+            return nil
+        }
+        if sentence[sentence.startIndex..<range.lowerBound].contains("より") {
+            return nil
+        }
+        if after.isEmpty || kataReadingAfterNoCues.contains(where: { after.hasPrefix($0) }) {
+            return "かた"
+        }
+        return nil
     }
 
     private static func isOclockJiContext(in sentence: String, at range: Range<String.Index>?) -> Bool {
@@ -836,6 +886,43 @@ final class JMDictStore {
             print("JMDictStore: compounds query error: \(error)")
             return []
         }
+    }
+
+    /// Candidate two- or three-character, kanji-only expressions (e.g. 電球, 自動車),
+    /// sorted by score. Cheap SQL-side filter only — callers still need to confirm every
+    /// character is a real kanji (e.g. via `KanjidicStore`) since this excludes kana
+    /// but not punctuation.
+    func kanjiCompounds(characterCounts: [Int] = [2, 3], limit: Int = 400) -> [JMDictEntry] {
+        openDatabaseIfNeeded()
+        guard let dbQueue else { return [] }
+        guard !characterCounts.isEmpty else { return [] }
+
+        let placeholders = characterCounts.map { _ in "?" }.joined(separator: ", ")
+        let sql = """
+            SELECT * FROM entries
+            WHERE length(expression) IN (\(placeholders))
+                AND expression NOT GLOB '*[ぁ-んァ-ヶー]*'
+            ORDER BY score DESC, id ASC
+            LIMIT ?
+            """
+
+        do {
+            return try dbQueue.read { db in
+                var arguments: [DatabaseValueConvertible] = characterCounts.map { $0 }
+                arguments.append(limit)
+                return try JMDictEntry.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
+            }
+        } catch {
+            print("JMDictStore: kanjiCompounds query error: \(error)")
+            return []
+        }
+    }
+
+    /// Candidate two-character, kanji-only expressions (e.g. 電球), sorted by score.
+    /// Cheap SQL-side filter only — callers still need to confirm both characters are
+    /// real kanji (e.g. via `KanjidicStore`) since this excludes kana but not punctuation.
+    func twoCharacterKanjiCompounds(limit: Int = 400) -> [JMDictEntry] {
+        kanjiCompounds(characterCounts: [2], limit: limit)
     }
 
     private static func escapeLike(_ s: String) -> String {

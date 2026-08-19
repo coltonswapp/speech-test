@@ -60,6 +60,13 @@ enum ExperimentPalette {
             : UIColor(red: 0.85, green: 0.72, blue: 0.18, alpha: 1)
     }
 
+    /// Meaning badge copy on kanji decomposition cards — darker than `.systemYellow`.
+    static let meaningBadgeText = UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.92, green: 0.74, blue: 0.18, alpha: 1)
+            : UIColor(red: 0.68, green: 0.48, blue: 0.0, alpha: 1)
+    }
+
     /// Success-state fill (soft green).
     static let successFill = UIColor { traits in
         traits.userInterfaceStyle == .dark

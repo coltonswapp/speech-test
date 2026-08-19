@@ -268,6 +268,10 @@ CREATE TABLE IF NOT EXISTS entries (
 );
 CREATE INDEX IF NOT EXISTS idx_entries_expression ON entries(expression);
 CREATE INDEX IF NOT EXISTS idx_entries_reading    ON entries(reading);
+-- Required by hasExactLexicalMatch's OR query: SQLite only applies the
+-- OR-to-index optimization when every arm is indexable; without this index
+-- each lookup falls back to a full table scan (~250k rows).
+CREATE INDEX IF NOT EXISTS idx_entries_primary_reading ON entries(primary_reading);
 CREATE INDEX IF NOT EXISTS idx_entries_score      ON entries(score DESC);
 
 -- romaji is a fully indexed column so prefix queries like "tabe*" hit it.

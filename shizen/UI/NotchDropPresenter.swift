@@ -192,8 +192,8 @@ final class NotchDropPresenter {
         speechBars.diamondFalloff = 0.75
         speechBars.meterHeight = style.voiceMeterHeight * 0.45
 
-        audioPlayer.onPlaybackUpdate = { [weak self] time, envelope, liveLevel in
-            self?.speechBars.setPlayback(envelope: envelope, at: time, liveLevel: liveLevel)
+        audioPlayer.onPlaybackUpdate = { [weak self] frame in
+            self?.speechBars.setPlayback(envelope: frame.envelope, at: frame.time, liveLevel: frame.liveLevel)
         }
         audioPlayer.onFinished = { [weak self] in
             guard let self else { return }

@@ -441,12 +441,44 @@ final class JapaneseTokenizer {
 // MARK: - Furigana (shared MeCab engine)
 
 extension JapaneseTokenizer {
+    /// MeCab tokenization + JMDict reading lookups are expensive and depend only on `text` —
+    /// never on font. Callers that rebuild furigana purely for a font/weight change (e.g. the
+    /// emphasis animation in DialogueExperimentViewController, which reruns this on nearly every
+    /// display-link tick) would otherwise redo this work every frame, which is what was causing
+    /// the animation to drop frames. Cache by text so a font-only change is a cache hit.
+    ///
+    /// Ranges are cached as UTF-16 `NSRange`s, not `Range<String.Index>`: a `String.Index` is
+    /// only valid for the exact string instance it was created from, and a cache hit hands the
+    /// result to a different (equal-content) instance whose backing storage may differ.
+    private final class FuriganaAnnotationsBox {
+        let entries: [(reading: String, nsRange: NSRange)]
+        init(_ entries: [(reading: String, nsRange: NSRange)]) { self.entries = entries }
+
+        func annotations(in text: String) -> [FuriganaAnnotation] {
+            entries.compactMap { entry in
+                guard let range = Range(entry.nsRange, in: text) else { return nil }
+                return FuriganaAnnotation(reading: entry.reading, range: range)
+            }
+        }
+    }
+
+    private static let furiganaAnnotationsCache = NSCache<NSString, FuriganaAnnotationsBox>()
+
     static func furiganaAnnotations(for text: String) -> [FuriganaAnnotation] {
         guard !text.isEmpty else { return [] }
         if mecabInitFailed { return [] }
 
+        let cacheKey = text as NSString
+        if let cached = furiganaAnnotationsCache.object(forKey: cacheKey) {
+            return cached.annotations(in: text)
+        }
+
         mecabLock.lock()
         defer { mecabLock.unlock() }
+
+        if let cached = furiganaAnnotationsCache.object(forKey: cacheKey) {
+            return cached.annotations(in: text)
+        }
 
         if mecabEngine == nil {
             do {
@@ -502,6 +534,10 @@ extension JapaneseTokenizer {
                 result.append(annotation)
             }
         }
+        furiganaAnnotationsCache.setObject(
+            FuriganaAnnotationsBox(result.map { (reading: $0.reading, nsRange: NSRange($0.range, in: text)) }),
+            forKey: cacheKey
+        )
         return result
     }
 

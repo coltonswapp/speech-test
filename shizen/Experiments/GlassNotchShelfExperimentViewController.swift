@@ -100,8 +100,8 @@ final class GlassNotchShelfExperimentViewController: UIViewController {
         navigationItem.largeTitleDisplayMode = .never
         view.backgroundColor = ExperimentPalette.pageBackground
 
-        audioPlayer.onPlaybackUpdate = { [weak self] time, envelope, liveLevel in
-            self?.speechBars.setPlayback(envelope: envelope, at: time, liveLevel: liveLevel)
+        audioPlayer.onPlaybackUpdate = { [weak self] frame in
+            self?.speechBars.setPlayback(envelope: frame.envelope, at: frame.time, liveLevel: frame.liveLevel)
         }
         audioPlayer.onFinished = { [weak self] in
             self?.speechBars.releaseToRest()

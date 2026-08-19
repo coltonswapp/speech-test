@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		F629EE192FBBBB15006A3F68 /* TTSCore in Frameworks */ = {isa = PBXBuildFile; productRef = F6AA00022F957A880FFF002 /* TTSCore */; };
+		F65E7DFB300B104C0081F120 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F65E7DFA300B104C0081F120 /* NNKit */; };
 		F6713B1630019B3000A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1530019B3000A89257 /* NNKit */; };
 		F6713B1930019E0800A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1830019E0800A89257 /* NNKit */; };
 		F6713B1C30019EC800A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1B30019EC800A89257 /* NNKit */; };
@@ -60,6 +61,7 @@
 				F6B950AD2FB582D0007030C7 /* Mecab-Swift in Frameworks */,
 				F6DE0FAD2F957A8600FFF413 /* GRDB in Frameworks */,
 				F6B950AF2FB582D0007030C7 /* StringTools in Frameworks */,
+				F65E7DFB300B104C0081F120 /* NNKit in Frameworks */,
 				F6B950AB2FB582D0007030C7 /* IPADic in Frameworks */,
 				F6713B1930019E0800A89257 /* NNKit in Frameworks */,
 			);
@@ -123,6 +125,7 @@
 				F6713B1530019B3000A89257 /* NNKit */,
 				F6713B1830019E0800A89257 /* NNKit */,
 				F6713B1B30019EC800A89257 /* NNKit */,
+				F65E7DFA300B104C0081F120 /* NNKit */,
 			);
 			productName = shizen;
 			productReference = F6DE0F8F2F957A7A00FFF406 /* shizen.app */;
@@ -157,7 +160,7 @@
 				F6B950A72FB582D0007030C7 /* XCRemoteSwiftPackageReference "Mecab-Swift" */,
 				F6AA00012F957A880FFF001 /* XCLocalSwiftPackageReference "TTSCore" */,
 				F6SC00012FCONTENT001 /* XCLocalSwiftPackageReference "GrammarContentKit" */,
-				F6713B1A30019EC800A89257 /* XCLocalSwiftPackageReference "../cs-ios-style-guide" */,
+				F65E7DF9300B104C0081F120 /* XCLocalSwiftPackageReference "../cs-ios-style-guide" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F6DE0F902F957A7A00FFF406 /* Products */;
@@ -401,7 +404,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		F6713B1A30019EC800A89257 /* XCLocalSwiftPackageReference "../cs-ios-style-guide" */ = {
+		F65E7DF9300B104C0081F120 /* XCLocalSwiftPackageReference "../cs-ios-style-guide" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../cs-ios-style-guide";
 		};
@@ -435,6 +438,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		F65E7DFA300B104C0081F120 /* NNKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NNKit;
+		};
 		F6713B1530019B3000A89257 /* NNKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = NNKit;

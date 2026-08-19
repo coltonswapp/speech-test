@@ -133,8 +133,37 @@ struct GrammarExample: Hashable {
     let targetSubstring: String?
     let audioKey: String?
     let publishedAudioUrl: String?
+    let publishedVariantId: String?
+    let publishedContentHash: String?
+    let publishedAt: String?
     let scenario: GrammarScenario?
     let sourceScenarioId: String?
+
+    init(
+        japanese: String,
+        romaji: String,
+        english: String,
+        targetSubstring: String? = nil,
+        audioKey: String? = nil,
+        publishedAudioUrl: String? = nil,
+        publishedVariantId: String? = nil,
+        publishedContentHash: String? = nil,
+        publishedAt: String? = nil,
+        scenario: GrammarScenario? = nil,
+        sourceScenarioId: String? = nil
+    ) {
+        self.japanese = japanese
+        self.romaji = romaji
+        self.english = english
+        self.targetSubstring = targetSubstring
+        self.audioKey = audioKey
+        self.publishedAudioUrl = publishedAudioUrl
+        self.publishedVariantId = publishedVariantId
+        self.publishedContentHash = publishedContentHash
+        self.publishedAt = publishedAt
+        self.scenario = scenario
+        self.sourceScenarioId = sourceScenarioId
+    }
 
     var reading: String { romaji }
 
@@ -232,6 +261,9 @@ extension GrammarExample {
         targetSubstring = record.targetSubstring
         audioKey = record.audioKey
         publishedAudioUrl = nil
+        publishedVariantId = nil
+        publishedContentHash = nil
+        publishedAt = nil
         scenario = record.scenario.map(GrammarScenario.init(record:))
         sourceScenarioId = record.sourceScenarioId
     }

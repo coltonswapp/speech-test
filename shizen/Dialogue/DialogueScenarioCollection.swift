@@ -63,6 +63,9 @@ private struct DialogueScenarioCollectionFile: Decodable {
         let targetSubstring: String?
         let audioKey: String?
         let publishedAudioUrl: String?
+        let publishedVariantId: String?
+        let publishedContentHash: String?
+        let publishedAt: String?
         let grammarPointIDs: [String]?
         let scenario: ScenarioBody
         let highlights: HighlightsRecord?
@@ -154,6 +157,9 @@ private extension DialogueScenarioCollection {
                 targetSubstring: record.targetSubstring,
                 audioKey: record.audioKey,
                 publishedAudioUrl: record.publishedAudioUrl,
+                publishedVariantId: record.publishedVariantId,
+                publishedContentHash: record.publishedContentHash,
+                publishedAt: record.publishedAt,
                 scenario: GrammarScenario(
                     setting: record.scenario.setting,
                     lines: lines

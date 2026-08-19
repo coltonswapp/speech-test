@@ -51,9 +51,13 @@ enum GrammarAudioCatalog {
     }
 
     /// Returns a locally playable URL when already cached or bundled.
-    static func resolveLocalURL(publishedAudioUrl: String?, audioKey: String?) -> URL? {
+    static func resolveLocalURL(
+        publishedAudioUrl: String?,
+        audioKey: String?,
+        cacheMetadata: RemoteAudioCacheMetadata? = nil
+    ) -> URL? {
         if let remote = trimmedRemoteURL(from: publishedAudioUrl),
-           let cached = RemoteAudioCache.cachedFileURL(for: remote) {
+           let cached = RemoteAudioCache.cachedFileURL(for: remote, expected: cacheMetadata) {
             return cached
         }
         if let key = audioKey?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -68,9 +72,14 @@ enum GrammarAudioCatalog {
     static func ensureLocalURL(
         publishedAudioUrl: String?,
         audioKey: String?,
+        cacheMetadata: RemoteAudioCacheMetadata? = nil,
         completion: @escaping (URL?) -> Void
     ) {
-        if let local = resolveLocalURL(publishedAudioUrl: publishedAudioUrl, audioKey: audioKey) {
+        if let local = resolveLocalURL(
+            publishedAudioUrl: publishedAudioUrl,
+            audioKey: audioKey,
+            cacheMetadata: cacheMetadata
+        ) {
             completion(local)
             return
         }
@@ -78,7 +87,7 @@ enum GrammarAudioCatalog {
             completion(nil)
             return
         }
-        RemoteAudioCache.ensureLocalFile(for: remote) { result in
+        RemoteAudioCache.ensureLocalFile(for: remote, metadata: cacheMetadata) { result in
             switch result {
             case .success(let url):
                 completion(url)
@@ -143,7 +152,7 @@ enum GrammarExampleDialogueLines {
 }
 
 /// Plays lesson `.m4a` clips from CDN or bundle, referenced by `publishedAudioUrl` / `audioKey`.
-final class GrammarAudioPlayer {
+final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
 
     private struct PreparedClip {
         let url: URL
@@ -155,18 +164,23 @@ final class GrammarAudioPlayer {
     private var preparedClip: PreparedClip?
     private var preparedCacheKey: String?
     private var lineStopTimer: Timer?
+    private var playbackCompletion: (() -> Void)?
 
     func play(
         publishedAudioUrl: String? = nil,
         audioKey: String?,
+        cacheMetadata: RemoteAudioCacheMetadata? = nil,
         dialogueLines: [String] = [],
         playLineIndex: Int? = nil,
         fallbackText: String,
-        languageIdentifier: String = "ja-JP"
+        languageIdentifier: String = "ja-JP",
+        onFinished: (() -> Void)? = nil
     ) {
+        playbackCompletion = onFinished
         GrammarAudioCatalog.ensureLocalURL(
             publishedAudioUrl: publishedAudioUrl,
-            audioKey: audioKey
+            audioKey: audioKey,
+            cacheMetadata: cacheMetadata
         ) { [weak self] url in
             guard let self else { return }
             self.performOnMain {
@@ -203,15 +217,19 @@ final class GrammarAudioPlayer {
         at index: Int,
         publishedAudioUrl: String? = nil,
         audioKey: String?,
+        cacheMetadata: RemoteAudioCacheMetadata? = nil,
         dialogueLines: [String],
-        fallbackText: String
+        fallbackText: String,
+        onFinished: (() -> Void)? = nil
     ) {
         play(
             publishedAudioUrl: publishedAudioUrl,
             audioKey: audioKey,
+            cacheMetadata: cacheMetadata,
             dialogueLines: dialogueLines,
             playLineIndex: index,
-            fallbackText: fallbackText
+            fallbackText: fallbackText,
+            onFinished: onFinished
         )
     }
 
@@ -223,7 +241,18 @@ final class GrammarAudioPlayer {
             self.audioPlayer?.stop()
             self.audioPlayer = nil
             self.fallbackSpeaker.stop()
+            self.playbackCompletion = nil
         }
+    }
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        notifyPlaybackFinished()
+    }
+
+    private func notifyPlaybackFinished() {
+        guard let completion = playbackCompletion else { return }
+        playbackCompletion = nil
+        completion()
     }
 
     // MARK: - Segmented playback
@@ -292,6 +321,7 @@ final class GrammarAudioPlayer {
         lineStopTimer = Timer.scheduledTimer(withTimeInterval: end - start, repeats: false) { [weak self] _ in
             player.stop()
             self?.lineStopTimer = nil
+            self?.notifyPlaybackFinished()
         }
     }
 
@@ -321,6 +351,7 @@ final class GrammarAudioPlayer {
             return audioPlayer
         }
         guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        player.delegate = self
         player.prepareToPlay()
         audioPlayer = player
         return player
@@ -332,6 +363,11 @@ final class GrammarAudioPlayer {
         audioPlayer?.stop()
         audioPlayer = nil
         fallbackSpeaker.speak(text, languageIdentifier: languageIdentifier)
+        // AVSpeechSynthesizer has no completion here — approximate so Listen & Repeat can proceed.
+        let estimated = max(0.8, Double(text.count) * 0.12)
+        DispatchQueue.main.asyncAfter(deadline: .now() + estimated) { [weak self] in
+            self?.notifyPlaybackFinished()
+        }
     }
 
     private func performOnMain(_ work: @escaping () -> Void) {

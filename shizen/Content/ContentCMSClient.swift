@@ -9,6 +9,8 @@ import Foundation
 
 struct CMSDialogueLessonSummary: Hashable, Sendable {
     let id: String
+    /// Curriculum unit (grammar band) this lesson belongs to; nil = unfiled.
+    let unitId: String?
     let title: String
     let subtitle: String?
     let sceneImage: String?
@@ -16,6 +18,22 @@ struct CMSDialogueLessonSummary: Hashable, Sendable {
     let orderIndex: Int
     let updatedAt: String?
     let scenarioCount: Int
+}
+
+struct CMSCurriculumUnit: Hashable, Sendable {
+    let id: String
+    let title: String
+    let subtitle: String?
+    /// 5 = N5 … 1 = N1, matching GrammarPoint.jlptLevel.
+    let jlptLevel: Int
+    let orderIndex: Int
+}
+
+/// Full lesson index: curriculum units in display order plus every lesson.
+/// Lessons whose `unitId` is nil (or references an unknown unit) are unfiled.
+struct CMSDialogueLessonIndex: Sendable {
+    let units: [CMSCurriculumUnit]
+    let lessons: [CMSDialogueLessonSummary]
 }
 
 enum ContentCMSClient {
@@ -39,10 +57,10 @@ enum ContentCMSClient {
 
     static var isConfigured: Bool { baseURL != nil }
 
-    /// Lists every dialogue lesson (collection) from the CMS.
-    /// Does not require per-lesson URLs — only the CMS base URL.
-    static func fetchDialogueLessons(
-        completion: @escaping (Result<[CMSDialogueLessonSummary], Error>) -> Void
+    /// Lists every dialogue lesson (collection) from the CMS, grouped under
+    /// curriculum units. Does not require per-lesson URLs — only the CMS base URL.
+    static func fetchDialogueLessonIndex(
+        completion: @escaping (Result<CMSDialogueLessonIndex, Error>) -> Void
     ) {
         guard let baseURL else {
             completion(.failure(CMSClientError.notConfigured))
@@ -77,7 +95,15 @@ enum ContentCMSClient {
                         }
                         return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
                     }
-                completion(.success(lessons))
+                let units = (decoded.units ?? [])
+                    .map { $0.asUnit }
+                    .sorted {
+                        if $0.orderIndex != $1.orderIndex {
+                            return $0.orderIndex < $1.orderIndex
+                        }
+                        return $0.id < $1.id
+                    }
+                completion(.success(CMSDialogueLessonIndex(units: units, lessons: lessons)))
             } catch {
                 completion(.failure(error))
             }
@@ -147,11 +173,32 @@ enum ContentCMSClient {
     }
 
     private struct LessonListPayload: Decodable {
+        // `units` is absent on older CMS deployments.
+        let units: [UnitRecord]?
         let collections: [LessonSummaryRecord]
+    }
+
+    private struct UnitRecord: Decodable {
+        let id: String
+        let title: String
+        let subtitle: String?
+        let jlptLevel: Int
+        let orderIndex: Int
+
+        var asUnit: CMSCurriculumUnit {
+            CMSCurriculumUnit(
+                id: id,
+                title: title,
+                subtitle: subtitle,
+                jlptLevel: jlptLevel,
+                orderIndex: orderIndex
+            )
+        }
     }
 
     private struct LessonSummaryRecord: Decodable {
         let id: String
+        let unitId: String?
         let title: String
         let subtitle: String?
         let sceneImage: String?
@@ -163,6 +210,7 @@ enum ContentCMSClient {
         var asSummary: CMSDialogueLessonSummary {
             CMSDialogueLessonSummary(
                 id: id,
+                unitId: unitId,
                 title: title,
                 subtitle: subtitle,
                 sceneImage: sceneImage,

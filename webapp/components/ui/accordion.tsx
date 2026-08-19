@@ -55,10 +55,12 @@ function AccordionPanel({
   return (
     <AccordionPrimitive.Panel
       data-slot="accordion-panel"
-      className="overflow-hidden text-sm"
+      // Default overflow-hidden clips sticky descendants; callers can override
+      // (e.g. Takes list needs overflow-visible for a section-sticky waveform).
+      className={cn("overflow-hidden text-sm", className)}
       {...props}
     >
-      <div className={cn("pt-0 pb-4", className)}>{children}</div>
+      <div className="pt-0 pb-4">{children}</div>
     </AccordionPrimitive.Panel>
   )
 }

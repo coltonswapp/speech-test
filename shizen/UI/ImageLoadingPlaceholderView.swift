@@ -23,6 +23,8 @@ final class ImageLoadingPlaceholderModel {
 struct ImageLoadingPlaceholderContent: View {
     var model: ImageLoadingPlaceholderModel
 
+    @State private var referenceDate = Date()
+
     private var surfaceColor: Color {
         model.isDarkMode
             ? Color(red: 0.184, green: 0.184, blue: 0.184)
@@ -37,7 +39,10 @@ struct ImageLoadingPlaceholderContent: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !model.isAnimating)) { timeline in
-            let time = Float(timeline.date.timeIntervalSinceReferenceDate)
+            // Anchor to a small elapsed value; the raw timeIntervalSinceReferenceDate
+            // is large enough (hundreds of millions of seconds) that casting straight
+            // to Float quantizes to ~1-minute steps and the shader appears frozen.
+            let time = Float(timeline.date.timeIntervalSince(referenceDate))
 
             GeometryReader { geometry in
                 ZStack(alignment: .topLeading) {

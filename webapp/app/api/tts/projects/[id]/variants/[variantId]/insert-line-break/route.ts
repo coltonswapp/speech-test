@@ -14,7 +14,7 @@ const bodySchema = z.object({
   sample: z.number().int().min(0),
 });
 
-/** Inserts 0.15s of silence at `sample`, shifts existing marks past the insertion point, and adds a new mark at the end of the inserted gap. */
+/** Inserts 0.15s of silence at `sample` and shifts existing marks/trim past the insertion point. Does not add a new mark. */
 export async function POST(
   request: NextRequest,
   ctx: RouteContext<"/api/tts/projects/[id]/variants/[variantId]/insert-line-break">
@@ -49,14 +49,11 @@ export async function POST(
 
   await putObject(variant.audioObjectKey, newWav, "audio/wav");
 
+  // Shift marks that fall at/after the insert so they stay aligned with speech;
+  // do not create a new dialogue-line mark for this gap.
   const shiftedMarks = (variant.dialogueLineSwitchSamples ?? []).map((s) =>
     s >= insertAt ? s + insertCount : s
   );
-  const newMarkSample = insertAt + insertCount;
-  if (!shiftedMarks.includes(newMarkSample)) {
-    shiftedMarks.push(newMarkSample);
-  }
-  shiftedMarks.sort((a, b) => a - b);
 
   const shiftedTrimLower =
     variant.trimSampleLower != null && variant.trimSampleLower >= insertAt

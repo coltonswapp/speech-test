@@ -90,7 +90,10 @@ export function VariantList({
   const selectionEnabled = selectedVariantId !== undefined;
 
   return (
-    <Card>
+    // overflow-visible so the waveform editor's sticky player can pin to the
+    // viewport while sentence-map rows scroll underneath (Card defaults to
+    // overflow-hidden for corner clipping).
+    <Card className="overflow-visible">
       <CardHeader>
         <CardTitle className="text-base font-medium">Takes</CardTitle>
       </CardHeader>
@@ -185,7 +188,7 @@ export function VariantList({
                       </DropdownMenu>
                     </div>
                   </div>
-                  <AccordionPanel>
+                  <AccordionPanel className="overflow-visible">
                     <div className="flex flex-col gap-3">
                       {selectionEnabled && !isSelected && (
                         <Button

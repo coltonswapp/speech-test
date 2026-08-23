@@ -110,7 +110,6 @@ final class SavedGenerationsViewController: UIViewController {
         case dialogueNestedPaging
         case dialogueBubbleUnderglow
         case kanjiDecomposition
-        case compoundMeaning
         case registerLadder
         case quickLookPDF
 
@@ -147,7 +146,6 @@ final class SavedGenerationsViewController: UIViewController {
             case .dialogueNestedPaging: return "Dialogue nested paging"
             case .dialogueBubbleUnderglow: return "Bubble underglow tuner"
             case .kanjiDecomposition: return "Kanji decomposition"
-            case .compoundMeaning: return "Compound meaning"
             case .registerLadder: return "Register ladder"
             case .quickLookPDF: return "QuickLook PDF repro"
             }
@@ -186,7 +184,6 @@ final class SavedGenerationsViewController: UIViewController {
             case .dialogueNestedPaging: return "Nested vertical scroll · boundary handoff · rectangles → circles"
             case .dialogueBubbleUnderglow: return "Single glass bubble · sliders for underglow tuning"
             case .kanjiDecomposition: return "Character-by-character compound breakdown · export cards"
-            case .compoundMeaning: return "2 kanji → English guess · rank · hint ladder · reveal"
             case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
             case .quickLookPDF: return "App Support PDF · QLPreview vs tmp / share / PDFKit"
             }
@@ -225,7 +222,6 @@ final class SavedGenerationsViewController: UIViewController {
             case .dialogueNestedPaging: return "rectangle.arrowtriangle.2.inward"
             case .dialogueBubbleUnderglow: return "bubble.left.fill"
             case .kanjiDecomposition: return "puzzlepiece.extension"
-            case .compoundMeaning: return "character.textbox"
             case .registerLadder: return "text.badge.star"
             case .quickLookPDF: return "doc.richtext"
             }
@@ -731,11 +727,6 @@ final class SavedGenerationsViewController: UIViewController {
         case .kanjiDecomposition:
             navigationController?.pushViewController(
                 KanjiDecompositionListViewController(),
-                animated: true
-            )
-        case .compoundMeaning:
-            navigationController?.pushViewController(
-                CompoundMeaningGameViewController(),
                 animated: true
             )
         case .registerLadder:

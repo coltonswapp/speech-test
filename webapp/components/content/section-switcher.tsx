@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 const sections = [
   { key: "dialogues", label: "Dialogues", href: "/content/dialogues" },
+  { key: "curriculum", label: "Curriculum", href: "/content/curriculum" },
   { key: "grammar", label: "Grammar", href: "/content" },
   { key: "coverage", label: "Coverage", href: "/content/coverage" },
 ] as const;
@@ -12,7 +13,7 @@ const sections = [
 export function SectionSwitcher({
   active,
 }: {
-  active: "grammar" | "dialogues" | "coverage";
+  active: "grammar" | "dialogues" | "coverage" | "curriculum";
 }) {
   return (
     <div className="flex rounded-lg bg-muted p-1 text-sm">
@@ -21,7 +22,7 @@ export function SectionSwitcher({
           key={section.key}
           href={section.href}
           className={cn(
-            "flex-1 rounded-md px-3 py-1 text-center transition-colors",
+            "flex-1 rounded-md px-2.5 py-1 text-center transition-colors whitespace-nowrap",
             section.key === active
               ? "bg-background font-medium shadow-sm"
               : "text-muted-foreground hover:text-foreground"

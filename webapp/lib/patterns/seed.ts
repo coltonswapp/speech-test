@@ -106,7 +106,15 @@ export function rowsFromCsv(text: string): TeachingPatternSeedRow[] {
       id,
       form: cells[col.form]?.trim() ?? "",
       gloss: cells[col.gloss]?.trim() ?? "",
-      jlptBand: Number(cells[col.jlptBand] ?? 5) || 5,
+      jlptBand: (() => {
+        const rawBand = (cells[col.jlptBand] ?? "5").trim();
+        if (/^n?\d+$/i.test(rawBand)) {
+          const n = Number(rawBand.replace(/^n/i, ""));
+          return Number.isFinite(n) && n > 0 ? n : 5;
+        }
+        const n = Number(rawBand);
+        return Number.isFinite(n) && n > 0 ? n : 5;
+      })(),
       category: cells[col.category]?.trim() ?? "other",
       status: cells[col.status]?.trim() || "seed",
       orderIndex: Number(cells[col.orderIndex] ?? rowIndex) || 0,

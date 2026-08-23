@@ -1,85 +1,90 @@
 id,form,gloss,jlptBand,category,status,orderIndex
-cha-ikenai-ja-ikenai,ちゃいけない・じゃいけない,must not do (spoken),5,obligation,seed,0
-da-desu,だ / です,to be,5,copula,seed,1
-dake,だけ,only; just,5,particle,seed,2
-darou,だろう,I think; probably,5,other,seed,3
-de,で,in; at; by; with,5,particle,seed,4
-demo,でも,but; however,5,conjunction,seed,5
-deshou,でしょう,I think; probably,5,other,seed,6
-donna,どんな,what kind of,5,question,seed,7
-doushite,どうして,why,5,question,seed,8
-douyatte,どうやって,how; by what means,5,question,seed,9
-ga,が,subject marker; but,5,particle,seed,10
-ga-arimasu,があります,there is (non-living),5,existence,seed,11
-ga-hoshii,がほしい,to want something,5,desire,seed,12
-ga-imasu,がいます,there is (living),5,existence,seed,13
-hou-ga-ii,ほうがいい,had better; should,5,obligation,seed,14
-i-adjectives,い-adjectives,i-adjectives,5,adjective,seed,15
-ichiban,一番,the most; the best,5,comparison,seed,16
-issho-ni,一緒に,together,5,adverb,seed,17
-itsumo,いつも,always,5,adverb,seed,18
-janai-dewa-nai,じゃない・ではない,to not be,5,copula,seed,19
-ka,か,question particle,5,question,seed,20
-ka-ka,か～か,or,5,question,seed,21
-kara,から,because; since; from,5,conjunction,seed,22
-kata,方,how to do; way of doing,5,other,seed,23
-kedo,けど,but; although,5,conjunction,seed,24
-keredo-mo,けれども,but; although,5,conjunction,seed,25
-mada,まだ,still; not yet,5,adverb,seed,26
-mada-te-imasen,まだ～ていません,have not yet,5,progressive,seed,27
-made,まで,until; as far as,5,particle,seed,28
-mae-ni,前に,before; in front of,5,conjunction,seed,29
-masen-ka,ませんか,would you; shall we,5,request,seed,30
-mashou,ましょう,let's,5,request,seed,31
-mashouka,ましょうか,shall I (offer),5,request,seed,32
-mo,も,too; also,5,particle,seed,33
-mou,もう,already; anymore,5,adverb,seed,34
-na-adjectives,な-adjectives,na-adjectives,5,adjective,seed,35
-naa,なあ,sentence ending; confirmation,5,other,seed,36
-naide,ないで,without doing,5,other,seed,37
-naide-kudasai,ないでください,please don't,5,request,seed,38
-naito-ikenai,ないといけない,must do,5,obligation,seed,39
-naku-temo-ii,なくてもいい,don't have to,5,permission,seed,40
-nakucha,なくちゃ,must; gotta (spoken),5,obligation,seed,41
-nakute-wa-ikenai,なくてはいけない,must do,5,obligation,seed,42
-nakute-wa-naranai,なくてはならない,must do,5,obligation,seed,43
-naru,なる,to become,5,other,seed,44
-ndesu,んです,explanatory; emphasis,5,other,seed,45
-ne,ね,isn't it?,5,other,seed,46
-ni,に,destination; in; at; to,5,particle,seed,47
-ni-iku,に行く,go to do,5,other,seed,48
-ni-suru,にする,to decide on,5,other,seed,49
-ni-e,に/へ,direction / destination,5,particle,seed,50
-no,の,possessive,5,particle,seed,51
-no-desu,のです,explanatory; emphasis,5,other,seed,52
-no-ga-heta,のが下手,bad at doing,5,adjective,seed,53
-no-ga-jouzu,のが上手,good at,5,adjective,seed,54
-no-ga-suki,のが好き,like doing,5,desire,seed,55
-no-naka-de-ichiban,の中で[A]が一番,"out of group, A is best",5,comparison,seed,56
-node,ので,because; since,5,conjunction,seed,57
-o-go,お / ご,honorific prefix,5,other,seed,58
-o-wo,を,object marker,5,particle,seed,59
-o-kudasai,をください,please give me,5,request,seed,60
-shikashi,しかし,but; however,5,conjunction,seed,61
-sore-kara,それから,and then; after that,5,conjunction,seed,62
-soshite,そして,and; and then,5,conjunction,seed,63
-sugiru,すぎる,too much,5,adverb,seed,64
-ta-koto-ga-aru,たことがある,have done before,5,experience,seed,65
-tai,たい,want to do,5,desire,seed,66
-tari-tari,たり～たり,do things like A and B,5,other,seed,67
-te-aru,てある,resulting state (has been done),5,progressive,seed,68
-te-iru,ている,ongoing / current state,5,progressive,seed,69
-te-kara,てから,after doing,5,conjunction,seed,70
-te-kudasai,てください,please do,5,request,seed,71
-te-wa-ikenai,てはいけない,must not,5,obligation,seed,72
-temo-ii-desu,てもいいです,may; is OK to,5,permission,seed,73
-to,と,and; with,5,particle,seed,74
-toki,とき,when,5,conjunction,seed,75
-totemo,とても,very,5,adverb,seed,76
-tsumori,つもり,plan to; intend to,5,other,seed,77
-wa-topic,は,topic marker,5,particle,seed,78
-wa-yori-desu,は〜より・・・です,more than,5,comparison,seed,79
-wa-dou-desu-ka,はどうですか,how about; how is,5,question,seed,80
-ya,や,and; or (incomplete list),5,particle,seed,81
-yo,よ,emphasis ending,5,other,seed,82
-yori-hou-ga,より～ほうが,more than,5,comparison,seed,83
+n5-da-desu,だ／です,"to be (copula: am, is, are)",N5,copula,seed,1
+n5-janai-dewa-nai,じゃない／ではない,to not be (negative copula),N5,copula,seed,2
+n5-wa-topic,は,topic marker,N5,particle,seed,3
+n5-ga-subject,が,subject marker,N5,particle,seed,4
+n5-o-wo,を,object marker,N5,particle,seed,5
+n5-ni-location-time,に,location/time particle; in; at; on,N5,particle,seed,6
+n5-ni-e-direction,に／へ,to (direction / destination),N5,particle,seed,7
+n5-de-location,で,at; in (place of action),N5,particle,seed,8
+n5-de-means,で,by; with; via (means/instrument),N5,particle,seed,9
+n5-to-and-with,と,and; with; quoting/connecting particle,N5,particle,seed,10
+n5-mo,も,too; also; as well,N5,particle,seed,11
+n5-ya,や,and; or (non-exhaustive list),N5,particle,seed,12
+n5-no-possessive,の,possessive / attributive particle (of),N5,particle,seed,13
+n5-no-nominalizer,の,nominalizer (turns clause/verb into noun),N5,particle,seed,14
+n5-ne,ね,isn't it?; right?; seeking agreement,N5,particle,seed,15
+n5-yo,よ,you know; emphatic sentence-ending particle,N5,particle,seed,16
+n5-naa,なあ／な,"sentence-ending particle (confirmation, admiration)",N5,particle,seed,17
+n5-o-go-honorific,お／ご,polite/honorific prefix,N5,particle,seed,18
+n5-ga-arimasu,があります,there is (non-living things),N5,existence,seed,19
+n5-ga-imasu,がいます,there is; to be (living things),N5,existence,seed,20
+n5-i-adjectives,い形容詞,i-adjective conjugation patterns,N5,adjective,seed,21
+n5-na-adjectives,な形容詞,na-adjective conjugation patterns,N5,adjective,seed,22
+n5-naru,なる,to become,N5,conjugation,seed,23
+n5-ni-suru,にする,to decide on ~,N5,conjugation,seed,24
+n5-ni-iku,に行く（にいく）,go to do ~ (purpose),N5,conjugation,seed,25
+n5-kata,方（かた）,the way of doing ~; how to do ~,N5,conjugation,seed,26
+n5-naide,ないで,without doing ~; do B without doing A,N5,conjugation,seed,27
+n5-tai,たい,want to do ~ (verb stem + たい),N5,desire,seed,28
+n5-ga-hoshii,がほしい,to want something,N5,desire,seed,29
+n5-no-ga-suki,のが好き,to like doing something,N5,desire,seed,30
+n5-tsumori,つもり,plan to ~; intend to ~,N5,desire,seed,31
+n5-te-kudasai,てください,please do ~,N5,request_permission,seed,32
+n5-naide-kudasai,ないでください,please don't do ~,N5,request_permission,seed,33
+n5-o-kudasai,をください,please give me ~,N5,request_permission,seed,34
+n5-temo-ii,てもいいです,may I ~?; is OK to ~; permission,N5,request_permission,seed,35
+n5-nakutemo-ii,なくてもいい,don't have to ~ (no need),N5,request_permission,seed,36
+n5-tewa-ikenai,てはいけない,must not; may not; cannot,N5,obligation_prohibition,seed,37
+n5-cha-ikenai,ちゃいけない／じゃいけない,must not do (spoken contraction),N5,obligation_prohibition,seed,38
+n5-nakute-wa-ikenai,なくてはいけない,must do; need to do,N5,obligation_prohibition,seed,39
+n5-nakute-wa-naranai,なくてはならない,must do; need to do ~,N5,obligation_prohibition,seed,40
+n5-naito-ikenai,ないといけない,must do; have an obligation to do ~,N5,obligation_prohibition,seed,41
+n5-nakucha,なくちゃ,must do; gotta do ~ (casual),N5,obligation_prohibition,seed,42
+n5-mashou,ましょう,let's ~; shall we ~,N5,suggestion_invitation,seed,43
+n5-mashouka,ましょうか,shall I ~? (offer help),N5,suggestion_invitation,seed,44
+n5-masen-ka,ませんか,won't you ~?; shall we ~? (invitation),N5,suggestion_invitation,seed,45
+n5-hou-ga-ii,ほうがいい,had better; it'd be better to; should ~,N5,suggestion_invitation,seed,46
+n5-wa-dou-desu-ka,はどうですか,how about ~?; how is ~?,N5,suggestion_invitation,seed,47
+n5-te-iru,ている,ongoing action or resulting/current state,N5,experience_aspect,seed,48
+n5-te-aru,てある,is/has been done (resulting state; intentional prep),N5,experience_aspect,seed,49
+n5-ta-koto-ga-aru,たことがある,to have done something before (experience),N5,experience_aspect,seed,50
+n5-mada-te-imasen,まだ～ていません,have not yet ~,N5,experience_aspect,seed,51
+n5-tari-tari,たり～たり,do such things as A and B,N5,experience_aspect,seed,52
+n5-ichiban,一番（いちばん）,the most; the best,N5,comparison,seed,53
+n5-no-naka-de-ichiban,の中で［A］が一番,"out of this group, [A] is the best",N5,comparison,seed,54
+n5-wa-yori-desu,は〜より・・・です,[N1] is more ~ than [N2],N5,comparison,seed,55
+n5-yori-hou-ga,より～ほうが,[B] is more ~ than [A],N5,comparison,seed,56
+n5-mae-ni,前に（まえに）,before; in front of ~,N5,time_sequence,seed,57
+n5-te-kara,てから,after doing ~,N5,time_sequence,seed,58
+n5-toki,とき,when; at the time when ~,N5,time_sequence,seed,59
+n5-made,まで,until; as far as; to (an extent),N5,time_sequence,seed,60
+n5-kara-from,から,from (starting point in time/place),N5,time_sequence,seed,61
+n5-sore-kara,それから,and then; after that; since then,N5,time_sequence,seed,62
+n5-soshite,そして,and; and then; thus,N5,time_sequence,seed,63
+n5-mada,まだ,still; not yet,N5,time_sequence,seed,64
+n5-mou,もう,already; anymore; again,N5,time_sequence,seed,65
+n5-kara-because,から,because; since (reason),N5,cause_reason,seed,66
+n5-node,ので,because of; given that; since ~,N5,cause_reason,seed,67
+n5-ga-but,が,but; however (clause connector),N5,contrast,seed,68
+n5-demo,でも,but; however; though ~,N5,contrast,seed,69
+n5-kedo,けど,but; however; although ~,N5,contrast,seed,70
+n5-keredo-mo,けれども,but; however; although ~,N5,contrast,seed,71
+n5-shikashi,しかし,but; however ~,N5,contrast,seed,72
+n5-dake,だけ,only; just; as much as ~,N5,quantity_extent,seed,73
+n5-sugiru,すぎる,too much; excessively ~,N5,quantity_extent,seed,74
+n5-kurai-gurai,くらい／ぐらい,about; approximately; to the extent that ~,N5,quantity_extent,seed,75
+n5-ka-question,か,question particle,N5,question_wh,seed,76
+n5-ka-ka-or,か～か,A or B (choice),N5,question_wh,seed,77
+n5-donna,どんな,what kind of; what sort of,N5,question_wh,seed,78
+n5-doushite,どうして,why; for what reason,N5,question_wh,seed,79
+n5-douyatte,どうやって,how; in what way; by what means,N5,question_wh,seed,80
+n5-darou,だろう,I think; it seems; probably; right?,N5,other,seed,81
+n5-deshou,でしょう,I think; it seems; probably; right?,N5,other,seed,82
+n5-ndesu,んです,explanatory/emphasis form (〜んです),N5,other,seed,83
+n5-no-desu,のです,explanatory/emphasis form (〜のです),N5,other,seed,84
+n5-no-ga-jouzu,のが上手（のがじょうず）,to be good at doing something,N5,other,seed,85
+n5-no-ga-heta,のが下手（のがへた）,to be bad at doing something,N5,other,seed,86
+n5-issho-ni,一緒に（いっしょに）,together,N5,other,seed,87
+n5-itsumo,いつも,always; usually; habitually,N5,other,seed,88
+n5-totemo,とても,very; awfully; exceedingly,N5,other,seed,89

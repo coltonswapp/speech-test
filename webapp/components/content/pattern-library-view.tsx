@@ -16,20 +16,22 @@ import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { cn } from "@/lib/utils";
 
 const CATEGORY_ORDER = [
-  "particle",
   "copula",
+  "particle",
   "existence",
-  "desire",
-  "request",
-  "obligation",
-  "permission",
-  "progressive",
-  "experience",
-  "comparison",
-  "conjunction",
-  "question",
-  "adverb",
   "adjective",
+  "conjugation",
+  "desire",
+  "request_permission",
+  "obligation_prohibition",
+  "suggestion_invitation",
+  "experience_aspect",
+  "comparison",
+  "time_sequence",
+  "cause_reason",
+  "contrast",
+  "quantity_extent",
+  "question_wh",
   "other",
 ] as const;
 

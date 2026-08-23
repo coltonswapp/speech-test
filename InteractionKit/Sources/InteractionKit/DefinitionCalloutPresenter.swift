@@ -1,6 +1,6 @@
 //
 //  DefinitionCalloutPresenter.swift
-//  shizen
+//  InteractionKit
 //
 //  Shows the compact definition callout on the hosting view controller's root view.
 //  Placement uses the scrubber's bounds (converted into host coordinates) to pick above vs below.
@@ -8,9 +8,10 @@
 
 import UIKit
 
-final class DefinitionCalloutPresenter {
+@MainActor
+public final class DefinitionCalloutPresenter {
 
-    static let shared = DefinitionCalloutPresenter()
+    public static let shared = DefinitionCalloutPresenter()
     private static let horizontalMargin: CGFloat = 8
     private static let maxWidthFraction: CGFloat = 0.70
 
@@ -22,13 +23,13 @@ final class DefinitionCalloutPresenter {
 
     private init() {}
 
-    func isShowingCallout(at point: CGPoint, in coordinateView: UIView) -> Bool {
+    public func isShowingCallout(at point: CGPoint, in coordinateView: UIView) -> Bool {
         guard let callout = calloutView, let hostView else { return false }
         let pointInHost = coordinateView.convert(point, to: hostView)
         return callout.frame.contains(pointInHost)
     }
 
-    func presentOrUpdate(
+    public func presentOrUpdate(
         text: String,
         surface: String,
         lineFragments: [CGRect],
@@ -103,7 +104,7 @@ final class DefinitionCalloutPresenter {
         }
     }
 
-    func dismiss(animated: Bool) {
+    public func dismiss(animated: Bool) {
         guard let callout = calloutView else {
             detachLifecycle()
             hostView = nil

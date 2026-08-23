@@ -5,6 +5,7 @@
 //  Glass-backed pills and wrapping flow layout for dialogue learning highlights.
 //
 
+import InteractionKit
 import UIKit
 
 enum DialogueGlassPillStyle {

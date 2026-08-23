@@ -1,18 +1,18 @@
 //
 //  FlashcardStackView.swift
-//  shizen
+//  InteractionKit
 //
-//  Tinder-style swipeable card stack: right = "know it", left = "review again" (DEBUG).
+//  Tinder-style swipeable card stack: right = "know it", left = "review again".
 //
 
 import UIKit
 
-enum FlashcardSwipeDirection {
+public enum FlashcardSwipeDirection {
     case left
     case right
 
     /// Translation past the screen edge so the card fully clears (with padding for rotation overhang).
-    var offscreenTranslation: CGFloat {
+    public var offscreenTranslation: CGFloat {
         let distance = UIScreen.main.bounds.width * 1.4
         switch self {
         case .left: return -distance
@@ -21,13 +21,19 @@ enum FlashcardSwipeDirection {
     }
 }
 
-protocol FlashcardStackViewDelegate: AnyObject {
+/// Per-card surface hosted by `FlashcardStackView`. Language-specific content lives in the app target.
+public protocol StackableFlashcard: UIView {
+    var isRevealed: Bool { get }
+    func setRevealed(_ revealed: Bool, animated: Bool)
+}
+
+public protocol FlashcardStackViewDelegate: AnyObject {
     func flashcardStack(_ stack: FlashcardStackView, didTapCardAt index: Int)
     func flashcardStack(_ stack: FlashcardStackView, didSwipeCardAt index: Int, direction: FlashcardSwipeDirection)
     func flashcardStackDidFinish(_ stack: FlashcardStackView)
 }
 
-final class FlashcardStackView: UIView {
+public final class FlashcardStackView: UIView, UIGestureRecognizerDelegate {
 
     // MARK: - Tuning
 
@@ -40,10 +46,11 @@ final class FlashcardStackView: UIView {
 
     // MARK: - State
 
-    private var deck: [VocabFlashcard] = []
-    private var cards: [VocabFlashcardView] = []
+    private var deckCount = 0
+    private var makeCard: ((Int) -> any StackableFlashcard)?
+    private var cards: [any StackableFlashcard] = []
     private var currentIndex: Int = 0
-    private var activeCard: VocabFlashcardView?
+    private var activeCard: (any StackableFlashcard)?
     /// Each card keeps its own tilt as it moves through the stack.
     private var cardRotations: [ObjectIdentifier: CGFloat] = [:]
 
@@ -80,16 +87,16 @@ final class FlashcardStackView: UIView {
         return view
     }()
 
-    weak var delegate: FlashcardStackViewDelegate?
+    public weak var delegate: FlashcardStackViewDelegate?
 
     // MARK: - Init
 
-    override init(frame: CGRect) {
+    public override init(frame: CGRect) {
         super.init(frame: frame)
         configure()
     }
 
-    required init?(coder: NSCoder) {
+    public required init?(coder: NSCoder) {
         super.init(coder: coder)
         configure()
     }
@@ -115,17 +122,19 @@ final class FlashcardStackView: UIView {
 
     // MARK: - Public
 
-    func setDeck(_ deck: [VocabFlashcard]) {
-        self.deck = deck
+    public func setDeck(count: Int, makeCard: @escaping (Int) -> any StackableFlashcard) {
+        deckCount = count
+        self.makeCard = makeCard
         currentIndex = 0
         cards.forEach { $0.removeFromSuperview() }
         cards.removeAll()
         cardRotations.removeAll()
         emptyStateLabel.alpha = 0
 
-        let visibleCount = min(maxVisibleCards, deck.count)
+        let visibleCount = min(maxVisibleCards, count)
         for slot in 0..<visibleCount {
-            let card = makeCard(for: deck[slot])
+            let card = makeCard(slot)
+            assignRotationIfNeeded(for: card)
             cards.append(card)
         }
 
@@ -140,17 +149,14 @@ final class FlashcardStackView: UIView {
         updateProgressLabel()
     }
 
-    // MARK: - Card construction & layout
-
-    private func makeCard(for vocab: VocabFlashcard) -> VocabFlashcardView {
-        let card = VocabFlashcardView()
-        card.translatesAutoresizingMaskIntoConstraints = false
-        card.configure(with: vocab)
-        assignRotationIfNeeded(for: card)
-        return card
+    public func enumerateVisibleCards(_ body: (any StackableFlashcard) -> Void) {
+        cards.forEach(body)
     }
 
+    // MARK: - Card construction & layout
+
     private func constrainCard(_ card: UIView) {
+        card.translatesAutoresizingMaskIntoConstraints = false
         let widthConstraint = card.widthAnchor.constraint(equalTo: widthAnchor, constant: -40)
         widthConstraint.priority = .required
         let heightCap = card.heightAnchor.constraint(lessThanOrEqualTo: heightAnchor, multiplier: 0.82)
@@ -163,7 +169,7 @@ final class FlashcardStackView: UIView {
         ])
     }
 
-    private func assignRotationIfNeeded(for card: VocabFlashcardView) {
+    private func assignRotationIfNeeded(for card: UIView) {
         let key = ObjectIdentifier(card)
         guard cardRotations[key] == nil else { return }
         let magnitude = CGFloat.random(in: backgroundRotationRange)
@@ -171,11 +177,11 @@ final class FlashcardStackView: UIView {
         cardRotations[key] = magnitude * sign * .pi / 180
     }
 
-    private func forgetRotation(for card: VocabFlashcardView) {
+    private func forgetRotation(for card: UIView) {
         cardRotations.removeValue(forKey: ObjectIdentifier(card))
     }
 
-    private func transform(for card: VocabFlashcardView, slot: Int) -> CGAffineTransform {
+    private func transform(for card: UIView, slot: Int) -> CGAffineTransform {
         let scale = pow(scaleRatio, CGFloat(slot))
         let yOffset = verticalOffset * CGFloat(slot)
         var transform = CGAffineTransform(translationX: 0, y: yOffset).scaledBy(x: scale, y: scale)
@@ -199,10 +205,6 @@ final class FlashcardStackView: UIView {
         }
     }
 
-    func refreshFuriganaDisplay(animated: Bool = true) {
-        cards.forEach { $0.refreshJapaneseDisplay(animated: animated) }
-    }
-
     // MARK: - Gestures
 
     private func attachGesturesToFrontCard() {
@@ -220,6 +222,8 @@ final class FlashcardStackView: UIView {
 
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        tap.delegate = self
+        pan.delegate = self
         top.addGestureRecognizer(tap)
         top.addGestureRecognizer(pan)
 
@@ -233,15 +237,24 @@ final class FlashcardStackView: UIView {
         ])
     }
 
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        var view = touch.view
+        while let current = view, current !== self {
+            if current is UIControl { return false }
+            view = current.superview
+        }
+        return true
+    }
+
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
-        guard let card = gesture.view as? VocabFlashcardView else { return }
+        guard let card = activeCard, gesture.view === card else { return }
         UISelectionFeedbackGenerator().selectionChanged()
         card.setRevealed(!card.isRevealed, animated: true)
         delegate?.flashcardStack(self, didTapCardAt: currentIndex)
     }
 
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
-        guard let card = gesture.view as? VocabFlashcardView else { return }
+        guard let card = gesture.view else { return }
         let translation = gesture.translation(in: self)
         let velocity = gesture.velocity(in: self)
         let width = max(card.bounds.width, 1)
@@ -299,9 +312,10 @@ final class FlashcardStackView: UIView {
 
         // Bring the next background card forward if we have more deck to draw from.
         let nextDeckIndex = currentIndex + cards.count
-        var incomingBackCard: VocabFlashcardView?
-        if nextDeckIndex < deck.count {
-            let newCard = makeCard(for: deck[nextDeckIndex])
+        var incomingBackCard: (any StackableFlashcard)?
+        if nextDeckIndex < deckCount, let makeCard {
+            let newCard = makeCard(nextDeckIndex)
+            assignRotationIfNeeded(for: newCard)
             newCard.alpha = 0
             if let bottom = cards.last {
                 insertSubview(newCard, belowSubview: bottom)
@@ -366,12 +380,12 @@ final class FlashcardStackView: UIView {
     // MARK: - Progress + empty state
 
     private func updateProgressLabel() {
-        if deck.isEmpty {
+        if deckCount == 0 {
             progressLabel.text = "0 / 0"
             return
         }
-        let displayed = min(currentIndex + 1, deck.count)
-        progressLabel.text = "\(displayed) / \(deck.count)"
+        let displayed = min(currentIndex + 1, deckCount)
+        progressLabel.text = "\(displayed) / \(deckCount)"
     }
 
     private func showEmptyState() {

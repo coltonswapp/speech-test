@@ -5,6 +5,7 @@
 //  Pan horizontally across a tokenized sentence to change the selection; haptics + JMdict gloss.
 //
 
+import InteractionKit
 import Translation
 import UIKit
 
@@ -70,7 +71,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
 
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
-    private let scrubbableSentenceView = ScrubbableSentenceView()
+    private let scrubbableSentenceView = ScrubbableSentenceView(engine: JapaneseScrubSentenceEngine.shared)
 
     /// Full-sentence English from the system Translation framework (below the Japanese line).
     private let englishTranslationLabel = UILabel()

@@ -3,8 +3,9 @@
 //  shizen
 //
 
-import UIKit
 import GrammarContentKit
+import InteractionKit
+import UIKit
 
 enum GrammarChoiceLayout {
     case grid
@@ -19,7 +20,7 @@ final class GrammarMultipleChoiceStepViewController: LessonStepViewController {
     private let drill: GrammarDrill
     private let choiceLabelStyle: KanaChoiceButtonLabelStyle
     private let choiceLayout: GrammarChoiceLayout
-    private let scrubbableSentenceView = ScrubbableSentenceView()
+    private let scrubbableSentenceView = ScrubbableSentenceView(engine: JapaneseScrubSentenceEngine.shared)
     private let promptLabel = UILabel()
     private let choicesStack = UIStackView()
     private var choiceButtons: [KanaChoiceButton] = []

@@ -1,28 +1,21 @@
 //
 //  WordDictionaryDetailView.swift
-//  shizen
+//  shizen-chinese
 //
-//  Reusable word detail: furigana header, romaji, speak control, kanji chips, JMdict definitions.
+//  Reusable word detail: pinyin ruby header, Apple Intelligence card,
+//  character chips, numbered CEDICT definitions, common compounds.
 //
 
 import InteractionKit
 import UIKit
 
-/// Scrollable content is the host's job; this view stacks word, kanji, and definition sections.
 final class WordDictionaryDetailView: UIView {
-
-    private let wordSpeaker = WordUtteranceSpeaker()
-    private var speechText = ""
 
     private let contentStack = UIStackView()
 
-    private let wordHeaderStack = UIStackView()
     private let wordContentStack = UIStackView()
-    private let selectedWordLabel = FuriganaTranscriptLabel()
-    private let romajiLabel = UILabel()
-    private let dictionaryFormLabel = UILabel()
-    private let speakWordButton = UIButton(type: .system)
-    private let speakWordGlyphView = UIImageView()
+    private let selectedWordLabel = PinyinRubyLabel()
+    private let pinyinFallbackLabel = UILabel()
 
     private let contextualCardContainer = UIView()
     private let contextualCardSurface = UIView()
@@ -39,10 +32,10 @@ final class WordDictionaryDetailView: UIView {
 
     private let dividerAfterWord = WordDictionaryDetailView.makeHairlineDivider()
 
-    private let kanjiChipsScrollView = UIScrollView()
-    private let kanjiChipsStack = UIStackView()
-    private let kanjiSectionTitle = UILabel()
-    private let kanjiSectionStack = UIStackView()
+    private let characterChipsScrollView = UIScrollView()
+    private let characterChipsStack = UIStackView()
+    private let characterSectionTitle = UILabel()
+    private let characterSectionStack = UIStackView()
 
     private let dividerBeforeDefinitions = WordDictionaryDetailView.makeHairlineDivider()
     private let definitionsSectionTitle = UILabel()
@@ -53,13 +46,9 @@ final class WordDictionaryDetailView: UIView {
     private let compoundsSectionStack = UIStackView()
     private let compoundStack = UIStackView()
 
-    /// Invoked when the user taps a compound row; host re-presents detail for that expression.
     var onSelectCompound: ((String) -> Void)?
+    var onSelectCharacter: ((String) -> Void)?
 
-    /// Invoked when the user taps a kanji chip; host opens the kanji detail screen.
-    var onSelectKanji: ((String) -> Void)?
-
-    /// When false, the COMPOUNDS section is never built or shown (e.g. inline in the scrub experiment).
     var showsCompounds = true {
         didSet {
             guard showsCompounds != oldValue, !lastConfiguredSurface.isEmpty else { return }
@@ -67,18 +56,12 @@ final class WordDictionaryDetailView: UIView {
         }
     }
 
-    /// Supplies the contextual "in this sentence" gloss. Defaults to the user's persisted
-    /// `ContextualGlossBackend.preferred` setting; hosts can inject a specific provider to override it.
-    var contextualGlossProvider: ContextualGlossProviding = ContextualGlossBackend.preferred.provider
-
     private var lastConfiguredSurface = ""
     private var lastConfiguredSentence: String?
 
     private static let contextualCardContentInsets = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
     private static let contextualCardShadowBleed: CGFloat = 12
-
-    private static let audioButtonSize: CGFloat = 56
-    private static let audioGlyphColor = UIColor.systemYellow
+    private static let accentGlyphColor = UIColor.systemYellow
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -97,73 +80,31 @@ final class WordDictionaryDetailView: UIView {
 
         guard !surface.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             isHidden = true
-            speechText = ""
-            dictionaryFormLabel.isHidden = true
             contextualCardContainer.isHidden = true
             return
         }
 
         isHidden = false
-        let lookup = JMDictStore.shared.lookup(forSurface: surface)
-        let entries = lookup.entries
+        let entries = CedictStore.shared.entries(forSimplified: surface)
+        let primary = entries.max { $0.score < $1.score } ?? entries.first
 
         let wordFont = selectedWordLabel.font ?? UIFont.preferredFont(forTextStyle: .largeTitle)
-        JapaneseFuriganaBuilder.applyScrubDisplay(
+        let appliedRuby = ChinesePinyinRubyBuilder.applyDisplay(
             to: selectedWordLabel,
-            attributed: JapaneseFuriganaBuilder.attributedString(
-                for: surface,
-                font: wordFont,
-                textColor: .label
-            ),
-            contentInsets: UIEdgeInsets(
-                top: JapaneseFuriganaBuilder.wordDetailRubyTopInset(for: wordFont),
-                left: 0,
-                bottom: 2,
-                right: 0
-            )
+            hanzi: surface,
+            pinyinMarked: primary?.pinyinMarked ?? "",
+            font: wordFont,
+            textColor: .label
         )
+        let fallbackPinyin = primary?.pinyinMarked.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        pinyinFallbackLabel.text = fallbackPinyin
+        pinyinFallbackLabel.isHidden = appliedRuby || fallbackPinyin.isEmpty
 
-        let primary = entries.max { ($0.score ?? 0) < ($1.score ?? 0) } ?? entries.first
-        let yomi =
-            primary
-            .map { JMDictStore.shared.readingForSurface(surface, matching: $0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            ?? ""
-        let readingForRomaji = !yomi.isEmpty ? yomi : surface
-        let romaji = HiraganaRomaji.romanize(readingForRomaji)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        romajiLabel.isHidden = romaji.isEmpty
-        romajiLabel.text = romaji.isEmpty ? nil : romaji
-
-        if let dictionaryForm = lookup.dictionaryForm {
-            let reading = lookup.dictionaryFormReading ?? dictionaryForm
-            let lemmaRomaji = HiraganaRomaji.romanize(reading)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if lemmaRomaji.isEmpty {
-                dictionaryFormLabel.text = "Dictionary form: \(dictionaryForm)"
-            } else {
-                dictionaryFormLabel.text = "Dictionary form: \(dictionaryForm) · \(lemmaRomaji)"
-            }
-            dictionaryFormLabel.isHidden = false
-        } else {
-            dictionaryFormLabel.text = nil
-            dictionaryFormLabel.isHidden = true
-        }
-
-        speechText = (!yomi.isEmpty ? yomi : surface)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        rebuildKanjiChips(surface: surface)
+        rebuildCharacterChips(surface: surface)
         rebuildCompoundContent(surface: surface)
 
-        let willRequestContextualGloss = Self.shouldRequestContextualGloss(
-            sentence: sentence,
-            hasDictionaryMatch: !entries.isEmpty,
-            providerAvailable: contextualGlossProvider.isAvailable
-        )
-        // When JMdict misses (compounds / set phrases), prefer the contextual card over
-        // an empty DEFINITIONS section — fall back to the empty label if gloss fails.
+        let willRequestContextualGloss = FoundationModelContextualGloss.isAvailable
         rebuildDefinitionContent(
-            surface: surface,
             entries: entries,
             suppressEmptyState: willRequestContextualGloss
         )
@@ -171,9 +112,9 @@ final class WordDictionaryDetailView: UIView {
         dividerAfterWord.isHidden = false
         definitionsSectionTitle.isHidden = entries.isEmpty && willRequestContextualGloss
         definitionStack.isHidden = entries.isEmpty && willRequestContextualGloss
-        let showKanji = !kanjiChipsScrollView.isHidden
-        kanjiSectionStack.isHidden = !showKanji
-        dividerBeforeDefinitions.isHidden = !showKanji || definitionsSectionTitle.isHidden
+        let showCharacters = !characterChipsScrollView.isHidden
+        characterSectionStack.isHidden = !showCharacters
+        dividerBeforeDefinitions.isHidden = !showCharacters || definitionsSectionTitle.isHidden
         let showCompounds = !compoundStack.arrangedSubviews.isEmpty
         compoundsSectionStack.isHidden = !showCompounds
         dividerBeforeCompounds.isHidden = !showCompounds || definitionsSectionTitle.isHidden
@@ -181,43 +122,28 @@ final class WordDictionaryDetailView: UIView {
         loadContextualGloss(
             surface: surface,
             sentence: sentence,
-            lookup: lookup,
+            entries: entries,
             primaryEntry: primary
         )
     }
 
-    private static func shouldRequestContextualGloss(
-        sentence: String?,
-        hasDictionaryMatch: Bool,
-        providerAvailable: Bool
-    ) -> Bool {
-        guard providerAvailable else { return false }
-        let trimmedSentence = sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        // Sentence scrub / dialogue context: always explain the token in situ.
-        if !trimmedSentence.isEmpty { return true }
-        // Vocabulary highlights without a dialogue line: still ask when JMdict has no hit.
-        return !hasDictionaryMatch
+    var primaryEntry: CedictEntry? {
+        let entries = CedictStore.shared.entries(forSimplified: lastConfiguredSurface)
+        return entries.max { $0.score < $1.score } ?? entries.first
     }
 
     private func loadContextualGloss(
         surface: String,
         sentence: String?,
-        lookup: JMDictLookupResult,
-        primaryEntry: JMDictEntry?
+        entries: [CedictEntry],
+        primaryEntry: CedictEntry?
     ) {
-        let trimmedSentence = sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let hasDictionaryMatch = !lookup.entries.isEmpty
-        guard Self.shouldRequestContextualGloss(
-            sentence: sentence,
-            hasDictionaryMatch: hasDictionaryMatch,
-            providerAvailable: contextualGlossProvider.isAvailable
-        ) else {
+        guard FoundationModelContextualGloss.isAvailable else {
             contextualCardContainer.isHidden = true
             return
         }
 
-        // Providers require a non-empty sentence; for unmatched compounds with no
-        // dialogue line, treat the surface itself as the span to explain.
+        let trimmedSentence = sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let contextSentence = trimmedSentence.isEmpty ? surface : trimmedSentence
         let hasBroaderSentence = !trimmedSentence.isEmpty && trimmedSentence != surface
         contextualSectionTitle.text = hasBroaderSentence ? "IN THIS SENTENCE" : "MEANING"
@@ -226,19 +152,19 @@ final class WordDictionaryDetailView: UIView {
         contextualRequestID = requestID
 
         let dictionaryGloss = primaryEntry
-            .map { Self.primaryGloss(from: $0) }
+            .map(\.primaryGloss)
             .flatMap { $0.isEmpty ? nil : $0 }
 
-        let request = ContextualGlossRequest(
+        let request = FoundationModelContextualGloss.Request(
             sentence: contextSentence,
             surface: surface,
-            dictionaryForm: lookup.dictionaryForm,
+            dictionaryForm: nil,
             dictionaryGloss: dictionaryGloss
         )
 
-        let provider = contextualGlossProvider
+        let hasDictionaryMatch = !entries.isEmpty
         contextualGlossTask = Task { [weak self] in
-            if let cached = await provider.cachedResult(for: request) {
+            if let cached = await FoundationModelContextualGloss.cachedResult(for: request) {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     guard let self, self.contextualRequestID == requestID else { return }
@@ -256,7 +182,7 @@ final class WordDictionaryDetailView: UIView {
             guard !Task.isCancelled else { return }
 
             do {
-                let gloss = try await provider.explain(request)
+                let gloss = try await FoundationModelContextualGloss.explain(request)
                 await MainActor.run {
                     guard let self, self.contextualRequestID == requestID else { return }
                     self.applyContextualGloss(gloss)
@@ -273,12 +199,11 @@ final class WordDictionaryDetailView: UIView {
         }
     }
 
-    /// Restores the DEFINITIONS empty state when a no-match contextual gloss fails.
     private func showDictionaryMissFallback() {
         definitionsSectionTitle.isHidden = false
         definitionStack.isHidden = false
-        dividerBeforeDefinitions.isHidden = kanjiSectionStack.isHidden
-        rebuildDefinitionContent(surface: lastConfiguredSurface, entries: [], suppressEmptyState: false)
+        dividerBeforeDefinitions.isHidden = characterSectionStack.isHidden
+        rebuildDefinitionContent(entries: [], suppressEmptyState: false)
         setNeedsLayout()
     }
 
@@ -295,7 +220,7 @@ final class WordDictionaryDetailView: UIView {
         contextualCardContainer.layoutIfNeeded()
     }
 
-    private func applyContextualGloss(_ gloss: ContextualGlossResult) {
+    private func applyContextualGloss(_ gloss: FoundationModelContextualGloss.Result) {
         contextualLoadingRow.isHidden = true
         contextualLoadingSpinner.isHidden = true
         contextualMeaningLabel.isHidden = false
@@ -314,15 +239,6 @@ final class WordDictionaryDetailView: UIView {
         contextualCardContainer.setNeedsLayout()
         contextualCardContainer.layoutIfNeeded()
         setNeedsLayout()
-    }
-
-    private static func primaryGloss(from entry: JMDictEntry) -> String {
-        let gloss = entry.glossary.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !gloss.isEmpty else { return "" }
-        return gloss
-            .split(separator: ";", maxSplits: 1, omittingEmptySubsequences: true)
-            .first
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) } ?? gloss
     }
 
     // MARK: - Setup
@@ -344,32 +260,10 @@ final class WordDictionaryDetailView: UIView {
             contentStack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
-        wordHeaderStack.axis = .horizontal
-        wordHeaderStack.alignment = .center
-        wordHeaderStack.spacing = 16
-        wordHeaderStack.distribution = .fill
-        wordHeaderStack.clipsToBounds = false
-
         wordContentStack.axis = .vertical
         wordContentStack.alignment = .leading
         wordContentStack.spacing = 4
         wordContentStack.clipsToBounds = false
-        wordContentStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        wordContentStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        wordHeaderStack.addArrangedSubview(wordContentStack)
-        wordHeaderStack.addArrangedSubview(speakWordButton)
-
-        speakWordButton.setContentHuggingPriority(.required, for: .horizontal)
-        speakWordButton.setContentCompressionResistancePriority(.required, for: .horizontal)
-        Self.configureGlassAudioButton(
-            speakWordButton,
-            glyphView: speakWordGlyphView,
-            symbolName: "speaker.wave.2.fill",
-            glyphPointSize: 22,
-            accessibilityLabel: "Speak word"
-        )
-        speakWordButton.addTarget(self, action: #selector(speakWordTapped), for: .touchUpInside)
 
         let wordFont: UIFont = {
             let base = UIFont.preferredFont(forTextStyle: .largeTitle)
@@ -385,24 +279,18 @@ final class WordDictionaryDetailView: UIView {
         selectedWordLabel.font = wordFont
         selectedWordLabel.textColor = .label
 
-        romajiLabel.font = .preferredFont(forTextStyle: .subheadline)
-        romajiLabel.textColor = .secondaryLabel
-        romajiLabel.textAlignment = .natural
-        romajiLabel.numberOfLines = 0
-
-        dictionaryFormLabel.font = .preferredFont(forTextStyle: .subheadline)
-        dictionaryFormLabel.textColor = .tertiaryLabel
-        dictionaryFormLabel.textAlignment = .natural
-        dictionaryFormLabel.numberOfLines = 0
-        dictionaryFormLabel.isHidden = true
+        pinyinFallbackLabel.font = .preferredFont(forTextStyle: .subheadline)
+        pinyinFallbackLabel.textColor = .secondaryLabel
+        pinyinFallbackLabel.textAlignment = .natural
+        pinyinFallbackLabel.numberOfLines = 0
+        pinyinFallbackLabel.isHidden = true
 
         wordContentStack.addArrangedSubview(selectedWordLabel)
-        wordContentStack.addArrangedSubview(romajiLabel)
-        wordContentStack.addArrangedSubview(dictionaryFormLabel)
+        wordContentStack.addArrangedSubview(pinyinFallbackLabel)
 
         let sectionHeaderFont = UIFont.preferredFont(forTextStyle: .subheadline)
 
-        contextualSectionTitle.text = "IN THIS SENTENCE"
+        contextualSectionTitle.text = "MEANING"
         contextualSectionTitle.font = UIFont.preferredFont(forTextStyle: .caption1)
         contextualSectionTitle.textColor = .secondaryLabel
 
@@ -424,7 +312,7 @@ final class WordDictionaryDetailView: UIView {
         contextualGrammarLabel.numberOfLines = 0
         contextualGrammarLabel.isHidden = true
 
-        contextualLoadingSpinner.configure(with: Self.audioGlyphColor)
+        contextualLoadingSpinner.configure(with: Self.accentGlyphColor)
         contextualLoadingSpinner.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             contextualLoadingSpinner.widthAnchor.constraint(equalToConstant: 24),
@@ -484,36 +372,35 @@ final class WordDictionaryDetailView: UIView {
             contextualSectionStack.bottomAnchor.constraint(equalTo: contextualCardSurface.bottomAnchor, constant: -insets.bottom),
         ])
 
-        kanjiChipsScrollView.translatesAutoresizingMaskIntoConstraints = false
-        kanjiChipsScrollView.showsHorizontalScrollIndicator = false
-        kanjiChipsScrollView.alwaysBounceHorizontal = true
-        // Glass chips carry a drop shadow (masksToBounds = false); don't clip it vertically.
-        kanjiChipsScrollView.clipsToBounds = false
+        characterChipsScrollView.translatesAutoresizingMaskIntoConstraints = false
+        characterChipsScrollView.showsHorizontalScrollIndicator = false
+        characterChipsScrollView.alwaysBounceHorizontal = true
+        characterChipsScrollView.clipsToBounds = false
 
-        kanjiChipsStack.translatesAutoresizingMaskIntoConstraints = false
-        kanjiChipsStack.axis = .horizontal
-        kanjiChipsStack.spacing = 8
-        kanjiChipsStack.alignment = .center
+        characterChipsStack.translatesAutoresizingMaskIntoConstraints = false
+        characterChipsStack.axis = .horizontal
+        characterChipsStack.spacing = 8
+        characterChipsStack.alignment = .center
 
-        kanjiChipsScrollView.addSubview(kanjiChipsStack)
-        let chipsContent = kanjiChipsScrollView.contentLayoutGuide
+        characterChipsScrollView.addSubview(characterChipsStack)
+        let chipsContent = characterChipsScrollView.contentLayoutGuide
         NSLayoutConstraint.activate([
-            kanjiChipsStack.topAnchor.constraint(equalTo: chipsContent.topAnchor),
-            kanjiChipsStack.leadingAnchor.constraint(equalTo: chipsContent.leadingAnchor),
-            kanjiChipsStack.trailingAnchor.constraint(equalTo: chipsContent.trailingAnchor),
-            kanjiChipsStack.bottomAnchor.constraint(equalTo: chipsContent.bottomAnchor),
-            kanjiChipsScrollView.heightAnchor.constraint(equalTo: kanjiChipsStack.heightAnchor),
+            characterChipsStack.topAnchor.constraint(equalTo: chipsContent.topAnchor),
+            characterChipsStack.leadingAnchor.constraint(equalTo: chipsContent.leadingAnchor),
+            characterChipsStack.trailingAnchor.constraint(equalTo: chipsContent.trailingAnchor),
+            characterChipsStack.bottomAnchor.constraint(equalTo: chipsContent.bottomAnchor),
+            characterChipsScrollView.heightAnchor.constraint(equalTo: characterChipsStack.heightAnchor),
         ])
 
-        kanjiSectionTitle.text = "KANJI"
-        kanjiSectionTitle.font = sectionHeaderFont
-        kanjiSectionTitle.textColor = .secondaryLabel
+        characterSectionTitle.text = "CHARACTERS"
+        characterSectionTitle.font = sectionHeaderFont
+        characterSectionTitle.textColor = .secondaryLabel
 
-        kanjiSectionStack.axis = .vertical
-        kanjiSectionStack.alignment = .fill
-        kanjiSectionStack.spacing = 8
-        kanjiSectionStack.addArrangedSubview(kanjiSectionTitle)
-        kanjiSectionStack.addArrangedSubview(kanjiChipsScrollView)
+        characterSectionStack.axis = .vertical
+        characterSectionStack.alignment = .fill
+        characterSectionStack.spacing = 8
+        characterSectionStack.addArrangedSubview(characterSectionTitle)
+        characterSectionStack.addArrangedSubview(characterChipsScrollView)
 
         definitionsSectionTitle.text = "DEFINITIONS"
         definitionsSectionTitle.font = sectionHeaderFont
@@ -538,14 +425,14 @@ final class WordDictionaryDetailView: UIView {
         compoundsSectionStack.addArrangedSubview(compoundsSectionTitle)
         compoundsSectionStack.addArrangedSubview(compoundStack)
 
-        contentStack.addArrangedSubview(wordHeaderStack)
-        contentStack.setCustomSpacing(16, after: wordHeaderStack)
+        contentStack.addArrangedSubview(wordContentStack)
+        contentStack.setCustomSpacing(16, after: wordContentStack)
         contentStack.addArrangedSubview(dividerAfterWord)
         contentStack.setCustomSpacing(16, after: dividerAfterWord)
         contentStack.addArrangedSubview(contextualCardContainer)
         contentStack.setCustomSpacing(16, after: contextualCardContainer)
-        contentStack.addArrangedSubview(kanjiSectionStack)
-        contentStack.setCustomSpacing(16, after: kanjiSectionStack)
+        contentStack.addArrangedSubview(characterSectionStack)
+        contentStack.setCustomSpacing(16, after: characterSectionStack)
         contentStack.addArrangedSubview(dividerBeforeDefinitions)
         contentStack.setCustomSpacing(16, after: dividerBeforeDefinitions)
         contentStack.addArrangedSubview(definitionsSectionTitle)
@@ -557,7 +444,7 @@ final class WordDictionaryDetailView: UIView {
         contentStack.addArrangedSubview(compoundsSectionStack)
 
         dividerAfterWord.isHidden = true
-        kanjiSectionStack.isHidden = true
+        characterSectionStack.isHidden = true
         dividerBeforeDefinitions.isHidden = true
         definitionsSectionTitle.isHidden = true
         dividerBeforeCompounds.isHidden = true
@@ -566,7 +453,6 @@ final class WordDictionaryDetailView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        speakWordButton.bringSubviewToFront(speakWordGlyphView)
         if !contextualCardContainer.isHidden {
             contextualCardSurface.layer.shadowPath = UIBezierPath(
                 roundedRect: contextualCardSurface.bounds,
@@ -575,48 +461,41 @@ final class WordDictionaryDetailView: UIView {
         }
     }
 
-    // MARK: - Actions
-
-    @objc private func speakWordTapped() {
-        wordSpeaker.speak(speechText)
-    }
-
     // MARK: - Content builders
 
-    private func rebuildKanjiChips(surface: String) {
-        kanjiChipsStack.arrangedSubviews.forEach {
-            kanjiChipsStack.removeArrangedSubview($0)
+    private func rebuildCharacterChips(surface: String) {
+        characterChipsStack.arrangedSubviews.forEach {
+            characterChipsStack.removeArrangedSubview($0)
             $0.removeFromSuperview()
         }
 
-        let items = KanjidicStore.shared.briefInfo(forKanjiIn: surface)
-        guard !items.isEmpty else {
-            kanjiChipsScrollView.isHidden = true
+        let items = CedictStore.shared.briefInfo(forCharactersIn: surface)
+        guard items.count > 1 || (items.count == 1 && surface.count > 1) else {
+            characterChipsScrollView.isHidden = true
             return
         }
 
-        kanjiChipsScrollView.isHidden = false
+        characterChipsScrollView.isHidden = false
         let titleFont = UIFont.preferredFont(forTextStyle: .title2)
         let captionFont = UIFont.preferredFont(forTextStyle: .caption1)
         for item in items {
             let chip = GlassChipControl(
                 title: item.character,
-                subtitle: item.briefMeaning,
+                subtitle: item.briefMeaning.isEmpty ? nil : item.briefMeaning,
                 titleFont: titleFont,
                 subtitleFont: captionFont
             )
             let character = item.character
             chip.addAction(
-                UIAction { [weak self] _ in self?.onSelectKanji?(character) },
+                UIAction { [weak self] _ in self?.onSelectCharacter?(character) },
                 for: .touchUpInside
             )
-            kanjiChipsStack.addArrangedSubview(chip)
+            characterChipsStack.addArrangedSubview(chip)
         }
     }
 
     private func rebuildDefinitionContent(
-        surface: String,
-        entries: [JMDictEntry],
+        entries: [CedictEntry],
         suppressEmptyState: Bool = false
     ) {
         definitionStack.arrangedSubviews.forEach {
@@ -639,16 +518,16 @@ final class WordDictionaryDetailView: UIView {
             return
         }
 
-        var groups: [Int: [JMDictEntry]] = [:]
-        var order: [Int] = []
-        for e in entries {
-            if groups[e.sequence] == nil {
-                order.append(e.sequence)
+        var groups: [String: [CedictEntry]] = [:]
+        var order: [String] = []
+        for entry in entries {
+            if groups[entry.pinyinMarked] == nil {
+                order.append(entry.pinyinMarked)
             }
-            groups[e.sequence, default: []].append(e)
+            groups[entry.pinyinMarked, default: []].append(entry)
         }
 
-        for (groupIdx, sequence) in order.enumerated() {
+        for (groupIdx, pinyin) in order.enumerated() {
             if groupIdx > 0 {
                 let sep = UIView()
                 sep.backgroundColor = .separator
@@ -658,57 +537,47 @@ final class WordDictionaryDetailView: UIView {
                 definitionStack.setCustomSpacing(20, after: sep)
             }
 
-            guard let groupRows = groups[sequence] else { continue }
-            let sorted = groupRows.sorted { ($0.score ?? 0) > ($1.score ?? 0) }
+            guard let groupRows = groups[pinyin] else { continue }
+            let sorted = groupRows.sorted { $0.score > $1.score }
 
             if order.count > 1, let one = sorted.first {
                 let expr = UILabel()
-                let y = one.displayReading
-                if y == one.expression || y.isEmpty {
-                    expr.text = one.expression
-                } else {
-                    expr.text = "\(one.expression)　\(y)"
-                }
+                expr.text = "\(one.simplified)　\(one.pinyinMarked)"
                 expr.font = headFont
                 expr.textColor = .label
                 expr.numberOfLines = 0
                 definitionStack.addArrangedSubview(expr)
             }
 
-            for (senseIdx, row) in sorted.enumerated() {
-                let line = NSMutableAttributedString()
-                line.append(NSAttributedString(
-                    string: "\(senseIdx + 1). ",
-                    attributes: [.font: bodyFont, .foregroundColor: UIColor.secondaryLabel]
-                ))
-                let gloss = row.glossary.trimmingCharacters(in: .whitespacesAndNewlines)
-                line.append(NSAttributedString(string: gloss, attributes: [.font: bodyFont, .foregroundColor: UIColor.label]))
-                if let tags = row.tags, !tags.isEmpty {
-                    line.append(NSAttributedString(
-                        string: "\n\(tags)",
-                        attributes: [.font: caption, .foregroundColor: UIColor.tertiaryLabel]
+            var senseIdx = 0
+            for row in sorted {
+                for line in row.glossaryLines {
+                    if line.uppercased().hasPrefix("CL:") {
+                        let tag = UILabel()
+                        tag.text = line
+                        tag.font = caption
+                        tag.textColor = .tertiaryLabel
+                        tag.numberOfLines = 0
+                        definitionStack.addArrangedSubview(tag)
+                        continue
+                    }
+                    senseIdx += 1
+                    let attributed = NSMutableAttributedString()
+                    attributed.append(NSAttributedString(
+                        string: "\(senseIdx). ",
+                        attributes: [.font: bodyFont, .foregroundColor: UIColor.secondaryLabel]
                     ))
-                }
-                if let info = row.info, !info.isEmpty {
-                    line.append(NSAttributedString(
-                        string: "\n\(info)",
-                        attributes: [.font: caption, .foregroundColor: UIColor.secondaryLabel]
+                    attributed.append(NSAttributedString(
+                        string: line,
+                        attributes: [.font: bodyFont, .foregroundColor: UIColor.label]
                     ))
+                    let label = UILabel()
+                    label.attributedText = attributed
+                    label.numberOfLines = 0
+                    definitionStack.addArrangedSubview(label)
                 }
-                let label = UILabel()
-                label.attributedText = line
-                label.numberOfLines = 0
-                definitionStack.addArrangedSubview(label)
             }
         }
-    }
-
-    /// True when `surface` is exactly one kanji (CJK ideograph) character.
-    private static func isSingleKanji(_ surface: String) -> Bool {
-        let trimmed = surface.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count == 1, let scalar = trimmed.unicodeScalars.first else { return false }
-        let v = scalar.value
-        return (0x3400...0x4DBF).contains(v) || (0x4E00...0x9FFF).contains(v)
     }
 
     private func rebuildCompoundContent(surface: String) {
@@ -717,14 +586,9 @@ final class WordDictionaryDetailView: UIView {
             $0.removeFromSuperview()
         }
 
-        guard showsCompounds else { return }
+        guard showsCompounds, CedictStore.isSingleHanCharacter(surface) else { return }
 
-        // Compounds are only meaningful when drilling into a single kanji. For a
-        // multi-character word (e.g. 東京) they surface unrelated entries that
-        // merely share a constituent kanji (東…), which is just noise here.
-        guard Self.isSingleKanji(surface) else { return }
-
-        let compounds = JMDictStore.shared.compounds(forSurface: surface)
+        let compounds = CedictStore.shared.compounds(forSurface: surface)
         guard !compounds.isEmpty else { return }
 
         for (idx, entry) in compounds.enumerated() {
@@ -735,8 +599,8 @@ final class WordDictionaryDetailView: UIView {
         }
     }
 
-    private func makeCompoundRow(entry: JMDictEntry) -> UIView {
-        let button = CompoundRowButton(expression: entry.expression)
+    private func makeCompoundRow(entry: CedictEntry) -> UIView {
+        let button = CompoundRowButton(expression: entry.simplified)
         button.translatesAutoresizingMaskIntoConstraints = false
         button.addTarget(self, action: #selector(compoundRowTapped(_:)), for: .touchUpInside)
 
@@ -745,18 +609,13 @@ final class WordDictionaryDetailView: UIView {
         exprLabel.textColor = .label
         exprLabel.setContentHuggingPriority(.required, for: .horizontal)
         exprLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-        let reading = entry.displayReading
-        if reading == entry.expression || reading.isEmpty {
-            exprLabel.text = entry.expression
-        } else {
-            exprLabel.text = "\(entry.expression)　\(reading)"
-        }
+        exprLabel.text = "\(entry.simplified)　\(entry.pinyinMarked)"
 
         let glossLabel = UILabel()
         glossLabel.font = UIFont.preferredFont(forTextStyle: .footnote)
         glossLabel.textColor = .secondaryLabel
         glossLabel.numberOfLines = 1
-        glossLabel.text = Self.primaryGloss(from: entry)
+        glossLabel.text = entry.primaryGloss
 
         let textStack = UIStackView(arrangedSubviews: [exprLabel, glossLabel])
         textStack.axis = .vertical
@@ -788,8 +647,6 @@ final class WordDictionaryDetailView: UIView {
         onSelectCompound?(sender.expression)
     }
 
-    // MARK: - Helpers
-
     private static func makeHairlineDivider() -> UIView {
         let v = UIView()
         v.backgroundColor = .separator
@@ -797,43 +654,8 @@ final class WordDictionaryDetailView: UIView {
         v.heightAnchor.constraint(equalToConstant: 1.0 / UIScreen.main.scale).isActive = true
         return v
     }
-
-    private static func configureGlassAudioButton(
-        _ button: UIButton,
-        glyphView: UIImageView,
-        symbolName: String,
-        glyphPointSize: CGFloat,
-        accessibilityLabel: String
-    ) {
-        var config = UIButton.Configuration.glass()
-        config.cornerStyle = .capsule
-        button.configuration = config
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.accessibilityLabel = accessibilityLabel
-
-        let symbolConfig = UIImage.SymbolConfiguration(pointSize: glyphPointSize, weight: .semibold)
-        glyphView.image = UIImage(systemName: symbolName, withConfiguration: symbolConfig)?
-            .withRenderingMode(.alwaysTemplate)
-        glyphView.tintColor = audioGlyphColor
-        glyphView.preferredSymbolConfiguration = symbolConfig
-        glyphView.contentMode = .scaleAspectFit
-        glyphView.isUserInteractionEnabled = false
-        glyphView.translatesAutoresizingMaskIntoConstraints = false
-        button.addSubview(glyphView)
-
-        NSLayoutConstraint.activate([
-            button.widthAnchor.constraint(equalToConstant: audioButtonSize),
-            button.heightAnchor.constraint(equalToConstant: audioButtonSize),
-            glyphView.centerXAnchor.constraint(equalTo: button.centerXAnchor),
-            glyphView.centerYAnchor.constraint(equalTo: button.centerYAnchor),
-            glyphView.widthAnchor.constraint(equalToConstant: glyphPointSize + 6),
-            glyphView.heightAnchor.constraint(equalToConstant: glyphPointSize + 6),
-        ])
-    }
-
 }
 
-/// Tappable compound row that remembers its expression for re-lookup.
 private final class CompoundRowButton: UIButton {
     let expression: String
 

@@ -1,18 +1,25 @@
 //
-//  DialogueBubbleSwipeRevealContainer.swift
-//  shizen
+//  SwipeRevealContainer.swift
+//  InteractionKit
 //
-//  Swipe a dialogue bubble right to reveal a magnifying glass and enter sentence
-//  focus. In reveal mode, swipe left to peel back the next detail level (meter →
-//  Japanese → English), with a yellow sparkles affordance on the trailing edge.
+//  Swipe a content view right to reveal a magnifying glass and enter focus.
+//  In reveal mode, swipe left to peel back the next detail level, with a
+//  yellow sparkles affordance on the trailing edge.
 //
 
 import UIKit
 
-final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
+/// Optional hook so language-specific bubbles can dim/brighten glass while swiping.
+public protocol SwipeRevealGlassAdjusting: AnyObject {
+    func setSwipeRevealAmount(_ amount: CGFloat)
+}
 
-    static let commitThreshold: CGFloat = 30
-    static let visualMax: CGFloat = 44
+public typealias DialogueBubbleSwipeRevealContainer = SwipeRevealContainer
+
+public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
+
+    public static let commitThreshold: CGFloat = 30
+    public static let visualMax: CGFloat = 44
     /// A fast flick commits from a shorter travel — without this, a quick swipe
     /// that lifts before `commitThreshold` snaps back and the gesture reads as
     /// dropped.
@@ -29,29 +36,29 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
     private static let progressiveRevealActiveIconColor = UIColor.systemYellow
 
     /// Only one bubble may stay offset at a time.
-    private static weak var activelyDragging: DialogueBubbleSwipeRevealContainer?
-    private static weak var committedContainer: DialogueBubbleSwipeRevealContainer?
+    private static weak var activelyDragging: SwipeRevealContainer?
+    private static weak var committedContainer: SwipeRevealContainer?
 
-    static func resetCommittedContainer(animated: Bool) {
+    public static func resetCommittedContainer(animated: Bool) {
         committedContainer?.reset(animated: animated)
     }
 
     /// Swipe right past threshold → sentence focus.
-    var onCommit: (() -> Void)?
+    public var onCommit: (() -> Void)?
     /// Swipe left past threshold → progressive reveal (reveal mode only).
-    var onProgressiveRevealCommit: (() -> Void)?
+    public var onProgressiveRevealCommit: (() -> Void)?
 
     /// When true, leftward pans drive the progressive-reveal affordance.
-    var allowsProgressiveReveal = false {
+    public var allowsProgressiveReveal = false {
         didSet {
             updateAccessibilityHint()
         }
     }
 
     /// Disabled while a horizontal swipe is active so vertical scroll does not fight the reveal.
-    weak var hostScrollView: UIScrollView?
+    public weak var hostScrollView: UIScrollView?
 
-    var panGestureRecognizer: UIPanGestureRecognizer { panGesture }
+    public var panGestureRecognizer: UIPanGestureRecognizer { panGesture }
 
     private let bubbleView: UIView
     private let expandBackdrop = LiquidGlassEffectView.makeContainer()
@@ -70,7 +77,7 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
     private var isCommitted = false
     private var configuredContentPopDeferral = false
 
-    init(bubbleView: UIView) {
+    public init(bubbleView: UIView) {
         self.bubbleView = bubbleView
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -134,7 +141,7 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
     }
 
     /// iOS 26+: content-area back swipe waits for the bubble reply pan to fail first.
-    func configureContentPopGestureDeferral(from viewController: UIViewController?) {
+    public func configureContentPopGestureDeferral(from viewController: UIViewController?) {
         guard !configuredContentPopDeferral else { return }
         if #available(iOS 26.0, *),
            let contentPop = viewController?.navigationController?.interactiveContentPopGestureRecognizer {
@@ -143,7 +150,7 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
         }
     }
 
-    func reset(animated: Bool, completion: (() -> Void)? = nil) {
+    public func reset(animated: Bool, completion: (() -> Void)? = nil) {
         isCommitted = false
         if Self.committedContainer === self {
             Self.committedContainer = nil
@@ -322,7 +329,7 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
         )
 
         let glassAmount = isCommitted ? 1 : max(expandProgress, progressiveProgress)
-        (bubbleView as? DialogueJapaneseBubbleView)?.setSwipeRevealAmount(glassAmount)
+        (bubbleView as? SwipeRevealGlassAdjusting)?.setSwipeRevealAmount(glassAmount)
     }
 
     private static func mappedTranslation(_ raw: CGFloat) -> CGFloat {
@@ -382,7 +389,7 @@ final class DialogueBubbleSwipeRevealContainer: UIView, UIGestureRecognizerDeleg
 
     // MARK: UIGestureRecognizerDelegate
 
-    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    public override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard gestureRecognizer === panGesture,
               let pan = gestureRecognizer as? UIPanGestureRecognizer
         else { return true }

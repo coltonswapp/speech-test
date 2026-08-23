@@ -9,6 +9,9 @@
 /* Begin PBXBuildFile section */
 		F629EE192FBBBB15006A3F68 /* TTSCore in Frameworks */ = {isa = PBXBuildFile; productRef = F6AA00022F957A880FFF002 /* TTSCore */; };
 		F65E7DFB300B104C0081F120 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F65E7DFA300B104C0081F120 /* NNKit */; };
+		F66A6EE1303657A700E973CE /* InteractionKit in Frameworks */ = {isa = PBXBuildFile; productRef = F66A6EE0303657A700E973CE /* InteractionKit */; };
+		F66A6EF0303657B000E973CE /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F66A6EEF303657B000E973CE /* GRDB */; };
+		F66A6EF2303657B200E973CE /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6C0FM022FC0A00100000002 /* FoundationModels.framework */; };
 		F6713B1630019B3000A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1530019B3000A89257 /* NNKit */; };
 		F6713B1930019E0800A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1830019E0800A89257 /* NNKit */; };
 		F6713B1C30019EC800A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1B30019EC800A89257 /* NNKit */; };
@@ -18,15 +21,24 @@
 		F6B950AF2FB582D0007030C7 /* StringTools in Frameworks */ = {isa = PBXBuildFile; productRef = F6B950AE2FB582D0007030C7 /* StringTools */; };
 		F6C0FM012FC0A00100000001 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6C0FM022FC0A00100000002 /* FoundationModels.framework */; };
 		F6DE0FAD2F957A8600FFF413 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F6DE0FAC2F957A8600FFF412 /* GRDB */; };
+		F6IK00102FINTERACT010 /* InteractionKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6IK00022FINTERACT002 /* InteractionKit */; };
 		F6SC00102FCONTENT010 /* GrammarContentKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6SC00022FCONTENT002 /* GrammarContentKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		F66A6EBF3036578E00E973CE /* shizen-chinese.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "shizen-chinese.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F6C0FM022FC0A00100000002 /* FoundationModels.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FoundationModels.framework; path = System/Library/Frameworks/FoundationModels.framework; sourceTree = SDKROOT; };
 		F6DE0F8F2F957A7A00FFF406 /* shizen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = shizen.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		F66A6ED03036579300E973CE /* Exceptions for "shizen-chinese" folder in "shizen-chinese" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F66A6EBE3036578E00E973CE /* shizen-chinese */;
+		};
 		F6DE0FA12F957A8600FFF406 /* Exceptions for "shizen" folder in "shizen" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -37,6 +49,14 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		F66A6EC03036578E00E973CE /* shizen-chinese */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				F66A6ED03036579300E973CE /* Exceptions for "shizen-chinese" folder in "shizen-chinese" target */,
+			);
+			path = "shizen-chinese";
+			sourceTree = "<group>";
+		};
 		F6DE0F912F957A7A00FFF406 /* shizen */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -48,6 +68,16 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		F66A6EBC3036578E00E973CE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F66A6EE1303657A700E973CE /* InteractionKit in Frameworks */,
+				F66A6EF0303657B000E973CE /* GRDB in Frameworks */,
+				F66A6EF2303657B200E973CE /* FoundationModels.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F6DE0F8C2F957A7A00FFF406 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -55,6 +85,7 @@
 				F6713B1C30019EC800A89257 /* NNKit in Frameworks */,
 				F6C0FM012FC0A00100000001 /* FoundationModels.framework in Frameworks */,
 				F629EE192FBBBB15006A3F68 /* TTSCore in Frameworks */,
+				F6IK00102FINTERACT010 /* InteractionKit in Frameworks */,
 				F6SC00102FCONTENT010 /* GrammarContentKit in Frameworks */,
 				F6713B1630019B3000A89257 /* NNKit in Frameworks */,
 				F6B950A92FB582D0007030C7 /* CharacterFilter in Frameworks */,
@@ -78,12 +109,21 @@
 			name = "Recovered References";
 			sourceTree = "<group>";
 		};
+		F66A6EA7303656E000E973CE /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		F6DE0F862F957A7A00FFF406 = {
 			isa = PBXGroup;
 			children = (
 				F6DE0F912F957A7A00FFF406 /* shizen */,
+				F66A6EC03036578E00E973CE /* shizen-chinese */,
 				F6DE0F902F957A7A00FFF406 /* Products */,
 				F65E31EB2FD4F7E500318D8E /* Recovered References */,
+				F66A6EA7303656E000E973CE /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -91,6 +131,7 @@
 			isa = PBXGroup;
 			children = (
 				F6DE0F8F2F957A7A00FFF406 /* shizen.app */,
+				F66A6EBF3036578E00E973CE /* shizen-chinese.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -98,6 +139,30 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		F66A6EBE3036578E00E973CE /* shizen-chinese */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F66A6ED13036579300E973CE /* Build configuration list for PBXNativeTarget "shizen-chinese" */;
+			buildPhases = (
+				F66A6EBB3036578E00E973CE /* Sources */,
+				F66A6EBC3036578E00E973CE /* Frameworks */,
+				F66A6EBD3036578E00E973CE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				F66A6EC03036578E00E973CE /* shizen-chinese */,
+			);
+			name = "shizen-chinese";
+			packageProductDependencies = (
+				F66A6EE0303657A700E973CE /* InteractionKit */,
+				F66A6EEF303657B000E973CE /* GRDB */,
+			);
+			productName = "shizen-chinese";
+			productReference = F66A6EBF3036578E00E973CE /* shizen-chinese.app */;
+			productType = "com.apple.product-type.application";
+		};
 		F6DE0F8E2F957A7A00FFF406 /* shizen */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F6DE0FA22F957A8600FFF406 /* Build configuration list for PBXNativeTarget "shizen" */;
@@ -117,6 +182,7 @@
 			packageProductDependencies = (
 				F6DE0FAC2F957A8600FFF412 /* GRDB */,
 				F6AA00022F957A880FFF002 /* TTSCore */,
+				F6IK00022FINTERACT002 /* InteractionKit */,
 				F6SC00022FCONTENT002 /* GrammarContentKit */,
 				F6B950A82FB582D0007030C7 /* CharacterFilter */,
 				F6B950AA2FB582D0007030C7 /* IPADic */,
@@ -138,9 +204,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2600;
+				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
+					F66A6EBE3036578E00E973CE = {
+						CreatedOnToolsVersion = 27.0;
+					};
 					F6DE0F8E2F957A7A00FFF406 = {
 						CreatedOnToolsVersion = 26.0.1;
 					};
@@ -159,6 +228,7 @@
 				F6DE0FAA2F957A8600FFF411 /* XCRemoteSwiftPackageReference "GRDB" */,
 				F6B950A72FB582D0007030C7 /* XCRemoteSwiftPackageReference "Mecab-Swift" */,
 				F6AA00012F957A880FFF001 /* XCLocalSwiftPackageReference "TTSCore" */,
+				F6IK00012FINTERACT001 /* XCLocalSwiftPackageReference "InteractionKit" */,
 				F6SC00012FCONTENT001 /* XCLocalSwiftPackageReference "GrammarContentKit" */,
 				F65E7DF9300B104C0081F120 /* XCLocalSwiftPackageReference "../cs-ios-style-guide" */,
 			);
@@ -168,11 +238,19 @@
 			projectRoot = "";
 			targets = (
 				F6DE0F8E2F957A7A00FFF406 /* shizen */,
+				F66A6EBE3036578E00E973CE /* shizen-chinese */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		F66A6EBD3036578E00E973CE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F6DE0F8D2F957A7A00FFF406 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -183,6 +261,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		F66A6EBB3036578E00E973CE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F6DE0F8B2F957A7A00FFF406 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -193,6 +278,70 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		F66A6ED23036579300E973CE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = X89M6X46Y8;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "shizen-chinese/Info.plist";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Swappfunc.speech-test.shizen-chinese";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F66A6ED33036579300E973CE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = X89M6X46Y8;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "shizen-chinese/Info.plist";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.Swappfunc.speech-test.shizen-chinese";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		F6DE0FA32F957A8600FFF406 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -383,6 +532,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		F66A6ED13036579300E973CE /* Build configuration list for PBXNativeTarget "shizen-chinese" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F66A6ED23036579300E973CE /* Debug */,
+				F66A6ED33036579300E973CE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		F6DE0F8A2F957A7A00FFF406 /* Build configuration list for PBXProject "shizen" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -411,6 +569,10 @@
 		F6AA00012F957A880FFF001 /* XCLocalSwiftPackageReference "TTSCore" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = TTSCore;
+		};
+		F6IK00012FINTERACT001 /* XCLocalSwiftPackageReference "InteractionKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = InteractionKit;
 		};
 		F6SC00012FCONTENT001 /* XCLocalSwiftPackageReference "GrammarContentKit" */ = {
 			isa = XCLocalSwiftPackageReference;
@@ -441,6 +603,16 @@
 		F65E7DFA300B104C0081F120 /* NNKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = NNKit;
+		};
+		F66A6EE0303657A700E973CE /* InteractionKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F6IK00012FINTERACT001 /* XCLocalSwiftPackageReference "InteractionKit" */;
+			productName = InteractionKit;
+		};
+		F66A6EEF303657B000E973CE /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F6DE0FAA2F957A8600FFF411 /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
 		};
 		F6713B1530019B3000A89257 /* NNKit */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -483,6 +655,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F6DE0FAA2F957A8600FFF411 /* XCRemoteSwiftPackageReference "GRDB" */;
 			productName = GRDB;
+		};
+		F6IK00022FINTERACT002 /* InteractionKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F6IK00012FINTERACT001 /* XCLocalSwiftPackageReference "InteractionKit" */;
+			productName = InteractionKit;
 		};
 		F6SC00022FCONTENT002 /* GrammarContentKit */ = {
 			isa = XCSwiftPackageProductDependency;

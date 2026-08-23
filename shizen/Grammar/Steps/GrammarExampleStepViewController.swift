@@ -3,6 +3,7 @@
 //  shizen
 //
 
+import InteractionKit
 import UIKit
 
 final class GrammarExampleStepViewController: LessonStepViewController {
@@ -14,7 +15,7 @@ final class GrammarExampleStepViewController: LessonStepViewController {
     private let audioPlayer = GrammarAudioPlayer()
 
     private let scenarioView = GrammarExampleScenarioView()
-    private let scrubbableSentenceView = ScrubbableSentenceView()
+    private let scrubbableSentenceView = ScrubbableSentenceView(engine: JapaneseScrubSentenceEngine.shared)
     private let englishLabel = UILabel()
     private let replayControl = LessonAudioReplayButton(size: 52, glyphPointSize: 22, glyphDimension: 26)
     private let sentenceSectionRowStack = UIStackView()

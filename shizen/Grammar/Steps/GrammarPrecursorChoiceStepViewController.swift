@@ -5,6 +5,7 @@
 //  Fill-in-the-blank drill: pick the verb precursor that completes the grammar pattern.
 //
 
+import InteractionKit
 import UIKit
 
 final class GrammarPrecursorChoiceStepViewController: LessonStepViewController {
@@ -13,7 +14,7 @@ final class GrammarPrecursorChoiceStepViewController: LessonStepViewController {
 
     private let drill: GrammarDrill
     private let blankedSentence: String
-    private let scrubbableSentenceView = ScrubbableSentenceView()
+    private let scrubbableSentenceView = ScrubbableSentenceView(engine: JapaneseScrubSentenceEngine.shared)
     private let englishLabel = UILabel()
     private let choicesStack = UIStackView()
     private var choiceButtons: [KanaChoiceButton] = []

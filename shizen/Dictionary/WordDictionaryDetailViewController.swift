@@ -5,6 +5,7 @@
 //  Half-sheet host for WordDictionaryDetailView.
 //
 
+import InteractionKit
 import UIKit
 
 final class WordDictionaryDetailViewController: UIViewController {

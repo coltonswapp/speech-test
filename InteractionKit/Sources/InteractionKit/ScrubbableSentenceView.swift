@@ -1,6 +1,6 @@
 //
 //  ScrubbableSentenceView.swift
-//  shizen
+//  InteractionKit
 //
 //  Reusable sentence scrubber: pan/tap across tokens, optional compact gloss callout above selection.
 //
@@ -8,19 +8,23 @@
 import UIKit
 
 /// Embeds a tokenized sentence with scrub interaction and an optional compact definition callout.
-final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
+public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
 
-    var showCalloutOnScrub = true {
+    public var engine: (any ScrubSentenceEngine)? {
+        didSet { bindEngineNotifications() }
+    }
+
+    public var showCalloutOnScrub = true {
         didSet { updateCalloutVisibility() }
     }
 
-    var onSelectionChanged: ((_ tokenIndex: Int?, _ surface: String?) -> Void)?
+    public var onSelectionChanged: ((_ tokenIndex: Int?, _ surface: String?) -> Void)?
 
     /// Called when the user taps the chevron on the compact callout.
-    var onRequestDictionaryDetail: ((_ surface: String, _ sentence: String) -> Void)?
+    public var onRequestDictionaryDetail: ((_ surface: String, _ sentence: String) -> Void)?
 
     /// Inner text view for layout anchors (e.g. align controls to the sentence line).
-    var sentenceLineView: LyricsInsetUnderlineTextView { sentenceTextView }
+    public var sentenceLineView: LyricsInsetUnderlineTextView { sentenceTextView }
 
     private let sentenceTextView = LyricsInsetUnderlineTextView()
     private let tokenizingIndicator: NNLoadingSpinner = {
@@ -39,7 +43,7 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
     private var lastScrubTokenIndex: Int?
     private var showsFurigana = true
     private var tokenizeTask: Task<Void, Never>?
-    private var backendObserver: NSObjectProtocol?
+    private var observedTokenizerNotification: Notification.Name?
 
     private var lastSentence = ""
     private var lastFont = UIFont.preferredFont(forTextStyle: .title1)
@@ -51,12 +55,12 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
     private static let calloutGap: CGFloat = 4
     private static let tokenizingIndicatorGap: CGFloat = 6
 
-    override init(frame: CGRect) {
+    public override init(frame: CGRect) {
         super.init(frame: frame)
         commonInit()
     }
 
-    required init?(coder: NSCoder) {
+    public required init?(coder: NSCoder) {
         super.init(coder: coder)
         commonInit()
     }
@@ -92,29 +96,39 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         }
 
         selectionFeedback.prepare()
-
-        backendObserver = NotificationCenter.default.addObserver(
-            forName: .japaneseTokenizerBackendDidChange,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.reapplyTokenizationIfConfigured()
-        }
+        bindEngineNotifications()
     }
 
-    deinit {
-        tokenizeTask?.cancel()
-        if let backendObserver {
-            NotificationCenter.default.removeObserver(backendObserver)
+    private func bindEngineNotifications() {
+        if let observedTokenizerNotification {
+            NotificationCenter.default.removeObserver(self, name: observedTokenizerNotification, object: nil)
+            self.observedTokenizerNotification = nil
         }
-        scrollObservation?.invalidate()
+        guard let name = engine?.tokenizerDidChangeNotification else { return }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleTokenizerBackendDidChange),
+            name: name,
+            object: nil
+        )
+        observedTokenizerNotification = name
+    }
+
+    @objc private func handleTokenizerBackendDidChange() {
+        reapplyTokenizationIfConfigured()
+    }
+
+    public override func willMove(toWindow newWindow: UIWindow?) {
+        super.willMove(toWindow: newWindow)
+        guard newWindow == nil else { return }
+        tokenizeTask?.cancel()
         if calloutIsVisible {
             DefinitionCalloutPresenter.shared.dismiss(animated: false)
         }
     }
 
     /// Dismisses the callout when the enclosing scroll view moves.
-    func bindDismissOnScroll(_ scrollView: UIScrollView) {
+    public func bindDismissOnScroll(_ scrollView: UIScrollView) {
         scrollObservation?.invalidate()
         scrollObservation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scrollView, _ in
             guard scrollView.isDragging || scrollView.isDecelerating else { return }
@@ -123,7 +137,7 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
     }
 
     /// Dismisses the callout when the user taps anywhere in `view` (e.g. the parent scroll view).
-    func bindDismissOnTap(_ view: UIView) {
+    public func bindDismissOnTap(_ view: UIView) {
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleDismissTap(_:)))
         tap.delegate = self
         tap.cancelsTouchesInView = false
@@ -131,11 +145,11 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
     }
 
     /// Dismisses the callout without clearing the current token selection.
-    func dismissCalloutOnly(animated: Bool = true) {
+    public func dismissCalloutOnly(animated: Bool = true) {
         dismissCallout(animated: animated)
     }
 
-    func configure(
+    public func configure(
         sentence: String,
         font: UIFont,
         showsFurigana: Bool = true,
@@ -153,10 +167,11 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
     }
 
     /// Renders with precomputed tokens only — no tokenizer or network call.
-    func configureWithTokens(
+    public func configureWithTokens(
         sentence: String,
         font: UIFont,
-        tokens: [JapaneseToken],
+        tokens: [ScrubToken],
+        lookupSurfaces: [String]? = nil,
         showsFurigana: Bool = true,
         accentSubstring: String? = nil,
         accentColor: UIColor = .systemBlue,
@@ -179,45 +194,23 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         }
 
         setTokenizing(false)
-        sentenceTextView.configure(
-            sentence: sentence,
-            lyricFont: font,
-            tokens: tokens,
-            showsFurigana: showsFurigana,
-            accentSubstring: accentSubstring,
-            accentColor: accentColor
-        )
+        applyTokensToTextView(tokens, lookupSurfaces: lookupSurfaces)
     }
 
-    /// One-shot tokenization for exercise drills; matches the active backend (including async LLM backends).
-    static func tokenize(sentence: String) async -> [JapaneseToken] {
-        switch JapaneseTokenizerBackend.preferred {
-        case .naturalLanguage, .mecab:
-            return JapaneseTokenizer(backend: JapaneseTokenizerBackend.preferred).tokenize(sentence)
-        case .foundationModel, .geminiFlash, .geminiFlashLite, .geminiFlash31Lite:
-            let fallback = JapaneseTokenizer(backend: .mecab).tokenize(sentence)
-            switch JapaneseTokenizerBackend.preferred {
-            case .foundationModel:
-                guard FoundationModelJapaneseTokenizer.isAvailable else { return fallback }
-                do {
-                    let result = try await FoundationModelJapaneseTokenizer.tokenize(sentence)
-                    return result.tokens.isEmpty ? fallback : result.tokens
-                } catch {
-                    return fallback
-                }
-            case .geminiFlash, .geminiFlashLite, .geminiFlash31Lite:
-                guard let model = JapaneseTokenizerBackend.preferred.geminiModel else { return fallback }
-                guard GeminiJapaneseTokenizer.isConfigured else { return fallback }
-                do {
-                    let result = try await GeminiJapaneseTokenizer.tokenize(sentence, model: model)
-                    return result.tokens.isEmpty ? fallback : result.tokens
-                } catch {
-                    return fallback
-                }
-            default:
-                return fallback
-            }
-        }
+    private func applyTokensToTextView(_ tokens: [ScrubToken], lookupSurfaces: [String]? = nil) {
+        let surfaces = lookupSurfaces ?? engine?.lookupSurfaces(for: tokens)
+        sentenceTextView.configure(
+            sentence: lastSentence,
+            lyricFont: lastFont,
+            tokens: tokens,
+            lookupSurfaces: surfaces,
+            showsFurigana: showsFurigana,
+            accentSubstring: lastAccentSubstring,
+            accentColor: lastAccentColor,
+            applyRuby: showsFurigana ? { [weak self] attributed, text, font in
+                self?.engine?.applyRuby(to: attributed, text: text, font: font)
+            } : nil
+        )
     }
 
     private func reapplyTokenizationIfConfigured() {
@@ -235,46 +228,29 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
             onSelectionChanged?(nil, nil)
         }
 
-        switch JapaneseTokenizerBackend.preferred {
-        case .naturalLanguage, .mecab:
+        guard let engine else {
+            applyTokensToTextView([])
+            return
+        }
+
+        if let tokens = engine.tokenizeSync(lastSentence) {
             setTokenizing(false)
-            let tokenizer = JapaneseTokenizer(backend: JapaneseTokenizerBackend.preferred)
-            sentenceTextView.configure(
-                sentence: lastSentence,
-                lyricFont: lastFont,
-                tokenizer: tokenizer,
-                showsFurigana: showsFurigana,
-                accentSubstring: lastAccentSubstring,
-                accentColor: lastAccentColor
-            )
-        case .foundationModel, .geminiFlash, .geminiFlashLite, .geminiFlash31Lite:
-            sentenceTextView.configure(
-                sentence: lastSentence,
-                lyricFont: lastFont,
-                tokens: [],
-                showsFurigana: showsFurigana,
-                accentSubstring: lastAccentSubstring,
-                accentColor: lastAccentColor
-            )
-            setTokenizing(true)
-            tokenizeTask = Task { @MainActor [weak self] in
-                guard let self else { return }
-                let tokens = await self.loadAsyncTokens(for: JapaneseTokenizerBackend.preferred)
-                guard !Task.isCancelled else { return }
-                self.sentenceTextView.configure(
-                    sentence: self.lastSentence,
-                    lyricFont: self.lastFont,
-                    tokens: tokens,
-                    showsFurigana: self.showsFurigana,
-                    accentSubstring: self.lastAccentSubstring,
-                    accentColor: self.lastAccentColor
-                )
-                self.setTokenizing(false, animatedSuccess: true)
-            }
+            applyTokensToTextView(tokens)
+            return
+        }
+
+        applyTokensToTextView([])
+        setTokenizing(true)
+        tokenizeTask = Task { @MainActor [weak self] in
+            guard let self, let engine = self.engine else { return }
+            let tokens = await engine.tokenizeAsync(self.lastSentence)
+            guard !Task.isCancelled else { return }
+            self.applyTokensToTextView(tokens)
+            self.setTokenizing(false, animatedSuccess: true)
         }
     }
 
-    override func layoutSubviews() {
+    public override func layoutSubviews() {
         super.layoutSubviews()
         updateTokenizingIndicatorPosition()
     }
@@ -330,32 +306,7 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         )
     }
 
-    private func loadAsyncTokens(for backend: JapaneseTokenizerBackend) async -> [JapaneseToken] {
-        let fallback = JapaneseTokenizer(backend: .mecab).tokenize(lastSentence)
-        switch backend {
-        case .foundationModel:
-            guard FoundationModelJapaneseTokenizer.isAvailable else { return fallback }
-            do {
-                let result = try await FoundationModelJapaneseTokenizer.tokenize(lastSentence)
-                return result.tokens.isEmpty ? fallback : result.tokens
-            } catch {
-                return fallback
-            }
-        case .geminiFlash, .geminiFlashLite:
-            guard let model = backend.geminiModel else { return fallback }
-            guard GeminiJapaneseTokenizer.isConfigured else { return fallback }
-            do {
-                let result = try await GeminiJapaneseTokenizer.tokenize(lastSentence, model: model)
-                return result.tokens.isEmpty ? fallback : result.tokens
-            } catch {
-                return fallback
-            }
-        default:
-            return fallback
-        }
-    }
-
-    func clearSelection() {
+    public func clearSelection() {
         applyTokenIndex(nil, fromUser: false)
     }
 
@@ -402,7 +353,7 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         return false
     }
 
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
         true
     }
 
@@ -460,7 +411,7 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
             return
         }
 
-        let gloss = Self.primaryGloss(for: surface)
+        let gloss = engine?.gloss(for: surface) ?? ""
         guard !gloss.isEmpty else {
             dismissCallout(animated: calloutIsVisible)
             return
@@ -495,20 +446,5 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         calloutIsVisible = false
         calloutSurface = nil
         DefinitionCalloutPresenter.shared.dismiss(animated: animated)
-    }
-
-    // MARK: - Gloss lookup
-
-    private static func primaryGloss(for surface: String) -> String {
-        let entries = JMDictStore.shared.entries(forSurface: surface)
-        guard let primary = entries.max(by: { ($0.score ?? 0) < ($1.score ?? 0) }) ?? entries.first else {
-            return ""
-        }
-        let gloss = primary.glossary.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !gloss.isEmpty else { return "" }
-        return gloss
-            .split(separator: ";", maxSplits: 1, omittingEmptySubsequences: true)
-            .first
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) } ?? gloss
     }
 }

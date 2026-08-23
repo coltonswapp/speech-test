@@ -1,16 +1,16 @@
 //
 //  LyricsTokenizationTextView.swift
-//  shizen
+//  InteractionKit
 //
-//  Inline tappable word regions for a single sentence. Used in LyricsViewController
-//  focus mode. Selection + underlines are custom-drawn; parent shows a definition tip.
+//  Inline tappable word regions for a single sentence. Selection + underlines
+//  are custom-drawn; parent shows a definition tip.
 //
 
 import CoreText
 import UIKit
 
 private extension NSAttributedString.Key {
-  static let jmdictTokenIndex = NSAttributedString.Key("jmdictTokenIndex")
+  static let scrubTokenIndex = NSAttributedString.Key("scrubTokenIndex")
 }
 
 // MARK: - Selection drawing
@@ -52,10 +52,10 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   private let selectionCornerRadius: CGFloat = 6
   private let selectionColor = UIColor.systemBlue
 
-  private var tokens: [JapaneseToken] = []
-  /// Parallel to `tokens`: merged adjacent surfaces when the pair is an exact JMdict match (e.g. お + 釣り → お釣り).
+  private var tokens: [ScrubToken] = []
+  /// Parallel to `tokens`: merged adjacent surfaces when the pair is an exact dictionary match.
   private var tokenLookupSurfaces: [String] = []
-  private let japaneseTokenizer = JapaneseTokenizer()
+  private var applyRuby: ((NSMutableAttributedString, String, UIFont) -> Void)?
   private var fullText: String = ""
   private var showsFurigana = false
   private var accentSubstring: String?
@@ -214,7 +214,8 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       font: font,
       selectedIndices: selectedIndices,
       selectionAppearance: tokenSelectionAppearance,
-      showsFurigana: showsFurigana
+      showsFurigana: showsFurigana,
+      applyRuby: applyRuby
     )
     let styled = NSMutableAttributedString(attributedString: built)
     applyAccentHighlight(to: styled, in: fullText)
@@ -222,39 +223,24 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     setNeedsDisplay()
   }
 
-  /// - Parameter showsFurigana: When true, adds MeCab ruby readings and extra line height (sentence scrub).
+  /// - Parameter showsFurigana: When true, applies ruby via `applyRuby` and extra line height.
   /// - Parameter accentSubstring: Optional substring drawn in `accentColor` (e.g. a learner's fill-in choice).
-  func configure(
+  public func configure(
     sentence: String,
     lyricFont: UIFont,
-    tokenizer tokenizerOverride: JapaneseTokenizer? = nil,
+    tokens precomputedTokens: [ScrubToken],
+    lookupSurfaces: [String]? = nil,
     showsFurigana: Bool = false,
     accentSubstring: String? = nil,
-    accentColor: UIColor = .systemBlue
+    accentColor: UIColor = .systemBlue,
+    applyRuby: ((NSMutableAttributedString, String, UIFont) -> Void)? = nil
   ) {
-    let tokenizer = tokenizerOverride ?? japaneseTokenizer
-    applyTokenConfiguration(
-      sentence: sentence,
-      lyricFont: lyricFont,
-      tokens: tokenizer.tokenize(sentence),
-      showsFurigana: showsFurigana,
-      accentSubstring: accentSubstring,
-      accentColor: accentColor
-    )
-  }
-
-  func configure(
-    sentence: String,
-    lyricFont: UIFont,
-    tokens precomputedTokens: [JapaneseToken],
-    showsFurigana: Bool = false,
-    accentSubstring: String? = nil,
-    accentColor: UIColor = .systemBlue
-  ) {
+    self.applyRuby = applyRuby
     applyTokenConfiguration(
       sentence: sentence,
       lyricFont: lyricFont,
       tokens: precomputedTokens,
+      lookupSurfaces: lookupSurfaces,
       showsFurigana: showsFurigana,
       accentSubstring: accentSubstring,
       accentColor: accentColor
@@ -264,7 +250,8 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   private func applyTokenConfiguration(
     sentence: String,
     lyricFont: UIFont,
-    tokens rawTokens: [JapaneseToken],
+    tokens rawTokens: [ScrubToken],
+    lookupSurfaces: [String]?,
     showsFurigana: Bool,
     accentSubstring: String?,
     accentColor: UIColor
@@ -275,7 +262,11 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       base: sentence,
       tokens: rawTokens
     )
-    tokenLookupSurfaces = JMDictStore.shared.effectiveLookupSurfaces(for: tokens)
+    if let lookupSurfaces, lookupSurfaces.count == tokens.count {
+      tokenLookupSurfaces = lookupSurfaces
+    } else {
+      tokenLookupSurfaces = tokens.map(\.text)
+    }
     selectedTokenIndex = nil
     let edge = textContainerEdgeOutset
     textContainerInset = UIEdgeInsets(
@@ -292,7 +283,8 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       font: lyricFont,
       selectedIndices: nil,
       selectionAppearance: tokenSelectionAppearance,
-      showsFurigana: showsFurigana
+      showsFurigana: showsFurigana,
+      applyRuby: applyRuby
     )
     let styled = NSMutableAttributedString(attributedString: built)
     applyAccentHighlight(to: styled, in: sentence)
@@ -476,7 +468,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       let highlight = contiguousIndicesWithSameLookup(as: sel)
       let source = visibleAttributedText ?? full
       source.enumerateAttribute(
-        .jmdictTokenIndex, in: NSRange(location: 0, length: source.length), options: []
+        .scrubTokenIndex, in: NSRange(location: 0, length: source.length), options: []
       ) { value, charRange, _ in
         guard let value else { return }
         let n: Int = (value as? NSNumber)?.intValue ?? (value as? Int) ?? -1
@@ -614,7 +606,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       overlay.addAttribute(rubyKey, value: clearAnnotation, range: range)
     }
     overlay.addAttribute(.foregroundColor, value: UIColor.clear, range: fullRange)
-    overlay.enumerateAttribute(.jmdictTokenIndex, in: fullRange, options: []) { value, charRange, _ in
+    overlay.enumerateAttribute(.scrubTokenIndex, in: fullRange, options: []) { value, charRange, _ in
       guard let value, charRange.length > 0 else { return }
       let n: Int = (value as? NSNumber)?.intValue ?? (value as? Int) ?? -1
       guard highlight.contains(n) else { return }
@@ -629,7 +621,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     highlight: Set<Int>
   ) -> Bool {
     var intersects = false
-    visible.enumerateAttribute(.jmdictTokenIndex, in: range, options: []) { value, _, stop in
+    visible.enumerateAttribute(.scrubTokenIndex, in: range, options: []) { value, _, stop in
       guard let value else { return }
       let n: Int = (value as? NSNumber)?.intValue ?? (value as? Int) ?? -1
       guard highlight.contains(n) else { return }
@@ -909,7 +901,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   private func tokenIndexResolving(near location: Int, in a: NSAttributedString) -> Int? {
     for p in [location, location - 1, location + 1, location - 2, location + 2] {
       if p < 0 || p >= a.length { continue }
-      if let n = a.attribute(.jmdictTokenIndex, at: p, effectiveRange: nil) as? NSNumber,
+      if let n = a.attribute(.scrubTokenIndex, at: p, effectiveRange: nil) as? NSNumber,
         tokens.indices.contains(n.intValue)
       {
         return n.intValue
@@ -927,11 +919,12 @@ public final class LyricsInsetUnderlineTextView: UITextView {
 
   private static func buildAttributed(
     text: String,
-    tokens: [JapaneseToken],
+    tokens: [ScrubToken],
     font: UIFont,
     selectedIndices: Set<Int>?,
     selectionAppearance: LyricsTokenSelectionAppearance,
-    showsFurigana: Bool = false
+    showsFurigana: Bool = false,
+    applyRuby: ((NSMutableAttributedString, String, UIFont) -> Void)? = nil
   ) -> NSAttributedString {
     let base: [NSAttributedString.Key: Any] = [
       .font: font,
@@ -942,21 +935,21 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     for (i, t) in tokens.enumerated() {
       let r = NSRange(t.range, in: text)
       guard r.location != NSNotFound, r.length > 0, NSMaxRange(r) <= m.length else { continue }
-      m.addAttribute(.jmdictTokenIndex, value: i, range: r)
+      m.addAttribute(.scrubTokenIndex, value: i, range: r)
       if selectionAppearance == .definitionTip, highlight.contains(i), !showsFurigana {
         m.addAttribute(.foregroundColor, value: UIColor.white, range: r)
       }
     }
     if showsFurigana {
-      JapaneseFuriganaBuilder.applyFurigana(to: m, text: text, font: font)
+      applyRuby?(m, text, font)
     }
     return m
   }
 
   private static func expandIfSingleFullSentenceToken(
     base: String,
-    tokens: [JapaneseToken]
-  ) -> [JapaneseToken] {
+    tokens: [ScrubToken]
+  ) -> [ScrubToken] {
     guard
       tokens.count == 1,
       let t = tokens.first,
@@ -964,7 +957,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       t.text.count > 1
     else { return tokens }
 
-    var out: [JapaneseToken] = []
+    var out: [ScrubToken] = []
     var i = base.startIndex
     while i < base.endIndex {
       let c = String(base[i])
@@ -973,7 +966,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
         CharacterSet.punctuationCharacters.contains(s) || CharacterSet.whitespacesAndNewlines.contains(s)
       }
       if punc { i = j; continue }
-      if !c.isEmpty { out.append(JapaneseToken(text: c, range: i..<j)) }
+      if !c.isEmpty { out.append(ScrubToken(text: c, range: i..<j)) }
       i = j
     }
     return out.isEmpty ? tokens : out

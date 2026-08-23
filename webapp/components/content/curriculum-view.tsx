@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   useMutation,
@@ -11,7 +11,9 @@ import { ChevronDown, ChevronUp, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { SectionSwitcher } from "@/components/content/section-switcher";
 import {
   dialogueApi,
@@ -31,6 +33,7 @@ function moveItem<T>(items: T[], from: number, to: number): T[] {
 
 export function CurriculumView() {
   const queryClient = useQueryClient();
+  const [editMode, setEditMode] = useState(false);
 
   const { data: unitsData, isLoading: unitsLoading } = useQuery({
     queryKey: ["curriculum-units"],
@@ -131,12 +134,39 @@ export function CurriculumView() {
         <div className="flex items-center gap-3">
           <SectionSwitcher active="curriculum" />
           <p className="text-sm text-muted-foreground">
-            Skim the learner path. Reorder here; deep-edit stays in Dialogues.
+            {editMode
+              ? "Reorder units, collections, and scenarios. Deep-edit stays in Dialogues."
+              : "Scan the learner path. Click through to Dialogues — flip Edit to reorder."}
           </p>
         </div>
-        <Badge variant="outline" className="text-xs font-normal">
-          POC · up/down reorder
-        </Badge>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Label
+              htmlFor="curriculum-edit-mode"
+              className="text-xs font-medium text-muted-foreground"
+            >
+              View
+            </Label>
+            <Switch
+              id="curriculum-edit-mode"
+              checked={editMode}
+              onCheckedChange={setEditMode}
+              aria-label="Toggle curriculum edit mode"
+            />
+            <Label
+              htmlFor="curriculum-edit-mode"
+              className={cn(
+                "text-xs font-medium",
+                editMode ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              Edit
+            </Label>
+          </div>
+          <Badge variant="outline" className="text-xs font-normal">
+            {editMode ? "Edit · reorder" : "View · scan"}
+          </Badge>
+        </div>
       </div>
 
       {isLoading ? (
@@ -151,7 +181,7 @@ export function CurriculumView() {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto rounded-lg border bg-card/30 p-3">
-          <div className="flex flex-col gap-3">
+          <div className={cn("flex flex-col", editMode ? "gap-3" : "gap-4")}>
             {units.map((unit, unitIndex) => {
               const unitCollections = (unit.collections ?? [])
                 .map((c) => collectionsById.get(c.id))
@@ -177,8 +207,15 @@ export function CurriculumView() {
                   key={unit.id}
                   className="rounded-lg border bg-background/80 shadow-sm"
                 >
-                  <header className="flex items-start gap-2 border-b px-3 py-2.5">
-                    <GripVertical className="mt-1 size-4 shrink-0 text-muted-foreground/50" />
+                  <header
+                    className={cn(
+                      "flex items-start gap-2 border-b px-3",
+                      editMode ? "py-2.5" : "py-3.5",
+                    )}
+                  >
+                    {editMode ? (
+                      <GripVertical className="mt-1 size-4 shrink-0 text-muted-foreground/50" />
+                    ) : null}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="truncate text-sm font-semibold">
@@ -209,21 +246,23 @@ export function CurriculumView() {
                         </p>
                       ) : null}
                     </div>
-                    <ReorderButtons
-                      disabled={busy}
-                      canUp={unitIndex > 0}
-                      canDown={unitIndex < units.length - 1}
-                      onUp={() =>
-                        reorderUnitsMutation.mutate(
-                          moveItem(units, unitIndex, unitIndex - 1),
-                        )
-                      }
-                      onDown={() =>
-                        reorderUnitsMutation.mutate(
-                          moveItem(units, unitIndex, unitIndex + 1),
-                        )
-                      }
-                    />
+                    {editMode ? (
+                      <ReorderButtons
+                        disabled={busy}
+                        canUp={unitIndex > 0}
+                        canDown={unitIndex < units.length - 1}
+                        onUp={() =>
+                          reorderUnitsMutation.mutate(
+                            moveItem(units, unitIndex, unitIndex - 1),
+                          )
+                        }
+                        onDown={() =>
+                          reorderUnitsMutation.mutate(
+                            moveItem(units, unitIndex, unitIndex + 1),
+                          )
+                        }
+                      />
+                    ) : null}
                   </header>
 
                   <div className="flex flex-col gap-2 p-2 pl-6">
@@ -243,7 +282,12 @@ export function CurriculumView() {
                             key={collection.id}
                             className="rounded-md border bg-muted/20"
                           >
-                            <div className="flex items-center gap-2 px-2.5 py-2">
+                            <div
+                              className={cn(
+                                "flex items-center gap-2 px-2.5",
+                                editMode ? "py-2" : "py-2.5",
+                              )}
+                            >
                               <div className="min-w-0 flex-1">
                                 <Link
                                   href={`/content/dialogues/${collection.id}`}
@@ -255,39 +299,44 @@ export function CurriculumView() {
                                   {scenarios.length} scenarios
                                 </p>
                               </div>
-                              <ReorderButtons
-                                disabled={busy}
-                                canUp={collectionIndex > 0}
-                                canDown={
-                                  collectionIndex < unitCollections.length - 1
-                                }
-                                onUp={() =>
-                                  reorderCollectionsMutation.mutate({
-                                    unitId: unit.id,
-                                    collectionIds: moveItem(
-                                      unitCollections,
-                                      collectionIndex,
-                                      collectionIndex - 1,
-                                    ).map((c) => c.id),
-                                  })
-                                }
-                                onDown={() =>
-                                  reorderCollectionsMutation.mutate({
-                                    unitId: unit.id,
-                                    collectionIds: moveItem(
-                                      unitCollections,
-                                      collectionIndex,
-                                      collectionIndex + 1,
-                                    ).map((c) => c.id),
-                                  })
-                                }
-                              />
+                              {editMode ? (
+                                <ReorderButtons
+                                  disabled={busy}
+                                  canUp={collectionIndex > 0}
+                                  canDown={
+                                    collectionIndex < unitCollections.length - 1
+                                  }
+                                  onUp={() =>
+                                    reorderCollectionsMutation.mutate({
+                                      unitId: unit.id,
+                                      collectionIds: moveItem(
+                                        unitCollections,
+                                        collectionIndex,
+                                        collectionIndex - 1,
+                                      ).map((c) => c.id),
+                                    })
+                                  }
+                                  onDown={() =>
+                                    reorderCollectionsMutation.mutate({
+                                      unitId: unit.id,
+                                      collectionIds: moveItem(
+                                        unitCollections,
+                                        collectionIndex,
+                                        collectionIndex + 1,
+                                      ).map((c) => c.id),
+                                    })
+                                  }
+                                />
+                              ) : null}
                             </div>
                             <ol className="border-t px-2 py-1.5">
                               {scenarios.map((scenario, scenarioIndex) => (
                                 <li
                                   key={scenario.id}
-                                  className="flex items-center gap-2 rounded px-1 py-1 hover:bg-background/60"
+                                  className={cn(
+                                    "flex items-center gap-2 rounded px-1 hover:bg-background/60",
+                                    editMode ? "py-1" : "py-1.5",
+                                  )}
                                 >
                                   <span className="w-5 shrink-0 text-right text-[10px] text-muted-foreground">
                                     {scenarioIndex + 1}
@@ -313,34 +362,36 @@ export function CurriculumView() {
                                       draft
                                     </Badge>
                                   )}
-                                  <ReorderButtons
-                                    size="xs"
-                                    disabled={busy}
-                                    canUp={scenarioIndex > 0}
-                                    canDown={
-                                      scenarioIndex < scenarios.length - 1
-                                    }
-                                    onUp={() =>
-                                      reorderScenariosMutation.mutate({
-                                        collectionId: collection.id,
-                                        scenarioIds: moveItem(
-                                          scenarios,
-                                          scenarioIndex,
-                                          scenarioIndex - 1,
-                                        ).map((s) => s.id),
-                                      })
-                                    }
-                                    onDown={() =>
-                                      reorderScenariosMutation.mutate({
-                                        collectionId: collection.id,
-                                        scenarioIds: moveItem(
-                                          scenarios,
-                                          scenarioIndex,
-                                          scenarioIndex + 1,
-                                        ).map((s) => s.id),
-                                      })
-                                    }
-                                  />
+                                  {editMode ? (
+                                    <ReorderButtons
+                                      size="xs"
+                                      disabled={busy}
+                                      canUp={scenarioIndex > 0}
+                                      canDown={
+                                        scenarioIndex < scenarios.length - 1
+                                      }
+                                      onUp={() =>
+                                        reorderScenariosMutation.mutate({
+                                          collectionId: collection.id,
+                                          scenarioIds: moveItem(
+                                            scenarios,
+                                            scenarioIndex,
+                                            scenarioIndex - 1,
+                                          ).map((s) => s.id),
+                                        })
+                                      }
+                                      onDown={() =>
+                                        reorderScenariosMutation.mutate({
+                                          collectionId: collection.id,
+                                          scenarioIds: moveItem(
+                                            scenarios,
+                                            scenarioIndex,
+                                            scenarioIndex + 1,
+                                          ).map((s) => s.id),
+                                        })
+                                      }
+                                    />
+                                  ) : null}
                                 </li>
                               ))}
                             </ol>

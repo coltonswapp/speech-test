@@ -207,8 +207,9 @@ export function WaveformEditor({
   }
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const containerEl = containerRef.current;
+    if (!containerEl) return;
+    const container: HTMLElement = containerEl;
     // Guards against React StrictMode's dev-only double-invoke of this effect: the
     // first mount's cleanup destroys this instance before its "ready" (or any other
     // async) callback runs, so those callbacks must no-op instead of touching state
@@ -746,10 +747,13 @@ export function WaveformEditor({
   // view so the following page content is never covered.
   useLayoutEffect(() => {
     if (!isConversation) return;
-    const section = sectionRef.current;
-    const player = playerBarRef.current;
-    const spacer = playerSpacerRef.current;
-    if (!section || !player || !spacer) return;
+    const sectionEl = sectionRef.current;
+    const playerEl = playerBarRef.current;
+    const spacerEl = playerSpacerRef.current;
+    if (!sectionEl || !playerEl || !spacerEl) return;
+    const section: HTMLElement = sectionEl;
+    const player: HTMLElement = playerEl;
+    const spacer: HTMLElement = spacerEl;
 
     function updatePin() {
       const sectionRect = section.getBoundingClientRect();

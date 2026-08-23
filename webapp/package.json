@@ -12,6 +12,7 @@
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
     "db:seed-content": "dotenv -e .env.local -- tsx scripts/seed-content.ts",
     "db:seed-dialogues": "dotenv -e .env.local -- tsx scripts/seed-dialogues.ts",
+    "db:seed-patterns": "dotenv -e .env.local -- tsx scripts/seed-teaching-patterns.ts",
     "db:cleanup-scenario-links": "dotenv -e .env.local -- tsx scripts/cleanup-scenario-links.ts",
     "db:seed-voice-previews": "dotenv -e .env.local -- tsx scripts/seed-voice-previews.ts"
   },

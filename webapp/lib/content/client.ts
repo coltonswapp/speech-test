@@ -119,6 +119,30 @@ export type CoverageReport = {
   unknownTags: Array<{ tag: string; scenarioIds: string[] }>;
 };
 
+
+export type TeachingPatternRow = {
+  id: string;
+  form: string;
+  gloss: string;
+  jlptBand: number;
+  category: string;
+  status: string;
+  notes: string | null;
+  orderIndex: number;
+  updatedAt: string;
+  linkedScenarioCount: number;
+};
+
+export type TeachingPatternList = {
+  patterns: TeachingPatternRow[];
+};
+
+export type TeachingPatternImportResult = {
+  inserted: number;
+  skipped: number;
+  total: number;
+};
+
 export const contentApi = {
   getCoverage: () => request<CoverageReport>("/api/content/coverage"),
   listPoints: (params?: { status?: string; search?: string }) => {
@@ -167,4 +191,10 @@ export const contentApi = {
       `/api/content/points/${id}/regenerate-section`,
       { method: "POST", body: JSON.stringify(body) }
     ),
+  listPatterns: () =>
+    request<TeachingPatternList>("/api/content/patterns"),
+  importPatterns: () =>
+    request<TeachingPatternImportResult>("/api/content/patterns/import", {
+      method: "POST",
+    }),
 };

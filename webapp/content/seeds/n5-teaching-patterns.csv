@@ -1,0 +1,85 @@
+id,form,gloss,jlptBand,category,status,orderIndex
+cha-ikenai-ja-ikenai,ちゃいけない・じゃいけない,must not do (spoken),5,obligation,seed,0
+da-desu,だ / です,to be,5,copula,seed,1
+dake,だけ,only; just,5,particle,seed,2
+darou,だろう,I think; probably,5,other,seed,3
+de,で,in; at; by; with,5,particle,seed,4
+demo,でも,but; however,5,conjunction,seed,5
+deshou,でしょう,I think; probably,5,other,seed,6
+donna,どんな,what kind of,5,question,seed,7
+doushite,どうして,why,5,question,seed,8
+douyatte,どうやって,how; by what means,5,question,seed,9
+ga,が,subject marker; but,5,particle,seed,10
+ga-arimasu,があります,there is (non-living),5,existence,seed,11
+ga-hoshii,がほしい,to want something,5,desire,seed,12
+ga-imasu,がいます,there is (living),5,existence,seed,13
+hou-ga-ii,ほうがいい,had better; should,5,obligation,seed,14
+i-adjectives,い-adjectives,i-adjectives,5,adjective,seed,15
+ichiban,一番,the most; the best,5,comparison,seed,16
+issho-ni,一緒に,together,5,adverb,seed,17
+itsumo,いつも,always,5,adverb,seed,18
+janai-dewa-nai,じゃない・ではない,to not be,5,copula,seed,19
+ka,か,question particle,5,question,seed,20
+ka-ka,か～か,or,5,question,seed,21
+kara,から,because; since; from,5,conjunction,seed,22
+kata,方,how to do; way of doing,5,other,seed,23
+kedo,けど,but; although,5,conjunction,seed,24
+keredo-mo,けれども,but; although,5,conjunction,seed,25
+mada,まだ,still; not yet,5,adverb,seed,26
+mada-te-imasen,まだ～ていません,have not yet,5,progressive,seed,27
+made,まで,until; as far as,5,particle,seed,28
+mae-ni,前に,before; in front of,5,conjunction,seed,29
+masen-ka,ませんか,would you; shall we,5,request,seed,30
+mashou,ましょう,let's,5,request,seed,31
+mashouka,ましょうか,shall I (offer),5,request,seed,32
+mo,も,too; also,5,particle,seed,33
+mou,もう,already; anymore,5,adverb,seed,34
+na-adjectives,な-adjectives,na-adjectives,5,adjective,seed,35
+naa,なあ,sentence ending; confirmation,5,other,seed,36
+naide,ないで,without doing,5,other,seed,37
+naide-kudasai,ないでください,please don't,5,request,seed,38
+naito-ikenai,ないといけない,must do,5,obligation,seed,39
+naku-temo-ii,なくてもいい,don't have to,5,permission,seed,40
+nakucha,なくちゃ,must; gotta (spoken),5,obligation,seed,41
+nakute-wa-ikenai,なくてはいけない,must do,5,obligation,seed,42
+nakute-wa-naranai,なくてはならない,must do,5,obligation,seed,43
+naru,なる,to become,5,other,seed,44
+ndesu,んです,explanatory; emphasis,5,other,seed,45
+ne,ね,isn't it?,5,other,seed,46
+ni,に,destination; in; at; to,5,particle,seed,47
+ni-iku,に行く,go to do,5,other,seed,48
+ni-suru,にする,to decide on,5,other,seed,49
+ni-e,に/へ,direction / destination,5,particle,seed,50
+no,の,possessive,5,particle,seed,51
+no-desu,のです,explanatory; emphasis,5,other,seed,52
+no-ga-heta,のが下手,bad at doing,5,adjective,seed,53
+no-ga-jouzu,のが上手,good at,5,adjective,seed,54
+no-ga-suki,のが好き,like doing,5,desire,seed,55
+no-naka-de-ichiban,の中で[A]が一番,"out of group, A is best",5,comparison,seed,56
+node,ので,because; since,5,conjunction,seed,57
+o-go,お / ご,honorific prefix,5,other,seed,58
+o-wo,を,object marker,5,particle,seed,59
+o-kudasai,をください,please give me,5,request,seed,60
+shikashi,しかし,but; however,5,conjunction,seed,61
+sore-kara,それから,and then; after that,5,conjunction,seed,62
+soshite,そして,and; and then,5,conjunction,seed,63
+sugiru,すぎる,too much,5,adverb,seed,64
+ta-koto-ga-aru,たことがある,have done before,5,experience,seed,65
+tai,たい,want to do,5,desire,seed,66
+tari-tari,たり～たり,do things like A and B,5,other,seed,67
+te-aru,てある,resulting state (has been done),5,progressive,seed,68
+te-iru,ている,ongoing / current state,5,progressive,seed,69
+te-kara,てから,after doing,5,conjunction,seed,70
+te-kudasai,てください,please do,5,request,seed,71
+te-wa-ikenai,てはいけない,must not,5,obligation,seed,72
+temo-ii-desu,てもいいです,may; is OK to,5,permission,seed,73
+to,と,and; with,5,particle,seed,74
+toki,とき,when,5,conjunction,seed,75
+totemo,とても,very,5,adverb,seed,76
+tsumori,つもり,plan to; intend to,5,other,seed,77
+wa-topic,は,topic marker,5,particle,seed,78
+wa-yori-desu,は〜より・・・です,more than,5,comparison,seed,79
+wa-dou-desu-ka,はどうですか,how about; how is,5,question,seed,80
+ya,や,and; or (incomplete list),5,particle,seed,81
+yo,よ,emphasis ending,5,other,seed,82
+yori-hou-ga,より～ほうが,more than,5,comparison,seed,83

@@ -22,6 +22,20 @@
       "when": 1784129206929,
       "tag": "0002_dialogue_collection_thumbnail",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784129206930,
+      "tag": "0003_curriculum_unit",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784129206931,
+      "tag": "0004_teaching_pattern",
+      "breakpoints": true
     }
   ]
 }

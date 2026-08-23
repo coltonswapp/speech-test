@@ -7,13 +7,14 @@ const sections = [
   { key: "dialogues", label: "Dialogues", href: "/content/dialogues" },
   { key: "curriculum", label: "Curriculum", href: "/content/curriculum" },
   { key: "grammar", label: "Grammar", href: "/content" },
+  { key: "patterns", label: "Patterns", href: "/content/patterns" },
   { key: "coverage", label: "Coverage", href: "/content/coverage" },
 ] as const;
 
 export function SectionSwitcher({
   active,
 }: {
-  active: "grammar" | "dialogues" | "coverage" | "curriculum";
+  active: "grammar" | "dialogues" | "coverage" | "curriculum" | "patterns";
 }) {
   return (
     <div className="flex rounded-lg bg-muted p-1 text-sm">

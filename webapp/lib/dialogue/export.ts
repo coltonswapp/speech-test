@@ -49,6 +49,22 @@ function exportLine(
   scenarioId: string,
   index: number
 ): DialogueLine {
+  // Stage rows live in jsonb as { type: "stage", text, visibility }. Main's
+  // DialogueLine type is still spoken-only; pass them through at runtime so
+  // the public API does not emit empty spoken objects.
+  const raw = line as DialogueLine & {
+    type?: string;
+    text?: string;
+    visibility?: string;
+  };
+  if (raw.type === "stage") {
+    return {
+      type: "stage",
+      text: raw.text ?? "",
+      visibility: raw.visibility === "cold" ? "cold" : "practice",
+      id: raw.id || `${scenarioId}/line-${index}`,
+    } as unknown as DialogueLine;
+  }
   return {
     speaker: line.speaker,
     japanese: line.japanese,

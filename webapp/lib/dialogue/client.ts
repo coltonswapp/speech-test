@@ -7,9 +7,11 @@ import type {
   GeneratedLines,
   GeneratedQuiz,
   GeneratedScenario,
+  PublishedTokenSync,
   QuizQuestion,
   ReviseLinesResult,
   SanitizeGrammarResult,
+  TokenizeLinesResult,
 } from "@/lib/dialogue/types";
 import type { Project as TtsProject } from "@/lib/tts/client";
 import { formatApiError } from "@/lib/api-error";
@@ -89,6 +91,7 @@ export type DialogueScenario = {
   lines: DialogueLine[];
   highlights: DialogueHighlights | null;
   quiz: QuizQuestion[] | null;
+  tokenSync: PublishedTokenSync | null;
   updatedAt: string;
 };
 
@@ -341,6 +344,11 @@ export const dialogueApi = {
       "/api/content/dialogues/generate-quiz",
       { method: "POST", body: JSON.stringify(body) },
     ),
+  tokenizeLines: (texts: string[]) =>
+    request<TokenizeLinesResult>("/api/content/dialogues/tokenize-lines", {
+      method: "POST",
+      body: JSON.stringify({ texts }),
+    }),
   auditScenario: (body: {
     lines: DialogueLine[];
     highlights?: DialogueHighlights | null;

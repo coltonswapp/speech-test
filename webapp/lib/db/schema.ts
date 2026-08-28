@@ -85,6 +85,8 @@ export const ttsVariant = pgTable("tts_variant", {
   // sha256 of the spoken content (mapped speaker + text sequence) at
   // generation time; null on takes generated before this column existed.
   contentHash: text("content_hash"),
+  // Optional learner-token karaoke timing for this take (working copy).
+  tokenSync: jsonb("token_sync"),
 });
 
 export const ttsVariantSentence = pgTable("tts_variant_sentence", {
@@ -247,6 +249,8 @@ export const dialogueScenario = pgTable("dialogue_scenario", {
   lines: jsonb("lines").notNull().default([]),
   highlights: jsonb("highlights"),
   quiz: jsonb("quiz"),
+  // Snapshot of complete token karaoke timing, copied from the published take.
+  tokenSync: jsonb("token_sync"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

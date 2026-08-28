@@ -9,7 +9,11 @@ import {
 import type { CollectionFile, DialogueLine } from "@/lib/dialogue/types";
 import { conversationContentHash } from "@/lib/tts/content-hash";
 import { scenarioLinesToConversation } from "@/lib/tts/scenario-conversation";
-import { renderVariantM4a } from "@/lib/tts/variant-audio";
+import { renderVariantM4a, lineSwitchSecondsForExport } from "@/lib/tts/variant-audio";
+import {
+  completeTokenSyncForVariant,
+  estimatedWavDurationSeconds,
+} from "@/lib/dialogue/token-sync";
 import {
   isPublishedR2Configured,
   publishedObjectPublicUrl,
@@ -86,6 +90,7 @@ export async function publishScenarioAudio(
   const m4a = await renderVariantM4a(variant);
   await putPublishedObject(objectKey, m4a, "audio/mp4");
   const publishedAudioUrl = publishedObjectPublicUrl(objectKey);
+  const tokenSync = tokenSyncSnapshot(variant, scenario.lines, contentHash);
 
   const [updated] = await db
     .update(dialogueScenario)
@@ -95,6 +100,7 @@ export async function publishScenarioAudio(
       publishedContentHash: contentHash,
       publishedAt: new Date(),
       audioKey: scenarioId,
+      tokenSync,
       updatedAt: new Date(),
     })
     .where(eq(dialogueScenario.id, scenarioId))
@@ -115,6 +121,7 @@ export async function unpublishScenarioAudio(
       publishedVariantId: null,
       publishedContentHash: null,
       publishedAt: null,
+      tokenSync: null,
       updatedAt: new Date(),
     })
     .where(eq(dialogueScenario.id, scenarioId))
@@ -123,6 +130,26 @@ export async function unpublishScenarioAudio(
     throw new Error("Scenario not found");
   }
   return updated;
+}
+
+function tokenSyncSnapshot(
+  variant: typeof ttsVariant.$inferSelect,
+  lines: unknown,
+  contentHash: string
+) {
+  const spokenTexts = scenarioLinesToConversation(
+    lines as DialogueLine[]
+  ).lines.map((line) => line.text);
+  return completeTokenSyncForVariant({
+    tokenSync: variant.tokenSync,
+    variantId: variant.id,
+    contentHash,
+    spokenTexts,
+    lineSwitchSeconds: lineSwitchSecondsForExport(variant),
+    durationSeconds: estimatedWavDurationSeconds(variant),
+    trimSampleLower: variant.trimSampleLower,
+    sampleRate: variant.sampleRate,
+  });
 }
 
 export function isPublishStale(
@@ -235,6 +262,13 @@ export async function publishLesson(
       !isPublishStale(scenario);
 
     if (alreadyCurrent) {
+      const tokenSync = tokenSyncSnapshot(variant, scenario.lines, contentHash);
+      if (JSON.stringify(scenario.tokenSync ?? null) !== JSON.stringify(tokenSync)) {
+        await db
+          .update(dialogueScenario)
+          .set({ tokenSync, updatedAt: new Date() })
+          .where(eq(dialogueScenario.id, scenario.id));
+      }
       results.push({
         id: scenario.id,
         menuTitle: scenario.menuTitle,

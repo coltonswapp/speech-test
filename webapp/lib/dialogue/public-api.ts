@@ -68,6 +68,7 @@ export function toExportableScenario(
     lines: scenario.lines,
     highlights: scenario.highlights,
     quiz: scenario.quiz,
+    tokenSync: scenario.tokenSync,
   };
 }
 

@@ -2,9 +2,11 @@ import type {
   CollectionFile,
   DialogueHighlights,
   DialogueLine,
+  PublishedTokenSync,
   QuizQuestion,
   ScenarioFile,
 } from "@/lib/dialogue/types";
+import { parsePublishedTokenSync } from "@/lib/dialogue/token-sync";
 
 // Structural input types satisfied by both the drizzle rows (jsonb columns
 // infer as unknown) and the client-side types in lib/dialogue/client.ts, so
@@ -36,6 +38,7 @@ export type ExportableScenario = {
   lines: unknown;
   highlights: unknown;
   quiz: unknown;
+  tokenSync?: unknown;
 };
 
 // Assembles the exact shizen collection file shape
@@ -110,6 +113,10 @@ function exportQuiz(quiz: QuizQuestion[] | null): QuizQuestion[] | undefined {
   }));
 }
 
+function exportTokenSync(raw: unknown): PublishedTokenSync | undefined {
+  return parsePublishedTokenSync(raw) ?? undefined;
+}
+
 export function buildScenarioFile(scenario: ExportableScenario): ScenarioFile {
   const lines = (scenario.lines as DialogueLine[]) ?? [];
   return {
@@ -135,6 +142,7 @@ export function buildScenarioFile(scenario: ExportableScenario): ScenarioFile {
     grammarPointIDs:
       scenario.grammarPointIds.length > 0 ? scenario.grammarPointIds : undefined,
     quiz: exportQuiz(scenario.quiz as QuizQuestion[] | null),
+    tokenSync: exportTokenSync(scenario.tokenSync),
   };
 }
 

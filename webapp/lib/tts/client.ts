@@ -1,4 +1,5 @@
 import { formatApiError } from "@/lib/api-error";
+import type { VariantTokenSync } from "@/lib/dialogue/types";
 
 export type ProjectSummary = {
   id: string;
@@ -59,6 +60,7 @@ export type Variant = {
   voice: string;
   provider: string;
   contentHash: string | null;
+  tokenSync: VariantTokenSync | null;
 };
 
 export type SuggestBreaksResult = {

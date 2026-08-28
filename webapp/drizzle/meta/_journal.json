@@ -22,6 +22,13 @@
       "when": 1784129206929,
       "tag": "0002_dialogue_collection_thumbnail",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784129206932,
+      "tag": "0003_token_sync",
+      "breakpoints": true
     }
   ]
 }

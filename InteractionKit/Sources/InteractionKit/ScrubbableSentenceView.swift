@@ -149,7 +149,18 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         dismissCallout(animated: animated)
     }
 
-    public func configure(
+    /// Text-container padding is only for ruby / selection overflow. Hug the
+    /// glyphs so this view's leading matches siblings in the same stack.
+    override var alignmentRectInsets: UIEdgeInsets {
+        UIEdgeInsets(
+            top: 0,
+            left: sentenceTextView.textContainerInset.left,
+            bottom: 0,
+            right: 0
+        )
+    }
+
+    func configure(
         sentence: String,
         font: UIFont,
         showsFurigana: Bool = true,
@@ -167,7 +178,9 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
     }
 
     /// Renders with precomputed tokens only — no tokenizer or network call.
-    public func configureWithTokens(
+    /// When `preservesTokenBoundaries` is true, underlines stay 1:1 with
+    /// `tokens` instead of merging adjacent JMDict compounds.
+    func configureWithTokens(
         sentence: String,
         font: UIFont,
         tokens: [ScrubToken],
@@ -175,7 +188,8 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         showsFurigana: Bool = true,
         accentSubstring: String? = nil,
         accentColor: UIColor = .systemBlue,
-        clearInteraction: Bool = false
+        clearInteraction: Bool = false,
+        preservesTokenBoundaries: Bool = false
     ) {
         tokenizeTask?.cancel()
         usesProvidedTokens = true
@@ -194,7 +208,21 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         }
 
         setTokenizing(false)
-        applyTokensToTextView(tokens, lookupSurfaces: lookupSurfaces)
+        sentenceTextView.configure(
+            sentence: sentence,
+            lyricFont: font,
+            tokens: tokens,
+            showsFurigana: showsFurigana,
+            accentSubstring: accentSubstring,
+            accentColor: accentColor,
+            preservesTokenBoundaries: preservesTokenBoundaries
+        )
+        noteTextLayoutChanged()
+    }
+
+    private func noteTextLayoutChanged() {
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
     }
 
     private func applyTokensToTextView(_ tokens: [ScrubToken], lookupSurfaces: [String]? = nil) {
@@ -235,18 +263,42 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
 
         if let tokens = engine.tokenizeSync(lastSentence) {
             setTokenizing(false)
-            applyTokensToTextView(tokens)
-            return
-        }
-
-        applyTokensToTextView([])
-        setTokenizing(true)
-        tokenizeTask = Task { @MainActor [weak self] in
-            guard let self, let engine = self.engine else { return }
-            let tokens = await engine.tokenizeAsync(self.lastSentence)
-            guard !Task.isCancelled else { return }
-            self.applyTokensToTextView(tokens)
-            self.setTokenizing(false, animatedSuccess: true)
+            let tokenizer = JapaneseTokenizer(backend: JapaneseTokenizerBackend.preferred)
+            sentenceTextView.configure(
+                sentence: lastSentence,
+                lyricFont: lastFont,
+                tokenizer: tokenizer,
+                showsFurigana: showsFurigana,
+                accentSubstring: lastAccentSubstring,
+                accentColor: lastAccentColor
+            )
+            noteTextLayoutChanged()
+        case .foundationModel, .geminiFlash, .geminiFlashLite, .geminiFlash31Lite:
+            sentenceTextView.configure(
+                sentence: lastSentence,
+                lyricFont: lastFont,
+                tokens: [],
+                showsFurigana: showsFurigana,
+                accentSubstring: lastAccentSubstring,
+                accentColor: lastAccentColor
+            )
+            noteTextLayoutChanged()
+            setTokenizing(true)
+            tokenizeTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                let tokens = await self.loadAsyncTokens(for: JapaneseTokenizerBackend.preferred)
+                guard !Task.isCancelled else { return }
+                self.sentenceTextView.configure(
+                    sentence: self.lastSentence,
+                    lyricFont: self.lastFont,
+                    tokens: tokens,
+                    showsFurigana: self.showsFurigana,
+                    accentSubstring: self.lastAccentSubstring,
+                    accentColor: self.lastAccentColor
+                )
+                self.noteTextLayoutChanged()
+                self.setTokenizing(false, animatedSuccess: true)
+            }
         }
     }
 

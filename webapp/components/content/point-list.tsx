@@ -11,7 +11,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { contentApi } from "@/lib/content/client";
-import { SectionSwitcher } from "@/components/content/section-switcher";
 import { BatchGenerateDialog } from "@/components/content/batch-generate-dialog";
 
 const statusLabels: Record<string, string> = {
@@ -54,7 +53,6 @@ export function PointList({ activeId }: { activeId?: string }) {
   return (
     <div className="flex w-80 shrink-0 flex-col gap-3 border-r border-border/60 pr-4">
       <div className="flex items-center justify-between gap-2">
-        <SectionSwitcher active="grammar" />
       </div>
       <BatchGenerateDialog points={allPointsData?.points ?? []} />
       <Input

@@ -12,6 +12,7 @@ final class DialogueQuizQuestionView: UIView {
     private let question: DialogueQuizQuestion
     private let numberLabel = UILabel()
     private let promptLabel = UILabel()
+    private let targetLabel = FuriganaTranscriptLabel()
     private let choicesStack = UIStackView()
     private let explainerLabel = UILabel()
     private var choiceButtons: [KanaChoiceButton] = []
@@ -24,12 +25,21 @@ final class DialogueQuizQuestionView: UIView {
         return valuesMatch(selectedButton.value, question.correctChoice)
     }
     var onSelectionChanged: (() -> Void)?
+    var showsQuestionEyebrow: Bool {
+        get { !numberLabel.isHidden }
+        set { numberLabel.isHidden = !newValue }
+    }
 
-    init(questionNumber: Int, question: DialogueQuizQuestion, choiceHeight: CGFloat) {
+    init(
+        questionNumber: Int,
+        question: DialogueQuizQuestion,
+        choiceHeight: CGFloat,
+        showsQuestionNumber: Bool = true
+    ) {
         self.question = question
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        configureLabels(questionNumber: questionNumber)
+        configureLabels(questionNumber: questionNumber, showsQuestionNumber: showsQuestionNumber)
         configureChoices(choiceHeight: choiceHeight)
         installLayout()
     }
@@ -38,8 +48,8 @@ final class DialogueQuizQuestionView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private func configureLabels(questionNumber: Int) {
-        numberLabel.text = "Question \(questionNumber)."
+    private func configureLabels(questionNumber: Int, showsQuestionNumber: Bool) {
+        numberLabel.text = showsQuestionNumber ? "Question \(questionNumber)." : "Quick check"
         numberLabel.font = .preferredFont(forTextStyle: .footnote)
         numberLabel.textColor = .secondaryLabel
         numberLabel.textAlignment = .center
@@ -53,6 +63,8 @@ final class DialogueQuizQuestionView: UIView {
         promptLabel.adjustsFontForContentSizeCategory = true
         promptLabel.translatesAutoresizingMaskIntoConstraints = false
 
+        configureTargetLabel()
+
         explainerLabel.text = question.wrongAnswerExplanation
         explainerLabel.font = .preferredFont(forTextStyle: .subheadline)
         explainerLabel.textColor = .secondaryLabel
@@ -61,6 +73,48 @@ final class DialogueQuizQuestionView: UIView {
         explainerLabel.adjustsFontForContentSizeCategory = true
         explainerLabel.isHidden = true
         explainerLabel.translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    private func configureTargetLabel() {
+        let trimmed = question.target?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        targetLabel.translatesAutoresizingMaskIntoConstraints = false
+        targetLabel.clipsToBounds = false
+        targetLabel.numberOfLines = 0
+        targetLabel.textAlignment = .center
+        targetLabel.adjustsFontForContentSizeCategory = true
+        targetLabel.verticalTextInsetsAffectAlignmentRect = false
+        targetLabel.setContentCompressionResistancePriority(.required, for: .vertical)
+        targetLabel.isHidden = trimmed.isEmpty
+        guard !trimmed.isEmpty else { return }
+
+        let font = UIFont.preferredFont(forTextStyle: .title2).bold()
+        let attributed = JapaneseFuriganaBuilder.scenarioAttributedString(
+            for: trimmed,
+            font: font,
+            textColor: .label
+        )
+        let centered = NSMutableAttributedString(attributedString: attributed)
+        if centered.length > 0 {
+            let style = NSMutableParagraphStyle()
+            if let existing = centered.attribute(
+                .paragraphStyle,
+                at: 0,
+                effectiveRange: nil
+            ) as? NSParagraphStyle {
+                style.setParagraphStyle(existing)
+            }
+            style.alignment = .center
+            centered.addAttribute(
+                .paragraphStyle,
+                value: style,
+                range: NSRange(location: 0, length: centered.length)
+            )
+        }
+        JapaneseFuriganaBuilder.applyScrubDisplay(
+            to: targetLabel,
+            attributed: centered,
+            contentInsets: JapaneseFuriganaBuilder.compactDisplayInsets(for: font)
+        )
     }
 
     private func configureChoices(choiceHeight: CGFloat) {
@@ -96,6 +150,7 @@ final class DialogueQuizQuestionView: UIView {
         let stack = UIStackView(arrangedSubviews: [
             numberLabel,
             promptLabel,
+            targetLabel,
             choicesStack,
             explainerLabel,
         ])
@@ -103,7 +158,12 @@ final class DialogueQuizQuestionView: UIView {
         stack.alignment = .fill
         stack.spacing = 16
         stack.setCustomSpacing(12, after: numberLabel)
-        stack.setCustomSpacing(20, after: promptLabel)
+        if targetLabel.isHidden {
+            stack.setCustomSpacing(20, after: promptLabel)
+        } else {
+            stack.setCustomSpacing(12, after: promptLabel)
+            stack.setCustomSpacing(20, after: targetLabel)
+        }
         stack.setCustomSpacing(16, after: choicesStack)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
@@ -123,6 +183,7 @@ final class DialogueQuizQuestionView: UIView {
         for button in choiceButtons {
             button.setChosen(button === sender)
         }
+        revealResult()
         onSelectionChanged?()
     }
 

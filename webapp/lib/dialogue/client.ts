@@ -20,6 +20,7 @@ export type ScenarioAudio = {
   project: TtsProject | null;
   currentContentHash: string;
   speakerNames: string[];
+  castVoices?: Array<{ name: string; voice: string }>;
 };
 
 export type ScenarioAudioStatus = {
@@ -378,6 +379,7 @@ export const dialogueApi = {
       scenario: DialogueScenario;
       publishedAudioUrl: string;
       objectKey: string;
+      hasTokenKaraoke: boolean;
     }>(`/api/content/dialogues/${collectionId}/scenarios/${slug}/publish`, {
       method: "POST",
     }),
@@ -394,6 +396,7 @@ export const dialogueApi = {
         menuTitle: string;
         status: "published" | "unchanged" | "skipped" | "failed";
         publishedAudioUrl: string | null;
+        hasTokenKaraoke?: boolean;
         error?: string;
       }>;
       lesson: CollectionFile;

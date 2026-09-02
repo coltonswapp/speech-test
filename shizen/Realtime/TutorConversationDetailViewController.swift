@@ -81,9 +81,18 @@ final class TutorConversationDetailViewController: UIViewController {
         else { return }
         let line = manifest.lines[index]
         let clip = TutorConversationStore.shared.audioClip(for: line, in: directoryURL)
+        let contextLines = manifest.lines.map { entry -> DialogueNuanceContext.Line in
+            let speaker: String
+            switch entry.speaker {
+            case .user: speaker = "You"
+            case .assistant: speaker = "Tutor"
+            }
+            return DialogueNuanceContext.Line(speaker: speaker, japanese: entry.text, english: nil)
+        }
         let scrub = SentenceScrubExperimentViewController(
             sentence: line.text,
-            recordedClip: clip
+            recordedClip: clip,
+            dialogueContext: DialogueNuanceContext.around(lines: contextLines, focusedIndex: index)
         )
         navigationController?.pushViewController(scrub, animated: true)
     }

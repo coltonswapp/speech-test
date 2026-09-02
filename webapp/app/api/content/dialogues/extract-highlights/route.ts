@@ -3,7 +3,10 @@ import type { NextRequest } from "next/server";
 import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { grammarPoint } from "@/lib/db/schema";
-import { extractHighlightsRequestSchema } from "@/lib/dialogue/types";
+import {
+  extractHighlightsRequestSchema,
+  lineGrammarIds,
+} from "@/lib/dialogue/types";
 import { DialogueGenerationError } from "@/lib/dialogue/gemini-generate";
 import { extractDialogueHighlights } from "@/lib/dialogue/gemini-extract-highlights";
 import { fetchGrammarPointIdSet } from "@/lib/dialogue/grammar-catalog";
@@ -22,7 +25,7 @@ export async function POST(request: NextRequest) {
   const grammarPointIds = [
     ...new Set([
       ...(parsed.data.grammarPointIds ?? []),
-      ...parsed.data.lines.flatMap((line) => line.grammarPointIDs ?? []),
+      ...parsed.data.lines.flatMap(lineGrammarIds),
     ]),
   ];
 

@@ -13,12 +13,20 @@ enum DialogueBubbleBackgroundStyle {
     case glass
 }
 
-/// Wraps a furigana label in a padded bubble that highlights while the line is active.
+enum DialogueBubbleTailEdge: Equatable {
+    case none
+    case leading
+    case trailing
+}
+
+/// Wraps a furigana label in a padded glass bubble. The chrome stays visible;
+/// emphasis drives underglow, while the host scales the bubble and recolors text.
 final class DialogueJapaneseBubbleView: UIView {
 
     private(set) var label: FuriganaTranscriptLabel
 
     private let solidBackgroundView = UIView()
+    private let solidMaskLayer = CAShapeLayer()
     private let glassGlowView = UIView()
     private let underglowGradientLayer = CAGradientLayer()
     private let glassBackgroundView = LiquidGlassEffectView.makeContainer()
@@ -27,16 +35,28 @@ final class DialogueJapaneseBubbleView: UIView {
     private var swipeRevealAmount: CGFloat = 0
     private var backgroundStyle: DialogueBubbleBackgroundStyle = .glass
     private var underglowConfiguration = DialogueBubbleUnderglowConfiguration.default
+    private var tailEdge: DialogueBubbleTailEdge = .none
+    private var solidFillColor: UIColor = .systemBlue
+    /// When true, the solid fill stays fully opaque even at zero emphasis.
+    private var solidFillStaysVisible = false
     /// Label edge pins that size the bubble. Deactivated while a live meter owns layout.
     private var labelEdgeConstraints: [NSLayoutConstraint] = []
+    private var labelLeadingConstraint: NSLayoutConstraint!
+    private var labelTrailingConstraint: NSLayoutConstraint!
     private var labelContributesToLayout = true
 
     private static let cornerRadius: CGFloat = 18
-    private static let contentPadding = UIEdgeInsets(top: 6, left: 12, bottom: 3, right: 12)
-    private static let bubbleFillColor = UIColor.systemBlue
+    private static let contentPadding = UIEdgeInsets(top: 6, left: 12, bottom: 10, right: 12)
+    /// Extra width reserved for an iMessage-style tail on one side.
+    private static let tailProtrusion: CGFloat = 6
 
     static var horizontalContentPadding: CGFloat {
         contentPadding.left + contentPadding.right
+    }
+
+    /// Horizontal padding that currently sizes the label, including a tail if shown.
+    var layoutHorizontalContentPadding: CGFloat {
+        Self.horizontalContentPadding + (tailEdge == .none ? 0 : Self.tailProtrusion)
     }
 
     init(label: FuriganaTranscriptLabel) {
@@ -51,6 +71,7 @@ final class DialogueJapaneseBubbleView: UIView {
         solidBackgroundView.layer.cornerCurve = .continuous
         solidBackgroundView.clipsToBounds = true
         solidBackgroundView.backgroundColor = .clear
+        solidMaskLayer.fillColor = UIColor.black.cgColor
 
         glassGlowView.translatesAutoresizingMaskIntoConstraints = true
         glassGlowView.isUserInteractionEnabled = false
@@ -72,10 +93,18 @@ final class DialogueJapaneseBubbleView: UIView {
         addSubview(glassBackgroundView)
         addSubview(label)
 
+        labelLeadingConstraint = label.leadingAnchor.constraint(
+            equalTo: leadingAnchor,
+            constant: Self.contentPadding.left
+        )
+        labelTrailingConstraint = label.trailingAnchor.constraint(
+            equalTo: trailingAnchor,
+            constant: -Self.contentPadding.right
+        )
         labelEdgeConstraints = [
             label.topAnchor.constraint(equalTo: topAnchor, constant: Self.contentPadding.top),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.contentPadding.left),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.contentPadding.right),
+            labelLeadingConstraint,
+            labelTrailingConstraint,
             label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.contentPadding.bottom),
         ]
 
@@ -90,6 +119,8 @@ final class DialogueJapaneseBubbleView: UIView {
             glassBackgroundView.trailingAnchor.constraint(equalTo: trailingAnchor),
             glassBackgroundView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ] + labelEdgeConstraints)
+
+        applyEmphasisVisuals()
     }
 
     /// When false, the label stops driving bubble size so a sibling (e.g. live
@@ -112,6 +143,7 @@ final class DialogueJapaneseBubbleView: UIView {
         super.layoutSubviews()
         layoutUnderglow()
         solidBackgroundView.layoutIfNeeded()
+        updateSolidMask()
         updateHighlightDecoration()
     }
 
@@ -130,6 +162,30 @@ final class DialogueJapaneseBubbleView: UIView {
         setNeedsLayout()
     }
 
+    func setSolidFillColor(_ color: UIColor) {
+        solidFillColor = color
+        applyEmphasisVisuals()
+    }
+
+    func setSolidFillStaysVisible(_ staysVisible: Bool) {
+        guard solidFillStaysVisible != staysVisible else { return }
+        solidFillStaysVisible = staysVisible
+        applyEmphasisVisuals()
+        setNeedsLayout()
+    }
+
+    func setTailEdge(_ edge: DialogueBubbleTailEdge) {
+        guard tailEdge != edge else { return }
+        tailEdge = edge
+        let leadingExtra = edge == .leading ? Self.tailProtrusion : 0
+        let trailingExtra = edge == .trailing ? Self.tailProtrusion : 0
+        labelLeadingConstraint.constant = Self.contentPadding.left + leadingExtra
+        labelTrailingConstraint.constant = -(Self.contentPadding.right + trailingExtra)
+        applySolidCornerChrome()
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+    }
+
     func setUnderglowConfiguration(_ configuration: DialogueBubbleUnderglowConfiguration) {
         underglowConfiguration = configuration
         applyUnderglowAppearance()
@@ -138,6 +194,11 @@ final class DialogueJapaneseBubbleView: UIView {
 
     var currentUnderglowConfiguration: DialogueBubbleUnderglowConfiguration {
         underglowConfiguration
+    }
+
+    /// Token karaoke fill — same hue as this bubble's underglow.
+    var tokenHighlightColor: UIColor {
+        underglowConfiguration.tokenHighlightUIColor
     }
 
     func setActive(_ active: Bool) {
@@ -170,14 +231,22 @@ final class DialogueJapaneseBubbleView: UIView {
         combinedGlassAmount > 0.001
     }
 
+    private var showsSolidFill: Bool {
+        solidFillStaysVisible || isBubbleActive
+    }
+
+    private var usesMessageTail: Bool {
+        tailEdge != .none
+    }
+
     private func applyEmphasisVisuals() {
         let glassAmount = combinedGlassAmount
         switch backgroundStyle {
         case .solid:
-            solidBackgroundView.isHidden = !isBubbleActive
-            solidBackgroundView.alpha = glassAmount
-            solidBackgroundView.backgroundColor = isBubbleActive
-                ? Self.bubbleFillColor
+            solidBackgroundView.isHidden = !showsSolidFill
+            solidBackgroundView.alpha = solidFillStaysVisible ? 1 : glassAmount
+            solidBackgroundView.backgroundColor = showsSolidFill
+                ? solidFillColor
                 : .clear
             glassGlowView.isHidden = true
             glassGlowView.alpha = 0
@@ -189,8 +258,27 @@ final class DialogueJapaneseBubbleView: UIView {
             solidBackgroundView.backgroundColor = .clear
             glassGlowView.isHidden = !isBubbleActive
             glassGlowView.alpha = glassAmount * underglowConfiguration.opacity
-            glassBackgroundView.isHidden = !isBubbleActive
-            glassBackgroundView.alpha = glassAmount
+            glassBackgroundView.isHidden = false
+            glassBackgroundView.alpha = 1
+        }
+    }
+
+    private func solidSilhouettePath(in rect: CGRect) -> UIBezierPath {
+        if usesMessageTail {
+            return Self.messageBubblePath(in: rect, tailEdge: tailEdge)
+        }
+        return UIBezierPath(roundedRect: rect, cornerRadius: Self.cornerRadius)
+    }
+
+    private func applySolidCornerChrome() {
+        if usesMessageTail {
+            solidBackgroundView.layer.cornerRadius = 0
+            solidBackgroundView.clipsToBounds = false
+        } else {
+            solidBackgroundView.layer.mask = nil
+            solidBackgroundView.layer.cornerRadius = Self.cornerRadius
+            solidBackgroundView.layer.cornerCurve = .continuous
+            solidBackgroundView.clipsToBounds = true
         }
     }
 
@@ -251,10 +339,26 @@ final class DialogueJapaneseBubbleView: UIView {
         }
     }
 
+    private func updateSolidMask() {
+        guard usesMessageTail,
+              backgroundStyle == .solid,
+              solidBackgroundView.bounds.width > 0,
+              solidBackgroundView.bounds.height > 0 else {
+            solidBackgroundView.layer.mask = nil
+            return
+        }
+
+        solidMaskLayer.frame = solidBackgroundView.bounds
+        solidMaskLayer.path = solidSilhouettePath(in: solidBackgroundView.bounds).cgPath
+        solidBackgroundView.layer.mask = solidMaskLayer
+    }
+
     private func updateHighlightDecoration() {
         highlightGradientLayer?.removeFromSuperlayer()
         highlightGradientLayer = nil
         guard backgroundStyle == .solid,
+              !solidFillStaysVisible,
+              !usesMessageTail,
               isBubbleActive,
               solidBackgroundView.bounds.width > 0,
               solidBackgroundView.bounds.height > 0 else { return }
@@ -286,6 +390,71 @@ final class DialogueJapaneseBubbleView: UIView {
 
         solidBackgroundView.layer.addSublayer(gradientLayer)
         highlightGradientLayer = gradientLayer
+    }
+
+    /// iOS Messages incoming-bubble silhouette, mirrored for a trailing tail.
+    private static func messageBubblePath(
+        in rect: CGRect,
+        tailEdge: DialogueBubbleTailEdge
+    ) -> UIBezierPath {
+        let width = rect.width
+        let height = rect.height
+        let path = UIBezierPath()
+        guard width > 44, height > 32, tailEdge != .none else {
+            path.append(
+                UIBezierPath(
+                    roundedRect: rect,
+                    cornerRadius: cornerRadius
+                )
+            )
+            return path
+        }
+
+        // Classic Messages tail: body inset ~6pt, beak along the bottom corner.
+        path.move(to: CGPoint(x: 22, y: height))
+        path.addLine(to: CGPoint(x: width - 17, y: height))
+        path.addCurve(
+            to: CGPoint(x: width, y: height - 17),
+            controlPoint1: CGPoint(x: width - 7.61, y: height),
+            controlPoint2: CGPoint(x: width, y: height - 7.61)
+        )
+        path.addLine(to: CGPoint(x: width, y: 17))
+        path.addCurve(
+            to: CGPoint(x: width - 17, y: 0),
+            controlPoint1: CGPoint(x: width, y: 7.61),
+            controlPoint2: CGPoint(x: width - 7.61, y: 0)
+        )
+        path.addLine(to: CGPoint(x: 21, y: 0))
+        path.addCurve(
+            to: CGPoint(x: 4, y: 17),
+            controlPoint1: CGPoint(x: 11.61, y: 0),
+            controlPoint2: CGPoint(x: 4, y: 7.61)
+        )
+        path.addLine(to: CGPoint(x: 4, y: height - 11))
+        path.addCurve(
+            to: CGPoint(x: 0, y: height),
+            controlPoint1: CGPoint(x: 4, y: height - 1),
+            controlPoint2: CGPoint(x: 0, y: height)
+        )
+        path.addLine(to: CGPoint(x: -0.05, y: height - 0.01))
+        path.addCurve(
+            to: CGPoint(x: 11.04, y: height - 4.04),
+            controlPoint1: CGPoint(x: 4.07, y: height + 0.43),
+            controlPoint2: CGPoint(x: 8.16, y: height - 1.06)
+        )
+        path.addCurve(
+            to: CGPoint(x: 22, y: height),
+            controlPoint1: CGPoint(x: 16, y: height),
+            controlPoint2: CGPoint(x: 19, y: height)
+        )
+        path.close()
+
+        if tailEdge == .trailing {
+            path.apply(CGAffineTransform(scaleX: -1, y: 1))
+            path.apply(CGAffineTransform(translationX: width, y: 0))
+        }
+        path.apply(CGAffineTransform(translationX: rect.minX, y: rect.minY))
+        return path
     }
 }
 

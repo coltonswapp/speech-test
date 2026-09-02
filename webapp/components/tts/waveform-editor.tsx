@@ -1,15 +1,19 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin, { type Region } from "wavesurfer.js/dist/plugins/regions.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Play, Pause, Scissors, Download } from "lucide-react";
 import { ttsApi, type Variant } from "@/lib/tts/client";
 import { cn } from "@/lib/utils";
 import type { EditableDialogueLine } from "@/components/tts/dialogue-line-editor";
+import { TokenSyncEditor } from "@/components/dialogue/token-sync-editor";
+import type { VariantTokenSync } from "@/lib/dialogue/types";
+import { enqueueTokenSyncSave } from "@/lib/dialogue/token-sync-persist";
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds)) return "0:00";
@@ -20,14 +24,50 @@ function formatTime(seconds: number): string {
 
 /** Splits dialogue lines into the spoken-line list the sentence map is built from. */
 function spokenLinesFor(dialogueLines: EditableDialogueLine[]): EditableDialogueLine[] {
-  return dialogueLines.flatMap((line) =>
-    line.text
+  return dialogueLines.flatMap((line) => {
+    if (line.kind === "stage") return [];
+    return line.text
       .split(/\r?\n/)
       .map((t) => t.trim())
       .filter((t) => t.length > 0)
-      .map((text) => ({ id: line.id, speaker: line.speaker, text }))
-  );
+      .map((text) => ({ id: line.id, speaker: line.speaker, text, kind: "spoken" as const }));
+  });
 }
+
+type MapListItem =
+  | { type: "stage"; key: string; text: string }
+  | { type: "spoken"; key: string; row: SentenceMapRow };
+
+function buildMapList(
+  dialogueLines: EditableDialogueLine[],
+  sentenceRows: SentenceMapRow[],
+): MapListItem[] {
+  const items: MapListItem[] = [];
+  let spokenI = 0;
+  dialogueLines.forEach((line, lineIndex) => {
+    if (line.kind === "stage") {
+      const text = line.text.trim();
+      if (!text) return;
+      items.push({ type: "stage", key: `stage-${lineIndex}`, text });
+      return;
+    }
+    const parts = line.text
+      .split(/\r?\n/)
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+    for (const _ of parts) {
+      const row = sentenceRows[spokenI];
+      if (row) items.push({ type: "spoken", key: `spoken-${row.index}`, row });
+      spokenI += 1;
+    }
+  });
+  return items;
+}
+
+/** One-click beat between dialogue lines (physical action, handing something). */
+const PLAYHEAD_BREAK_SECONDS = 0.15;
+const PLAYHEAD_BREAK_HALF_SECONDS = 0.5;
+const PLAYBACK_RATES = [0.5, 0.75, 1] as const;
 
 type SentenceMapRow = {
   index: number;
@@ -92,10 +132,14 @@ export function WaveformEditor({
   projectId,
   variant,
   dialogueLines,
+  currentContentHash,
+  hasUnsavedChanges,
 }: {
   projectId: string;
   variant: Variant;
   dialogueLines?: EditableDialogueLine[];
+  currentContentHash?: string;
+  hasUnsavedChanges?: boolean;
 }) {
   const queryClient = useQueryClient();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -109,6 +153,8 @@ export function WaveformEditor({
   const playerSpacerRef = useRef<HTMLDivElement>(null);
   const sectionRef = useRef<HTMLDivElement>(null);
   const sectionHeaderRef = useRef<HTMLDivElement>(null);
+  const variantRef = useRef(variant);
+  variantRef.current = variant;
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isTrimMode, setIsTrimMode] = useState(false);
@@ -127,19 +173,26 @@ export function WaveformEditor({
   >(null);
   const [playerBarHeight, setPlayerBarHeight] = useState(0);
   const [sectionHeaderHeight, setSectionHeaderHeight] = useState(0);
+  const [timingMode, setTimingMode] = useState<"lines" | "tokens">("lines");
+  const [playbackRate, setPlaybackRate] =
+    useState<(typeof PLAYBACK_RATES)[number]>(1);
+  const playbackRateRef = useRef(playbackRate);
+  playbackRateRef.current = playbackRate;
 
   // Bust the media URL whenever the take's bytes change (cut / commit-trim /
   // insert-line-break). WaveSurfer only remounts when this string changes, and
   // browsers otherwise keep serving the pre-edit WAV from cache.
   const audioUrl = `/api/tts/projects/${projectId}/variants/${variant.id}/audio?v=${variant.audioByteCount}`;
   const marks = variant.dialogueLineSwitchSamples ?? [];
-  const spokenLines = spokenLinesFor(dialogueLines ?? []);
+  const sourceLines = dialogueLines ?? [];
+  const spokenLines = spokenLinesFor(sourceLines);
   const totalSamples = Math.round(duration * variant.sampleRate);
   const { rows: sentenceRows, usesMarks, validMarkCount } = buildSentenceMap(
     spokenLines,
     marks,
     totalSamples
   );
+  const mapList = buildMapList(sourceLines, sentenceRows);
   const activeRowIndex = activeSentenceIndexForTime(
     marks,
     currentTime,
@@ -150,12 +203,13 @@ export function WaveformEditor({
   // Keep the currently-playing line in view as the page scrolls — the pinned
   // waveform dock at the bottom would otherwise cover rows near the edge.
   useEffect(() => {
+    if (timingMode !== "lines") return;
     if (activeRowIndex == null) return;
     rowRefs.current[activeRowIndex]?.scrollIntoView({
       behavior: "smooth",
       block: "nearest",
     });
-  }, [activeRowIndex]);
+  }, [activeRowIndex, timingMode]);
 
   // Track chrome heights for scroll-margin on active sentence rows.
   useEffect(() => {
@@ -176,7 +230,7 @@ export function WaveformEditor({
     return () => observer.disconnect();
   }, []);
 
-  function patchVariantInCache(next: Variant) {
+  function patchVariantInCache(next: Variant, options?: { refetch?: boolean }) {
     queryClient.setQueryData<{ variants: Variant[] }>(
       ["tts-variants", projectId],
       (old) => {
@@ -188,17 +242,34 @@ export function WaveformEditor({
         };
       }
     );
+    if (options?.refetch === false) return;
     void queryClient.invalidateQueries({ queryKey: ["tts-variants", projectId] });
   }
 
   const updateVariantMutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       ttsApi.updateVariant(projectId, variant.id, body),
-    onSuccess: () => {
+    onSuccess: (_data, body) => {
+      if (Object.keys(body).length === 1 && "tokenSync" in body) return;
       queryClient.invalidateQueries({ queryKey: ["tts-variants", projectId] });
     },
     onError: (error) => toast.error(error.message),
   });
+
+  function persistTokenSync(tokenSync: VariantTokenSync | null) {
+    const variantId = variantRef.current.id;
+    patchVariantInCache({ ...variantRef.current, tokenSync }, { refetch: false });
+    void enqueueTokenSyncSave(() =>
+      ttsApi
+        .updateVariant(projectId, variantId, { tokenSync })
+        .then(() => undefined)
+        .catch((error: unknown) => {
+          toast.error(
+            error instanceof Error ? error.message : "Could not save token timing."
+          );
+        })
+    );
+  }
 
   function setMarks(next: number[]) {
     updateVariantMutation.mutate({
@@ -293,6 +364,7 @@ export function WaveformEditor({
       trimRegionRef.current = region;
       if (region.element) region.element.style.pointerEvents = "none";
       lastDrawnWidth = 0;
+      ws.setPlaybackRate(playbackRateRef.current, true);
       requestAnimationFrame(() => {
         requestAnimationFrame(ensureWaveformPainted);
       });
@@ -475,23 +547,62 @@ export function WaveformEditor({
     setSuggested({ samples: [], summary: "" });
   }
 
-  const insertLineBreakMutation = useMutation({
-    mutationFn: () => ttsApi.insertLineBreak(projectId, variant.id, currentEditSample()),
-    onSuccess: ({ variant: next }) => {
+  const insertSilenceMutation = useMutation({
+    mutationFn: ({
+      sample,
+      durationSeconds,
+    }: {
+      sample: number;
+      durationSeconds: number;
+    }) => ttsApi.insertLineBreak(projectId, variant.id, sample, durationSeconds),
+    onSuccess: ({ variant: next }, { durationSeconds }) => {
       patchVariantInCache(next);
-      toast.success("Inserted 0.15s silence.");
+      const label =
+        durationSeconds >= 1
+          ? durationSeconds.toFixed(1)
+          : durationSeconds.toFixed(2);
+      toast.success(`Inserted ${label}s silence.`);
     },
     onError: (error) => toast.error(error.message),
   });
 
-  function insertLineBreak() {
-    const sample = currentEditSample();
+  function insertSilenceAt(
+    sample: number,
+    durationSeconds: number,
+    invalidMessage: string
+  ) {
     if (sample <= 0 || sample >= totalSamples) {
-      toast.error("Move the playhead to a spot between lines, not at the very start or end.");
+      toast.error(invalidMessage);
       return;
     }
-    insertLineBreakMutation.mutate();
+    insertSilenceMutation.mutate({ sample, durationSeconds });
   }
+
+  function insertLineBreak(durationSeconds: number = PLAYHEAD_BREAK_SECONDS) {
+    insertSilenceAt(
+      currentEditSample(),
+      durationSeconds,
+      "Move the playhead to a spot between lines, not at the very start or end."
+    );
+  }
+
+  function insertPauseAfterStage(itemIndex: number) {
+    const nextSpoken = mapList
+      .slice(itemIndex + 1)
+      .find((item) => item.type === "spoken");
+    const sample =
+      nextSpoken && usesMarks && nextSpoken.row.sampleLower > 0
+        ? nextSpoken.row.sampleLower
+        : 1;
+    insertSilenceAt(
+      sample,
+      PLAYHEAD_BREAK_HALF_SECONDS,
+      "Can't insert silence here.",
+    );
+  }
+
+  const timingModeRef = useRef(timingMode);
+  timingModeRef.current = timingMode;
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -500,7 +611,10 @@ export function WaveformEditor({
       if (e.code === "Space") {
         e.preventDefault();
         toggleMainPlayback();
-      } else if (e.key === "m" || e.key === "M") {
+      } else if (
+        timingModeRef.current === "lines" &&
+        (e.key === "m" || e.key === "M")
+      ) {
         e.preventDefault();
         markLineSwitchAtPlayhead();
       }
@@ -531,6 +645,10 @@ export function WaveformEditor({
     setLoopingRowIndex(null);
     wavesurferRef.current?.playPause();
   }
+
+  useEffect(() => {
+    wavesurferRef.current?.setPlaybackRate(playbackRate, true);
+  }, [playbackRate]);
 
   useEffect(() => {
     const ws = wavesurferRef.current;
@@ -796,13 +914,13 @@ export function WaveformEditor({
       player.style.zIndex = "";
       spacer.style.height = "";
     };
-  }, [isConversation, sentenceRows.length, playerBarHeight]);
+  }, [isConversation, sentenceRows.length, playerBarHeight, timingMode]);
 
   const playerTools = (
     <>
       <div className="relative w-full">
         <div ref={containerRef} className="h-[72px] w-full" />
-        {isConversation && duration > 0 && (
+        {isConversation && timingMode === "lines" && duration > 0 && (
           <div className="pointer-events-none absolute inset-0 z-[1]">
             {suggested.samples.map((sample, i) => (
               <div
@@ -832,7 +950,7 @@ export function WaveformEditor({
         )}
       </div>
 
-      {isConversation && duration > 0 && (
+      {isConversation && timingMode === "lines" && duration > 0 && (
         <div
           ref={stripRef}
           className="relative h-4 w-full overflow-visible rounded-sm bg-muted/50"
@@ -885,6 +1003,22 @@ export function WaveformEditor({
         <span className="text-xs tabular-nums text-muted-foreground">
           {formatTime(currentTime)} / {formatTime(duration)}
         </span>
+        <div
+          className="flex items-center rounded-md border border-border/60 p-0.5"
+          title="Playback speed"
+        >
+          {PLAYBACK_RATES.map((rate) => (
+            <Button
+              key={rate}
+              size="xs"
+              variant={playbackRate === rate ? "secondary" : "ghost"}
+              className="h-6 min-w-8 px-1.5 tabular-nums"
+              onClick={() => setPlaybackRate(rate)}
+            >
+              {rate}×
+            </Button>
+          ))}
+        </div>
         <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
           <div
             className="h-full bg-primary transition-[width] duration-75"
@@ -893,14 +1027,19 @@ export function WaveformEditor({
         </div>
       </div>
 
-      {isConversation && (
+      {isConversation && timingMode === "lines" && (
         <p className="text-xs text-muted-foreground">
           Scrub the waveform above (Space play/pause, M mark line switch). Drag green
           triangles on the bottom rail to fine-tune. Orange = auto breaks.
         </p>
       )}
+      {isConversation && timingMode === "tokens" && (
+        <p className="text-xs text-muted-foreground">
+          Space play/pause. Stamp tokens in the list above (T stamps, Backspace undoes).
+        </p>
+      )}
 
-      {isConversation && duration > 0 && (
+      {isConversation && timingMode === "lines" && duration > 0 && (
         <div className="flex flex-col gap-2 rounded-md border border-orange-500/20 bg-orange-500/5 p-2.5">
           <p className="text-xs font-semibold">Line break alignment</p>
           <p className="text-xs text-muted-foreground">
@@ -934,84 +1073,96 @@ export function WaveformEditor({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setIsTrimMode((v) => !v)}
-        >
-          {isTrimMode ? "Done trimming" : "Trim…"}
-        </Button>
-        {isTrimMode && (
-          <>
+      {(timingMode === "lines" || !isConversation) && (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="outline"
-              onClick={() => saveTrimMutation.mutate()}
-              disabled={saveTrimMutation.isPending}
+              onClick={() => setIsTrimMode((v) => !v)}
             >
-              Save trim
+              {isTrimMode ? "Done trimming" : "Trim…"}
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => commitTrimMutation.mutate()}
-              disabled={commitTrimMutation.isPending}
-            >
-              <Scissors className="size-3.5" />
-              Apply trim to take
-            </Button>
-          </>
-        )}
-        {isConversation && (
-          <>
-            <Button size="sm" variant="outline" onClick={markLineSwitchAtPlayhead}>
-              Mark line switch
-            </Button>
-            {marks.length > 0 && (
+            {isTrimMode && (
               <>
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={removeLineSwitchMarkNearestPlayhead}
+                  onClick={() => saveTrimMutation.mutate()}
+                  disabled={saveTrimMutation.isPending}
                 >
-                  Remove nearest mark
+                  Save trim
                 </Button>
-                <Button size="sm" variant="outline" onClick={clearLineSwitchMarks}>
-                  Clear line marks
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => commitTrimMutation.mutate()}
+                  disabled={commitTrimMutation.isPending}
+                >
+                  <Scissors className="size-3.5" />
+                  Apply trim to take
                 </Button>
               </>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={insertLineBreak}
-              disabled={insertLineBreakMutation.isPending}
-            >
-              Insert line break (0.15s)
+            {isConversation && (
+              <>
+                <Button size="sm" variant="outline" onClick={markLineSwitchAtPlayhead}>
+                  Mark line switch
+                </Button>
+                {marks.length > 0 && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={removeLineSwitchMarkNearestPlayhead}
+                    >
+                      Remove nearest mark
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={clearLineSwitchMarks}>
+                      Clear line marks
+                    </Button>
+                  </>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => insertLineBreak(PLAYHEAD_BREAK_SECONDS)}
+                  disabled={insertSilenceMutation.isPending}
+                >
+                  Insert line break (0.15s)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => insertLineBreak(PLAYHEAD_BREAK_HALF_SECONDS)}
+                  disabled={insertSilenceMutation.isPending}
+                >
+                  Insert line break (0.5s)
+                </Button>
+              </>
+            )}
+            <Button size="sm" variant="outline" onClick={toggleCutMode}>
+              {isCutMode ? "Cancel cut" : "Cut section…"}
             </Button>
-          </>
-        )}
-        <Button size="sm" variant="outline" onClick={toggleCutMode}>
-          {isCutMode ? "Cancel cut" : "Cut section…"}
-        </Button>
-        {isCutMode && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={removeCutRegion}
-            disabled={!hasCutRegion || removeGapMutation.isPending}
-          >
-            <Scissors className="size-3.5" />
-            Remove selected section
-          </Button>
-        )}
-      </div>
-      {isCutMode && (
-        <p className="text-xs text-muted-foreground">
-          Drag across the waveform to select the section to cut, then drag its edges to
-          fine-tune. The selected audio is deleted and the remaining audio spliced together.
-        </p>
+            {isCutMode && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={removeCutRegion}
+                disabled={!hasCutRegion || removeGapMutation.isPending}
+              >
+                <Scissors className="size-3.5" />
+                Remove selected section
+              </Button>
+            )}
+          </div>
+          {isCutMode && (
+            <p className="text-xs text-muted-foreground">
+              Drag across the waveform to select the section to cut, then drag its edges to
+              fine-tune. The selected audio is deleted and the remaining audio spliced together.
+            </p>
+          )}
+        </>
       )}
     </>
   );
@@ -1022,47 +1173,107 @@ export function WaveformEditor({
         <div ref={sectionRef} className="relative flex flex-col">
           <div
             ref={sectionHeaderRef}
-            className="sticky top-14 z-20 bg-background pb-2"
+            className="sticky top-14 z-20 flex flex-col gap-2 bg-background pb-2"
           >
-            <p className="text-sm font-medium">Sentence map</p>
-            {usesMarks ? (
-              <p className="text-xs text-emerald-600 dark:text-emerald-400">
-                One row per audio segment ({sentenceRows.length} lines, {marks.length}{" "}
-                breaks). Ranges follow your marks. Playhead highlights the active
-                sentence for QC.
-              </p>
-            ) : spokenLines.length > 1 ? (
-              (() => {
-                const needed = spokenLines.length - 1;
-                const delta = needed - validMarkCount;
-                if (delta > 0) {
-                  return (
-                    <p className="text-xs text-muted-foreground">
-                      One row per spoken line. Place {delta} more line break
-                      {delta === 1 ? "" : "s"} ({validMarkCount} of {needed} placed) to
-                      align audio with marks.
-                    </p>
-                  );
+            <Tabs
+              value={timingMode}
+              onValueChange={(value) => {
+                if (value === "lines" || value === "tokens") {
+                  setLoopingRowIndex(null);
+                  setIsTrimMode(false);
+                  setIsCutMode(false);
+                  setDragging(null);
+                  setTimingMode(value);
                 }
-                return (
-                  <p className="text-xs text-amber-600 dark:text-amber-400">
-                    {-delta} extra mark{-delta === 1 ? "" : "s"} for {spokenLines.length}{" "}
-                    lines ({validMarkCount} placed, {needed} needed). Remove the extra
-                    mark{-delta === 1 ? "" : "s"}, or check whether the script changed
-                    since these were placed.
+              }}
+            >
+              <TabsList>
+                <TabsTrigger value="lines">Line timing</TabsTrigger>
+                <TabsTrigger value="tokens">Token timing</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            {timingMode === "lines" && (
+              <>
+                <p className="text-sm font-medium">Sentence map</p>
+                {usesMarks ? (
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                    One row per audio segment ({sentenceRows.length} lines, {marks.length}{" "}
+                    breaks). Ranges follow your marks. Playhead highlights the active
+                    sentence for QC.
                   </p>
-                );
-              })()
-            ) : null}
+                ) : spokenLines.length > 1 ? (
+                  (() => {
+                    const needed = spokenLines.length - 1;
+                    const delta = needed - validMarkCount;
+                    if (delta > 0) {
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          One row per spoken line. Place {delta} more line break
+                          {delta === 1 ? "" : "s"} ({validMarkCount} of {needed} placed) to
+                          align audio with marks.
+                        </p>
+                      );
+                    }
+                    return (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        {-delta} extra mark{-delta === 1 ? "" : "s"} for {spokenLines.length}{" "}
+                        lines ({validMarkCount} placed, {needed} needed). Remove the extra
+                        mark{-delta === 1 ? "" : "s"}, or check whether the script changed
+                        since these were placed.
+                      </p>
+                    );
+                  })()
+                ) : null}
+              </>
+            )}
+            {timingMode === "tokens" && (
+              <p className="text-sm font-medium">Token karaoke</p>
+            )}
           </div>
+          {timingMode === "lines" && (
           <div className="flex flex-col gap-1.5">
-            {sentenceRows.map((row) => {
+            {mapList.map((item, itemIndex) => {
+              if (item.type === "stage") {
+                return (
+                  <Fragment key={item.key}>
+                    <div className="flex items-start gap-2 rounded-md border border-dashed border-border/80 bg-muted/20 px-2 py-1.5 text-xs">
+                      <div className="mt-0.5 size-3.5 shrink-0" />
+                      <div className="flex flex-1 flex-col gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="rounded-full bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-medium italic text-muted-foreground">
+                            stage
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            cold
+                          </span>
+                        </div>
+                        <span className="italic text-muted-foreground">{item.text}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 px-8 py-0.5">
+                      <div className="h-px flex-1 bg-border/50" />
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="outline"
+                        title="Insert 0.5s of silence after this stage line"
+                        disabled={insertSilenceMutation.isPending || totalSamples <= 1}
+                        onClick={() => insertPauseAfterStage(itemIndex)}
+                      >
+                        +0.5s
+                      </Button>
+                      <div className="h-px flex-1 bg-border/50" />
+                    </div>
+                  </Fragment>
+                );
+              }
+              const row = item.row;
               const isLooping = loopingRowIndex === row.index;
               const isActive = activeRowIndex === row.index;
               const isHighlighted = isLooping || isActive;
               return (
+                <Fragment key={item.key}>
                 <div
-                  key={row.index}
                   ref={(el) => {
                     rowRefs.current[row.index] = el;
                   }}
@@ -1138,9 +1349,51 @@ export function WaveformEditor({
                     )}
                   </div>
                 </div>
+                </Fragment>
               );
             })}
           </div>
+          )}
+          {timingMode === "tokens" && spokenLines.length > 0 && (
+            <TokenSyncEditor
+              variant={variant}
+              spokenLines={spokenLines.map((line) => ({
+                speaker: line.speaker,
+                text: line.text,
+              }))}
+              currentTime={currentTime}
+              duration={duration}
+              usesMarks={usesMarks}
+              currentContentHash={currentContentHash}
+              hasUnsavedChanges={hasUnsavedChanges}
+              enableHotkeys
+              onGetPlayhead={() =>
+                wavesurferRef.current?.getCurrentTime() ?? currentTime
+              }
+              onPlayLine={(lineIndex) => {
+                const ws = wavesurferRef.current;
+                if (!ws) return;
+                if (loopingRowIndex === lineIndex && ws.isPlaying()) {
+                  ws.pause();
+                  setLoopingRowIndex(null);
+                  return;
+                }
+                const row = sentenceRows[lineIndex];
+                if (row && usesMarks) {
+                  playRow(row);
+                  return;
+                }
+                if (lineIndex === 0) {
+                  if (ws.isPlaying()) ws.pause();
+                  ws.setTime(0);
+                  setLoopingRowIndex(null);
+                  void ws.play();
+                }
+              }}
+              playingLineIndex={loopingRowIndex}
+              onPersist={persistTokenSync}
+            />
+          )}
           {/* Holds layout space while the player is fixed to the viewport bottom. */}
           <div ref={playerSpacerRef} aria-hidden />
           <div

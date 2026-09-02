@@ -23,7 +23,12 @@ import {
   dialogueLinesFromGenerated,
   generationBriefFromSetting,
 } from "@/lib/dialogue/generated-lines";
-import type { DialogueLine, GeneratedLines } from "@/lib/dialogue/types";
+import {
+  formatDialogueTranscriptLine,
+  isSpokenLine,
+  type DialogueLine,
+  type GeneratedLines,
+} from "@/lib/dialogue/types";
 import type { DialogueDifficulty } from "@/lib/dialogue/difficulty";
 import type { DialogueFormality } from "@/lib/dialogue/formality";
 
@@ -61,7 +66,9 @@ export function GenerateLinesPanel({
   triggerGenerateCount?: number;
 }) {
   const defaultSpeakers = [
-    ...new Set(existingLines.map((line) => line.speaker).filter(Boolean)),
+    ...new Set(
+      existingLines.filter(isSpokenLine).map((line) => line.speaker).filter(Boolean),
+    ),
   ].slice(0, 2);
 
   const [extraInstructions, setExtraInstructions] = useState("");
@@ -387,8 +394,16 @@ export function GenerateLinesPanel({
                             key={lineIndex}
                             className="text-xs text-muted-foreground"
                           >
-                            <span className="font-medium">{line.speaker}:</span>{" "}
-                            {line.japanese}
+                            {isSpokenLine(line) ? (
+                              <>
+                                <span className="font-medium">{line.speaker}:</span>{" "}
+                                {line.japanese}
+                              </>
+                            ) : (
+                              <span className="italic">
+                                {formatDialogueTranscriptLine(line)}
+                              </span>
+                            )}
                           </div>
                         ))}
                       </div>

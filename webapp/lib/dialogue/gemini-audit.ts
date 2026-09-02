@@ -4,6 +4,9 @@ import {
   generateJsonWithRetries,
 } from "@/lib/dialogue/gemini-generate";
 import {
+  formatDialogueTranscriptLine,
+  isSpokenLine,
+  lineGrammarIds,
   llmAuditResultSchema,
   type DialogueLine,
   type LlmAuditResult,
@@ -26,6 +29,9 @@ const RESPONSE_SCHEMA = `{"mistaggedLines":[{"lineIndex":0,"grammarPointID":"poi
 function buildPrompt(params: AuditDialogueParams): string {
   const transcript = params.lines
     .map((line, index) => {
+      if (!isSpokenLine(line)) {
+        return `${index}: ${formatDialogueTranscriptLine(line)}`;
+      }
       const tags =
         line.grammarPointIDs && line.grammarPointIDs.length > 0
           ? ` [tags: ${line.grammarPointIDs.join(", ")}]`
@@ -89,7 +95,7 @@ export async function auditDialogueWithGemini(
   params: AuditDialogueParams
 ): Promise<LlmAuditResult> {
   const taggedLineCount = params.lines.filter(
-    (line) => (line.grammarPointIDs?.length ?? 0) > 0
+    (line) => lineGrammarIds(line).length > 0
   ).length;
 
   if (taggedLineCount === 0) {

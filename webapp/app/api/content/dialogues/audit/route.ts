@@ -5,7 +5,10 @@ import { db } from "@/lib/db/client";
 import { grammarPoint } from "@/lib/db/schema";
 import { auditScenarioContent } from "@/lib/dialogue/audit-scenario";
 import { fetchGrammarPointContext } from "@/lib/dialogue/grammar-catalog";
-import { auditScenarioRequestSchema } from "@/lib/dialogue/types";
+import {
+  auditScenarioRequestSchema,
+  lineGrammarIds,
+} from "@/lib/dialogue/types";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -20,7 +23,7 @@ export async function POST(request: NextRequest) {
   const grammarPointIds = [
     ...new Set([
       ...(parsed.data.grammarPointIds ?? []),
-      ...parsed.data.lines.flatMap((line) => line.grammarPointIDs ?? []),
+      ...parsed.data.lines.flatMap(lineGrammarIds),
       ...(parsed.data.highlights?.grammarPatterns ?? [])
         .map((p) => p.grammarPointID)
         .filter((id): id is string => !!id),

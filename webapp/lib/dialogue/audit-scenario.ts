@@ -16,6 +16,7 @@ import type {
   DialogueLine,
   LlmAuditResult,
 } from "@/lib/dialogue/types";
+import { isSpokenLine, lineGrammarIds } from "@/lib/dialogue/types";
 
 export type AuditScenarioParams = {
   lines: DialogueLine[];
@@ -43,7 +44,7 @@ function stripMistaggedIds(
   for (const entry of mistagged) {
     if (entry.lineIndex < 0 || entry.lineIndex >= lines.length) continue;
     const line = lines[entry.lineIndex];
-    if (!(line.grammarPointIDs ?? []).includes(entry.grammarPointID)) continue;
+    if (!lineGrammarIds(line).includes(entry.grammarPointID)) continue;
     if (!toStrip.has(entry.lineIndex)) {
       toStrip.set(entry.lineIndex, new Set());
     }
@@ -54,7 +55,7 @@ function stripMistaggedIds(
 
   return lines.map((line, index) => {
     const strip = toStrip.get(index);
-    if (!strip) return line;
+    if (!strip || !isSpokenLine(line)) return line;
     const grammarPointIDs = (line.grammarPointIDs ?? []).filter(
       (id) => !strip.has(id)
     );

@@ -249,8 +249,26 @@ export const dialogueScenario = pgTable("dialogue_scenario", {
   lines: jsonb("lines").notNull().default([]),
   highlights: jsonb("highlights"),
   quiz: jsonb("quiz"),
-  // Snapshot of complete token karaoke timing, copied from the published take.
+  // Snapshot of complete token karaoke timing, copied from the published
+  // take. Omitted from export when null.
   tokenSync: jsonb("token_sync"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Teaching patterns — curated curriculum spine (N5 seed first).
+// Distinct from full grammarPoint teaching docs; ids may later align with
+// grammarPoint ids so scenario tags (grammarPointIds) light up coverage counts.
+export const teachingPattern = pgTable("teaching_pattern", {
+  id: text("id").primaryKey(), // slug
+  form: text("form").notNull(), // Japanese form
+  gloss: text("gloss").notNull(),
+  jlptBand: integer("jlpt_band").notNull().default(5),
+  category: text("category").notNull(), // communicative function
+  status: text("status").notNull().default("seed"), // seed | planned | tagged | live
+  notes: text("notes"),
+  orderIndex: integer("order_index").notNull().default(0),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

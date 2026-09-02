@@ -51,7 +51,7 @@ export function tokenSyncStatus(
 export function tokenSyncFromSurfaces(params: {
   lines: Array<{ text: string; tokens: string[] }>;
   contentHash: string;
-  lineStartSeconds?: number[] | null;
+  lineStartSeconds?: Array<number | null | undefined> | null;
 }): VariantTokenSync {
   return {
     version: TOKEN_SYNC_VERSION,
@@ -62,11 +62,50 @@ export function tokenSyncFromSurfaces(params: {
         text,
         startSeconds:
           tokenIndex === 0 && params.lineStartSeconds?.[lineIndex] != null
-            ? params.lineStartSeconds[lineIndex]
+            ? params.lineStartSeconds[lineIndex]!
             : null,
       })),
     })),
   };
+}
+
+/** Playhead seconds for the first token of each spoken line. */
+export function lineStartSecondsForTokenSync(
+  windows: LineWindow[] | null,
+  spokenCount: number
+): Array<number | null> {
+  return Array.from({ length: spokenCount }, (_, index) => {
+    if (windows?.[index] != null) return windows[index].start;
+    if (index === 0) return 0;
+    return null;
+  });
+}
+
+/** First token of each line follows the line-start mark. */
+export function applyLineStartToFirstTokens(
+  sync: VariantTokenSync,
+  lineStartSeconds: Array<number | null | undefined>,
+  options?: { overwrite?: boolean }
+): VariantTokenSync {
+  const overwrite = options?.overwrite === true;
+  let changed = false;
+  const lines = sync.lines.map((line, lineIndex) => {
+    const start = lineStartSeconds[lineIndex];
+    if (start == null || !Number.isFinite(start) || line.tokens.length === 0) {
+      return line;
+    }
+    const first = line.tokens[0];
+    if (!overwrite && first.startSeconds != null) return line;
+    if (first.startSeconds === start) return line;
+    changed = true;
+    return {
+      ...line,
+      tokens: line.tokens.map((token, tokenIndex) =>
+        tokenIndex === 0 ? { ...token, startSeconds: start } : token
+      ),
+    };
+  });
+  return changed ? { ...sync, lines } : sync;
 }
 
 /** Line windows in full-WAV seconds — same domain as the waveform playhead. */
@@ -120,7 +159,8 @@ function flattenTokens(sync: VariantTokenSync) {
 function previousStamp(
   sync: VariantTokenSync,
   lineIndex: number,
-  tokenIndex: number
+  tokenIndex: number,
+  window: LineWindow | null
 ): number {
   const entries = flattenTokens(sync);
   const index = entries.findIndex(
@@ -130,7 +170,23 @@ function previousStamp(
     const value = entries[i]?.startSeconds;
     if (value != null) return value;
   }
+  if (window && tokenIndex > 0) return window.start;
   return 0;
+}
+
+function proposedStampSeconds(
+  clipSeconds: number,
+  previous: number,
+  window: LineWindow | null
+): number {
+  const floor = Math.max(
+    previous + TOKEN_STAMP_MIN_GAP_SECONDS,
+    window?.start ?? 0
+  );
+  const pulledBack = clipSeconds - TOKEN_STAMP_LOOKBACK_SECONDS;
+  // Lookback models tap lag, but near a line mark it snaps every word
+  // onto the same tenth. Use the live playhead in that case.
+  return pulledBack > floor ? pulledBack : Math.max(clipSeconds, floor);
 }
 
 function clampStamp(params: {
@@ -138,16 +194,15 @@ function clampStamp(params: {
   previous: number;
   window: LineWindow | null;
 }): number {
-  let next = Math.max(
-    params.previous + TOKEN_STAMP_MIN_GAP_SECONDS,
-    params.proposed
-  );
+  const minNext = params.previous + TOKEN_STAMP_MIN_GAP_SECONDS;
+  let next = Math.max(minNext, params.proposed);
   if (params.window) {
     const latest =
       params.window.end - TOKEN_STAMP_MIN_GAP_SECONDS > params.window.start
         ? params.window.end - TOKEN_STAMP_MIN_GAP_SECONDS
         : params.window.end;
-    next = Math.min(Math.max(next, params.window.start), latest);
+    next = Math.min(Math.max(next, params.window.start), Math.max(latest, minNext));
+    next = Math.max(next, minNext);
   }
   return Math.max(0, next);
 }
@@ -182,12 +237,12 @@ export function stampNextToken(
     const line = sync.lines[lineIndex];
     for (let tokenIndex = 0; tokenIndex < line.tokens.length; tokenIndex++) {
       if (line.tokens[tokenIndex].startSeconds != null) continue;
-      const previous = previousStamp(sync, lineIndex, tokenIndex);
-      const proposed = clipSeconds - TOKEN_STAMP_LOOKBACK_SECONDS;
+      const window = windows?.[lineIndex] ?? null;
+      const previous = previousStamp(sync, lineIndex, tokenIndex, window);
       const startSeconds = clampStamp({
-        proposed,
+        proposed: proposedStampSeconds(clipSeconds, previous, window),
         previous,
-        window: windows?.[lineIndex] ?? null,
+        window,
       });
       return replaceToken(sync, lineIndex, tokenIndex, startSeconds);
     }
@@ -212,32 +267,59 @@ export function restampToken(
   clipSeconds: number,
   windows: LineWindow[] | null
 ): VariantTokenSync {
-  const previous = previousStamp(sync, lineIndex, tokenIndex);
-  const proposed = clipSeconds - TOKEN_STAMP_LOOKBACK_SECONDS;
+  const window = windows?.[lineIndex] ?? null;
+  const previous = previousStamp(sync, lineIndex, tokenIndex, window);
   const startSeconds = clampStamp({
-    proposed,
+    proposed: proposedStampSeconds(clipSeconds, previous, window),
     previous,
-    window: windows?.[lineIndex] ?? null,
+    window,
   });
   return replaceToken(sync, lineIndex, tokenIndex, startSeconds);
 }
 
+export function clearAllStamps(
+  sync: VariantTokenSync,
+  lineStartSeconds?: Array<number | null | undefined> | null
+): VariantTokenSync {
+  const next = {
+    ...sync,
+    lines: sync.lines.map((line, lineIndex) => ({
+      ...line,
+      tokens: line.tokens.map((token, tokenIndex) => ({
+        ...token,
+        startSeconds:
+          tokenIndex === 0 && lineStartSeconds?.[lineIndex] != null
+            ? lineStartSeconds[lineIndex]!
+            : null,
+      })),
+    })),
+  };
+  return JSON.stringify(next) === JSON.stringify(sync) ? sync : next;
+}
+
 export function clearLineStamps(
   sync: VariantTokenSync,
-  lineIndex: number
+  lineIndex: number,
+  lineStartSeconds?: number | null
 ): VariantTokenSync {
   const line = sync.lines[lineIndex];
   if (!line) return sync;
-  if (line.tokens.every((token) => token.startSeconds == null)) return sync;
+  const nextTokens = line.tokens.map((token, tokenIndex) => ({
+    ...token,
+    startSeconds:
+      tokenIndex === 0 && lineStartSeconds != null ? lineStartSeconds : null,
+  }));
+  if (
+    line.tokens.every(
+      (token, tokenIndex) => token.startSeconds === nextTokens[tokenIndex].startSeconds
+    )
+  ) {
+    return sync;
+  }
   return {
     ...sync,
     lines: sync.lines.map((row, i) =>
-      i === lineIndex
-        ? {
-            ...row,
-            tokens: row.tokens.map((token) => ({ ...token, startSeconds: null })),
-          }
-        : row
+      i === lineIndex ? { ...row, tokens: nextTokens } : row
     ),
   };
 }
@@ -616,19 +698,21 @@ export function publishedTokenSyncFromWorking(params: {
   if (sync.version !== TOKEN_SYNC_VERSION) return null;
   if (sync.contentHash !== contentHash) return null;
   if (!textsMatch(sync, spokenTexts)) return null;
-  if (!windows || windows.length !== sync.lines.length) return null;
 
   const lines: PublishedTokenSync["lines"] = [];
   let previous = -TOKEN_STAMP_MIN_GAP_SECONDS;
   for (let lineIndex = 0; lineIndex < sync.lines.length; lineIndex++) {
     const line = sync.lines[lineIndex];
-    const window = windows[lineIndex];
+    const window =
+      windows && windows.length === sync.lines.length
+        ? windows[lineIndex]
+        : null;
     const tokens: PublishedTokenSync["lines"][number]["tokens"] = [];
     for (const token of line.tokens) {
       if (token.startSeconds == null || !Number.isFinite(token.startSeconds)) {
         return null;
       }
-      const exportSeconds = Math.max(
+      let exportSeconds = Math.max(
         0,
         playheadToExportSeconds(
           token.startSeconds,
@@ -636,13 +720,28 @@ export function publishedTokenSyncFromWorking(params: {
           sampleRate
         )
       );
-      if (exportSeconds <= previous) return null;
-      if (exportSeconds < window.start) return null;
-      if (exportSeconds >= window.end) return null;
-      previous = exportSeconds;
+      if (window) {
+        const latest =
+          window.end - TOKEN_STAMP_MIN_GAP_SECONDS > window.start
+            ? window.end - TOKEN_STAMP_MIN_GAP_SECONDS
+            : Math.max(window.start, window.end - 0.001);
+        exportSeconds = Math.min(
+          Math.max(exportSeconds, window.start),
+          latest
+        );
+      }
+      exportSeconds = Math.max(
+        exportSeconds,
+        previous + TOKEN_STAMP_MIN_GAP_SECONDS
+      );
+      let rounded = roundSeconds(exportSeconds);
+      if (rounded <= previous) {
+        rounded = roundSeconds(previous + TOKEN_STAMP_MIN_GAP_SECONDS);
+      }
+      previous = rounded;
       tokens.push({
         text: token.text,
-        startSeconds: roundSeconds(exportSeconds),
+        startSeconds: rounded,
       });
     }
     if (tokens.length === 0) return null;

@@ -108,6 +108,12 @@ private enum DialogueHarnessAlignmentLogger {
     }
 
     static func logAlignmentDiagnostics(for entry: DialogueExperimentCatalog.Entry) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            logAlignmentDiagnosticsOffMain(for: entry)
+        }
+    }
+
+    private static func logAlignmentDiagnosticsOffMain(for entry: DialogueExperimentCatalog.Entry) {
         guard let audioKey = entry.example.audioKey,
               let url = GrammarAudioCatalog.bundledURL(for: audioKey) else {
             log("WARNING: no bundled audio URL for \(entry.menuTitle)")

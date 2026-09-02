@@ -32,18 +32,11 @@ final class DialogueQuizViewController: UIViewController {
     private var nestedPagingTopContentInset: CGFloat = 0
     private var nestedPagingBottomContentInset: CGFloat = 0
 
-    private(set) var hasCheckedAnswers = false
-    var onSelectionChanged: (() -> Void)?
-    /// Fired once when Check finds every question answered correctly.
+    private var didPassQuiz = false
+    /// Fired once when every question has been answered correctly.
     var onQuizPassed: (() -> Void)?
     /// Host should refresh nested handoff when the active question scroll view changes.
     var onHandoffScrollViewChanged: (() -> Void)?
-
-    var canCheckAnswers: Bool {
-        !hasCheckedAnswers
-            && !questionPages.isEmpty
-            && questionPages.allSatisfy(\.hasSelection)
-    }
 
     /// Vertical scroll view for the currently visible question page (nested handoff).
     var handoffScrollView: UIScrollView {
@@ -73,7 +66,7 @@ final class DialogueQuizViewController: UIViewController {
 
     func configure(questions: [DialogueQuizQuestion]) {
         loadViewIfNeeded()
-        hasCheckedAnswers = false
+        didPassQuiz = false
         currentIndex = 0
 
         questionPages = questions.enumerated().map { index, question in
@@ -83,8 +76,9 @@ final class DialogueQuizViewController: UIViewController {
                 choiceHeight: Self.choiceHeight,
                 horizontalInset: Self.questionHorizontalInset
             )
-            page.onSelectionChanged = { [weak self] in
-                self?.onSelectionChanged?()
+            page.onSelectionChanged = { [weak self, weak page] in
+                guard let self, let page else { return }
+                self.handleImmediateAnswer(on: page)
             }
             return page
         }
@@ -103,7 +97,6 @@ final class DialogueQuizViewController: UIViewController {
 
         applyScrollContentInsets()
         onHandoffScrollViewChanged?()
-        onSelectionChanged?()
     }
 
     private func updatePageControlVisibility(pageCount: Int) {
@@ -113,29 +106,28 @@ final class DialogueQuizViewController: UIViewController {
         applyScrollContentInsets()
     }
 
-    func checkAnswers() {
-        guard canCheckAnswers else { return }
-        hasCheckedAnswers = true
+    private func handleImmediateAnswer(on page: DialogueQuizQuestionPageViewController) {
+        let allCorrect = !questionPages.isEmpty && questionPages.allSatisfy(\.isSelectionCorrect)
 
-        var allCorrect = true
-        for page in questionPages {
-            allCorrect = page.isSelectionCorrect && allCorrect
-            page.revealResult()
-        }
-
-        if allCorrect {
+        if page.isSelectionCorrect {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-            ExperimentFeedbackSound.playSuccess(
-                for: .kanaSpelling,
-                spellingSyllableCount: questionPages.count
-            )
-            onQuizPassed?()
+            if allCorrect {
+                ExperimentFeedbackSound.playSuccess(
+                    for: .kanaSpelling,
+                    spellingSyllableCount: questionPages.count
+                )
+            } else {
+                ExperimentFeedbackSound.playSuccess(for: .kanaSpelling)
+            }
         } else {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             ExperimentFeedbackSound.playIncorrect()
         }
 
-        onSelectionChanged?()
+        if allCorrect, !didPassQuiz {
+            didPassQuiz = true
+            onQuizPassed?()
+        }
     }
 
     /// Same contract as `DialogueExperimentViewController.applyNestedPagingTopContentInset`.
@@ -147,16 +139,14 @@ final class DialogueQuizViewController: UIViewController {
         applyScrollContentInsets()
     }
 
-    /// Bottom clearance for scroll content (Check button / home indicator).
-    /// Does not move the page control — that uses `applyPageControlBottomInset`
-    /// so it stays put when Check hides after grading.
+    /// Bottom clearance for scroll content (page control / home indicator).
+    /// Does not move the page control — that uses `applyPageControlBottomInset`.
     func applyNestedPagingBottomContentInset(_ inset: CGFloat) {
         nestedPagingBottomContentInset = inset
         applyScrollContentInsets()
     }
 
-    /// Stable bottom offset for the page control (typically always clears the
-    /// Check-button band, whether or not Check is currently visible).
+    /// Stable bottom offset for the page control (home-indicator clearance).
     func applyPageControlBottomInset(_ inset: CGFloat) {
         loadViewIfNeeded()
         guard abs(pageControlBottomConstraint.constant + inset) > 0.5 else { return }

@@ -96,6 +96,14 @@ struct GrammarUsageLadder: Hashable {
     let levels: [GrammarUsageLevel]
 }
 
+/// When a scenario line is a stage direction rather than spoken dialogue.
+enum DialogueStageLineVisibility: String, Hashable {
+    /// Shown on the first (cold) listen-through.
+    case cold
+    /// Shown only in practice / role-play — never on first listen.
+    case practice
+}
+
 struct GrammarScenarioLine: Hashable {
     let speaker: String
     let japanese: String
@@ -103,6 +111,14 @@ struct GrammarScenarioLine: Hashable {
     let english: String?
     let grammarPointIDs: [String]
     let lineID: String?
+    /// Non-nil for Content Studio stage directions (caption text lives in `japanese`).
+    let stageVisibility: DialogueStageLineVisibility?
+    /// Non-nil for a mid-listen `inline-question` checkpoint.
+    let inlineQuestion: DialogueInlineQuestion?
+
+    var isStageLine: Bool { stageVisibility != nil }
+    var isInlineQuestion: Bool { inlineQuestion != nil }
+    var isSpokenLine: Bool { !isStageLine && !isInlineQuestion }
 
     init(
         speaker: String,
@@ -110,7 +126,9 @@ struct GrammarScenarioLine: Hashable {
         romaji: String? = nil,
         english: String? = nil,
         grammarPointIDs: [String] = [],
-        lineID: String? = nil
+        lineID: String? = nil,
+        stageVisibility: DialogueStageLineVisibility? = nil,
+        inlineQuestion: DialogueInlineQuestion? = nil
     ) {
         self.speaker = speaker
         self.japanese = japanese
@@ -118,12 +136,29 @@ struct GrammarScenarioLine: Hashable {
         self.english = english
         self.grammarPointIDs = grammarPointIDs
         self.lineID = lineID
+        self.stageVisibility = stageVisibility
+        self.inlineQuestion = inlineQuestion
     }
 }
 
 struct GrammarScenario: Hashable {
     let setting: String?
     let lines: [GrammarScenarioLine]
+
+    /// Questions to present after each spoken-line index finishes. Index `-1`
+    /// holds any questions that sit before the first spoken line.
+    func inlineQuestionsAfterSpokenIndices() -> [Int: [DialogueInlineQuestion]] {
+        var spoken = -1
+        var map: [Int: [DialogueInlineQuestion]] = [:]
+        for line in lines {
+            if let question = line.inlineQuestion {
+                map[spoken, default: []].append(question)
+            } else if line.isSpokenLine {
+                spoken += 1
+            }
+        }
+        return map
+    }
 }
 
 struct GrammarExample: Hashable {
@@ -138,6 +173,7 @@ struct GrammarExample: Hashable {
     let publishedAt: String?
     let scenario: GrammarScenario?
     let sourceScenarioId: String?
+    let tokenSync: DialogueTokenSync?
 
     init(
         japanese: String,
@@ -150,7 +186,8 @@ struct GrammarExample: Hashable {
         publishedContentHash: String? = nil,
         publishedAt: String? = nil,
         scenario: GrammarScenario? = nil,
-        sourceScenarioId: String? = nil
+        sourceScenarioId: String? = nil,
+        tokenSync: DialogueTokenSync? = nil
     ) {
         self.japanese = japanese
         self.romaji = romaji
@@ -163,6 +200,7 @@ struct GrammarExample: Hashable {
         self.publishedAt = publishedAt
         self.scenario = scenario
         self.sourceScenarioId = sourceScenarioId
+        self.tokenSync = tokenSync
     }
 
     var reading: String { romaji }
@@ -243,6 +281,8 @@ extension GrammarScenarioLine {
         english = record.english
         grammarPointIDs = []
         lineID = nil
+        stageVisibility = nil
+        inlineQuestion = nil
     }
 }
 
@@ -266,6 +306,7 @@ extension GrammarExample {
         publishedAt = nil
         scenario = record.scenario.map(GrammarScenario.init(record:))
         sourceScenarioId = record.sourceScenarioId
+        tokenSync = nil
     }
 }
 

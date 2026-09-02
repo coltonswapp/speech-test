@@ -128,7 +128,7 @@ enum ContentCMSClient {
             .appendingPathComponent("dialogues")
             .appendingPathComponent(id)
         var request = URLRequest(url: url)
-        request.cachePolicy = .useProtocolCachePolicy
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         URLSession.shared.dataTask(with: request) { data, response, error in
             if let error {
                 if let cached = readCachedCollectionData(id: id) {

@@ -13,7 +13,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { GenerateQuizPanel } from "@/components/dialogue/generate-quiz-panel";
-import type { DialogueLine, QuizQuestion } from "@/lib/dialogue/types";
+import {
+  isInlineQuestionLine,
+  isSpokenLine,
+  isStageLine,
+  type DialogueLine,
+  type QuizQuestion,
+} from "@/lib/dialogue/types";
 
 export function QuizEditor({
   quiz,
@@ -47,15 +53,29 @@ export function QuizEditor({
           <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto pr-1">
             {lines.map((line, index) => (
               <p key={index} className="text-sm leading-snug">
-                <span className="text-muted-foreground">
-                  {line.speaker ? `${line.speaker}: ` : ""}
-                </span>
-                <span>{line.japanese}</span>
-                {line.english && (
-                  <span className="text-muted-foreground">
-                    {" "}
-                    — {line.english}
+                {isStageLine(line) ? (
+                  <span className="italic text-muted-foreground">
+                    {line.text}
                   </span>
+                ) : isInlineQuestionLine(line) ? (
+                  <span className="text-muted-foreground">
+                    Inline question
+                    {line.target?.trim() ? ` · ${line.target.trim()}` : ""}
+                    {line.prompt.trim() ? ` — ${line.prompt}` : ""}
+                  </span>
+                ) : (
+                  <>
+                    <span className="text-muted-foreground">
+                      {line.speaker ? `${line.speaker}: ` : ""}
+                    </span>
+                    <span>{line.japanese}</span>
+                    {isSpokenLine(line) && line.english && (
+                      <span className="text-muted-foreground">
+                        {" "}
+                        — {line.english}
+                      </span>
+                    )}
+                  </>
                 )}
               </p>
             ))}

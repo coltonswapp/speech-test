@@ -65,6 +65,9 @@ enum GeminiJapaneseTokenizer {
     similarly んですか, んだよ, んだから, んですが each stay as one token).
     Split standalone particles, nouns, and punctuation when that helps lookup.
     Keep punctuation as separate tokens when present.
+    Punctuation (、 。 ， ． , . ！ ？ ! ? … ・ etc.) is always a hard token boundary. \
+    NEVER keep words on both sides of a comma or period in one token \
+    (e.g. え、いいん must be え and いいん, not one token).
     """
 
     private static let retrySuffix = """

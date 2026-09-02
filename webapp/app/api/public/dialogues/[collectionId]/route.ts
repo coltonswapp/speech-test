@@ -13,7 +13,9 @@ export async function GET(
   }
   return NextResponse.json(file, {
     headers: {
-      "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+      // Lesson JSON includes token karaoke; edge cache would keep the app on
+      // a pre-stamp snapshot for minutes after publish.
+      "Cache-Control": "private, no-store",
     },
   });
 }

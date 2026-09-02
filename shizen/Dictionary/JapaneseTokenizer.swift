@@ -116,6 +116,8 @@ enum JapaneseSegmentationMapping {
             searchStart = range.upperBound
         }
 
+        tokens = splitOnInternalPunctuation(tokens, in: text)
+
         guard coversInput(tokens, in: text) else {
             let significantInput = text.filter { !$0.isWhitespace && !isAllPunctuationOrWhitespace(String($0)) }
             let mapped = tokens.map(\.text).joined().filter { !$0.isWhitespace }
@@ -133,11 +135,66 @@ enum JapaneseSegmentationMapping {
         return latinLetters.isEmpty
     }
 
-    private static func isAllPunctuationOrWhitespace(_ word: String) -> Bool {
-        word.unicodeScalars.allSatisfy { scalar in
-            CharacterSet.punctuationCharacters.contains(scalar)
+    /// Punctuation that always ends a dictionary-lookup token.
+    /// Ideographic comma/stop (`、` `。`) are listed explicitly: they are not
+    /// reliably in `CharacterSet.punctuationCharacters`, so MeCab, NLTokenizer,
+    /// and LLM backends can otherwise emit a single token like `え、いいん`.
+    private static let tokenBoundaryPunctuation = CharacterSet(
+        charactersIn: "。．.｡､、，,！!？?…⋯‥・･：:；;「」『』【】（）()［］[]〜~"
+    ).union(.punctuationCharacters)
+
+    static func isAllPunctuationOrWhitespace(_ word: String) -> Bool {
+        !word.isEmpty && word.unicodeScalars.allSatisfy { scalar in
+            tokenBoundaryPunctuation.contains(scalar)
                 || CharacterSet.whitespacesAndNewlines.contains(scalar)
         }
+    }
+
+    /// Splits any token that contains comma/period/quote-like punctuation into
+    /// the surrounding lookup units and drops the punctuation itself.
+    static func splitOnInternalPunctuation(_ tokens: [JapaneseToken], in fullText: String) -> [JapaneseToken] {
+        var out: [JapaneseToken] = []
+        out.reserveCapacity(tokens.count)
+        for token in tokens {
+            out.append(contentsOf: splitTokenOnPunctuation(token, in: fullText))
+        }
+        return out
+    }
+
+    private static func splitTokenOnPunctuation(_ token: JapaneseToken, in fullText: String) -> [JapaneseToken] {
+        let surface = token.text
+        guard surface.unicodeScalars.contains(where: { tokenBoundaryPunctuation.contains($0) }) else {
+            return [token]
+        }
+
+        var pieces: [JapaneseToken] = []
+        var pieceStart: String.Index?
+        var index = token.range.lowerBound
+        while index < token.range.upperBound {
+            let next = fullText.index(after: index)
+            let char = String(fullText[index..<next])
+            if isAllPunctuationOrWhitespace(char) {
+                if let start = pieceStart {
+                    let range = start..<index
+                    let text = String(fullText[range])
+                    if !text.isEmpty {
+                        pieces.append(JapaneseToken(text: text, range: range))
+                    }
+                    pieceStart = nil
+                }
+            } else if pieceStart == nil {
+                pieceStart = index
+            }
+            index = next
+        }
+        if let start = pieceStart {
+            let range = start..<token.range.upperBound
+            let text = String(fullText[range])
+            if !text.isEmpty {
+                pieces.append(JapaneseToken(text: text, range: range))
+            }
+        }
+        return pieces
     }
 
     private static func coversInput(_ tokens: [JapaneseToken], in text: String) -> Bool {
@@ -268,20 +325,17 @@ final class JapaneseTokenizer {
         tokens.reserveCapacity(annotations.count)
         for ann in annotations {
             let word = ann.base
-            let isAllPuncOrSpace = word.unicodeScalars.allSatisfy { s in
-                CharacterSet.punctuationCharacters.contains(s)
-                    || CharacterSet.whitespacesAndNewlines.contains(s)
-            }
-            if !isAllPuncOrSpace, !word.isEmpty {
+            if !word.isEmpty, !JapaneseSegmentationMapping.isAllPunctuationOrWhitespace(word) {
                 tokens.append(JapaneseToken(text: word, range: ann.range))
             }
         }
         return postProcessTokens(tokens, in: text)
     }
 
-    /// Shared cleanup for both NL and MeCab token streams (inflection glue, intentional splits).
+    /// Shared cleanup for both NL and MeCab token streams (punctuation splits, inflection glue).
     private static func postProcessTokens(_ tokens: [JapaneseToken], in text: String) -> [JapaneseToken] {
-        var t = splitFinalHaParticle(from: tokens, in: text)
+        var t = JapaneseSegmentationMapping.splitOnInternalPunctuation(tokens, in: text)
+        t = splitFinalHaParticle(from: t, in: text)
         t = splitAdjectiveNounForLookup(from: t, in: text)
         t = mergeSplitInflectionTokens(from: t, in: text)
         return t
@@ -295,11 +349,7 @@ final class JapaneseTokenizer {
 
         tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
             let word = String(text[range])
-            let isAllPuncOrSpace = word.unicodeScalars.allSatisfy { s in
-                CharacterSet.punctuationCharacters.contains(s)
-                    || CharacterSet.whitespacesAndNewlines.contains(s)
-            }
-            if !isAllPuncOrSpace, !word.isEmpty {
+            if !word.isEmpty, !JapaneseSegmentationMapping.isAllPunctuationOrWhitespace(word) {
                 tokens.append(JapaneseToken(text: word, range: range))
             }
             return true
@@ -506,7 +556,10 @@ extension JapaneseTokenizer {
                     && compound.range.upperBound >= annotation.range.upperBound
             }) {
                 if consumedCompounds.insert(ci).inserted {
-                    result.append(FuriganaAnnotation(reading: compounds[ci].reading, range: compounds[ci].range))
+                    result.append(contentsOf: splitMixedKanjiKanaRuby(
+                        FuriganaAnnotation(reading: compounds[ci].reading, range: compounds[ci].range),
+                        in: text
+                    ))
                 }
                 continue
             }
@@ -528,11 +581,10 @@ extension JapaneseTokenizer {
                 at: annotation.range,
                 wordDictionaryForm: wordDictionaryForm
             )
-            if reading != annotation.reading {
-                result.append(FuriganaAnnotation(reading: reading, range: annotation.range))
-            } else {
-                result.append(annotation)
-            }
+            let resolved = reading != annotation.reading
+                ? FuriganaAnnotation(reading: reading, range: annotation.range)
+                : annotation
+            result.append(contentsOf: splitMixedKanjiKanaRuby(resolved, in: text))
         }
         furiganaAnnotationsCache.setObject(
             FuriganaAnnotationsBox(result.map { (reading: $0.reading, nsRange: NSRange($0.range, in: text)) }),
@@ -602,6 +654,116 @@ extension JapaneseTokenizer {
         guard !s.isEmpty else { return false }
         return s.unicodeScalars.allSatisfy { u in
             (0x3400...0x4DBF).contains(u.value) || (0x4E00...0x9FFF).contains(u.value) || u.value == 0x3005
+        }
+    }
+
+    /// MeCab often emits one ruby over a kanji–kana–kanji stretch:
+    /// 疲れ様 → "つか　さま" (center kana replaced with U+3000) or 間に合 → "まにあ"
+    /// (center kana kept in the reading). Either way Core Text piles the whole
+    /// reading onto the first glyphs. Split onto each kanji run instead.
+    private static let ideographicSpace: Character = "\u{3000}"
+
+    private enum RubySurfaceRun {
+        case kanji(Range<String.Index>)
+        case kana(String)
+    }
+
+    private static func splitMixedKanjiKanaRuby(
+        _ annotation: FuriganaAnnotation,
+        in text: String
+    ) -> [FuriganaAnnotation] {
+        let runs = rubySurfaceRuns(in: annotation.range, text: text)
+        guard !runs.isEmpty else { return [annotation] }
+        let kanjiRuns = runs.compactMap { run -> Range<String.Index>? in
+            if case .kanji(let range) = run { return range }
+            return nil
+        }
+        let hasKana = runs.contains { if case .kana = $0 { return true } else { return false } }
+
+        if annotation.reading.contains(ideographicSpace) {
+            let parts = annotation.reading
+                .split(separator: ideographicSpace, omittingEmptySubsequences: true)
+                .map(String.init)
+            guard parts.count >= 2, parts.count == kanjiRuns.count else { return [annotation] }
+            return zip(parts, kanjiRuns).map { FuriganaAnnotation(reading: $0, range: $1) }
+        }
+
+        guard hasKana, kanjiRuns.count >= 1, runs.count >= 2 else { return [annotation] }
+        return alignReadingToKanjiRuns(runs: runs, reading: annotation.reading) ?? [annotation]
+    }
+
+    private static func rubySurfaceRuns(
+        in range: Range<String.Index>,
+        text: String
+    ) -> [RubySurfaceRun] {
+        var runs: [RubySurfaceRun] = []
+        var index = range.lowerBound
+        while index < range.upperBound {
+            if isKanjiOnlySurface(String(text[index])) {
+                let start = index
+                index = text.index(after: index)
+                while index < range.upperBound, isKanjiOnlySurface(String(text[index])) {
+                    index = text.index(after: index)
+                }
+                runs.append(.kanji(start..<index))
+            } else if isKanaSurface(String(text[index])) {
+                let start = index
+                index = text.index(after: index)
+                while index < range.upperBound, isKanaSurface(String(text[index])) {
+                    index = text.index(after: index)
+                }
+                runs.append(.kana(String(text[start..<index])))
+            } else {
+                return []
+            }
+        }
+        return runs
+    }
+
+    private static func alignReadingToKanjiRuns(
+        runs: [RubySurfaceRun],
+        reading: String
+    ) -> [FuriganaAnnotation]? {
+        var remaining = Substring(reading)
+        var pendingKanji: Range<String.Index>?
+        var result: [FuriganaAnnotation] = []
+
+        for run in runs {
+            switch run {
+            case .kanji(let range):
+                guard pendingKanji == nil else { return nil }
+                pendingKanji = range
+            case .kana(let kana):
+                guard let match = remaining.range(of: kana) else { return nil }
+                if let kanjiRange = pendingKanji {
+                    let piece = String(remaining[..<match.lowerBound])
+                    guard !piece.isEmpty else { return nil }
+                    result.append(FuriganaAnnotation(reading: piece, range: kanjiRange))
+                    pendingKanji = nil
+                } else if match.lowerBound != remaining.startIndex {
+                    return nil
+                }
+                remaining = remaining[match.upperBound...]
+            }
+        }
+        if let kanjiRange = pendingKanji {
+            let piece = String(remaining)
+            guard !piece.isEmpty else { return nil }
+            result.append(FuriganaAnnotation(reading: piece, range: kanjiRange))
+            remaining = Substring()
+        }
+        guard remaining.isEmpty, !result.isEmpty else { return nil }
+        return result
+    }
+
+    private static func isKanaSurface(_ s: String) -> Bool {
+        guard !s.isEmpty else { return false }
+        return s.unicodeScalars.allSatisfy { scalar in
+            let value = scalar.value
+            return (0x3040...0x309F).contains(value)
+                || (0x30A0...0x30FF).contains(value)
+                || (0xFF66...0xFF9D).contains(value)
+                || value == 0x30FC
         }
     }
 

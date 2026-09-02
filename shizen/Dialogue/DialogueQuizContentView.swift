@@ -16,14 +16,10 @@ final class DialogueQuizContentView: UIView {
     private let contentStack = UIStackView()
     private var questionViews: [DialogueQuizQuestionView] = []
 
-    private(set) var hasCheckedAnswers = false
+    private var didPassQuiz = false
     var onSelectionChanged: (() -> Void)?
-    /// Fired once when Check finds every question answered correctly.
+    /// Fired once when every question has been answered correctly.
     var onQuizPassed: (() -> Void)?
-
-    var canCheckAnswers: Bool {
-        !hasCheckedAnswers && !questionViews.isEmpty && questionViews.allSatisfy(\.hasSelection)
-    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -48,7 +44,7 @@ final class DialogueQuizContentView: UIView {
     }
 
     func configure(questions: [DialogueQuizQuestion]) {
-        hasCheckedAnswers = false
+        didPassQuiz = false
         questionViews.forEach { $0.removeFromSuperview() }
         questionViews.removeAll()
 
@@ -58,39 +54,38 @@ final class DialogueQuizContentView: UIView {
                 question: question,
                 choiceHeight: Self.choiceHeight
             )
-            questionView.onSelectionChanged = { [weak self] in
-                self?.onSelectionChanged?()
+            questionView.onSelectionChanged = { [weak self, weak questionView] in
+                guard let self, let questionView else { return }
+                self.handleImmediateAnswer(questionView)
             }
             contentStack.addArrangedSubview(questionView)
             questionViews.append(questionView)
         }
     }
 
-    /// Reveals every question's result at once with a quiet color crossfade —
-    /// no per-question bounce cascade, which reads as chaos when a scenario
-    /// carries several questions. One haptic + one sound summarize the outcome.
-    func checkAnswers() {
-        guard canCheckAnswers else { return }
-        hasCheckedAnswers = true
+    private func handleImmediateAnswer(_ questionView: DialogueQuizQuestionView) {
+        let allCorrect = !questionViews.isEmpty && questionViews.allSatisfy(\.isSelectionCorrect)
 
-        var allCorrect = true
-        for questionView in questionViews {
-            allCorrect = questionView.isSelectionCorrect && allCorrect
-            questionView.revealResult()
-        }
-
-        if allCorrect {
+        if questionView.isSelectionCorrect {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-            ExperimentFeedbackSound.playSuccess(
-                for: .kanaSpelling,
-                spellingSyllableCount: questionViews.count
-            )
-            onQuizPassed?()
+            if allCorrect {
+                ExperimentFeedbackSound.playSuccess(
+                    for: .kanaSpelling,
+                    spellingSyllableCount: questionViews.count
+                )
+            } else {
+                ExperimentFeedbackSound.playSuccess(for: .kanaSpelling)
+            }
         } else {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             ExperimentFeedbackSound.playIncorrect()
         }
 
         onSelectionChanged?()
+
+        if allCorrect, !didPassQuiz {
+            didPassQuiz = true
+            onQuizPassed?()
+        }
     }
 }

@@ -147,11 +147,12 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     guard let visible = visibleAttributedText, visible.length > 0 else { return 0 }
     let width = furiganaTextWidth(forViewWidth: viewWidth)
     guard width > 0 else { return 0 }
-    let framesetter = CTFramesetterCreateWithAttributedString(visible)
+    let measured = Self.attributedStringByRemovingRuby(visible)
+    let framesetter = CTFramesetterCreateWithAttributedString(measured)
     var fitRange = CFRange()
     let size = CTFramesetterSuggestFrameSizeWithConstraints(
       framesetter,
-      CFRange(location: 0, length: visible.length),
+      CFRange(location: 0, length: measured.length),
       nil,
       CGSize(width: width, height: .greatestFiniteMagnitude),
       &fitRange
@@ -169,11 +170,14 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     let textWidth = furiganaTextWidth(forViewWidth: width)
     guard textWidth > 0 else { return furiganaLayout }
 
-    let framesetter = CTFramesetterCreateWithAttributedString(visible)
+    // Layout without ruby so Core Text does not stretch 少々 to しょうしょう
+    // or slide ま off 待. Readings are painted as an overlay.
+    let measured = Self.attributedStringByRemovingRuby(visible)
+    let framesetter = CTFramesetterCreateWithAttributedString(measured)
     var fitRange = CFRange()
     let textSize = CTFramesetterSuggestFrameSizeWithConstraints(
       framesetter,
-      CFRange(location: 0, length: visible.length),
+      CFRange(location: 0, length: measured.length),
       nil,
       CGSize(width: textWidth, height: .greatestFiniteMagnitude),
       &fitRange
@@ -185,7 +189,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     )
     let frame = CTFramesetterCreateFrame(
       framesetter,
-      CFRange(location: 0, length: visible.length),
+      CFRange(location: 0, length: measured.length),
       path,
       nil
     )
@@ -232,8 +236,27 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     lookupSurfaces: [String]? = nil,
     showsFurigana: Bool = false,
     accentSubstring: String? = nil,
+    accentColor: UIColor = .systemBlue
+  ) {
+    let tokenizer = tokenizerOverride ?? japaneseTokenizer
+    applyTokenConfiguration(
+      sentence: sentence,
+      lyricFont: lyricFont,
+      tokens: tokenizer.tokenize(sentence),
+      showsFurigana: showsFurigana,
+      accentSubstring: accentSubstring,
+      accentColor: accentColor
+    )
+  }
+
+  func configure(
+    sentence: String,
+    lyricFont: UIFont,
+    tokens precomputedTokens: [JapaneseToken],
+    showsFurigana: Bool = false,
+    accentSubstring: String? = nil,
     accentColor: UIColor = .systemBlue,
-    applyRuby: ((NSMutableAttributedString, String, UIFont) -> Void)? = nil
+    preservesTokenBoundaries: Bool = false
   ) {
     self.applyRuby = applyRuby
     applyTokenConfiguration(
@@ -243,7 +266,8 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       lookupSurfaces: lookupSurfaces,
       showsFurigana: showsFurigana,
       accentSubstring: accentSubstring,
-      accentColor: accentColor
+      accentColor: accentColor,
+      preservesTokenBoundaries: preservesTokenBoundaries
     )
   }
 
@@ -254,26 +278,29 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     lookupSurfaces: [String]?,
     showsFurigana: Bool,
     accentSubstring: String?,
-    accentColor: UIColor
+    accentColor: UIColor,
+    preservesTokenBoundaries: Bool = false
   ) {
     fullText = sentence
     self.showsFurigana = showsFurigana
-    tokens = Self.expandIfSingleFullSentenceToken(
-      base: sentence,
-      tokens: rawTokens
-    )
-    if let lookupSurfaces, lookupSurfaces.count == tokens.count {
-      tokenLookupSurfaces = lookupSurfaces
-    } else {
-      tokenLookupSurfaces = tokens.map(\.text)
-    }
+    tokens = preservesTokenBoundaries
+      ? rawTokens
+      : Self.expandIfSingleFullSentenceToken(
+        base: sentence,
+        tokens: rawTokens
+      )
+    tokenLookupSurfaces = preservesTokenBoundaries
+      ? tokens.map(\.text)
+      : JMDictStore.shared.effectiveLookupSurfaces(for: tokens)
     selectedTokenIndex = nil
     let edge = textContainerEdgeOutset
+    let rubyTop = showsFurigana ? Self.rubyOverlayTopInset(for: lyricFont) : 0
+    let rubySide = showsFurigana ? Self.rubyOverlaySideInset(for: lyricFont) : 0
     textContainerInset = UIEdgeInsets(
-      top: edge,
-      left: edge,
+      top: edge + rubyTop,
+      left: edge + rubySide,
       bottom: bottomTextContainerOutset,
-      right: edge
+      right: edge + rubySide
     )
     self.accentSubstring = accentSubstring
     self.accentColor = accentColor
@@ -310,7 +337,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   }
 
   private static func layoutOnlyAttributedText(from visible: NSAttributedString) -> NSAttributedString {
-    let m = NSMutableAttributedString(attributedString: visible)
+    let m = NSMutableAttributedString(attributedString: attributedStringByRemovingRuby(visible))
     guard m.length > 0 else { return m }
     m.addAttribute(.foregroundColor, value: UIColor.clear, range: NSRange(location: 0, length: m.length))
     return m
@@ -545,6 +572,63 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     ctx.textMatrix = .identity
     CTFrameDraw(layout.frame, ctx)
     ctx.restoreGState()
+    drawFuriganaReadings(layout: layout)
+  }
+
+  /// Centers each reading on its base glyphs. Core Text ruby is not used for
+  /// drawing — it widens kanji and leaves holes between tokens.
+  private func drawFuriganaReadings(layout: FuriganaTextLayout) {
+    guard let visible = visibleAttributedText, visible.length > 0 else { return }
+    let rubyKey = NSAttributedString.Key(kCTRubyAnnotationAttributeName as String)
+    let lines = coreTextLines(in: layout.frame)
+    guard !lines.isEmpty else { return }
+    let lineOrigins = coreTextLineOrigins(in: layout.frame, lineCount: lines.count)
+
+    visible.enumerateAttribute(rubyKey, in: NSRange(location: 0, length: visible.length)) { value, range, _ in
+      guard let value,
+            let reading = Self.reading(fromRubyAnnotation: value),
+            !reading.isEmpty,
+            range.length > 0
+      else { return }
+
+      for (index, line) in lines.enumerated() {
+        let lineRange = CTLineGetStringRange(line)
+        let lineNSRange = NSRange(location: lineRange.location, length: lineRange.length)
+        let sub = NSIntersectionRange(range, lineNSRange)
+        guard sub.length > 0 else { continue }
+
+        let startX = CTLineGetOffsetForStringIndex(line, sub.location, nil)
+        let endX = CTLineGetOffsetForStringIndex(line, sub.location + sub.length, nil)
+        let origin = lineOrigins[index]
+        let baseFont = visible.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont
+          ?? Self.fontForAttributes(from: visible)
+        let factor = Self.sizeFactor(fromRubyAnnotation: value)
+        let rubyFont = UIFont.systemFont(
+          ofSize: baseFont.pointSize * (factor > 0 ? factor : Self.rubySizeFactor),
+          weight: .regular
+        )
+        let rubyAttrs: [NSAttributedString.Key: Any] = [
+          .font: rubyFont,
+          .foregroundColor: Self.rubyTextColor,
+        ]
+        let rubySize = (reading as NSString).size(withAttributes: rubyAttrs)
+        let baseMidX = layout.textOrigin.x + origin.x + (startX + endX) / 2
+        let glyphTop = layout.textOrigin.y + (layout.textSize.height - origin.y - baseFont.ascender)
+        let rubyRect = CGRect(
+          x: baseMidX - rubySize.width / 2,
+          y: glyphTop - rubySize.height + 1,
+          width: rubySize.width,
+          height: rubySize.height
+        )
+        (reading as NSString).draw(
+          with: rubyRect,
+          options: .usesLineFragmentOrigin,
+          attributes: rubyAttrs,
+          context: nil
+        )
+        break
+      }
+    }
   }
 
   /// White base glyphs on the blue selection pill; furigana stays from the first pass only.
@@ -590,21 +674,14 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     ctx.restoreGState()
   }
 
-  /// Overlay keeps ruby layout metrics but draws ruby invisibly so the white base glyphs
-  /// align with the first pass (stripping ruby shifts lines by paragraph line spacing).
+  /// White base glyphs on the selection pill. Layout matches the ruby-stripped
+  /// Core Text frame so the overlay stays on the same glyphs.
   private static func selectionOverlayAttributedString(
     from visible: NSAttributedString,
     highlight: Set<Int>
   ) -> NSAttributedString {
-    let overlay = NSMutableAttributedString(attributedString: visible)
+    let overlay = NSMutableAttributedString(attributedString: attributedStringByRemovingRuby(visible))
     let fullRange = NSRange(location: 0, length: overlay.length)
-    let rubyKey = NSAttributedString.Key(kCTRubyAnnotationAttributeName as String)
-
-    overlay.enumerateAttribute(rubyKey, in: fullRange) { value, range, _ in
-      guard let value else { return }
-      let clearAnnotation = clearRubyAnnotation(from: value)
-      overlay.addAttribute(rubyKey, value: clearAnnotation, range: range)
-    }
     overlay.addAttribute(.foregroundColor, value: UIColor.clear, range: fullRange)
     overlay.enumerateAttribute(.scrubTokenIndex, in: fullRange, options: []) { value, charRange, _ in
       guard let value, charRange.length > 0 else { return }
@@ -631,23 +708,32 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     return intersects
   }
 
-  private static func clearRubyAnnotation(from source: Any) -> CTRubyAnnotation {
-    let annotation = (source as AnyObject) as! CTRubyAnnotation
-    let sizeFactor = CTRubyAnnotationGetSizeFactor(annotation)
-    let alignment = CTRubyAnnotationGetAlignment(annotation)
-    let overhang = CTRubyAnnotationGetOverhang(annotation)
-    let reading = (CTRubyAnnotationGetTextForPosition(annotation, .before) as String?) ?? ""
-    let attrs: [CFString: Any] = [
-      kCTRubyAnnotationSizeFactorAttributeName: sizeFactor,
-      kCTForegroundColorAttributeName: UIColor.clear.cgColor,
-    ]
-    return CTRubyAnnotationCreateWithAttributes(
-      alignment,
-      overhang,
-      .before,
-      reading as CFString,
-      attrs as CFDictionary
-    )
+  private static let rubySizeFactor: CGFloat = 0.45
+  private static let rubyTextColor = UIColor.secondaryLabel
+
+  private static func rubyOverlayTopInset(for font: UIFont) -> CGFloat {
+    ceil(font.pointSize * rubySizeFactor) + 2
+  }
+
+  private static func rubyOverlaySideInset(for font: UIFont) -> CGFloat {
+    ceil(font.pointSize * rubySizeFactor * 0.85)
+  }
+
+  private static func attributedStringByRemovingRuby(_ attributed: NSAttributedString) -> NSAttributedString {
+    let mutable = NSMutableAttributedString(attributedString: attributed)
+    let rubyKey = NSAttributedString.Key(kCTRubyAnnotationAttributeName as String)
+    mutable.removeAttribute(rubyKey, range: NSRange(location: 0, length: mutable.length))
+    return mutable
+  }
+
+  private static func reading(fromRubyAnnotation value: Any) -> String? {
+    let annotation = (value as AnyObject) as! CTRubyAnnotation
+    return CTRubyAnnotationGetTextForPosition(annotation, .before) as String?
+  }
+
+  private static func sizeFactor(fromRubyAnnotation value: Any) -> CGFloat {
+    let annotation = (value as AnyObject) as! CTRubyAnnotation
+    return CTRubyAnnotationGetSizeFactor(annotation)
   }
 
   private func coreTextLines(in frame: CTFrame) -> [CTLine] {

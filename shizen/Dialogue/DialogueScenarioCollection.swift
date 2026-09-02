@@ -70,6 +70,83 @@ private struct DialogueScenarioCollectionFile: Decodable {
         let scenario: ScenarioBody
         let highlights: HighlightsRecord?
         let quiz: [QuizRecord]?
+        let tokenSync: TokenSyncRecord?
+
+        enum CodingKeys: String, CodingKey {
+            case id, menuTitle, menuSubtitle, japanese, romaji, english
+            case targetSubstring, audioKey, publishedAudioUrl, publishedVariantId
+            case publishedContentHash, publishedAt, grammarPointIDs
+            case scenario, highlights, quiz, tokenSync
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            menuTitle = try container.decode(String.self, forKey: .menuTitle)
+            menuSubtitle = try container.decodeIfPresent(String.self, forKey: .menuSubtitle)
+            japanese = try container.decode(String.self, forKey: .japanese)
+            romaji = try container.decode(String.self, forKey: .romaji)
+            english = try container.decode(String.self, forKey: .english)
+            targetSubstring = try container.decodeIfPresent(String.self, forKey: .targetSubstring)
+            audioKey = try container.decodeIfPresent(String.self, forKey: .audioKey)
+            publishedAudioUrl = try container.decodeIfPresent(String.self, forKey: .publishedAudioUrl)
+            publishedVariantId = try container.decodeIfPresent(String.self, forKey: .publishedVariantId)
+            publishedContentHash = try container.decodeIfPresent(String.self, forKey: .publishedContentHash)
+            publishedAt = try container.decodeIfPresent(String.self, forKey: .publishedAt)
+            grammarPointIDs = try container.decodeIfPresent([String].self, forKey: .grammarPointIDs)
+            scenario = try container.decode(ScenarioBody.self, forKey: .scenario)
+            highlights = try container.decodeIfPresent(HighlightsRecord.self, forKey: .highlights)
+            quiz = try container.decodeIfPresent([QuizRecord].self, forKey: .quiz)
+            // Karaoke is optional — a bad stamp payload must not drop the lesson.
+            tokenSync = try? container.decode(TokenSyncRecord.self, forKey: .tokenSync)
+        }
+    }
+
+    struct TokenSyncRecord: Decodable {
+        let version: Int
+        let variantId: String
+        let contentHash: String
+        let lines: [Line]
+
+        struct Line: Decodable {
+            let text: String
+            let tokens: [Token]
+        }
+
+        struct Token: Decodable {
+            let text: String
+            let startSeconds: Double
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                text = try container.decode(String.self, forKey: .text)
+                if let seconds = try? container.decode(Double.self, forKey: .startSeconds) {
+                    startSeconds = seconds
+                } else {
+                    startSeconds = Double(try container.decode(Int.self, forKey: .startSeconds))
+                }
+            }
+
+            private enum CodingKeys: String, CodingKey {
+                case text, startSeconds
+            }
+        }
+
+        func model() -> DialogueTokenSync {
+            DialogueTokenSync(
+                version: version,
+                variantId: variantId,
+                contentHash: contentHash,
+                lines: lines.map { line in
+                    DialogueTokenSync.Line(
+                        text: line.text,
+                        tokens: line.tokens.map {
+                            DialogueTokenSync.Token(text: $0.text, startSeconds: $0.startSeconds)
+                        }
+                    )
+                }
+            )
+        }
     }
 
     struct QuizRecord: Decodable {
@@ -87,11 +164,123 @@ private struct DialogueScenarioCollectionFile: Decodable {
 
     struct LineRecord: Decodable {
         let id: String?
-        let speaker: String
-        let japanese: String
+        let type: String?
+        let speaker: String?
+        let japanese: String?
         let romaji: String?
         let english: String?
         let grammarPointIDs: [String]?
+        let text: String?
+        let visibility: String?
+        let prompt: String?
+        let target: String?
+        let layout: DialogueQuizQuestion.Layout?
+        let choices: [String]?
+        let correctChoice: String?
+        let wrongAnswerExplanation: String?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(String.self, forKey: .id)
+            type = try container.decodeIfPresent(String.self, forKey: .type)
+            speaker = try container.decodeIfPresent(String.self, forKey: .speaker)
+            japanese = try container.decodeIfPresent(String.self, forKey: .japanese)
+            romaji = try container.decodeIfPresent(String.self, forKey: .romaji)
+            english = try container.decodeIfPresent(String.self, forKey: .english)
+            grammarPointIDs = try container.decodeIfPresent([String].self, forKey: .grammarPointIDs)
+            text = try container.decodeIfPresent(String.self, forKey: .text)
+            visibility = try container.decodeIfPresent(String.self, forKey: .visibility)
+            prompt = try container.decodeIfPresent(String.self, forKey: .prompt)
+            target = try container.decodeIfPresent(String.self, forKey: .target)
+            if let raw = try container.decodeIfPresent(String.self, forKey: .layout) {
+                layout = DialogueQuizQuestion.Layout(rawValue: raw) ?? .grid
+            } else {
+                layout = nil
+            }
+            choices = try container.decodeIfPresent([String].self, forKey: .choices)
+            correctChoice = try container.decodeIfPresent(String.self, forKey: .correctChoice)
+            wrongAnswerExplanation = try container.decodeIfPresent(
+                String.self,
+                forKey: .wrongAnswerExplanation
+            )
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, type, speaker, japanese, romaji, english, grammarPointIDs
+            case text, visibility, prompt, target, layout, choices
+            case correctChoice, wrongAnswerExplanation
+        }
+
+        func grammarScenarioLine(scenarioID: String, fallbackIndex: Int) -> GrammarScenarioLine? {
+            if type == "inline-question" {
+                let promptText = prompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let optionChoices = (choices ?? []).map {
+                    $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                }.filter { !$0.isEmpty }
+                let correct = correctChoice?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                guard !promptText.isEmpty else {
+                    print("[inline-question] DROPPED \(scenarioID)#\(fallbackIndex): empty prompt choices=\(optionChoices.count) correct=\(correct.isEmpty ? "empty" : "ok")")
+                    return nil
+                }
+                print("[inline-question] decoded \(scenarioID)#\(fallbackIndex) prompt=\(promptText) choices=\(optionChoices.count)")
+                return GrammarScenarioLine(
+                    speaker: "",
+                    japanese: promptText,
+                    romaji: nil,
+                    english: nil,
+                    grammarPointIDs: [],
+                    lineID: id ?? "\(scenarioID)/inline-question-\(fallbackIndex)",
+                    inlineQuestion: DialogueInlineQuestion(
+                        prompt: promptText,
+                        target: target?.trimmingCharacters(in: .whitespacesAndNewlines),
+                        choices: optionChoices,
+                        correctChoice: correct,
+                        wrongAnswerExplanation: wrongAnswerExplanation ?? "",
+                        layout: layout ?? .grid
+                    )
+                )
+            }
+            if type == "stage" {
+                let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                guard !trimmed.isEmpty else { return nil }
+                let stageVisibility = DialogueStageLineVisibility(rawValue: visibility ?? "cold") ?? .cold
+                return GrammarScenarioLine(
+                    speaker: "",
+                    japanese: trimmed,
+                    romaji: nil,
+                    english: nil,
+                    grammarPointIDs: [],
+                    lineID: id ?? "\(scenarioID)/stage-\(fallbackIndex)",
+                    stageVisibility: stageVisibility
+                )
+            }
+            let speakerName = speaker?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let japaneseText = japanese?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !speakerName.isEmpty, !japaneseText.isEmpty else { return nil }
+            return GrammarScenarioLine(
+                speaker: speakerName,
+                japanese: japaneseText,
+                romaji: romaji,
+                english: english,
+                grammarPointIDs: grammarPointIDs ?? [],
+                lineID: id ?? "\(scenarioID)/line-\(fallbackIndex)"
+            )
+        }
+
+        func taggedLine(scenarioID: String, fallbackIndex: Int) -> DialogueScenarioCollection.Scenario.TaggedLine? {
+            guard type != "stage", type != "inline-question" else { return nil }
+            let speakerName = speaker?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let japaneseText = japanese?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !speakerName.isEmpty, !japaneseText.isEmpty else { return nil }
+            return DialogueScenarioCollection.Scenario.TaggedLine(
+                lineID: id ?? "\(scenarioID)/line-\(fallbackIndex)",
+                speaker: speakerName,
+                japanese: japaneseText,
+                romaji: romaji,
+                english: english,
+                grammarPointIDs: grammarPointIDs ?? []
+            )
+        }
     }
 
     struct HighlightsRecord: Decodable {
@@ -130,25 +319,11 @@ private extension DialogueScenarioCollection {
         sceneImageName = file.sceneImage
         thumbnailURL = file.thumbnailUrl.flatMap(URL.init(string:))
         scenarios = file.scenarios.map { record in
-            let taggedLines = record.scenario.lines.enumerated().map { index, line in
-                Scenario.TaggedLine(
-                    lineID: line.id ?? "\(record.id)/line-\(index)",
-                    speaker: line.speaker,
-                    japanese: line.japanese,
-                    romaji: line.romaji,
-                    english: line.english,
-                    grammarPointIDs: line.grammarPointIDs ?? []
-                )
+            let taggedLines = record.scenario.lines.enumerated().compactMap { index, line in
+                line.taggedLine(scenarioID: record.id, fallbackIndex: index)
             }
-            let lines = taggedLines.map { tagged in
-                GrammarScenarioLine(
-                    speaker: tagged.speaker,
-                    japanese: tagged.japanese,
-                    romaji: tagged.romaji,
-                    english: tagged.english,
-                    grammarPointIDs: tagged.grammarPointIDs,
-                    lineID: tagged.lineID
-                )
+            let lines = record.scenario.lines.enumerated().compactMap { index, line in
+                line.grammarScenarioLine(scenarioID: record.id, fallbackIndex: index)
             }
             let example = GrammarExample(
                 japanese: record.japanese,
@@ -164,7 +339,12 @@ private extension DialogueScenarioCollection {
                     setting: record.scenario.setting,
                     lines: lines
                 ),
-                sourceScenarioId: record.id
+                sourceScenarioId: record.id,
+                tokenSync: DialogueTokenSync.validated(
+                    record.tokenSync?.model(),
+                    spokenTexts: lines.filter(\.isSpokenLine).map(\.japanese),
+                    publishedContentHash: record.publishedContentHash
+                )
             )
             let grammarPatterns = (record.highlights?.grammarPatterns ?? []).map {
                 DialogueGrammarPatternRef(label: $0.label, grammarPointID: $0.grammarPointID)
@@ -179,6 +359,7 @@ private extension DialogueScenarioCollection {
             let quiz = (record.quiz ?? []).map {
                 DialogueQuizQuestion(
                     prompt: $0.prompt,
+                    target: nil,
                     choices: $0.choices,
                     correctChoice: $0.correctChoice,
                     wrongAnswerExplanation: $0.wrongAnswerExplanation,
@@ -246,17 +427,13 @@ enum DialogueScenarioCollectionCatalog {
     }
 
     /// Fetches a collection from the CMS when configured; falls back to bundled JSON.
-    /// Subsequent calls for the same id reuse the remote cache (or join an in-flight fetch).
+    /// Always revalidates against the network so a republish is visible without
+    /// force-quitting. In-flight fetches for the same id are joined.
     static func fetchCollection(
         id: String,
         completion: @escaping (DialogueScenarioCollection?) -> Void
     ) {
         cacheLock.lock()
-        if let cached = remoteCollections[id] {
-            cacheLock.unlock()
-            DispatchQueue.main.async { completion(cached) }
-            return
-        }
         if inFlightCompletions[id] != nil {
             inFlightCompletions[id, default: []].append(completion)
             cacheLock.unlock()
@@ -265,29 +442,65 @@ enum DialogueScenarioCollectionCatalog {
         inFlightCompletions[id] = [completion]
         cacheLock.unlock()
 
+        print("[inline-question] fetch \(id) cms=\(ContentCMSClient.isConfigured) base=\(ContentCMSClient.baseURL?.absoluteString ?? "nil")")
         guard ContentCMSClient.isConfigured else {
+            print("[inline-question] fetch \(id) using bundled/cache — CMS not configured")
             finishFetch(id: id, result: collection(id: id))
             return
         }
-
         ContentCMSClient.fetchDialogueCollection(id: id) { result in
             switch result {
             case .success(let data):
-                guard let file = try? JSONDecoder().decode(
-                    DialogueScenarioCollectionFile.self,
-                    from: data
-                ) else {
+                Self.logRawInlineQuestions(in: data, collectionID: id)
+                do {
+                    let file = try JSONDecoder().decode(
+                        DialogueScenarioCollectionFile.self,
+                        from: data
+                    )
+                    let decoded = DialogueScenarioCollection(file: file)
+                    Self.logDecodedInlineQuestions(in: decoded)
+                    cacheLock.lock()
+                    remoteCollections[id] = decoded
+                    cacheLock.unlock()
+                    finishFetch(id: id, result: decoded)
+                } catch {
+                    print("[inline-question] DECODE FAILED \(id): \(error)")
+                    print("DialogueScenarioCollection: decode failed for \(id): \(error)")
                     finishFetch(id: id, result: collection(id: id))
-                    return
                 }
-                let decoded = DialogueScenarioCollection(file: file)
-                cacheLock.lock()
-                remoteCollections[id] = decoded
-                cacheLock.unlock()
-                finishFetch(id: id, result: decoded)
-            case .failure:
+            case .failure(let error):
+                print("[inline-question] FETCH FAILED \(id): \(error) — falling back to cache/bundle")
+                print("DialogueScenarioCollection: fetch failed for \(id): \(error)")
                 finishFetch(id: id, result: collection(id: id))
             }
+        }
+    }
+
+    private static func logRawInlineQuestions(in data: Data, collectionID: String) {
+        guard
+            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let scenarios = root["scenarios"] as? [[String: Any]]
+        else {
+            print("[inline-question] raw \(collectionID): could not parse JSON object")
+            return
+        }
+        for scenario in scenarios {
+            let scenarioID = scenario["id"] as? String ?? "?"
+            let lines = (scenario["scenario"] as? [String: Any])?["lines"] as? [[String: Any]] ?? []
+            let types = lines.map { $0["type"] as? String ?? "spoken" }
+            let inlineCount = types.filter { $0 == "inline-question" }.count
+            print("[inline-question] raw \(scenarioID): \(inlineCount)/\(lines.count) inline-question types=\(types)")
+        }
+    }
+
+    private static func logDecodedInlineQuestions(in collection: DialogueScenarioCollection) {
+        for scenario in collection.scenarios {
+            let lines = scenario.example.scenario?.lines ?? []
+            let inline = lines.enumerated().compactMap { index, line -> String? in
+                guard line.isInlineQuestion else { return nil }
+                return "#\(index) \(line.inlineQuestion?.prompt ?? "?")"
+            }
+            print("[inline-question] decoded \(scenario.id): \(inline.count)/\(lines.count) kept \(inline)")
         }
     }
 

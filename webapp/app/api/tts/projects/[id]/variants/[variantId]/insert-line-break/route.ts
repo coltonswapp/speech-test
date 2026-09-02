@@ -6,12 +6,14 @@ import { db } from "@/lib/db/client";
 import { ttsVariant } from "@/lib/db/schema";
 import { getObject, putObject } from "@/lib/storage/r2";
 import { wavToPcm16, pcm16ToWav } from "@/lib/tts/wav";
+import { shiftTokenSyncBySamples } from "@/lib/dialogue/token-sync";
 
 /** Fixed-duration silence inserted between dialogue lines for reliable splitting — mirrors TTSAudioAlignmentMarker.silenceDuration. */
 const SILENCE_DURATION_SECONDS = 0.15;
 
 const bodySchema = z.object({
   sample: z.number().int().min(0),
+  durationSeconds: z.number().positive().max(5).optional(),
 });
 
 /** Inserts 0.15s of silence at `sample` and shifts existing marks/trim past the insertion point. Does not add a new mark. */
@@ -25,7 +27,7 @@ export async function POST(
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { sample } = parsed.data;
+  const { sample, durationSeconds } = parsed.data;
 
   const variant = await db.query.ttsVariant.findFirst({
     where: eq(ttsVariant.id, variantId),
@@ -39,7 +41,10 @@ export async function POST(
   const totalSamples = pcm.length / 2;
 
   const insertAt = Math.min(Math.max(sample, 1), totalSamples - 1);
-  const insertCount = Math.max(1, Math.round(SILENCE_DURATION_SECONDS * sampleRate));
+  const insertCount = Math.max(
+    1,
+    Math.round((durationSeconds ?? SILENCE_DURATION_SECONDS) * sampleRate)
+  );
 
   const before = pcm.subarray(0, insertAt * 2);
   const after = pcm.subarray(insertAt * 2);
@@ -64,6 +69,12 @@ export async function POST(
       ? variant.trimSampleUpper + insertCount
       : variant.trimSampleUpper;
 
+  const shiftedTokenSync = shiftTokenSyncBySamples(
+    variant.tokenSync,
+    sampleRate,
+    (s) => (s >= insertAt ? s + insertCount : s)
+  );
+
   const [updated] = await db
     .update(ttsVariant)
     .set({
@@ -71,6 +82,7 @@ export async function POST(
       trimSampleLower: shiftedTrimLower,
       trimSampleUpper: shiftedTrimUpper,
       dialogueLineSwitchSamples: shiftedMarks,
+      tokenSync: shiftedTokenSync,
     })
     .where(eq(ttsVariant.id, variantId))
     .returning();

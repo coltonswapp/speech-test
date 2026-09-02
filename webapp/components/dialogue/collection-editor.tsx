@@ -47,6 +47,7 @@ import {
   serializeCollectionFile,
 } from "@/lib/dialogue/export";
 import { collectionFileSchema, type CollectionFile } from "@/lib/dialogue/types";
+import { flushPendingTokenSync } from "@/lib/dialogue/token-sync-persist";
 import { ScenarioTemplatePicker } from "@/components/dialogue/scenario-template-picker";
 import { scenarioTemplates } from "@/lib/dialogue/scenario-templates";
 import {
@@ -311,9 +312,14 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
   });
 
   const publishLessonMutation = useMutation({
-    mutationFn: () => dialogueApi.publishLesson(collectionId),
+    mutationFn: async () => {
+      await flushPendingTokenSync();
+      return dialogueApi.publishLesson(collectionId);
+    },
     onSuccess: (result) => {
       invalidate();
+      const karaokeCount = result.results.filter((row) => row.hasTokenKaraoke)
+        .length;
       const parts = [
         result.publishedCount > 0
           ? `${result.publishedCount} published`
@@ -324,6 +330,7 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
         result.skippedCount > 0
           ? `${result.skippedCount} without audio`
           : null,
+        karaokeCount > 0 ? `${karaokeCount} with token karaoke` : null,
       ].filter(Boolean);
       if (result.failedCount > 0) {
         const firstError = result.results.find((r) => r.status === "failed");

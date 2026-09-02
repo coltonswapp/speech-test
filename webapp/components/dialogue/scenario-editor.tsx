@@ -23,10 +23,11 @@ import { QuizEditor } from "@/components/dialogue/quiz-editor";
 import { ScenarioAudioPanel } from "@/components/dialogue/scenario-audio-panel";
 import { ScenarioAuditPanel } from "@/components/dialogue/scenario-audit-panel";
 import { ScenarioMinimap } from "@/components/dialogue/scenario-minimap";
-import type {
-  AuditScenarioResult,
-  DialogueHighlights,
-  DialogueLine,
+import {
+  hasSpokenJapanese,
+  type AuditScenarioResult,
+  type DialogueHighlights,
+  type DialogueLine,
 } from "@/lib/dialogue/types";
 
 // Sections within the "editor" view; "raw" is a separate top-level view, not
@@ -191,7 +192,7 @@ export function ScenarioEditor({
     if (
       !draft ||
       lines.length === 0 ||
-      lines.every((line) => !line.japanese.trim()) ||
+      !hasSpokenJapanese(lines) ||
       isEnrichingHighlights
     ) {
       return;

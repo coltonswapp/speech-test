@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import {
+  AUTH_COOKIE,
+  passphraseCookieValue,
+} from "@/lib/studio-auth";
 import { getAppPassphrase } from "@/lib/secrets";
-
-const AUTH_COOKIE = "studio_auth";
 
 export async function POST(request: NextRequest) {
   const form = await request.formData();
@@ -20,7 +22,7 @@ export async function POST(request: NextRequest) {
   const response = NextResponse.redirect(new URL(next, request.url), {
     status: 303,
   });
-  response.cookies.set(AUTH_COOKIE, expected, {
+  response.cookies.set(AUTH_COOKIE, passphraseCookieValue(expected), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

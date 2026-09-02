@@ -94,20 +94,35 @@ enum DialogueExperimentFixture {
 
 // MARK: - Display model
 
-private enum DialogueSpeakerSide {
+nonisolated enum DialogueSpeakerSide: Hashable, Sendable {
     case leading
     case trailing
+
+    var underglowColor: DialogueBubbleUnderglowColor {
+        ExperimentSettings.dialogueHighlightColor(for: self)
+    }
 }
 
-private struct DialogueLineDisplay {
+struct DialogueLineDisplay {
     let speaker: String
     let speakerSide: DialogueSpeakerSide
     let showsSpeakerLabel: Bool
     let japanese: String
     let english: String?
+    let stageDirection: StageDirection?
+    let inlineQuestion: DialogueInlineQuestion?
+
+    struct StageDirection: Hashable {
+        let text: String
+        let visibility: DialogueStageLineVisibility
+    }
+
+    var isStageLine: Bool { stageDirection != nil }
+    var isInlineQuestion: Bool { inlineQuestion != nil }
+    var isSpokenLine: Bool { !isStageLine && !isInlineQuestion }
 }
 
-private enum DialoguePlaybackPhase {
+enum DialoguePlaybackPhase {
     case idle
     case playing
     case paused
@@ -154,7 +169,7 @@ private enum DialogueLineRevealTravel {
 
 // MARK: - View controller
 
-final class DialogueExperimentViewController: UIViewController {
+class DialogueExperimentViewController: UIViewController {
 
     private var pointTitle: String
     private var example: GrammarExample
@@ -163,11 +178,15 @@ final class DialogueExperimentViewController: UIViewController {
     private let presentationContext: DialoguePresentationContext
     private var displayLines: [DialogueLineDisplay]
     private var spokenLineTexts: [String]
+    /// Maps spoken-line index → transcript display index (stage rows omitted from spoken side).
+    private var spokenLineDisplayIndices: [Int] = []
+    /// Maps display index → spoken-line index (`nil` for stage direction rows).
+    private var displayLineSpokenIndices: [Int?] = []
+    private var tokenSync: DialogueTokenSync?
 
     private let scrollHeaderStack = UIStackView()
     private let sceneImageContainer = UIView()
     private let sceneImageView = UIImageView()
-    private let sceneImageLoadingPlaceholder = ImageLoadingPlaceholderView()
     /// Pins the scene image to ~92% of the header-stack width. Activated only
     /// once the container has been added to the stack (shared ancestor), else
     /// AutoLayout traps with a "no common ancestor" exception.
@@ -198,11 +217,16 @@ final class DialogueExperimentViewController: UIViewController {
 
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
-    private var contentStackTopConstraint: NSLayoutConstraint!
+    private var contentStackTopConstraint: NSLayoutConstraint?
+    /// Prevents inset/constraint writes in `viewDidLayoutSubviews` from re-entering
+    /// layout and overflowing the stack.
+    private var isPerformingLayoutSideEffects = false
     private var lineRows: [UIView] = []
     private var japaneseBubbles: [DialogueJapaneseBubbleView] = []
     private var japaneseLabels: [FuriganaTranscriptLabel] = []
     private var englishLabels: [UILabel] = []
+    /// Caption labels for stage-direction rows; `nil` for spoken lines.
+    private var stageCaptionLabels: [UILabel?] = []
     /// One bubble+meter per speaker in `.listeningSpeakers` mode; empty otherwise.
     private var listeningSpeakerSlots: [ListeningSpeakerSlot] = []
     /// One meter per line in `.listeningLines` / `.reveal` modes; empty otherwise.
@@ -216,6 +240,11 @@ final class DialogueExperimentViewController: UIViewController {
     private var lineRevealTravels: [DialogueLineRevealTravel] = []
     /// UI handles for animating meter → Japanese → English in `.reveal` mode.
     private var lineRevealSlots: [LineRevealSlot] = []
+    /// English translation wrappers, hidden until swipe when ``dialogueHidesEnglishUntilSwipe``.
+    private var englishWrappers: [UIView?] = []
+    private var englishRevealedIndices = Set<Int>()
+    /// First complete listen unlocks the scene summary.
+    private var hasHeardScenario = false
 
     private struct ListeningSpeakerSlot {
         let speaker: String
@@ -251,8 +280,8 @@ final class DialogueExperimentViewController: UIViewController {
     private let elapsedLabel = UILabel()
     private let playPauseButton = UIButton(type: .system)
     private let playGlyphView = UIImageView()
-    private let speedButton = UIButton(type: .system)
-    private let speedGlyphView = UIImageView()
+    private let overflowButton = UIButton(type: .system)
+    private let overflowGlyphView = UIImageView()
     private let restartButton = UIButton(type: .system)
     private let restartGlyphView = UIImageView()
     private let leftTransportControlsStack = UIStackView()
@@ -291,15 +320,39 @@ final class DialogueExperimentViewController: UIViewController {
     /// dirties the whole stack view's layout regardless of whether the value actually moved, so
     /// unchanged rows are skipped to avoid forcing a full-window layout pass every animation frame.
     private var appliedRowSpacingEmphasis: [CGFloat] = []
+    /// Last emphasis used to recolor Japanese text; skip when unchanged so layout
+    /// passes do not rebuild attributed strings.
+    private var appliedJapaneseColorEmphasis: [CGFloat] = []
+    /// Karaoke token last applied per display row (`-1` = none).
+    private var appliedKaraokeTokenIndex: [Int] = []
+    private var activeKaraokeTokenIndex: Int?
     private var seekTargetLineIndex: Int?
     private var playbackResumeStartedAt: CFTimeInterval = 0
     /// Invalidates in-flight async audio-session activations when a newer play
     /// request supersedes them; only the latest completion may start the player.
     private var playbackActivationGeneration = 0
+    private var stageHoldGeneration = 0
+    /// Spoken indices whose preceding stage lines have already been held this pass.
+    private var heldStageBoundaries = Set<Int>()
+    private var isHoldingForStageLine = false
+    private var pendingFinishAfterStageHold = false
+    /// Spoken indices whose following inline questions have already been shown this pass.
+    private var heldInlineQuestionBoundaries = Set<Int>()
+    private var isHoldingForInlineQuestion = false
+    private var pendingFinishAfterInlineQuestion = false
+    private var inlineQuestionsAfterSpokenIndex: [Int: [DialogueInlineQuestion]] = [:]
+    private var pendingInlineQuestionDisplayIndices: [Int] = []
+    private var pendingInlineResumeSpokenIndex: Int?
+    private var inlineQuestionViews: [Int: DialogueInlineQuestionView] = [:]
+    private var activeInlineQuestionView: DialogueInlineQuestionView?
+    private var didHoldTrailingStageLines = false
     private var nestedPagingTopContentInset: CGFloat = 0
     private var nestedPagingTransportProgress: CGFloat = 0
     /// Set by `DialogueExperimentHarnessViewController` to print alignment / switch diagnostics.
     var alignmentDebugLog: ((String) -> Void)?
+    /// Hosts (nested paging) refresh their own menus when token-sync is toggled
+    /// from the transport overflow.
+    var tokenSyncSettingDidChange: (() -> Void)?
 
     /// Scroll view used for nested vertical paging handoff when embedded in a pager host.
     var handoffScrollView: UIScrollView { scrollView }
@@ -319,9 +372,15 @@ final class DialogueExperimentViewController: UIViewController {
         self.scenarioID = scenarioID
         self.grammarPointIDs = grammarPointIDs
         self.presentationContext = presentationContext
-        self.displayLines = Self.makeDisplayLines(for: example)
+        self.displayLines = Self.makeDisplayLines(
+            for: example,
+            includesStageVisibility: { $0 == .cold }
+        )
         self.spokenLineTexts = GrammarExampleDialogueLines.lines(for: example)
         super.init(nibName: nil, bundle: nil)
+        rebuildSpokenLineIndexMaps()
+        rebuildInlineQuestionMap()
+        refreshTokenSync()
         title = "Scenario"
     }
 
@@ -367,12 +426,28 @@ final class DialogueExperimentViewController: UIViewController {
         }
     }
 
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) else { return }
+        appliedJapaneseColorEmphasis = Array(repeating: -1, count: japaneseLabels.count)
+        appliedKaraokeTokenIndex = Array(repeating: -1, count: japaneseLabels.count)
+        applyRowStylesFromEmphasis()
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        guard !isPerformingLayoutSideEffects else { return }
+        guard let contentStackTopConstraint else { return }
+        isPerformingLayoutSideEffects = true
+        defer { isPerformingLayoutSideEffects = false }
+
         playPauseButton.bringSubviewToFront(playGlyphView)
-        speedButton.bringSubviewToFront(speedGlyphView)
+        overflowButton.bringSubviewToFront(overflowGlyphView)
         restartButton.bringSubviewToFront(restartGlyphView)
-        contentStackTopConstraint.constant = 8
+        let topConstant = dialogueContentStackTopConstant()
+        if abs(contentStackTopConstraint.constant - topConstant) > 0.5 {
+            contentStackTopConstraint.constant = topConstant
+        }
         applyScrollContentInsets()
         updateBubbleMinWidths()
         applyRowStylesFromEmphasis()
@@ -403,6 +478,11 @@ final class DialogueExperimentViewController: UIViewController {
            !navigationBar.interactions.contains(where: { $0 === topScrollEdgeInteraction }) {
             navigationBar.addInteraction(topScrollEdgeInteraction)
         }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        PlaybackAudioSession.prewarm()
     }
 
     func applyNestedPagingTopContentInset(_ inset: CGFloat) {
@@ -469,8 +549,11 @@ final class DialogueExperimentViewController: UIViewController {
         self.example = example
         if let scenarioID { self.scenarioID = scenarioID }
         if let grammarPointIDs { self.grammarPointIDs = grammarPointIDs }
-        displayLines = Self.makeDisplayLines(for: example)
+        displayLines = makeDisplayLines(for: example)
         spokenLineTexts = GrammarExampleDialogueLines.lines(for: example)
+        rebuildSpokenLineIndexMaps()
+        rebuildInlineQuestionMap()
+        refreshTokenSync()
 
         activeLineIndex = nil
         alignedLines = []
@@ -480,9 +563,12 @@ final class DialogueExperimentViewController: UIViewController {
         seekTargetLineIndex = nil
         playbackPhase = .idle
 
+        hasHeardScenario = false
+        englishRevealedIndices.removeAll()
+
         if let setting = example.scenario?.setting, !setting.isEmpty {
             settingLabel.text = setting
-            settingLabel.isHidden = false
+            applyScenarioSummaryVisibility(animated: false)
         } else {
             settingLabel.text = nil
             settingLabel.isHidden = true
@@ -516,7 +602,9 @@ final class DialogueExperimentViewController: UIViewController {
         scrollHeaderStack.layoutMargins = UIEdgeInsets(top: 8, left: 0, bottom: 0, right: 0)
         scrollHeaderStack.insetsLayoutMarginsFromSafeArea = false
 
-        configureSceneImageView()
+        if dialogueShowsScenarioChrome() {
+            configureSceneImageView()
+        }
 
         let settingBase = UIFont.preferredFont(forTextStyle: .body)
         if let italicDescriptor = settingBase.fontDescriptor.withSymbolicTraits(.traitItalic) {
@@ -535,17 +623,22 @@ final class DialogueExperimentViewController: UIViewController {
         metadataLabel.numberOfLines = 0
         updateMetadataLabel()
 
-        if sceneImageView.image != nil || sceneImageURL != nil {
-            scrollHeaderStack.addArrangedSubview(sceneImageContainer)
-            scrollHeaderStack.setCustomSpacing(20, after: sceneImageContainer)
-            // Now that container and stack share an ancestor, the width pin is safe.
-            sceneImageWidthConstraint?.isActive = true
+        if dialogueShowsScenarioChrome() {
+            if sceneImageView.image != nil || sceneImageURL != nil {
+                scrollHeaderStack.addArrangedSubview(sceneImageContainer)
+                scrollHeaderStack.setCustomSpacing(20, after: sceneImageContainer)
+                // Now that container and stack share an ancestor, the width pin is safe.
+                sceneImageWidthConstraint?.isActive = true
+            }
+            if let setting = example.scenario?.setting, !setting.isEmpty {
+                scrollHeaderStack.addArrangedSubview(settingLabel)
+                scrollHeaderStack.setCustomSpacing(12, after: settingLabel)
+                applyScenarioSummaryVisibility(animated: false)
+            }
         }
-        if let setting = example.scenario?.setting, !setting.isEmpty {
-            scrollHeaderStack.addArrangedSubview(settingLabel)
-            scrollHeaderStack.setCustomSpacing(12, after: settingLabel)
+        if dialogueShowsMetadataHeader() {
+            scrollHeaderStack.addArrangedSubview(metadataLabel)
         }
-        scrollHeaderStack.addArrangedSubview(metadataLabel)
     }
 
     /// Scene-setting image (white border + drop shadow + 20pt rounded corners),
@@ -561,7 +654,6 @@ final class DialogueExperimentViewController: UIViewController {
             let finishLoading: (UIImage?) -> Void = { [weak self] image in
                 guard let self,
                       self.sceneImageView.accessibilityIdentifier == token else { return }
-                self.hideSceneImageLoadingPlaceholder()
                 if let image {
                     self.applySceneImage(image)
                 } else if let bundled = self.sceneImageName.flatMap({ UIImage(named: $0) }) {
@@ -574,31 +666,17 @@ final class DialogueExperimentViewController: UIViewController {
             if let cached = LessonThumbnailLoader.cachedImage(for: remoteURL) {
                 finishLoading(cached)
             } else {
-                showSceneImageLoadingPlaceholder()
+                sceneImageView.image = nil
                 LessonThumbnailLoader.load(url: remoteURL, completion: finishLoading)
             }
             return
         }
-
-        hideSceneImageLoadingPlaceholder()
 
         guard let image = sceneImageName.flatMap({ UIImage(named: $0) }) else {
             sceneImageContainer.isHidden = true
             return
         }
         applySceneImage(image)
-    }
-
-    private func showSceneImageLoadingPlaceholder() {
-        sceneImageLoadingPlaceholder.message = "Loading"
-        sceneImageLoadingPlaceholder.syncCornerRadius(with: sceneImageView)
-        sceneImageLoadingPlaceholder.isHidden = false
-        sceneImageLoadingPlaceholder.startAnimating()
-    }
-
-    private func hideSceneImageLoadingPlaceholder() {
-        sceneImageLoadingPlaceholder.stopAnimating()
-        sceneImageLoadingPlaceholder.isHidden = true
     }
 
     private func prepareSceneImageChrome(aspectRatio: CGFloat) {
@@ -613,25 +691,13 @@ final class DialogueExperimentViewController: UIViewController {
         sceneImageView.translatesAutoresizingMaskIntoConstraints = false
         sceneImageView.contentMode = .scaleAspectFill
         sceneImageView.clipsToBounds = true
-        sceneImageView.layer.cornerRadius = ImageLoadingPlaceholderMetrics.defaultCornerRadius
+        sceneImageView.backgroundColor = .systemGray5
+        sceneImageView.layer.cornerRadius = 20
         sceneImageView.layer.cornerCurve = .continuous
         sceneImageView.layer.borderWidth = 3
         sceneImageView.layer.borderColor = UIColor.white.cgColor
         if sceneImageView.superview == nil {
             sceneImageContainer.addSubview(sceneImageView)
-        }
-        if sceneImageLoadingPlaceholder.superview == nil {
-            sceneImageLoadingPlaceholder.translatesAutoresizingMaskIntoConstraints = false
-            sceneImageLoadingPlaceholder.message = "Loading"
-            sceneImageLoadingPlaceholder.syncCornerRadius(with: sceneImageView)
-            sceneImageLoadingPlaceholder.isHidden = true
-            sceneImageContainer.addSubview(sceneImageLoadingPlaceholder)
-            NSLayoutConstraint.activate([
-                sceneImageLoadingPlaceholder.topAnchor.constraint(equalTo: sceneImageView.topAnchor),
-                sceneImageLoadingPlaceholder.leadingAnchor.constraint(equalTo: sceneImageView.leadingAnchor),
-                sceneImageLoadingPlaceholder.trailingAnchor.constraint(equalTo: sceneImageView.trailingAnchor),
-                sceneImageLoadingPlaceholder.bottomAnchor.constraint(equalTo: sceneImageView.bottomAnchor),
-            ])
         }
 
         sceneImageContainer.constraints
@@ -679,7 +745,6 @@ final class DialogueExperimentViewController: UIViewController {
     }
 
     private func applySceneImage(_ image: UIImage) {
-        hideSceneImageLoadingPlaceholder()
         sceneImageView.image = image
         sceneImageContainer.isHidden = false
         let aspect = image.size.height / max(image.size.width, 1)
@@ -701,7 +766,7 @@ final class DialogueExperimentViewController: UIViewController {
     private func updateMetadataLabel() {
         metadataLabel.text = Self.metadataText(
             pointTitle: pointTitle,
-            lineCount: displayLines.count,
+            lineCount: spokenLineTexts.count,
             duration: clipDuration
         )
     }
@@ -714,23 +779,31 @@ final class DialogueExperimentViewController: UIViewController {
         scrollView.delaysContentTouches = false
         scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.backgroundColor = .clear
-        view.addSubview(scrollView)
 
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         contentStack.axis = .vertical
         contentStack.alignment = .fill
         contentStack.spacing = 48
-        contentStack.layoutMargins = UIEdgeInsets(top: 0, left: 24, bottom: 0, right: 24)
+        contentStack.layoutMargins = UIEdgeInsets(
+            top: 0,
+            left: dialogueContentHorizontalInset(),
+            bottom: 0,
+            right: dialogueContentHorizontalInset()
+        )
         contentStack.isLayoutMarginsRelativeArrangement = true
         // The scroll view sweeps the safe-area boundary through content near the
         // top; opting out stops per-frame margin relayout of the whole transcript.
         contentStack.insetsLayoutMarginsFromSafeArea = false
         scrollView.addSubview(contentStack)
 
-        contentStackTopConstraint = contentStack.topAnchor.constraint(
+        let topConstraint = contentStack.topAnchor.constraint(
             equalTo: scrollView.contentLayoutGuide.topAnchor,
             constant: 0
         )
+        contentStackTopConstraint = topConstraint
+
+        // Add to the view last so a layout pass cannot run with a nil top constraint.
+        view.addSubview(scrollView)
 
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -738,7 +811,7 @@ final class DialogueExperimentViewController: UIViewController {
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            contentStackTopConstraint,
+            topConstraint,
             contentStack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
             contentStack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
             contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
@@ -767,14 +840,16 @@ final class DialogueExperimentViewController: UIViewController {
         playPauseButton.addAction(UIAction { [weak self] _ in self?.togglePlayPause() }, for: .primaryActionTriggered)
 
         Self.configureGlassTransportButton(
-            speedButton,
-            glyphView: speedGlyphView,
-            symbolName: "gauge.with.dots.needle.67percent",
+            overflowButton,
+            glyphView: overflowGlyphView,
+            symbolName: "ellipsis",
             glyphPointSize: Self.transportGlyphPointSize - 2,
-            accessibilityLabel: "Playback speed"
+            accessibilityLabel: "More"
         )
-        speedButton.showsMenuAsPrimaryAction = true
-        speedButton.menu = makeSpeedMenu()
+        overflowButton.showsMenuAsPrimaryAction = true
+        overflowButton.menu = makeOverflowMenu()
+        overflowButton.isHidden = !dialogueShowsOverflowButton()
+        overflowButton.isUserInteractionEnabled = dialogueShowsOverflowButton()
 
         Self.configureGlassTransportButton(
             restartButton,
@@ -789,14 +864,14 @@ final class DialogueExperimentViewController: UIViewController {
         leftTransportControlsStack.axis = .horizontal
         leftTransportControlsStack.alignment = .center
         leftTransportControlsStack.spacing = 8
-        leftTransportControlsStack.addArrangedSubview(speedButton)
+        leftTransportControlsStack.addArrangedSubview(overflowButton)
         leftTransportControlsStack.addArrangedSubview(restartButton)
 
         transportBarContainer.addSubview(leftTransportControlsStack)
         transportBarContainer.addSubview(elapsedLabel)
         transportBarContainer.addSubview(playPauseButton)
 
-        elapsedLabel.isHidden = presentationContext == .nestedPagingHost
+        elapsedLabel.isHidden = !dialogueShowsElapsedTime()
 
         let horizontalInset: CGFloat = 20
         let buttonSize = Self.transportButtonSize
@@ -806,8 +881,8 @@ final class DialogueExperimentViewController: UIViewController {
             leftTransportControlsStack.topAnchor.constraint(equalTo: transportBarContainer.topAnchor, constant: 8),
             leftTransportControlsStack.bottomAnchor.constraint(equalTo: transportBarContainer.safeAreaLayoutGuide.bottomAnchor, constant: -8),
 
-            speedButton.widthAnchor.constraint(equalToConstant: buttonSize),
-            speedButton.heightAnchor.constraint(equalToConstant: buttonSize),
+            overflowButton.widthAnchor.constraint(equalToConstant: buttonSize),
+            overflowButton.heightAnchor.constraint(equalToConstant: buttonSize),
             restartButton.widthAnchor.constraint(equalToConstant: buttonSize),
             restartButton.heightAnchor.constraint(equalToConstant: buttonSize),
 
@@ -838,7 +913,7 @@ final class DialogueExperimentViewController: UIViewController {
         NSLayoutConstraint.activate(transportBarPositionConstraints)
     }
 
-    private func makeSpeedMenu() -> UIMenu {
+    func makePlaybackSpeedMenu() -> UIMenu {
         let actions = Self.playbackSpeedOptions.map { speed in
             UIAction(
                 title: Self.speedMenuTitle(for: speed),
@@ -847,7 +922,103 @@ final class DialogueExperimentViewController: UIViewController {
                 self?.setPlaybackSpeed(speed)
             }
         }
-        return UIMenu(title: "Playback speed", options: .singleSelection, children: actions)
+        return UIMenu(
+            title: "Playback Speed",
+            image: UIImage(systemName: "gauge.with.dots.needle.67percent"),
+            options: .singleSelection,
+            children: actions
+        )
+    }
+
+    func makeOverflowMenu() -> UIMenu {
+        let rolePlay = UIAction(
+            title: "Role Play",
+            image: UIImage(systemName: "person.wave.2")
+        ) { [weak self] _ in
+            self?.presentRolePlay()
+        }
+        return UIMenu(children: [
+            makePlaybackSpeedMenu(),
+            makeTokenSyncMenuAction(),
+            makeTokenSyncHighlightStyleMenu(),
+            rolePlay,
+        ])
+    }
+
+    func makeTokenSyncMenuAction() -> UIAction {
+        UIAction(
+            title: "Token sync",
+            subtitle: "Yellow highlight on the spoken word",
+            image: UIImage(systemName: "highlighter"),
+            state: ExperimentSettings.dialogueShowsTokenSync ? .on : .off
+        ) { [weak self] _ in
+            self?.toggleTokenSyncHighlight()
+        }
+    }
+
+    func makeTokenSyncHighlightStyleMenu() -> UIMenu {
+        let selected = ExperimentSettings.dialogueTokenSyncHighlightStyle
+        let actions = DialogueTokenSyncHighlightStyle.allCases.map { style in
+            UIAction(
+                title: style.title,
+                subtitle: style.subtitle,
+                state: style == selected ? .on : .off
+            ) { [weak self] _ in
+                self?.setTokenSyncHighlightStyle(style)
+            }
+        }
+        return UIMenu(
+            title: "Token highlight",
+            image: UIImage(systemName: "paintbrush.pointed"),
+            options: .singleSelection,
+            children: actions
+        )
+    }
+
+    func toggleTokenSyncHighlight() {
+        ExperimentSettings.dialogueShowsTokenSync.toggle()
+        applyTokenSyncHighlightSetting()
+    }
+
+    func setTokenSyncHighlightStyle(_ style: DialogueTokenSyncHighlightStyle) {
+        ExperimentSettings.dialogueTokenSyncHighlightStyle = style
+        applyTokenSyncHighlightSetting()
+    }
+
+    func applyTokenSyncHighlightSetting() {
+        appliedKaraokeTokenIndex = Array(repeating: -2, count: japaneseLabels.count)
+        refreshActiveKaraokeFromPlaybackTime()
+        applyJapaneseLabelColorsFromEmphasis()
+        dialogueRefreshOverflowMenu()
+        tokenSyncSettingDidChange?()
+    }
+
+    func dialogueRefreshOverflowMenu() {
+        overflowButton.menu = makeOverflowMenu()
+    }
+
+    private func presentRolePlay() {
+        stopPlayback(resetPosition: false)
+        let rolePlay = DialogueRolePlayViewController(
+            pointTitle: pointTitle,
+            example: example,
+            presentationContext: .standalone,
+            scenarioID: scenarioID,
+            grammarPointIDs: grammarPointIDs
+        )
+        rolePlay.dialogueApplyPlaybackSpeed(playbackSpeed)
+        if let navigationController {
+            navigationController.pushViewController(rolePlay, animated: true)
+        } else {
+            let nav = UINavigationController(rootViewController: rolePlay)
+            nav.navigationBar.prefersLargeTitles = false
+            nav.modalPresentationStyle = .pageSheet
+            if let sheet = nav.sheetPresentationController {
+                sheet.detents = [.large()]
+                sheet.prefersGrabberVisible = true
+            }
+            present(nav, animated: true)
+        }
     }
 
     private func setPlaybackSpeed(_ speed: Float) {
@@ -856,7 +1027,7 @@ final class DialogueExperimentViewController: UIViewController {
         if audioPlayer?.isPlaying == true {
             audioPlayer?.rate = speed
         }
-        speedButton.menu = makeSpeedMenu()
+        dialogueRefreshOverflowMenu()
     }
 
     private static func speedMenuTitle(for speed: Float) -> String {
@@ -867,28 +1038,35 @@ final class DialogueExperimentViewController: UIViewController {
     }
 
     private func rebuildTranscriptRows() {
+        setInlineQuestionFocus(nil, animated: false)
         for v in contentStack.arrangedSubviews {
             contentStack.removeArrangedSubview(v)
             v.removeFromSuperview()
         }
         lineRows.removeAll()
+        inlineQuestionViews.removeAll()
+        activeInlineQuestionView = nil
         japaneseBubbles.removeAll()
         japaneseLabels.removeAll()
         englishLabels.removeAll()
+        stageCaptionLabels.removeAll()
         listeningSpeakerSlots.removeAll()
         listeningLineMeters.removeAll()
         lineRevealLevels.removeAll()
         lineRevealTravels.removeAll()
         lineRevealSlots.removeAll()
+        englishWrappers.removeAll()
+        englishRevealedIndices.removeAll()
         bubbleMinWidthConstraints.removeAll()
         bubbleSwipeContainers.removeAll()
         messageColumnLayouts.removeAll()
         lineEmphasis = Array(repeating: 0, count: displayLines.count)
         appliedRowSpacingEmphasis.removeAll()
+        appliedJapaneseColorEmphasis.removeAll()
         appliedBubbleMinWidthColumnWidth = -1
 
         contentStack.addArrangedSubview(scrollHeaderStack)
-        contentStack.setCustomSpacing(64, after: scrollHeaderStack)
+        contentStack.setCustomSpacing(dialogueHeaderBottomSpacing(), after: scrollHeaderStack)
 
         if transcriptDisplayMode == .listeningSpeakers {
             buildListeningSpeakerRows()
@@ -908,8 +1086,10 @@ final class DialogueExperimentViewController: UIViewController {
 
             if idx < displayLines.count - 1 {
                 let nextLine = displayLines[idx + 1]
-                let spacing: CGFloat = nextLine.speaker == line.speaker ? 20 : 48
-                contentStack.setCustomSpacing(spacing, after: row)
+                contentStack.setCustomSpacing(
+                    dialogueSpacingAfterLineRow(line: line, nextLine: nextLine),
+                    after: row
+                )
             }
         }
         if transcriptDisplayMode != .listeningLines, transcriptDisplayMode != .reveal {
@@ -930,7 +1110,8 @@ final class DialogueExperimentViewController: UIViewController {
     /// trailing sits right with the name below, mirroring the mock.
     private func buildListeningSpeakerRows() {
         var orderedSpeakers: [(speaker: String, side: DialogueSpeakerSide)] = []
-        for line in displayLines where !orderedSpeakers.contains(where: { $0.speaker == line.speaker }) {
+        for line in displayLines where line.isSpokenLine
+            && !orderedSpeakers.contains(where: { $0.speaker == line.speaker }) {
             orderedSpeakers.append((line.speaker, line.speakerSide))
         }
 
@@ -955,14 +1136,9 @@ final class DialogueExperimentViewController: UIViewController {
             placeholderLabel.alpha = 0
             let bubble = DialogueJapaneseBubbleView(label: placeholderLabel)
             bubble.setBackgroundStyle(.glass)
-            var glowConfig = DialogueBubbleUnderglowConfiguration.default
-            glowConfig.color = entry.side == .leading ? .blue : .yellow
             // The default glow is tuned for wide text bubbles; on this small
             // pill its blur/shadow bleeds past the silhouette. Tuck it inside.
-            glowConfig.horizontalInset = 12
-            glowConfig.blurRadius = 8
-            glowConfig.offsetX = 0
-            bubble.setUnderglowConfiguration(glowConfig)
+            bubble.setUnderglowConfiguration(.compactMeter(for: entry.side))
 
             let meter = makeListeningMeterView(for: entry.side)
             bubble.addSubview(meter)
@@ -1193,14 +1369,126 @@ final class DialogueExperimentViewController: UIViewController {
     }
 
     private func applyBubbleBackgroundStyleToAllBubbles() {
-        for bubble in japaneseBubbles {
+        for (index, bubble) in japaneseBubbles.enumerated() {
             bubble.setBackgroundStyle(.glass)
-            bubble.setUnderglowConfiguration(.default)
+            guard displayLines.indices.contains(index), displayLines[index].isSpokenLine else {
+                continue
+            }
+            bubble.setUnderglowConfiguration(.forSpeaker(displayLines[index].speakerSide))
         }
     }
 
+    private func makeStageDirectionRow(text: String, index: Int) -> UIView {
+        let placeholderLabel = FuriganaTranscriptLabel()
+        placeholderLabel.isHidden = true
+        japaneseLabels.append(placeholderLabel)
+
+        let placeholderBubble = DialogueJapaneseBubbleView(label: placeholderLabel)
+        placeholderBubble.isHidden = true
+        japaneseBubbles.append(placeholderBubble)
+
+        englishLabels.append(UILabel())
+        englishWrappers.append(nil)
+
+        let row = UIView()
+        row.translatesAutoresizingMaskIntoConstraints = false
+        row.tag = index
+        row.isUserInteractionEnabled = false
+        row.accessibilityLabel = "Stage direction"
+        row.accessibilityValue = text
+
+        let captionLabel = UILabel()
+        captionLabel.translatesAutoresizingMaskIntoConstraints = false
+        captionLabel.numberOfLines = 0
+        captionLabel.textAlignment = .center
+        captionLabel.textColor = .secondaryLabel
+        captionLabel.font = Self.stageDirectionFont
+        captionLabel.text = text
+        stageCaptionLabels.append(captionLabel)
+
+        row.addSubview(captionLabel)
+        messageColumnLayouts.append(
+            LineMessageColumnLayout(
+                column: UIStackView(),
+                viewBeforeBubble: placeholderBubble,
+                bubbleView: placeholderBubble,
+                hasEnglish: false
+            )
+        )
+
+        NSLayoutConstraint.activate([
+            captionLabel.topAnchor.constraint(
+                equalTo: row.topAnchor,
+                constant: Self.stageDirectionVerticalPadding
+            ),
+            captionLabel.bottomAnchor.constraint(
+                equalTo: row.bottomAnchor,
+                constant: -Self.stageDirectionVerticalPadding
+            ),
+            captionLabel.centerXAnchor.constraint(equalTo: row.centerXAnchor),
+            captionLabel.leadingAnchor.constraint(greaterThanOrEqualTo: row.leadingAnchor, constant: 12),
+            captionLabel.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor, constant: -12),
+        ])
+
+        return row
+    }
+
+    private func makeInlineQuestionRow(question: DialogueInlineQuestion, index: Int) -> UIView {
+        let placeholderLabel = FuriganaTranscriptLabel()
+        placeholderLabel.isHidden = true
+        japaneseLabels.append(placeholderLabel)
+
+        let placeholderBubble = DialogueJapaneseBubbleView(label: placeholderLabel)
+        placeholderBubble.isHidden = true
+        japaneseBubbles.append(placeholderBubble)
+
+        englishLabels.append(UILabel())
+        englishWrappers.append(nil)
+        stageCaptionLabels.append(nil)
+        messageColumnLayouts.append(
+            LineMessageColumnLayout(
+                column: UIStackView(),
+                viewBeforeBubble: placeholderBubble,
+                bubbleView: placeholderBubble,
+                hasEnglish: false
+            )
+        )
+
+        let row = UIView()
+        row.translatesAutoresizingMaskIntoConstraints = false
+        row.tag = index
+        row.isUserInteractionEnabled = true
+        row.accessibilityLabel = "Quick check"
+        row.accessibilityValue = question.prompt
+
+        let questionView = DialogueInlineQuestionView(question: question)
+        questionView.translatesAutoresizingMaskIntoConstraints = false
+        questionView.onExpandedChanged = { [weak self] in
+            self?.view.layoutIfNeeded()
+        }
+        inlineQuestionViews[index] = questionView
+        row.addSubview(questionView)
+        NSLayoutConstraint.activate([
+            questionView.topAnchor.constraint(equalTo: row.topAnchor, constant: 8),
+            questionView.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -8),
+            questionView.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+            questionView.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+        ])
+
+        return row
+    }
+
     private func makeLineRow(line: DialogueLineDisplay, index: Int) -> UIView {
-        let lineContainer = UIView()
+        if let stage = line.stageDirection {
+            return makeStageDirectionRow(text: stage.text, index: index)
+        }
+        if let question = line.inlineQuestion {
+            return makeInlineQuestionRow(question: question, index: index)
+        }
+
+        stageCaptionLabels.append(nil)
+
+        let lineContainer = DialogueLineRowView()
         lineContainer.translatesAutoresizingMaskIntoConstraints = false
         lineContainer.tag = index
         lineContainer.isUserInteractionEnabled = true
@@ -1217,16 +1505,17 @@ final class DialogueExperimentViewController: UIViewController {
         speakerLabel.font = GrammarJapaneseTypography.scenarioSpeakerFont
         speakerLabel.textColor = .secondaryLabel
         speakerLabel.text = Self.speakerPrefix(for: line.speaker)
+        speakerLabel.textAlignment = line.speakerSide == .trailing ? .right : .left
+        speakerLabel.setContentHuggingPriority(.required, for: .horizontal)
+        speakerLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         let speakerWrapper = Self.insetMetadataWrapper(
             around: speakerLabel,
-            side: line.speakerSide
+            side: line.speakerSide,
+            verticalPin: .bottom
         )
         speakerWrapper.isHidden = !line.showsSpeakerLabel
 
         let japaneseFont = Self.dialogueJapaneseBaseFont
-
-        var displayInsets = JapaneseFuriganaBuilder.dialogueBubbleDisplayInsets(for: japaneseFont)
-        displayInsets.top += 2
 
         let isListeningLineMeterRow = transcriptDisplayMode == .listeningLines
         let isRevealMode = transcriptDisplayMode == .reveal
@@ -1234,13 +1523,16 @@ final class DialogueExperimentViewController: UIViewController {
         let installsLineMeter = isListeningLineMeterRow || isRevealMode
         /// Nested paging: swipe right expands any non-listening-lines bubble.
         /// Reveal mode also wraps meter bubbles so expand + left-swipe peel work.
-        let allowsBubbleSwipe = presentationContext == .nestedPagingHost
-            && (isRevealMode || !isListeningLineMeterRow)
+        let allowsBubbleSwipe = dialogueShouldInstallBubbleSwipe(
+            isRevealMode: isRevealMode,
+            isListeningLineMeterRow: isListeningLineMeterRow
+        )
 
         let japaneseLabel = FuriganaTranscriptLabel()
         japaneseLabel.translatesAutoresizingMaskIntoConstraints = false
         japaneseLabel.clipsToBounds = false
         japaneseLabel.numberOfLines = 0
+        japaneseLabel.lineBreakMode = .byCharWrapping
         japaneseLabel.textAlignment = .natural
         japaneseLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         if installsLineMeter {
@@ -1250,20 +1542,20 @@ final class DialogueExperimentViewController: UIViewController {
             japaneseLabel.alpha = 0
         } else {
             japaneseLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-            JapaneseFuriganaBuilder.applyScrubDisplay(
+            JapaneseFuriganaBuilder.applyDialogueBubbleDisplay(
                 to: japaneseLabel,
-                attributed: JapaneseFuriganaBuilder.dialogueBubbleAttributedString(
-                    for: line.japanese,
-                    font: japaneseFont,
-                    textColor: Self.inactiveJapaneseColor
-                ),
-                contentInsets: displayInsets
+                text: line.japanese,
+                font: japaneseFont,
+                textColor: Self.inactiveJapaneseColor
             )
+            DialogueContentLineWrap.applyOrphanGlue(to: japaneseLabel)
         }
 
         let japaneseBubble = DialogueJapaneseBubbleView(label: japaneseLabel)
         japaneseBubble.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         japaneseBubble.setContentCompressionResistancePriority(.required, for: .horizontal)
+        japaneseBubble.setBackgroundStyle(.glass)
+        japaneseBubble.setUnderglowConfiguration(.forSpeaker(line.speakerSide))
 
         var revealMeterBubbleSizingConstraints: [NSLayoutConstraint] = []
         var revealMeterParkConstraints: [NSLayoutConstraint] = []
@@ -1273,12 +1565,7 @@ final class DialogueExperimentViewController: UIViewController {
             // can't fight the meter (critical when cycling back from Japanese).
             japaneseBubble.setLabelContributesToLayout(false)
             japaneseBubble.setBackgroundStyle(.glass)
-            var glowConfig = DialogueBubbleUnderglowConfiguration.default
-            glowConfig.color = line.speakerSide == .leading ? .blue : .yellow
-            glowConfig.horizontalInset = 12
-            glowConfig.blurRadius = 8
-            glowConfig.offsetX = 0
-            japaneseBubble.setUnderglowConfiguration(glowConfig)
+            japaneseBubble.setUnderglowConfiguration(.compactMeter(for: line.speakerSide))
 
             let meter = makeListeningMeterView(for: line.speakerSide)
             meter.meterHeight = 36
@@ -1327,24 +1614,30 @@ final class DialogueExperimentViewController: UIViewController {
         if allowsBubbleSwipe {
             let swipeContainer = DialogueBubbleSwipeRevealContainer(bubbleView: japaneseBubble)
             swipeContainer.hostScrollView = scrollView
-            swipeContainer.onCommit = { [weak self] in
-                self?.presentSentenceFocus(forLineAt: index)
-            }
-            if isRevealMode {
-                swipeContainer.allowsProgressiveReveal = true
-                swipeContainer.onProgressiveRevealCommit = { [weak self] in
-                    self?.advanceRevealLevel(at: index, animated: true)
-                }
-            }
+            dialogueDidInstallBubbleSwipe(swipeContainer, at: index, isRevealMode: isRevealMode)
             swipeContainer.configureContentPopGestureDeferral(from: self)
             bubbleSwipeContainers.append(swipeContainer)
             lineTapGesture.require(toFail: swipeContainer.panGestureRecognizer)
+            lineContainer.swipeContainer = swipeContainer
             bubbleLayoutTarget = swipeContainer
+            // Must join the column before pinning chrome to the speaker label —
+            // otherwise Auto Layout has no common ancestor and crashes.
             messageColumn.addArrangedSubview(swipeContainer)
+            swipeContainer.alignChromeBottom(
+                to: line.showsSpeakerLabel ? speakerLabel : nil
+            )
+            if dialogueReservesAccessoryChromeHeight(), line.showsSpeakerLabel {
+                speakerWrapper.heightAnchor.constraint(
+                    greaterThanOrEqualToConstant: DialogueBubbleSwipeRevealContainer.accessoryChromeSize
+                ).isActive = true
+            }
         } else {
             bubbleLayoutTarget = japaneseBubble
             messageColumn.addArrangedSubview(japaneseBubble)
         }
+
+        speakerWrapper.widthAnchor.constraint(equalTo: bubbleLayoutTarget.widthAnchor).isActive = true
+        messageColumn.setCustomSpacing(Self.messageColumnBaseSpacing, after: speakerWrapper)
 
         var revealTextMinWidthConstraint: NSLayoutConstraint?
         if !installsLineMeter {
@@ -1378,7 +1671,9 @@ final class DialogueExperimentViewController: UIViewController {
         var hasEnglishTranslation = false
         var revealEnglishWrapper: UIView?
         let englishText = line.english?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let shouldBuildEnglish = (transcriptDisplayMode == .full || isRevealMode) && !englishText.isEmpty
+        let hidesEnglishUntilSwipe = dialogueHidesEnglishUntilSwipe()
+        let shouldBuildEnglish = (transcriptDisplayMode == .full || isRevealMode || hidesEnglishUntilSwipe)
+            && !englishText.isEmpty
         if shouldBuildEnglish {
             let englishLabel = UILabel()
             englishLabel.font = Self.englishFont
@@ -1390,7 +1685,7 @@ final class DialogueExperimentViewController: UIViewController {
                 around: englishLabel,
                 side: line.speakerSide
             )
-            if isRevealMode {
+            if isRevealMode || hidesEnglishUntilSwipe {
                 englishWrapper.isHidden = true
                 englishWrapper.alpha = 0
                 revealEnglishWrapper = englishWrapper
@@ -1399,8 +1694,10 @@ final class DialogueExperimentViewController: UIViewController {
             }
             messageColumn.addArrangedSubview(englishWrapper)
             englishLabels.append(englishLabel)
+            englishWrappers.append(englishWrapper)
         } else {
             englishLabels.append(UILabel())
+            englishWrappers.append(nil)
         }
 
         if isRevealMode, let meter = revealMeter {
@@ -1463,11 +1760,14 @@ final class DialogueExperimentViewController: UIViewController {
             cacheMetadata: example.remoteAudioCacheMetadata
         ) { [weak self] url in
             guard let self else { return }
-            self.resolvedAudioURL = url
-            self.prepareAudioAlignment()
-            self.updateTransportControls()
-            if self.presentationContext == .standalone {
-                self.updateElapsedLabel(currentTime: 0)
+            let apply = {
+                self.resolvedAudioURL = url
+                self.prepareAudioAlignment()
+            }
+            if Thread.isMainThread {
+                apply()
+            } else {
+                DispatchQueue.main.async(execute: apply)
             }
         }
     }
@@ -1477,6 +1777,13 @@ final class DialogueExperimentViewController: UIViewController {
             return
         }
 
+        DialogueAlignmentMetadata.readPayload(from: url) { [weak self] _ in
+            guard let self, self.resolvedAudioURL == url else { return }
+            self.applyAudioAlignment(url: url)
+        }
+    }
+
+    private func applyAudioAlignment(url: URL) {
         clipDuration = playerDuration(for: url)
         updateMetadataLabel()
 
@@ -1503,6 +1810,11 @@ final class DialogueExperimentViewController: UIViewController {
                     alignmentDebugLog("aligned[\(index)] switch≥\(lo)s · range \(lo)–\(hi)s · \"\(line.text)\"")
                 }
             }
+        }
+
+        updateTransportControls()
+        if presentationContext == .standalone {
+            updateElapsedLabel(currentTime: 0)
         }
     }
 
@@ -1545,24 +1857,56 @@ final class DialogueExperimentViewController: UIViewController {
 
         if fromBeginning {
             player.currentTime = 0
+            cancelStageLineHold()
+            cancelInlineQuestionHold()
+            heldStageBoundaries = []
+            heldInlineQuestionBoundaries = []
+            didHoldTrailingStageLines = false
         }
-        if transcriptDisplayMode == .listeningSpeakers {
-            scrollListeningBubblesIntoView()
-        } else if fromBeginning {
-            scrollToTranscriptTop(animated: true)
+
+        if fromBeginning, dialogueShouldHoldForStageLinesDuringPlayback() {
+            let leading = stageLineDisplayIndices(beforeSpokenIndex: 0)
+            if !leading.isEmpty {
+                if transcriptDisplayMode == .listeningSpeakers {
+                    scrollListeningBubblesIntoView()
+                } else {
+                    scrollToTranscriptTop(animated: true)
+                }
+                playbackPhase = .playing
+                updateTransportControls()
+                heldStageBoundaries.insert(0)
+                runStageLineHold(displayIndices: leading) { [weak self] in
+                    guard let self, self.playbackPhase == .playing else { return }
+                    self.beginClipPlayback(player: player, fromBeginning: true, skipScroll: true)
+                }
+                return
+            }
+        }
+
+        beginClipPlayback(player: player, fromBeginning: fromBeginning, skipScroll: false)
+    }
+
+    private func beginClipPlayback(player: AVAudioPlayer, fromBeginning: Bool, skipScroll: Bool) {
+        if !skipScroll {
+            if transcriptDisplayMode == .listeningSpeakers {
+                scrollListeningBubblesIntoView()
+            } else if fromBeginning {
+                scrollToTranscriptTop(animated: true)
+            }
         }
 
         playbackPhase = .playing
         updateTransportControls()
         syncActiveLineFromPlaybackTime(player.currentTime, animated: true)
+        syncActiveTokenFromPlaybackTime(player.currentTime)
         startPlayerAfterSessionActivation(player)
     }
 
-    /// Activates the audio session off the main thread, then starts `player` once
-    /// it completes. The synchronous `setActive` blocks long enough to drop frames
-    /// of the line-emphasis animation, so UI state flips to `.playing` immediately
-    /// and the player starts when the session is ready. The completion no-ops if
-    /// playback was paused/stopped or superseded by a newer request in the gap.
+    /// Activates the audio session on the next main-queue turn, then starts
+    /// `player`. UI flips to `.playing` immediately so line-emphasis can commit
+    /// this turn; `viewDidAppear` prewarms the session so that `setActive` stays
+    /// cheap. The completion no-ops if playback was paused/stopped or superseded
+    /// by a newer request in the gap.
     private func startPlayerAfterSessionActivation(_ player: AVAudioPlayer) {
         playbackActivationGeneration += 1
         let generation = playbackActivationGeneration
@@ -1587,6 +1931,14 @@ final class DialogueExperimentViewController: UIViewController {
     }
 
     private func pausePlayback() {
+        if pendingFinishAfterStageHold || pendingFinishAfterInlineQuestion {
+            cancelStageLineHold()
+            cancelInlineQuestionHold()
+            completePlaybackFinished()
+            return
+        }
+        cancelStageLineHold()
+        cancelInlineQuestionHold()
         audioPlayer?.pause()
         playbackPhase = .paused
         stopProgressDisplayLink()
@@ -1611,12 +1963,17 @@ final class DialogueExperimentViewController: UIViewController {
         // startPlayerAfterSessionActivation wouldn't catch a pending activation;
         // invalidate it by generation so stopped audio can't restart itself.
         playbackActivationGeneration += 1
+        cancelStageLineHold()
+        cancelInlineQuestionHold()
         stopProgressDisplayLink()
         releaseListeningMetersToRest()
         seekTargetLineIndex = nil
         audioPlayer?.stop()
         if resetPosition {
             audioPlayer?.currentTime = 0
+            heldStageBoundaries = []
+            heldInlineQuestionBoundaries = []
+            didHoldTrailingStageLines = false
             playbackPhase = .idle
             setActiveLine(nil, animated: false)
             updateElapsedLabel(currentTime: 0)
@@ -1624,13 +1981,40 @@ final class DialogueExperimentViewController: UIViewController {
         updateTransportControls()
     }
 
-    private func handlePlaybackFinished() {
+    func handlePlaybackFinished() {
+        if beginTrailingInlineQuestionHoldIfNeeded() {
+            return
+        }
+        if dialogueShouldHoldForStageLinesDuringPlayback(),
+           !didHoldTrailingStageLines {
+            let trailing = trailingStageLineDisplayIndices()
+            if !trailing.isEmpty {
+                didHoldTrailingStageLines = true
+                pendingFinishAfterStageHold = true
+                stopProgressDisplayLink()
+                releaseListeningMetersToRest()
+                playbackPhase = .playing
+                updateTransportControls()
+                runStageLineHold(displayIndices: trailing) { [weak self] in
+                    guard let self, self.pendingFinishAfterStageHold else { return }
+                    self.pendingFinishAfterStageHold = false
+                    self.completePlaybackFinished()
+                }
+                return
+            }
+        }
+        completePlaybackFinished()
+    }
+
+    private func completePlaybackFinished() {
+        pendingFinishAfterStageHold = false
         stopProgressDisplayLink()
         releaseListeningMetersToRest()
         playbackPhase = .finished
         setActiveLine(nil, animated: true)
         updateElapsedLabel(currentTime: clipDuration)
         updateTransportControls()
+        markScenarioHeardIfNeeded()
         recordScenarioCompletionIfNeeded()
     }
 
@@ -1658,6 +2042,8 @@ final class DialogueExperimentViewController: UIViewController {
     @objc private func handleProgressTick() {
         guard let player = audioPlayer, player.isPlaying else {
             if playbackPhase == .playing,
+               !isHoldingForStageLine,
+               !isHoldingForInlineQuestion,
                CACurrentMediaTime() - playbackResumeStartedAt > 0.12 {
                 handlePlaybackFinished()
             }
@@ -1666,23 +2052,60 @@ final class DialogueExperimentViewController: UIViewController {
 
         let time = player.currentTime
         updateElapsedLabel(currentTime: time)
-        syncActiveLineFromPlaybackTime(time, animated: true)
+        if dialogueShouldSyncActiveLineFromPlayback() {
+            syncActiveLineFromPlaybackTime(time, animated: true)
+        }
+        syncActiveTokenFromPlaybackTime(time)
+        dialogueDidTickPlayback(at: time)
         updateListeningMetersFromPlayback(player)
     }
 
     private func syncActiveLineFromPlaybackTime(_ time: TimeInterval, animated: Bool) {
-        if let targetIndex = seekTargetLineIndex,
-           alignedLines.indices.contains(targetIndex) {
-            let range = alignedLines[targetIndex].timeRange
+        if isHoldingForStageLine || isHoldingForInlineQuestion { return }
+
+        if let targetSpokenIndex = seekTargetLineIndex,
+           alignedLines.indices.contains(targetSpokenIndex) {
+            let range = alignedLines[targetSpokenIndex].timeRange
             if time + 0.05 >= range.lowerBound, time < range.upperBound + 0.05 {
                 seekTargetLineIndex = nil
             } else {
-                setActiveLine(targetIndex, animated: false)
+                setActiveLine(displayIndex(forSpokenIndex: targetSpokenIndex), animated: false)
                 return
             }
         }
 
-        setActiveLine(lineIndex(for: time), animated: animated)
+        if let spokenIndex = lineIndex(for: time) {
+            // Questions sit after a spoken line. Once the next line has
+            // started, `spokenIndex` has already advanced — so also fire any
+            // unanswered checkpoints behind the playhead.
+            if beginPassedInlineQuestionHolds(beforeSpokenIndex: spokenIndex) {
+                return
+            }
+            if alignedLines.indices.contains(spokenIndex),
+               time + 0.05 >= alignedLines[spokenIndex].timeRange.upperBound,
+               beginInlineQuestionHoldIfNeeded(afterSpokenIndex: spokenIndex) {
+                return
+            }
+            if dialogueShouldHoldForStageLinesDuringPlayback() {
+                let nextSpoken = spokenIndex + 1
+                if alignedLines.indices.contains(spokenIndex),
+                   time + 0.05 >= alignedLines[spokenIndex].timeRange.upperBound,
+                   spokenLineDisplayIndices.indices.contains(nextSpoken),
+                   beginStageHoldIfNeeded(beforeSpokenIndex: nextSpoken) {
+                    return
+                }
+                if beginStageHoldIfNeeded(beforeSpokenIndex: spokenIndex) {
+                    return
+                }
+            }
+            setActiveLine(displayIndex(forSpokenIndex: spokenIndex), animated: animated)
+        } else if let active = activeLineIndex,
+                  displayLines.indices.contains(active),
+                  displayLines[active].isStageLine {
+            // Keep the opener stage line focused until speech starts.
+        } else {
+            setActiveLine(nil, animated: animated)
+        }
     }
 
     private func lineIndex(for time: TimeInterval) -> Int? {
@@ -1692,6 +2115,303 @@ final class DialogueExperimentViewController: UIViewController {
             active = index
         }
         return active
+    }
+
+    private func cancelStageLineHold() {
+        stageHoldGeneration += 1
+        isHoldingForStageLine = false
+        pendingFinishAfterStageHold = false
+    }
+
+    private func stageLineDisplayIndices(beforeSpokenIndex spokenIndex: Int) -> [Int] {
+        let endDisplay = displayIndex(forSpokenIndex: spokenIndex) ?? displayLines.count
+        let startDisplay: Int
+        if spokenIndex <= 0 {
+            startDisplay = 0
+        } else if let previous = displayIndex(forSpokenIndex: spokenIndex - 1) {
+            startDisplay = previous + 1
+        } else {
+            startDisplay = 0
+        }
+        guard startDisplay < endDisplay else { return [] }
+        return (startDisplay..<endDisplay).filter { displayLines[$0].isStageLine }
+    }
+
+    private func trailingStageLineDisplayIndices() -> [Int] {
+        guard let lastSpokenDisplay = spokenLineDisplayIndices.last else { return [] }
+        guard lastSpokenDisplay + 1 < displayLines.count else { return [] }
+        return ((lastSpokenDisplay + 1)..<displayLines.count).filter { displayLines[$0].isStageLine }
+    }
+
+    @discardableResult
+    private func beginStageHoldIfNeeded(beforeSpokenIndex spokenIndex: Int) -> Bool {
+        guard !heldStageBoundaries.contains(spokenIndex) else { return false }
+        let stages = stageLineDisplayIndices(beforeSpokenIndex: spokenIndex)
+        heldStageBoundaries.insert(spokenIndex)
+        guard !stages.isEmpty else { return false }
+        beginInterveningStageHold(beforeSpokenIndex: spokenIndex, displayIndices: stages)
+        return true
+    }
+
+    private func beginInterveningStageHold(beforeSpokenIndex spokenIndex: Int, displayIndices: [Int]) {
+        audioPlayer?.pause()
+        runStageLineHold(displayIndices: displayIndices) { [weak self] in
+            guard let self, self.playbackPhase == .playing else { return }
+            if alignedLines.indices.contains(spokenIndex) {
+                audioPlayer?.currentTime = alignedLines[spokenIndex].timeRange.lowerBound
+            }
+            if let display = displayIndex(forSpokenIndex: spokenIndex) {
+                setActiveLine(display, animated: true)
+            }
+            guard let player = audioPlayer else { return }
+            startPlayerAfterSessionActivation(player)
+        }
+    }
+
+    private func runStageLineHold(displayIndices: [Int], then continueWork: @escaping () -> Void) {
+        guard !displayIndices.isEmpty else {
+            continueWork()
+            return
+        }
+        isHoldingForStageLine = true
+        stopProgressDisplayLink()
+        presentStageHold(displayIndices: displayIndices, offset: 0, then: continueWork)
+    }
+
+    private func rebuildInlineQuestionMap() {
+        inlineQuestionsAfterSpokenIndex =
+            example.scenario?.inlineQuestionsAfterSpokenIndices() ?? [:]
+        heldInlineQuestionBoundaries = []
+        pendingInlineQuestionDisplayIndices = []
+        pendingInlineResumeSpokenIndex = nil
+        pendingFinishAfterInlineQuestion = false
+        clearActiveInlineQuestion()
+        setInlineQuestionFocus(nil, animated: false)
+        let displayCount = displayLines.filter(\.isInlineQuestion).count
+        print("[inline-question] transcript \(example.sourceScenarioId ?? "?") display=\(displayCount)/\(displayLines.count) map=\(inlineQuestionsAfterSpokenIndex.mapValues { $0.map(\.prompt) }) mode=\(transcriptDisplayMode)")
+    }
+
+    @discardableResult
+    private func beginPassedInlineQuestionHolds(beforeSpokenIndex spokenIndex: Int) -> Bool {
+        guard spokenIndex > 0 else { return false }
+        for prior in 0..<spokenIndex {
+            if beginInlineQuestionHoldIfNeeded(afterSpokenIndex: prior) {
+                return true
+            }
+        }
+        return false
+    }
+
+    @discardableResult
+    private func beginInlineQuestionHoldIfNeeded(afterSpokenIndex spokenIndex: Int) -> Bool {
+        guard !heldInlineQuestionBoundaries.contains(spokenIndex) else { return false }
+        let questions = inlineQuestionsAfterSpokenIndex[spokenIndex] ?? []
+        heldInlineQuestionBoundaries.insert(spokenIndex)
+        print("[inline-question] checkpoint afterSpoken=\(spokenIndex) questions=\(questions.map(\.prompt))")
+        guard !questions.isEmpty else { return false }
+        beginInlineQuestionHold(
+            displayIndices: displayIndicesForInlineQuestions(afterSpokenIndex: spokenIndex),
+            resumeSpokenIndex: spokenIndex + 1,
+            finishing: false
+        )
+        return true
+    }
+
+    @discardableResult
+    private func beginTrailingInlineQuestionHoldIfNeeded() -> Bool {
+        let lastSpoken = spokenLineTexts.count - 1
+        guard lastSpoken >= 0 else { return false }
+        guard !heldInlineQuestionBoundaries.contains(lastSpoken) else { return false }
+        let questions = inlineQuestionsAfterSpokenIndex[lastSpoken] ?? []
+        heldInlineQuestionBoundaries.insert(lastSpoken)
+        guard !questions.isEmpty else { return false }
+        pendingFinishAfterInlineQuestion = true
+        playbackPhase = .playing
+        updateTransportControls()
+        beginInlineQuestionHold(
+            displayIndices: displayIndicesForInlineQuestions(afterSpokenIndex: lastSpoken),
+            resumeSpokenIndex: lastSpoken + 1,
+            finishing: true
+        )
+        return true
+    }
+
+    private func displayIndicesForInlineQuestions(afterSpokenIndex spokenIndex: Int) -> [Int] {
+        let start: Int
+        if spokenIndex < 0 {
+            start = 0
+        } else if let spokenDisplay = displayIndex(forSpokenIndex: spokenIndex) {
+            start = spokenDisplay + 1
+        } else {
+            return []
+        }
+        var indices: [Int] = []
+        var index = start
+        while index < displayLines.count, !displayLines[index].isSpokenLine {
+            if displayLines[index].isInlineQuestion {
+                indices.append(index)
+            }
+            index += 1
+        }
+        return indices
+    }
+
+    private func beginInlineQuestionHold(
+        displayIndices: [Int],
+        resumeSpokenIndex: Int,
+        finishing: Bool
+    ) {
+        audioPlayer?.pause()
+        isHoldingForInlineQuestion = true
+        pendingFinishAfterInlineQuestion = finishing
+        pendingInlineQuestionDisplayIndices = displayIndices
+        pendingInlineResumeSpokenIndex = resumeSpokenIndex
+        stopProgressDisplayLink()
+        releaseListeningMetersToRest()
+        presentNextInlineQuestion()
+    }
+
+    private func presentNextInlineQuestion() {
+        clearActiveInlineQuestion()
+        guard let displayIndex = pendingInlineQuestionDisplayIndices.first else {
+            finishInlineQuestionHold()
+            return
+        }
+        pendingInlineQuestionDisplayIndices.removeFirst()
+        guard let questionView = inlineQuestionViews[displayIndex] else {
+            presentNextInlineQuestion()
+            return
+        }
+        activeInlineQuestionView = questionView
+        questionView.onContinue = { [weak self] in
+            self?.presentNextInlineQuestion()
+        }
+        questionView.onAnswered = { [weak self] in
+            guard let self else { return }
+            self.view.layoutIfNeeded()
+            self.scrollLineIntoView(at: displayIndex, animated: true)
+        }
+        setActiveLine(displayIndex, animated: true)
+        setInlineQuestionFocus(displayIndex, animated: true)
+        questionView.prepareForHold()
+    }
+
+    private func finishInlineQuestionHold() {
+        clearActiveInlineQuestion()
+        isHoldingForInlineQuestion = false
+        setInlineQuestionFocus(nil, animated: true)
+        let finishing = pendingFinishAfterInlineQuestion
+        let resumeSpoken = pendingInlineResumeSpokenIndex
+        pendingFinishAfterInlineQuestion = false
+        pendingInlineResumeSpokenIndex = nil
+        pendingInlineQuestionDisplayIndices = []
+
+        guard playbackPhase == .playing else { return }
+        if finishing || resumeSpoken == nil || !alignedLines.indices.contains(resumeSpoken!) {
+            handlePlaybackFinished()
+            return
+        }
+        audioPlayer?.currentTime = alignedLines[resumeSpoken!].timeRange.lowerBound
+        if let display = displayIndex(forSpokenIndex: resumeSpoken!) {
+            setActiveLine(display, animated: true)
+        }
+        guard let player = audioPlayer else { return }
+        startPlayerAfterSessionActivation(player)
+    }
+
+    private func cancelInlineQuestionHold() {
+        pendingInlineQuestionDisplayIndices = []
+        pendingInlineResumeSpokenIndex = nil
+        pendingFinishAfterInlineQuestion = false
+        isHoldingForInlineQuestion = false
+        clearActiveInlineQuestion()
+        setInlineQuestionFocus(nil, animated: true)
+    }
+
+    private func clearActiveInlineQuestion() {
+        activeInlineQuestionView?.onContinue = nil
+        activeInlineQuestionView?.onAnswered = nil
+        activeInlineQuestionView = nil
+    }
+
+    /// Dims everything except the active quick check so the checkpoint can
+    /// be read without the surrounding dialogue competing for attention.
+    private func setInlineQuestionFocus(_ focusedIndex: Int?, animated: Bool) {
+        let fade: CGFloat = 0.4
+        let updates = {
+            self.scrollHeaderStack.alpha = focusedIndex == nil ? 1 : fade
+            self.scrollHeaderStack.isUserInteractionEnabled = focusedIndex == nil
+            for (index, row) in self.lineRows.enumerated() {
+                let keep = focusedIndex == nil || focusedIndex == index
+                row.alpha = keep ? 1 : fade
+                row.isUserInteractionEnabled = keep
+            }
+            for view in self.contentStack.arrangedSubviews {
+                if view === self.scrollHeaderStack { continue }
+                if self.lineRows.contains(where: { $0 === view }) { continue }
+                view.alpha = focusedIndex == nil ? 1 : fade
+                view.isUserInteractionEnabled = focusedIndex == nil
+            }
+        }
+
+        if animated {
+            UIView.animate(
+                withDuration: Self.emphasisAnimationDuration,
+                delay: 0,
+                options: [.curveEaseInOut, .beginFromCurrentState]
+            ) {
+                updates()
+            }
+        } else {
+            updates()
+        }
+    }
+
+    private func presentStageHold(
+        displayIndices: [Int],
+        offset: Int,
+        then continueWork: @escaping () -> Void
+    ) {
+        let generation = stageHoldGeneration
+        guard displayIndices.indices.contains(offset) else {
+            isHoldingForStageLine = false
+            continueWork()
+            return
+        }
+        setActiveLine(displayIndices[offset], animated: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.stageLineHold) { [weak self] in
+            guard let self, self.stageHoldGeneration == generation, self.isHoldingForStageLine else { return }
+            self.presentStageHold(displayIndices: displayIndices, offset: offset + 1, then: continueWork)
+        }
+    }
+
+    private func refreshTokenSync() {
+        tokenSync = DialogueTokenSync.validated(
+            example.tokenSync,
+            spokenTexts: spokenLineTexts,
+            publishedContentHash: example.publishedContentHash
+        )
+        activeKaraokeTokenIndex = nil
+        appliedKaraokeTokenIndex = Array(repeating: -1, count: japaneseLabels.count)
+    }
+
+    private func refreshActiveKaraokeFromPlaybackTime(_ time: TimeInterval? = nil) {
+        guard ExperimentSettings.dialogueShowsTokenSync,
+              let tokenSync,
+              let displayIndex = activeLineIndex,
+              let spokenIndex = spokenIndex(forDisplayIndex: displayIndex) else {
+            activeKaraokeTokenIndex = nil
+            return
+        }
+        let t = time ?? audioPlayer?.currentTime ?? 0
+        activeKaraokeTokenIndex = tokenSync.tokenIndex(lineIndex: spokenIndex, at: t)
+    }
+
+    private func syncActiveTokenFromPlaybackTime(_ time: TimeInterval) {
+        let previous = activeKaraokeTokenIndex
+        refreshActiveKaraokeFromPlaybackTime(time)
+        guard activeKaraokeTokenIndex != previous else { return }
+        applyJapaneseLabelColorsFromEmphasis()
     }
 
     // MARK: - Active line
@@ -1704,10 +2424,16 @@ final class DialogueExperimentViewController: UIViewController {
             let from = activeLineIndex.map(String.init) ?? "nil"
             let to = newIndex.map(String.init) ?? "nil"
             var detail = "line switch at t=\(String(format: "%.3f", time))s: \(from) → \(to)"
-            if let newIndex, alignedLines.indices.contains(newIndex) {
-                let range = alignedLines[newIndex].timeRange
+            if let newIndex,
+               let spokenIndex = spokenIndex(forDisplayIndex: newIndex),
+               alignedLines.indices.contains(spokenIndex) {
+                let range = alignedLines[spokenIndex].timeRange
                 detail += " (bounds ≥\(String(format: "%.3f", range.lowerBound)) <\(String(format: "%.3f", range.upperBound)))"
-                detail += " \"\(alignedLines[newIndex].text)\""
+                detail += " \"\(alignedLines[spokenIndex].text)\""
+            } else if let newIndex, displayLines.indices.contains(newIndex), displayLines[newIndex].isStageLine {
+                detail += " (stage direction)"
+            } else if let newIndex, displayLines.indices.contains(newIndex), displayLines[newIndex].isInlineQuestion {
+                detail += " (inline question)"
             } else if newIndex != nil {
                 detail += " WARNING: index out of alignedLines range (count=\(alignedLines.count))"
             }
@@ -1719,6 +2445,7 @@ final class DialogueExperimentViewController: UIViewController {
         }
 
         activeLineIndex = newIndex
+        refreshActiveKaraokeFromPlaybackTime()
 
         syncLineEmphasisToActiveIndex(animated: animated)
         applyListeningSpeakerFocus(animated: animated)
@@ -1844,18 +2571,44 @@ final class DialogueExperimentViewController: UIViewController {
         contentStack.convert(row.bounds, from: row)
     }
 
+    /// Follow-along target: the full line including English, so the translation
+    /// is not left under the bottom-bar blur.
+    private func followAlongTargetFrame(at index: Int) -> CGRect? {
+        guard lineRows.indices.contains(index) else { return nil }
+        let row = lineRows[index]
+        guard !row.isHidden, row.bounds.height > 0 else { return nil }
+
+        var frame = rowBoundsInScrollableContent(row)
+        if messageColumnLayouts.indices.contains(index),
+           messageColumnLayouts[index].hasEnglish,
+           englishLabels.indices.contains(index) {
+            let label = englishLabels[index]
+            if let wrapper = label.superview, !wrapper.isHidden, wrapper.bounds.height > 0 {
+                frame = frame.union(contentStack.convert(wrapper.bounds, from: wrapper))
+            }
+        }
+        return frame
+    }
+
+    private func followAlongBuffers(for index: Int) -> (top: CGFloat, bottom: CGFloat) {
+        if displayLines.indices.contains(index),
+           (displayLines[index].isStageLine || displayLines[index].isInlineQuestion) {
+            return (Self.stageFollowAlongTopBuffer, Self.stageFollowAlongBottomBuffer)
+        }
+        return (Self.followAlongTopBuffer, Self.followAlongBottomBuffer)
+    }
+
     /// Which way the transcript must scroll so the line at `index` sits inside the
     /// top/bottom follow-along margins, or `nil` when it is already comfortably visible.
     private func followAlongDirection(revealingLineAt index: Int) -> FollowAlongScrollDirection? {
-        guard lineRows.indices.contains(index) else { return nil }
-        let row = lineRows[index]
-        guard row.bounds.height > 0 else { return nil }
+        scrollView.layoutIfNeeded()
+        guard let rowFrame = followAlongTargetFrame(at: index) else { return nil }
 
-        let rowFrame = rowBoundsInScrollableContent(row)
         let inset = scrollView.adjustedContentInset
         let currentY = scrollView.contentOffset.y
-        let visibleBottom = currentY + scrollView.bounds.height - inset.bottom - Self.followAlongBottomBuffer
-        let visibleTop = currentY + Self.followAlongTopBuffer
+        let buffers = followAlongBuffers(for: index)
+        let visibleBottom = currentY + scrollView.bounds.height - inset.bottom - buffers.bottom
+        let visibleTop = currentY + buffers.top
 
         if rowFrame.maxY > visibleBottom { return .down }
         if rowFrame.minY < visibleTop { return .up }
@@ -1868,31 +2621,59 @@ final class DialogueExperimentViewController: UIViewController {
         revealingLineAt index: Int,
         direction: FollowAlongScrollDirection
     ) -> CGFloat? {
-        guard lineRows.indices.contains(index) else { return nil }
-        let row = lineRows[index]
-        guard row.bounds.height > 0 else { return nil }
-
-        let rowFrame = rowBoundsInScrollableContent(row)
+        guard let rowFrame = followAlongTargetFrame(at: index) else { return nil }
         let inset = scrollView.adjustedContentInset
+        let buffers = followAlongBuffers(for: index)
         let targetY: CGFloat
         switch direction {
         case .down:
-            targetY = rowFrame.maxY - scrollView.bounds.height + inset.bottom + Self.followAlongBottomBuffer
+            targetY = rowFrame.maxY - scrollView.bounds.height + inset.bottom + buffers.bottom
         case .up:
-            targetY = rowFrame.minY - Self.followAlongTopBuffer
+            targetY = rowFrame.minY - buffers.top
         }
         return scrollView.clampedContentOffsetY(targetY, allowNoScroll: true)
     }
 
-    /// Emphasis never touches the rendered text: labels are rendered once at the
-    /// base font when rows are built, and focus is conveyed by the bubble transform
-    /// scale, bubble visuals, and row spacing — so focused lines never re-wrap.
+    /// Scrolls so the line — through the bottom of its English — clears the
+    /// bottom bar. Safe to call when the active index did not change.
+    func scrollLineIntoView(at index: Int, animated: Bool) {
+        guard lineRows.indices.contains(index) else { return }
+        scrollView.layoutIfNeeded()
+        guard !scrollView.isTracking, !scrollView.isDecelerating else { return }
+        guard let direction = followAlongDirection(revealingLineAt: index) else { return }
+
+        if animated, emphasisAnimationLink != nil {
+            if followAlongScrollDirection == nil {
+                followAlongScrollStartY = scrollView.contentOffset.y
+            }
+            followAlongScrollDirection = direction
+            return
+        }
+
+        guard let endY = followAlongEndOffsetY(revealingLineAt: index, direction: direction) else { return }
+        guard abs(endY - scrollView.contentOffset.y) >= 1 else { return }
+        if animated {
+            UIView.animate(
+                withDuration: Self.emphasisAnimationDuration,
+                delay: 0,
+                options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState]
+            ) {
+                self.scrollView.setClampedContentOffsetY(endY, allowsScrollCallback: false)
+            }
+        } else {
+            scrollView.setClampedContentOffsetY(endY, allowsScrollCallback: false)
+        }
+    }
+
+    /// Focus is conveyed by the bubble transform scale, underglow, row spacing,
+    /// and Japanese text color (secondary → label) — font size stays put so
+    /// focused lines never re-wrap.
     private func applyRowStylesFromEmphasis() {
         for (i, bubble) in japaneseBubbles.enumerated() {
+            guard displayLines.indices.contains(i), displayLines[i].isSpokenLine else { continue }
             let emphasis = lineEmphasis.indices.contains(i) ? lineEmphasis[i] : 0
-            // Meter bubbles have no text, so a fully de-emphasized glass
-            // background (alpha 0) would leave nothing visible; keep the same
-            // inactive floor the speaker-listening bubbles use.
+            // Meter-only bubbles keep an underglow floor so inactive speaker /
+            // line meters don't go fully dark.
             let usesMeterEmphasisFloor = transcriptDisplayMode == .listeningLines
                 || (transcriptDisplayMode == .reveal
                     && lineRevealLevels.indices.contains(i)
@@ -1908,7 +2689,106 @@ final class DialogueExperimentViewController: UIViewController {
                 side: displayLines[i].speakerSide
             )
         }
+        applyJapaneseLabelColorsFromEmphasis()
         applyMessageColumnSpacingFromEmphasis()
+        applyStageLineRowSpacingFromEmphasis()
+        applyStageLineEmphasisFromEmphasis()
+    }
+
+    private func applyJapaneseLabelColorsFromEmphasis() {
+        if appliedJapaneseColorEmphasis.count != japaneseLabels.count {
+            appliedJapaneseColorEmphasis = Array(repeating: -1, count: japaneseLabels.count)
+        }
+        if appliedKaraokeTokenIndex.count != japaneseLabels.count {
+            appliedKaraokeTokenIndex = Array(repeating: -1, count: japaneseLabels.count)
+        }
+
+        for (index, label) in japaneseLabels.enumerated() {
+            guard dialogueShouldApplyEmphasisTextColor(at: index) else {
+                appliedJapaneseColorEmphasis[index] = -1
+                appliedKaraokeTokenIndex[index] = -1
+                continue
+            }
+            guard let attributed = label.attributedText, attributed.length > 0 else { continue }
+            let emphasis = lineEmphasis.indices.contains(index) ? lineEmphasis[index] : 0
+            let karaokeToken = karaokeTokenIndex(forDisplayIndex: index)
+            let highlightStyleBit = ExperimentSettings.dialogueTokenSyncHighlightStyle == .full ? 10_000 : 0
+            let glowBit = japaneseBubbles.indices.contains(index)
+                ? japaneseBubbles[index].currentUnderglowConfiguration.color.rawValue * 100_000
+                : 0
+            let karaokeKey = (karaokeToken ?? -1) + highlightStyleBit + glowBit
+            guard abs(emphasis - appliedJapaneseColorEmphasis[index]) > 0.0005
+                    || karaokeKey != appliedKaraokeTokenIndex[index] else { continue }
+            appliedJapaneseColorEmphasis[index] = emphasis
+            appliedKaraokeTokenIndex[index] = karaokeKey
+            let baseColor = japaneseColor(forEmphasis: emphasis)
+            if let karaokeToken,
+               let spoken = spokenIndex(forDisplayIndex: index),
+               let range = tokenSync?.utf16Range(
+                lineIndex: spoken,
+                tokenIndex: karaokeToken,
+                inDisplay: attributed.string
+               ) {
+                let highlightColor = japaneseBubbles.indices.contains(index)
+                    ? japaneseBubbles[index].tokenHighlightColor
+                    : FuriganaTranscriptLabel.tokenSyncHighlightColor
+                label.setTokenHighlightPreservingLayout(
+                    foregroundColor: baseColor,
+                    highlightedRange: range,
+                    fullHeight: ExperimentSettings.dialogueTokenSyncHighlightStyle == .full,
+                    highlightColor: highlightColor
+                )
+            } else {
+                label.setForegroundColorPreservingLayout(baseColor)
+            }
+        }
+    }
+
+    private func karaokeTokenIndex(forDisplayIndex index: Int) -> Int? {
+        guard ExperimentSettings.dialogueShowsTokenSync,
+              tokenSync != nil,
+              index == activeLineIndex else { return nil }
+        return activeKaraokeTokenIndex
+    }
+
+    private func japaneseColor(forEmphasis emphasis: CGFloat) -> UIColor {
+        if emphasis <= 0.001 { return Self.inactiveJapaneseColor }
+        if emphasis >= 0.999 { return Self.activeJapaneseColor }
+        let from = Self.inactiveJapaneseColor.resolvedColor(with: traitCollection)
+        let to = Self.activeJapaneseColor.resolvedColor(with: traitCollection)
+        return from.mixed(with: to, amount: emphasis)
+    }
+
+    /// Same emphasis channel as spoken bubbles: scale the caption from center
+    /// and lift the type from secondary to label.
+    private func applyStageLineEmphasisFromEmphasis() {
+        for (index, label) in stageCaptionLabels.enumerated() {
+            guard let label else { continue }
+            let emphasis = lineEmphasis.indices.contains(index) ? lineEmphasis[index] : 0
+            let scale = 1 + (Self.activeBubbleScale - 1) * emphasis
+            label.transform = abs(scale - 1) > 0.001
+                ? CGAffineTransform(scaleX: scale, y: scale)
+                : .identity
+            label.textColor = japaneseColor(forEmphasis: emphasis)
+        }
+    }
+
+    /// Opens extra stack space above and below a focused stage line so it can
+    /// sit in a clear band while the 0.75s hold asks you to read the scene.
+    private func applyStageLineRowSpacingFromEmphasis() {
+        guard lineRows.count == displayLines.count, displayLines.count > 1 else { return }
+        for index in displayLines.indices.dropLast() {
+            let line = displayLines[index]
+            let next = displayLines[index + 1]
+            guard !line.isSpokenLine || !next.isSpokenLine else { continue }
+            let emphasis = max(
+                !line.isSpokenLine && lineEmphasis.indices.contains(index) ? lineEmphasis[index] : 0,
+                !next.isSpokenLine && lineEmphasis.indices.contains(index + 1) ? lineEmphasis[index + 1] : 0
+            )
+            let spacing = dialogueSpacingAfterLineRow(line: line, nextLine: next)
+                + Self.stageLineFocusExtraSpacing * emphasis
+            contentStack.setCustomSpacing(spacing, after: lineRows[index])
+        }
     }
 
     private func applyMessageColumnSpacingFromEmphasis() {
@@ -1917,6 +2797,7 @@ final class DialogueExperimentViewController: UIViewController {
         }
 
         for (index, layout) in messageColumnLayouts.enumerated() {
+            guard displayLines.indices.contains(index), displayLines[index].isSpokenLine else { continue }
             let emphasis = lineEmphasis.indices.contains(index) ? lineEmphasis[index] : 0
             guard abs(emphasis - appliedRowSpacingEmphasis[index]) > 0.0005 else { continue }
             appliedRowSpacingEmphasis[index] = emphasis
@@ -1936,32 +2817,35 @@ final class DialogueExperimentViewController: UIViewController {
         side: DialogueSpeakerSide
     ) {
         let scale = 1 + (Self.activeBubbleScale - 1) * emphasis
-        guard abs(scale - 1) > 0.001, bubble.bounds.width > 0 else {
-            bubble.transform = .identity
-            return
+        let transform: CGAffineTransform
+        if abs(scale - 1) > 0.001, bubble.bounds.width > 0 {
+            let width = bubble.bounds.width
+            let dx: CGFloat
+            switch side {
+            case .leading:
+                dx = -width * (1 - scale) / 2
+            case .trailing:
+                dx = width * (1 - scale) / 2
+            }
+            transform = CGAffineTransform(translationX: dx, y: 0).scaledBy(x: scale, y: scale)
+        } else {
+            transform = .identity
         }
 
-        let width = bubble.bounds.width
-        let dx: CGFloat
-        switch side {
-        case .leading:
-            dx = -width * (1 - scale) / 2
-        case .trailing:
-            dx = width * (1 - scale) / 2
+        if let container = bubble.superview as? DialogueBubbleSwipeRevealContainer {
+            container.setBaseBubbleTransform(transform)
+        } else {
+            bubble.transform = transform
         }
-        bubble.transform = CGAffineTransform(translationX: dx, y: 0).scaledBy(x: scale, y: scale)
     }
 
     private func applyScrollContentInsets() {
         let transportInset = max(transportBarContainer.bounds.height, 0) + Self.scrollBottomContentInsetExtra
-        let topInset = presentationContext == .nestedPagingHost ? nestedPagingTopContentInset : 0
-        scrollView.contentInset = UIEdgeInsets(top: topInset, left: 0, bottom: transportInset, right: 0)
-        scrollView.verticalScrollIndicatorInsets = UIEdgeInsets(
-            top: topInset,
-            left: 0,
-            bottom: transportInset,
-            right: 0
-        )
+        let topInset = dialogueScrollTopContentInset()
+        let insets = UIEdgeInsets(top: topInset, left: 0, bottom: transportInset, right: 0)
+        guard scrollView.contentInset != insets else { return }
+        scrollView.contentInset = insets
+        scrollView.verticalScrollIndicatorInsets = insets
     }
 
     // MARK: - Actions
@@ -1972,8 +2856,43 @@ final class DialogueExperimentViewController: UIViewController {
         }
     }
 
-    private func presentSentenceFocus(forLineAt index: Int) {
-        guard displayLines.indices.contains(index) else { return }
+    func dialogueShouldInstallBubbleSwipe(isRevealMode: Bool, isListeningLineMeterRow: Bool) -> Bool {
+        !isListeningLineMeterRow
+    }
+
+    /// When true, the speaker-name row is at least as tall as Role Play mic/Hear
+    /// chrome so those buttons sit in-row instead of overflowing (and clipping).
+    func dialogueReservesAccessoryChromeHeight() -> Bool { false }
+
+    func dialogueDidInstallBubbleSwipe(
+        _ container: DialogueBubbleSwipeRevealContainer,
+        at index: Int,
+        isRevealMode: Bool
+    ) {
+        container.onCommit = { [weak self] in
+            self?.presentSentenceFocus(forLineAt: index)
+        }
+        if displayLines.indices.contains(index) {
+            container.chromeEdge = displayLines[index].speakerSide == .leading
+                ? .trailing
+                : .leading
+        }
+        if isRevealMode {
+            container.allowsProgressiveReveal = true
+            container.onProgressiveRevealCommit = { [weak self] in
+                self?.advanceRevealLevel(at: index, animated: true)
+            }
+        } else if dialogueHidesEnglishUntilSwipe(), lineHasEnglishTranslation(at: index) {
+            container.allowsProgressiveReveal = true
+            container.progressiveRevealAccessibilityHint = "swipe left to show or hide English"
+            container.onProgressiveRevealCommit = { [weak self] in
+                self?.toggleEnglishReveal(at: index, animated: true)
+            }
+        }
+    }
+
+    func presentSentenceFocus(forLineAt index: Int) {
+        guard displayLines.indices.contains(index), displayLines[index].isSpokenLine else { return }
         let sentence = displayLines[index].japanese
 
         // Stop full-clip playback so sentence scrub owns audio while focused.
@@ -1981,43 +2900,114 @@ final class DialogueExperimentViewController: UIViewController {
             pausePlayback()
         }
 
+        let spokenIndex = spokenIndex(forDisplayIndex: index)
         let dialogueLineAudio: DialogueLineAudioReference?
-        if spokenLineTexts.indices.contains(index),
+        if let spokenIndex,
+           spokenLineTexts.indices.contains(spokenIndex),
            (example.publishedAudioUrl?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             || example.audioKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) {
             dialogueLineAudio = DialogueLineAudioReference(
                 publishedAudioUrl: example.publishedAudioUrl,
                 audioKey: example.audioKey ?? "",
                 cacheMetadata: example.remoteAudioCacheMetadata,
-                lineIndex: index,
+                lineIndex: spokenIndex,
                 dialogueLines: spokenLineTexts
             )
         } else {
             dialogueLineAudio = nil
         }
 
+        let tokens = spokenIndex.flatMap { tokenSync?.japaneseTokens(lineIndex: $0, in: sentence) }
+
         let scrub = SentenceScrubExperimentViewController(
             sentence: sentence,
             englishTranslation: displayLines[index].english,
-            dialogueLineAudio: dialogueLineAudio
+            dialogueLineAudio: dialogueLineAudio,
+            dialogueContext: nuanceContext(forDisplayIndex: index),
+            tokens: tokens
         )
         navigationController?.pushViewController(scrub, animated: true)
     }
 
-    @objc private func handleLineTap(_ gesture: UITapGestureRecognizer) {
+    private func nuanceContext(forDisplayIndex index: Int) -> DialogueNuanceContext? {
+        var lines: [DialogueNuanceContext.Line] = []
+        var focusedOffset: Int?
+        for (displayIndex, line) in displayLines.enumerated() {
+            guard !line.isStageLine else { continue }
+            let japanese = line.japanese.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !japanese.isEmpty else { continue }
+            if displayIndex == index {
+                focusedOffset = lines.count
+            }
+            lines.append(
+                DialogueNuanceContext.Line(
+                    speaker: line.speaker,
+                    japanese: japanese,
+                    english: line.english
+                )
+            )
+        }
+        guard let focusedOffset else { return nil }
+        return DialogueNuanceContext.around(lines: lines, focusedIndex: focusedOffset)
+    }
+
+    @objc func handleLineTap(_ gesture: UITapGestureRecognizer) {
         guard let row = gesture.view else { return }
         let index = row.tag
-        guard alignedLines.indices.contains(index) else { return }
+        if displayLines.indices.contains(index), displayLines[index].isInlineQuestion {
+            presentInlineQuestion(atDisplayIndex: index)
+            return
+        }
+        playLine(at: index)
+    }
+
+    private func presentInlineQuestion(atDisplayIndex displayIndex: Int) {
+        guard displayLines.indices.contains(displayIndex),
+              displayLines[displayIndex].isInlineQuestion else { return }
+        let previousSpoken = (0..<displayIndex)
+            .reversed()
+            .compactMap { spokenIndex(forDisplayIndex: $0) }
+            .first
+        if let previousSpoken {
+            heldInlineQuestionBoundaries.insert(previousSpoken)
+        }
+        let resumeSpoken = (previousSpoken ?? -1) + 1
+        if playbackPhase == .playing {
+            beginInlineQuestionHold(
+                displayIndices: [displayIndex],
+                resumeSpokenIndex: resumeSpoken,
+                finishing: !alignedLines.indices.contains(resumeSpoken)
+            )
+            return
+        }
+        pendingInlineQuestionDisplayIndices = [displayIndex]
+        pendingInlineResumeSpokenIndex = nil
+        pendingFinishAfterInlineQuestion = false
+        isHoldingForInlineQuestion = true
+        presentNextInlineQuestion()
+    }
+
+    func playLine(at displayIndex: Int) {
+        guard let spokenIndex = spokenIndex(forDisplayIndex: displayIndex) else { return }
+        guard alignedLines.indices.contains(spokenIndex) else { return }
+        guard dialogueShouldAllowLineTap(at: displayIndex) else { return }
 
         guard let player = makePlayer() else { return }
 
-        let range = alignedLines[index].timeRange
-        seekTargetLineIndex = index
+        cancelStageLineHold()
+        cancelInlineQuestionHold()
+        for index in 0...spokenIndex {
+            heldStageBoundaries.insert(index)
+            heldInlineQuestionBoundaries.insert(index)
+        }
+
+        let range = alignedLines[spokenIndex].timeRange
+        seekTargetLineIndex = spokenIndex
         player.currentTime = range.lowerBound
         playbackPhase = .playing
         updateTransportControls()
         updateElapsedLabel(currentTime: range.lowerBound)
-        setActiveLine(index, animated: true)
+        setActiveLine(displayIndex, animated: true)
         startPlayerAfterSessionActivation(player)
     }
 
@@ -2086,18 +3076,14 @@ final class DialogueExperimentViewController: UIViewController {
         var slot = lineRevealSlots[index]
 
         let japaneseFont = Self.dialogueJapaneseBaseFont
-        var displayInsets = JapaneseFuriganaBuilder.dialogueBubbleDisplayInsets(for: japaneseFont)
-        displayInsets.top += 2
         label.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-        JapaneseFuriganaBuilder.applyScrubDisplay(
+        JapaneseFuriganaBuilder.applyDialogueBubbleDisplay(
             to: label,
-            attributed: JapaneseFuriganaBuilder.dialogueBubbleAttributedString(
-                for: line.japanese,
-                font: japaneseFont,
-                textColor: Self.inactiveJapaneseColor
-            ),
-            contentInsets: displayInsets
+            text: line.japanese,
+            font: japaneseFont,
+            textColor: Self.inactiveJapaneseColor
         )
+        DialogueContentLineWrap.applyOrphanGlue(to: label)
 
         NSLayoutConstraint.deactivate(slot.meterBubbleSizingConstraints)
         slot.textMinWidthConstraint?.isActive = true
@@ -2107,7 +3093,7 @@ final class DialogueExperimentViewController: UIViewController {
         // Meter stays parked (centered) under the text while hidden.
         label.alpha = 0
         bubble.setLabelContributesToLayout(true)
-        bubble.setUnderglowConfiguration(.default)
+        bubble.setUnderglowConfiguration(.forSpeaker(line.speakerSide))
         slot.meter.releaseToRest()
 
         let apply = {
@@ -2168,14 +3154,14 @@ final class DialogueExperimentViewController: UIViewController {
 
         messageColumnLayouts[index].hasEnglish = false
 
+        // Hide inside the animation so UIStackView collapses the English slot
+        // with the same layout pass as the alpha fade — deferring `isHidden`
+        // to completion made rows below jump into place.
         let apply = {
             englishWrapper.alpha = 0
+            englishWrapper.isHidden = true
             self.view.layoutIfNeeded()
             self.applyMessageColumnSpacingFromEmphasis()
-        }
-
-        let finish = {
-            englishWrapper.isHidden = true
         }
 
         if animated {
@@ -2186,12 +3172,9 @@ final class DialogueExperimentViewController: UIViewController {
                 initialSpringVelocity: 0,
                 options: [.allowUserInteraction, .beginFromCurrentState],
                 animations: apply
-            ) { _ in
-                finish()
-            }
+            )
         } else {
             apply()
-            finish()
         }
     }
 
@@ -2213,12 +3196,7 @@ final class DialogueExperimentViewController: UIViewController {
         NSLayoutConstraint.activate(slot.meterBubbleSizingConstraints)
         lineRevealSlots[index] = slot
 
-        var glowConfig = DialogueBubbleUnderglowConfiguration.default
-        glowConfig.color = side == .leading ? .blue : .yellow
-        glowConfig.horizontalInset = 12
-        glowConfig.blurRadius = 8
-        glowConfig.offsetX = 0
-        bubble.setUnderglowConfiguration(glowConfig)
+        bubble.setUnderglowConfiguration(.compactMeter(for: side))
 
         let apply = {
             slot.meter.alpha = 1
@@ -2240,10 +3218,126 @@ final class DialogueExperimentViewController: UIViewController {
         }
     }
 
-    private func togglePlayPause() {
+    private func lineHasEnglishTranslation(at index: Int) -> Bool {
+        guard displayLines.indices.contains(index) else { return false }
+        let text = displayLines[index].english?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !text.isEmpty
+    }
+
+    private func toggleEnglishReveal(at index: Int, animated: Bool) {
+        guard englishWrappers.indices.contains(index),
+              englishWrappers[index] != nil else { return }
+        if englishRevealedIndices.contains(index) {
+            concealEnglishTranslation(at: index, animated: animated)
+        } else {
+            revealEnglishTranslation(at: index, animated: animated)
+        }
+    }
+
+    private func revealEnglishTranslation(at index: Int, animated: Bool) {
+        guard messageColumnLayouts.indices.contains(index),
+              englishWrappers.indices.contains(index),
+              let englishWrapper = englishWrappers[index] else { return }
+
+        englishRevealedIndices.insert(index)
+        englishWrapper.isHidden = false
+        messageColumnLayouts[index].hasEnglish = true
+
+        let apply = {
+            englishWrapper.alpha = 1
+            self.view.layoutIfNeeded()
+            self.applyMessageColumnSpacingFromEmphasis()
+        }
+
+        if animated {
+            lineChangeHaptic.impactOccurred()
+            UIView.animate(
+                withDuration: 0.34,
+                delay: 0,
+                usingSpringWithDamping: 0.9,
+                initialSpringVelocity: 0,
+                options: [.allowUserInteraction, .beginFromCurrentState],
+                animations: apply
+            ) { _ in
+                self.scrollLineIntoView(at: index, animated: true)
+            }
+        } else {
+            apply()
+        }
+    }
+
+    private func concealEnglishTranslation(at index: Int, animated: Bool) {
+        guard messageColumnLayouts.indices.contains(index),
+              englishWrappers.indices.contains(index),
+              let englishWrapper = englishWrappers[index] else { return }
+
+        englishRevealedIndices.remove(index)
+        messageColumnLayouts[index].hasEnglish = false
+
+        // Hide inside the animation so UIStackView collapses the English slot
+        // with the same layout pass as the alpha fade — deferring `isHidden`
+        // to completion made rows below jump into place.
+        let apply = {
+            englishWrapper.alpha = 0
+            englishWrapper.isHidden = true
+            self.view.layoutIfNeeded()
+            self.applyMessageColumnSpacingFromEmphasis()
+        }
+
+        if animated {
+            lineChangeHaptic.impactOccurred()
+            UIView.animate(
+                withDuration: 0.34,
+                delay: 0,
+                usingSpringWithDamping: 0.9,
+                initialSpringVelocity: 0,
+                options: [.allowUserInteraction, .beginFromCurrentState],
+                animations: apply
+            )
+        } else {
+            apply()
+        }
+    }
+
+    private func applyScenarioSummaryVisibility(animated: Bool) {
+        let setting = example.scenario?.setting?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let shouldShow = dialogueShowsScenarioChrome()
+            && !setting.isEmpty
+            && (!dialogueHidesSummaryUntilHeard() || hasHeardScenario)
+        let apply = {
+            self.settingLabel.isHidden = !shouldShow
+            self.settingLabel.alpha = shouldShow ? 1 : 0
+            if self.contentStackTopConstraint != nil, !self.isPerformingLayoutSideEffects {
+                self.view.layoutIfNeeded()
+            }
+        }
+        if shouldShow {
+            settingLabel.isHidden = false
+        }
+        if animated, view.window != nil {
+            UIView.animate(
+                withDuration: 0.34,
+                delay: 0,
+                options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState],
+                animations: apply
+            ) { _ in
+                self.settingLabel.isHidden = !shouldShow
+            }
+        } else {
+            apply()
+        }
+    }
+
+    private func markScenarioHeardIfNeeded() {
+        guard !hasHeardScenario else { return }
+        hasHeardScenario = true
+        applyScenarioSummaryVisibility(animated: true)
+    }
+
+    func togglePlayPause() {
         switch playbackPhase {
         case .idle, .finished:
-            startPlayback(fromBeginning: playbackPhase == .idle)
+            startPlayback(fromBeginning: true)
         case .playing:
             pausePlayback()
         case .paused:
@@ -2251,29 +3345,149 @@ final class DialogueExperimentViewController: UIViewController {
         }
     }
 
-    private func restartTapped() {
+    func restartTapped() {
         stopPlayback(resetPosition: true)
         startPlayback(fromBeginning: true)
     }
 
-    private func updateTransportControls() {
+    func dialoguePlayPauseSymbolName(isPlaying: Bool) -> String {
+        isPlaying ? "pause.fill" : "play.fill"
+    }
+
+    func dialoguePlayPauseAccessibilityLabel(isPlaying: Bool) -> String {
+        isPlaying ? "Pause" : "Play"
+    }
+
+    func dialogueDidTickPlayback(at time: TimeInterval) {}
+
+    func dialogueShouldAllowLineTap(at index: Int) -> Bool {
+        guard displayLines.indices.contains(index), displayLines[index].isSpokenLine else { return false }
+        return true
+    }
+
+    /// Role Play keeps completed / in-progress match colors out of the
+    /// secondary → label emphasis interpolation.
+    func dialogueShouldApplyEmphasisTextColor(at index: Int) -> Bool { true }
+
+    func dialogueShowsScenarioChrome() -> Bool { true }
+
+    func dialogueShowsMetadataHeader() -> Bool { true }
+
+    func dialogueHeaderBottomSpacing() -> CGFloat { 64 }
+
+    /// Vertical gap between consecutive transcript rows. Role Play overrides to
+    /// clear accessory chrome that sits above the bubble.
+    func dialogueSpacingAfterLineRow(
+        line: DialogueLineDisplay,
+        nextLine: DialogueLineDisplay
+    ) -> CGFloat {
+        if !line.isSpokenLine || !nextLine.isSpokenLine { return Self.stageLineRowSpacing }
+        return nextLine.speaker == line.speaker ? 20 : 48
+    }
+
+    func dialogueScrollTopContentInset() -> CGFloat {
+        presentationContext == .nestedPagingHost ? nestedPagingTopContentInset : 0
+    }
+
+    func dialogueContentStackTopConstant() -> CGFloat { 8 }
+
+    func dialogueContentHorizontalInset() -> CGFloat { 24 }
+
+    func dialogueShouldSyncActiveLineFromPlayback() -> Bool { true }
+
+    /// Pause the clip and focus each stage direction for ``stageLineHold``
+    /// before the next spoken line. Role Play sequences its own holds.
+    func dialogueShouldHoldForStageLinesDuringPlayback() -> Bool { true }
+
+    func dialogueShowsElapsedTime() -> Bool {
+        presentationContext == .standalone
+    }
+
+    /// Hide play when the clip is missing — a clear in-app signal that audio
+    /// still needs to be generated for this dialogue.
+    func dialogueShowsPlayButton() -> Bool {
+        resolvedAudioURL != nil
+    }
+
+    func dialogueShowsOverflowButton() -> Bool { true }
+
+    /// Japanese is the default; English is a left-swipe.
+    func dialogueHidesEnglishUntilSwipe() -> Bool {
+        transcriptDisplayMode == .full
+    }
+
+    /// Scene-setting copy would give away the dialogue before you hear it.
+    func dialogueHidesSummaryUntilHeard() -> Bool { true }
+
+    func updateTransportControls() {
         let isPlaying = playbackPhase == .playing
         let symbolConfig = UIImage.SymbolConfiguration(pointSize: Self.transportGlyphPointSize, weight: .semibold)
         playGlyphView.image = UIImage(
-            systemName: isPlaying ? "pause.fill" : "play.fill",
+            systemName: dialoguePlayPauseSymbolName(isPlaying: isPlaying),
             withConfiguration: symbolConfig
         )?.withRenderingMode(.alwaysTemplate)
         playGlyphView.preferredSymbolConfiguration = symbolConfig
+        playPauseButton.accessibilityLabel = dialoguePlayPauseAccessibilityLabel(isPlaying: isPlaying)
+        let showPlay = dialogueShowsPlayButton()
+        playPauseButton.isHidden = !showPlay
+        playPauseButton.isUserInteractionEnabled = showPlay
+        let showOverflow = dialogueShowsOverflowButton()
+        overflowButton.isHidden = !showOverflow
+        overflowButton.isUserInteractionEnabled = showOverflow
     }
 
     private func updateElapsedLabel(currentTime: TimeInterval) {
-        guard presentationContext == .standalone else { return }
+        guard dialogueShowsElapsedTime() else { return }
         elapsedLabel.text = Self.formatElapsed(currentTime)
+    }
+
+    /// Cold listen shows `cold` stage lines; practice-only stage lines are omitted.
+    func dialogueIncludesStageLineVisibility(_ visibility: DialogueStageLineVisibility) -> Bool {
+        visibility == .cold
+    }
+
+    private func makeDisplayLines(for example: GrammarExample) -> [DialogueLineDisplay] {
+        Self.makeDisplayLines(
+            for: example,
+            includesStageVisibility: { [weak self] visibility in
+                self?.dialogueIncludesStageLineVisibility(visibility) ?? (visibility == .cold)
+            }
+        )
+    }
+
+    private func rebuildSpokenLineIndexMaps() {
+        var spokenToDisplay: [Int] = []
+        var spokenForDisplay: [Int?] = []
+        var spokenCounter = 0
+        for (displayIndex, line) in displayLines.enumerated() {
+            if !line.isSpokenLine {
+                spokenForDisplay.append(nil)
+            } else {
+                spokenToDisplay.append(displayIndex)
+                spokenForDisplay.append(spokenCounter)
+                spokenCounter += 1
+            }
+        }
+        spokenLineDisplayIndices = spokenToDisplay
+        displayLineSpokenIndices = spokenForDisplay
+    }
+
+    func spokenIndex(forDisplayIndex displayIndex: Int) -> Int? {
+        guard displayLineSpokenIndices.indices.contains(displayIndex) else { return nil }
+        return displayLineSpokenIndices[displayIndex]
+    }
+
+    func displayIndex(forSpokenIndex spokenIndex: Int) -> Int? {
+        guard spokenLineDisplayIndices.indices.contains(spokenIndex) else { return nil }
+        return spokenLineDisplayIndices[spokenIndex]
     }
 
     // MARK: - Builders
 
-    private static func makeDisplayLines(for example: GrammarExample) -> [DialogueLineDisplay] {
+    private static func makeDisplayLines(
+        for example: GrammarExample,
+        includesStageVisibility: (DialogueStageLineVisibility) -> Bool
+    ) -> [DialogueLineDisplay] {
         guard let scenario = example.scenario, !scenario.lines.isEmpty else {
             return [
                 DialogueLineDisplay(
@@ -2281,7 +3495,9 @@ final class DialogueExperimentViewController: UIViewController {
                     speakerSide: .leading,
                     showsSpeakerLabel: true,
                     japanese: example.japanese,
-                    english: example.english
+                    english: example.english,
+                    stageDirection: nil,
+                    inlineQuestion: nil
                 ),
             ]
         }
@@ -2289,8 +3505,40 @@ final class DialogueExperimentViewController: UIViewController {
         var speakerSides: [String: DialogueSpeakerSide] = [:]
         var nextSide: DialogueSpeakerSide = .leading
         var previousSpeaker: String?
+        var result: [DialogueLineDisplay] = []
 
-        return scenario.lines.map { line in
+        for line in scenario.lines {
+            if let question = line.inlineQuestion {
+                print("[inline-question] display-row +\(result.count) \(example.sourceScenarioId ?? "?") \(question.prompt)")
+                result.append(
+                    DialogueLineDisplay(
+                        speaker: "",
+                        speakerSide: .leading,
+                        showsSpeakerLabel: false,
+                        japanese: "",
+                        english: nil,
+                        stageDirection: nil,
+                        inlineQuestion: question
+                    )
+                )
+                continue
+            }
+            if let visibility = line.stageVisibility {
+                guard includesStageVisibility(visibility) else { continue }
+                result.append(
+                    DialogueLineDisplay(
+                        speaker: "",
+                        speakerSide: .leading,
+                        showsSpeakerLabel: false,
+                        japanese: "",
+                        english: nil,
+                        stageDirection: .init(text: line.japanese, visibility: visibility),
+                        inlineQuestion: nil
+                    )
+                )
+                continue
+            }
+
             if speakerSides[line.speaker] == nil {
                 speakerSides[line.speaker] = nextSide
                 nextSide = nextSide == .leading ? .trailing : .leading
@@ -2299,14 +3547,20 @@ final class DialogueExperimentViewController: UIViewController {
             let showsSpeakerLabel = line.speaker != previousSpeaker
             previousSpeaker = line.speaker
 
-            return DialogueLineDisplay(
-                speaker: line.speaker,
-                speakerSide: speakerSides[line.speaker]!,
-                showsSpeakerLabel: showsSpeakerLabel,
-                japanese: line.japanese,
-                english: line.english
+            result.append(
+                DialogueLineDisplay(
+                    speaker: line.speaker,
+                    speakerSide: speakerSides[line.speaker]!,
+                    showsSpeakerLabel: showsSpeakerLabel,
+                    japanese: line.japanese,
+                    english: line.english,
+                    stageDirection: nil,
+                    inlineQuestion: nil
+                )
             )
         }
+
+        return result
     }
 
     private static func speakerPrefix(for speaker: String) -> String {
@@ -2315,29 +3569,63 @@ final class DialogueExperimentViewController: UIViewController {
         return "\(trimmed):"
     }
 
-    private static func insetMetadataWrapper(around label: UILabel, side: DialogueSpeakerSide) -> UIView {
+    private enum MetadataVerticalPin {
+        /// Label fills the wrapper (english under a bubble).
+        case fill
+        /// Label sits on the wrapper's bottom edge so a taller header (role-play
+        /// controls) still keeps the name on the bubble.
+        case bottom
+    }
+
+    private static func insetMetadataWrapper(
+        around label: UILabel,
+        side: DialogueSpeakerSide,
+        verticalPin: MetadataVerticalPin = .fill
+    ) -> UIView {
         let wrapper = UIView()
         wrapper.translatesAutoresizingMaskIntoConstraints = false
         label.translatesAutoresizingMaskIntoConstraints = false
         wrapper.addSubview(label)
 
-        switch side {
-        case .leading:
-            NSLayoutConstraint.activate([
+        var constraints: [NSLayoutConstraint] = []
+        switch (side, verticalPin) {
+        case (.leading, .fill):
+            constraints += [
                 label.topAnchor.constraint(equalTo: wrapper.topAnchor),
+                label.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
                 label.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: metadataHorizontalInset),
                 label.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor),
-                label.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
-            ])
-        case .trailing:
-            NSLayoutConstraint.activate([
+            ]
+        case (.trailing, .fill):
+            constraints += [
                 label.topAnchor.constraint(equalTo: wrapper.topAnchor),
+                label.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
                 label.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -metadataHorizontalInset),
                 label.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor),
+            ]
+        case (.leading, .bottom):
+            constraints += [
                 label.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
-            ])
+                label.topAnchor.constraint(greaterThanOrEqualTo: wrapper.topAnchor),
+                label.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: metadataHorizontalInset),
+                label.trailingAnchor.constraint(lessThanOrEqualTo: wrapper.trailingAnchor),
+            ]
+            let hugTop = label.topAnchor.constraint(equalTo: wrapper.topAnchor)
+            hugTop.priority = .defaultHigh
+            constraints.append(hugTop)
+        case (.trailing, .bottom):
+            constraints += [
+                label.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
+                label.topAnchor.constraint(greaterThanOrEqualTo: wrapper.topAnchor),
+                label.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -metadataHorizontalInset),
+                label.leadingAnchor.constraint(greaterThanOrEqualTo: wrapper.leadingAnchor),
+            ]
+            let hugTop = label.topAnchor.constraint(equalTo: wrapper.topAnchor)
+            hugTop.priority = .defaultHigh
+            constraints.append(hugTop)
         }
 
+        NSLayoutConstraint.activate(constraints)
         return wrapper
     }
 
@@ -2357,8 +3645,11 @@ final class DialogueExperimentViewController: UIViewController {
         return String(format: "%02d:%02d.%02d", minutes, seconds, hundredths)
     }
 
-    /// Shared duration for the bubble emphasis and follow-along scroll so both motions
-    /// read as one gesture. Keep comfortably under the shortest line duration.
+    /// Pause after a stage direction so the scene can land before the next line.
+    private static let stageLineHold: TimeInterval = 0.75
+
+    /// Shared duration for the bubble emphasis, follow-along scroll, and
+    /// quick-check focus fade so those motions read as one gesture.
     private static let emphasisAnimationDuration: TimeInterval = 0.35
     private static let messageColumnBaseSpacing: CGFloat = 6
     /// Extra vertical gap above/below the bubble while a line is focused.
@@ -2374,14 +3665,35 @@ final class DialogueExperimentViewController: UIViewController {
     private static let metadataHorizontalInset: CGFloat = 20
     /// Extra space kept above the active line when follow-along scrolling.
     private static let followAlongTopBuffer: CGFloat = 56
-    /// Extra space kept below the active line's bottom edge when follow-along scrolling.
-    private static let followAlongBottomBuffer: CGFloat = 72
-    /// Breathing room between the last dialogue row and the transport bar.
-    private static let scrollBottomContentInsetExtra: CGFloat = 16
-    private static let inactiveJapaneseColor: UIColor = .label
+    /// Extra space kept below the English (or bubble) so it clears the bottom
+    /// transport bar and its edge-effect blur.
+    private static let followAlongBottomBuffer: CGFloat = 100
+    /// Stage directions need a wider empty band so the scene can be read
+    /// without a bubble crowding the caption.
+    private static let stageFollowAlongTopBuffer: CGFloat = 88
+    private static let stageFollowAlongBottomBuffer: CGFloat = 136
+    /// Inner padding on the stage-direction caption itself.
+    private static let stageDirectionVerticalPadding: CGFloat = 24
+    /// Stack gap before/after a stage row (larger than a speaker change).
+    private static let stageLineRowSpacing: CGFloat = 52
+    /// Extra stack gap opened while a stage line is focused.
+    private static let stageLineFocusExtraSpacing: CGFloat = 24
+    /// Must be at least ``followAlongBottomBuffer`` so the last revealed line can
+    /// actually scroll that far above the transport bar.
+    private static let scrollBottomContentInsetExtra: CGFloat = 100
+    private static let inactiveJapaneseColor: UIColor = .secondaryLabel
+    private static let activeJapaneseColor: UIColor = .label
 
     private static let englishFont: UIFont = .preferredFont(forTextStyle: .subheadline)
     private static let englishColor: UIColor = .secondaryLabel
+
+    private static let stageDirectionFont: UIFont = {
+        let base = UIFont.preferredFont(forTextStyle: .subheadline)
+        guard let italicDescriptor = base.fontDescriptor.withSymbolicTraits(.traitItalic) else {
+            return base
+        }
+        return UIFont(descriptor: italicDescriptor, size: base.pointSize)
+    }()
 
     private func availableMessageColumnWidth() -> CGFloat {
         let margins = contentStack.layoutMargins.left + contentStack.layoutMargins.right
@@ -2397,12 +3709,25 @@ final class DialogueExperimentViewController: UIViewController {
         guard columnMaxWidth != appliedBubbleMinWidthColumnWidth else { return }
         appliedBubbleMinWidthColumnWidth = columnMaxWidth
 
-        for (index, constraint) in bubbleMinWidthConstraints.enumerated() {
-            guard displayLines.indices.contains(index) else { continue }
-            constraint.constant = Self.minimumBubbleWidth(
-                for: displayLines[index],
+        var constraintIndex = 0
+        for (lineIndex, line) in displayLines.enumerated() {
+            guard line.isSpokenLine else { continue }
+            if japaneseLabels.indices.contains(lineIndex),
+               japaneseBubbles.indices.contains(lineIndex) {
+                let textWidth = max(
+                    0,
+                    columnMaxWidth - japaneseBubbles[lineIndex].layoutHorizontalContentPadding
+                )
+                japaneseLabels[lineIndex].preferredMaxLayoutWidth = textWidth
+                japaneseLabels[lineIndex].invalidateIntrinsicContentSize()
+                japaneseBubbles[lineIndex].invalidateIntrinsicContentSize()
+            }
+            guard bubbleMinWidthConstraints.indices.contains(constraintIndex) else { continue }
+            bubbleMinWidthConstraints[constraintIndex].constant = Self.minimumBubbleWidth(
+                for: line,
                 columnMaxWidth: columnMaxWidth
             )
+            constraintIndex += 1
         }
     }
 
@@ -2410,28 +3735,26 @@ final class DialogueExperimentViewController: UIViewController {
         for line: DialogueLineDisplay,
         columnMaxWidth: CGFloat
     ) -> CGFloat {
+        guard line.isSpokenLine else { return 0 }
         let layoutFont = dialogueJapaneseBaseFont
-        let attributed = JapaneseFuriganaBuilder.dialogueBubbleAttributedString(
-            for: line.japanese,
-            font: layoutFont,
-            textColor: inactiveJapaneseColor
+        let attributed = DialogueContentLineWrap.preparingForLayout(
+            JapaneseFuriganaBuilder.dialogueBubbleAttributedString(
+                for: line.japanese,
+                font: layoutFont,
+                textColor: inactiveJapaneseColor
+            )
         )
         let horizontalPadding = DialogueJapaneseBubbleView.horizontalContentPadding
         let maxTextWidth = max(0, columnMaxWidth - horizontalPadding)
-
-        let singleLineRect = attributed.boundingRect(
-            with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            context: nil
+        // Measure after wrapping so a hanging-punctuation break can shrink
+        // the bubble to the longest line instead of the column cap.
+        let usedWidth = ceil(
+            JapaneseFuriganaBuilder.usedBaseTextWidth(
+                for: attributed,
+                limitingWidth: maxTextWidth
+            )
         )
-        let wrappedRect = attributed.boundingRect(
-            with: CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            context: nil
-        )
-
-        let textWidth = max(ceil(singleLineRect.width), ceil(wrappedRect.width))
-        return min(columnMaxWidth, textWidth + horizontalPadding)
+        return min(columnMaxWidth, usedWidth + horizontalPadding)
     }
 
 
@@ -2481,7 +3804,159 @@ final class DialogueExperimentViewController: UIViewController {
     }
 }
 
+// MARK: - Role-play subclass API
+
+extension DialogueExperimentViewController {
+    func dialogueRebuildDisplayLines() {
+        displayLines = makeDisplayLines(for: example)
+        spokenLineTexts = GrammarExampleDialogueLines.lines(for: example)
+        rebuildSpokenLineIndexMaps()
+        rebuildInlineQuestionMap()
+        refreshTokenSync()
+    }
+
+    var dialogueDisplayLines: [DialogueLineDisplay] { displayLines }
+    var dialogueAlignedLines: [AlignedTimeLine] { alignedLines }
+    var dialogueJapaneseLabels: [FuriganaTranscriptLabel] { japaneseLabels }
+    var dialogueJapaneseBubbles: [DialogueJapaneseBubbleView] { japaneseBubbles }
+    var dialoguePlaybackPhase: DialoguePlaybackPhase { playbackPhase }
+
+    func dialogueMessageColumn(at index: Int) -> UIStackView? {
+        guard messageColumnLayouts.indices.contains(index) else { return nil }
+        return messageColumnLayouts[index].column
+    }
+
+    func dialogueBubbleLayoutView(at index: Int) -> UIView? {
+        guard messageColumnLayouts.indices.contains(index) else { return nil }
+        return messageColumnLayouts[index].bubbleView
+    }
+
+    func dialogueViewBeforeBubble(at index: Int) -> UIView? {
+        guard messageColumnLayouts.indices.contains(index) else { return nil }
+        return messageColumnLayouts[index].viewBeforeBubble
+    }
+    var dialogueSeekTargetLineIndex: Int? {
+        get { seekTargetLineIndex }
+        set { seekTargetLineIndex = newValue }
+    }
+
+    static var dialogueJapaneseFont: UIFont { dialogueJapaneseBaseFont }
+    static var dialogueInactiveJapaneseColor: UIColor { inactiveJapaneseColor }
+
+    func dialogueJapaneseColor(forLineAt index: Int) -> UIColor {
+        let emphasis = lineEmphasis.indices.contains(index) ? lineEmphasis[index] : 0
+        return japaneseColor(forEmphasis: emphasis)
+    }
+
+    func dialogueSetActiveLine(_ index: Int?, animated: Bool) {
+        setActiveLine(index, animated: animated)
+    }
+
+    func dialoguePausePlayback() {
+        pausePlayback()
+    }
+
+    func dialogueResumePlayback() {
+        resumePlayback()
+    }
+
+    func dialogueMakePlayer() -> AVAudioPlayer? {
+        makePlayer()
+    }
+
+    func dialogueStartPlayerAfterSessionActivation(_ player: AVAudioPlayer) {
+        startPlayerAfterSessionActivation(player)
+    }
+
+    func dialogueUpdateTransportControls() {
+        updateTransportControls()
+    }
+
+    func dialogueUpdateElapsedLabel(currentTime: TimeInterval) {
+        updateElapsedLabel(currentTime: currentTime)
+    }
+
+    func dialogueStopPlayback(resetPosition: Bool) {
+        stopPlayback(resetPosition: resetPosition)
+    }
+
+    func dialogueSetPlaybackPhase(_ phase: DialoguePlaybackPhase) {
+        playbackPhase = phase
+    }
+
+    func dialogueApplyPlaybackSpeed(_ speed: Float) {
+        setPlaybackSpeed(speed)
+    }
+
+    /// Drops `accessory` into the transport bar's empty center, squeezed between
+    /// the leading controls and play/pause.
+    func dialogueInstallTransportCenterView(_ accessory: UIView) {
+        accessory.translatesAutoresizingMaskIntoConstraints = false
+        transportBarContainer.addSubview(accessory)
+        NSLayoutConstraint.activate([
+            accessory.centerXAnchor.constraint(equalTo: transportBarContainer.centerXAnchor),
+            accessory.centerYAnchor.constraint(equalTo: leftTransportControlsStack.centerYAnchor),
+            accessory.leadingAnchor.constraint(
+                greaterThanOrEqualTo: leftTransportControlsStack.trailingAnchor,
+                constant: 10
+            ),
+            accessory.trailingAnchor.constraint(
+                lessThanOrEqualTo: playPauseButton.leadingAnchor,
+                constant: -10
+            ),
+        ])
+        transportBarContainer.bringSubviewToFront(accessory)
+    }
+
+    var dialoguePlayerCurrentTime: TimeInterval? {
+        audioPlayer?.currentTime
+    }
+
+    var dialogueLineRows: [UIView] { lineRows }
+    var dialogueBubbleSwipeContainers: [DialogueBubbleSwipeRevealContainer] { bubbleSwipeContainers }
+
+    func dialogueWireBubbleSwipeContentPopDeferral() {
+        wireBubbleSwipeContentPopDeferral()
+    }
+
+    func dialogueSetTransportBarHidden(_ hidden: Bool) {
+        transportBarContainer.isHidden = hidden
+        transportBarContainer.isUserInteractionEnabled = !hidden
+    }
+
+    func dialogueMarkScenarioCompleted() {
+        guard let scenarioID else { return }
+        DialogueProgressStore.shared.markCompleted(scenarioID: scenarioID)
+        GrammarMasteryStore.shared.recordEncounter(
+            grammarIDs: grammarPointIDs,
+            scenarioID: scenarioID
+        )
+    }
+}
+
 // MARK: - Scroll: clamped offset
+
+private extension UIColor {
+    func mixed(with other: UIColor, amount: CGFloat) -> UIColor {
+        let t = min(max(amount, 0), 1)
+        var r1: CGFloat = 0
+        var g1: CGFloat = 0
+        var b1: CGFloat = 0
+        var a1: CGFloat = 0
+        var r2: CGFloat = 0
+        var g2: CGFloat = 0
+        var b2: CGFloat = 0
+        var a2: CGFloat = 0
+        getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+        other.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+        return UIColor(
+            red: r1 + (r2 - r1) * t,
+            green: g1 + (g2 - g1) * t,
+            blue: b1 + (b2 - b1) * t,
+            alpha: a1 + (a2 - a1) * t
+        )
+    }
+}
 
 private extension UIScrollView {
     func clampedContentOffsetY(_ y: CGFloat, allowNoScroll: Bool) -> CGFloat? {

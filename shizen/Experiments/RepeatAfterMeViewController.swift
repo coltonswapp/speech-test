@@ -432,16 +432,11 @@ final class RepeatAfterMeViewController: UIViewController {
     }
 
     private func refreshSentenceDisplay() {
-        var displayInsets = JapaneseFuriganaBuilder.dialogueBubbleDisplayInsets(for: Self.sentenceFont)
-        displayInsets.top += 2
-        JapaneseFuriganaBuilder.applyScrubDisplay(
+        JapaneseFuriganaBuilder.applyDialogueBubbleDisplay(
             to: sentenceLabel,
-            attributed: JapaneseFuriganaBuilder.dialogueBubbleAttributedString(
-                for: sentence,
-                font: Self.sentenceFont,
-                textColor: .label
-            ),
-            contentInsets: displayInsets
+            text: sentence,
+            font: Self.sentenceFont,
+            textColor: .label
         )
     }
 
@@ -469,16 +464,11 @@ final class RepeatAfterMeViewController: UIViewController {
         label.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         label.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        var displayInsets = JapaneseFuriganaBuilder.dialogueBubbleDisplayInsets(for: Self.attemptFont)
-        displayInsets.top += 2
-        JapaneseFuriganaBuilder.applyScrubDisplay(
+        JapaneseFuriganaBuilder.applyDialogueBubbleDisplay(
             to: label,
-            attributed: JapaneseFuriganaBuilder.dialogueBubbleAttributedString(
-                for: trimmed,
-                font: Self.attemptFont,
-                textColor: .label
-            ),
-            contentInsets: displayInsets
+            text: trimmed,
+            font: Self.attemptFont,
+            textColor: .label
         )
 
         let bubble = DialogueJapaneseBubbleView(label: label)

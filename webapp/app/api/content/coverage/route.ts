@@ -8,7 +8,7 @@ import {
   dialogueScenario,
   grammarPoint,
 } from "@/lib/db/schema";
-import { dialogueLineSchema } from "@/lib/dialogue/types";
+import { dialogueLineSchema, lineGrammarIds } from "@/lib/dialogue/types";
 
 // Grammar-point coverage across the dialogue catalog: for every point in the
 // catalog, which scenarios exercise it (scenario-level tags plus line-level
@@ -79,7 +79,7 @@ export async function GET() {
     const parsedLines = linesSchema.safeParse(scenario.lines);
     if (parsedLines.success) {
       for (const line of parsedLines.data) {
-        for (const id of line.grammarPointIDs ?? []) {
+        for (const id of lineGrammarIds(line)) {
           lineTagCounts.set(id, (lineTagCounts.get(id) ?? 0) + 1);
         }
       }

@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { ttsVariant, ttsVariantSentence } from "@/lib/db/schema";
 import { getObject, putObject } from "@/lib/storage/r2";
 import { wavToPcm16, pcm16ToWav } from "@/lib/tts/wav";
+import { shiftTokenSyncBySamples } from "@/lib/dialogue/token-sync";
 
 /** Permanently rewrites the take's WAV to the current trim bounds, mirrors StudioViewModel.commitTrimToLoadedTake(). */
 export async function POST(
@@ -62,6 +63,17 @@ export async function POST(
     .map((s) => s - lo)
     .filter((s) => s > 0 && s < hi - lo);
 
+  const newLength = hi - lo;
+  const shiftedTokenSync = shiftTokenSyncBySamples(
+    variant.tokenSync,
+    sampleRate,
+    (s) => {
+      const next = s - lo;
+      if (next <= 0 || next >= newLength) return null;
+      return next;
+    }
+  );
+
   const [updated] = await db
     .update(ttsVariant)
     .set({
@@ -70,6 +82,7 @@ export async function POST(
       trimSampleUpper: null,
       dialogueLineSwitchSamples:
         shiftedLineSwitches.length > 0 ? shiftedLineSwitches : null,
+      tokenSync: shiftedTokenSync,
     })
     .where(eq(ttsVariant.id, variantId))
     .returning();

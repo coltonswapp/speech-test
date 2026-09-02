@@ -42,6 +42,7 @@ export type PublishScenarioResult = {
   scenario: typeof dialogueScenario.$inferSelect;
   publishedAudioUrl: string;
   objectKey: string;
+  hasTokenKaraoke: boolean;
 };
 
 export async function publishScenarioAudio(
@@ -106,7 +107,12 @@ export async function publishScenarioAudio(
     .where(eq(dialogueScenario.id, scenarioId))
     .returning();
 
-  return { scenario: updated, publishedAudioUrl, objectKey };
+  return {
+    scenario: updated,
+    publishedAudioUrl,
+    objectKey,
+    hasTokenKaraoke: tokenSync != null,
+  };
 }
 
 export async function unpublishScenarioAudio(
@@ -172,6 +178,7 @@ export type LessonPublishScenarioResult = {
   menuTitle: string;
   status: "published" | "unchanged" | "skipped" | "failed";
   publishedAudioUrl: string | null;
+  hasTokenKaraoke?: boolean;
   error?: string;
 };
 
@@ -274,6 +281,7 @@ export async function publishLesson(
         menuTitle: scenario.menuTitle,
         status: "unchanged",
         publishedAudioUrl: scenario.publishedAudioUrl,
+        hasTokenKaraoke: tokenSync != null,
       });
       continue;
     }
@@ -285,6 +293,7 @@ export async function publishLesson(
         menuTitle: scenario.menuTitle,
         status: "published",
         publishedAudioUrl: published.publishedAudioUrl,
+        hasTokenKaraoke: published.hasTokenKaraoke,
       });
     } catch (error) {
       results.push({

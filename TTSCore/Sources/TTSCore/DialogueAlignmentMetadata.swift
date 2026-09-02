@@ -7,6 +7,7 @@
 
 import AVFoundation
 import Foundation
+import os
 
 public enum DialogueAlignmentMetadata {
 
@@ -76,41 +77,124 @@ public enum DialogueAlignmentMetadata {
 
     // MARK: - Read
 
+    private enum PayloadCacheEntry: Sendable {
+        case absent
+        case payload(Payload)
+
+        var value: Payload? {
+            switch self {
+            case .absent: return nil
+            case .payload(let payload): return payload
+            }
+        }
+    }
+
+    private static let payloadCache = OSAllocatedUnfairLock(initialState: [String: PayloadCacheEntry]())
+
+    private static func payloadCacheKey(for url: URL) -> String {
+        url.standardizedFileURL.path
+    }
+
+    private static func cachedPayloadEntry(for url: URL) -> PayloadCacheEntry? {
+        payloadCache.withLock { $0[payloadCacheKey(for: url)] }
+    }
+
+    private static func storeCachedPayload(_ payload: Payload?, for url: URL) {
+        let entry: PayloadCacheEntry = payload.map { .payload($0) } ?? .absent
+        payloadCache.withLock { $0[payloadCacheKey(for: url)] = entry }
+    }
+
     /// Reads embedded switch times from an M4A/MP4 URL. Returns `nil` when absent or invalid.
     public static func readLineSwitchSeconds(from url: URL) -> [TimeInterval]? {
         readPayload(from: url)?.lineSwitchSeconds
     }
 
+    /// Synchronous read. Off the main thread this may load container metadata.
+    /// On main it only returns a cache hit so User-interactive never waits on
+    /// AVFoundation's Default-QoS loader (Thread Performance Checker).
     public static func readPayload(from url: URL) -> Payload? {
-        if Thread.isMainThread {
-            return DispatchQueue.global(qos: .utility).sync {
-                readPayloadBlocking(from: url)
-            }
+        if let cached = cachedPayloadEntry(for: url) {
+            return cached.value
         }
+        guard !Thread.isMainThread else { return nil }
         return readPayloadBlocking(from: url)
     }
 
-    private static func readPayloadBlocking(from url: URL) -> Payload? {
+    /// Loads metadata without blocking the caller. `completion` runs on the main queue.
+    /// Cache hits already on main are delivered immediately.
+    public static func readPayload(from url: URL, completion: @escaping (Payload?) -> Void) {
+        let completion = MainQueueCompletion(completion)
+        if let cached = cachedPayloadEntry(for: url) {
+            completion.yield(cached.value)
+            return
+        }
+        Task {
+            completion.yield(await loadPayload(from: url))
+        }
+    }
+
+    /// Warms the payload cache so a later main-thread read is a hit.
+    public static func prewarmPayload(from url: URL) {
+        readPayload(from: url) { _ in }
+    }
+
+    /// `DispatchQueue.main.async` requires a Sendable closure; UIKit-style completions
+    /// are not. This type is the hop — callers still get `completion` on the main queue.
+    private struct MainQueueCompletion: @unchecked Sendable {
+        let block: (Payload?) -> Void
+
+        init(_ block: @escaping (Payload?) -> Void) {
+            self.block = block
+        }
+
+        func yield(_ payload: Payload?) {
+            if Thread.isMainThread {
+                block(payload)
+            } else {
+                DispatchQueue.main.async { self.block(payload) }
+            }
+        }
+    }
+
+    private static func loadPayload(from url: URL) async -> Payload? {
+        if let cached = cachedPayloadEntry(for: url) {
+            return cached.value
+        }
+        let loaded = await fetchPayload(from: url)
+        storeCachedPayload(loaded, for: url)
+        return loaded
+    }
+
+    private static func fetchPayload(from url: URL) async -> Payload? {
         let asset = AVURLAsset(url: url)
-        let key = "metadata"
-        let sem = DispatchSemaphore(value: 0)
-        asset.loadValuesAsynchronously(forKeys: [key]) {
-            sem.signal()
+        do {
+            var items = try await asset.load(.metadata)
+            items.append(contentsOf: try await asset.loadMetadata(for: .iTunesMetadata))
+            items.append(contentsOf: try await asset.loadMetadata(for: .quickTimeMetadata))
+            for item in items {
+                if let payload = payload(from: item) {
+                    return payload
+                }
+            }
+            return nil
+        } catch {
+            return nil
         }
-        sem.wait()
+    }
 
-        var error: NSError?
-        guard asset.statusOfValue(forKey: key, error: &error) == .loaded else { return nil }
-
-        var items = asset.metadata
-        for format in [AVMetadataFormat.iTunesMetadata, .quickTimeMetadata] {
-            items.append(contentsOf: asset.metadata(forFormat: format))
+    private static func readPayloadBlocking(from url: URL) -> Payload? {
+        if let cached = cachedPayloadEntry(for: url) {
+            return cached.value
         }
-
-        for item in items {
-            if let payload = payload(from: item) { return payload }
+        let result = OSAllocatedUnfairLock<Payload?>(initialState: nil)
+        let done = DispatchSemaphore(value: 0)
+        Task {
+            let loaded = await loadPayload(from: url)
+            result.withLock { $0 = loaded }
+            done.signal()
         }
-        return nil
+        done.wait()
+        return result.withLock { $0 }
     }
 
     private static func payload(from item: AVMetadataItem) -> Payload? {

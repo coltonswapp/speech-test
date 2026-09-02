@@ -28,6 +28,9 @@ enum FoundationModelJapaneseTokenizer {
     Use sentence context: keep casual verb endings with their verb \
     (e.g. 食べちゃいけない — not 食べ + ちゃ + いけない, where ちゃ could be misread as “tea”).
     Keep punctuation as separate tokens when present.
+    Punctuation (、 。 , . ！ ？ ! ? …) is always a hard token boundary — \
+    never keep words on both sides of a comma or period in one token \
+    (e.g. え、いいん must be え and いいん).
     Tokens must appear in order and together cover the full input.
     """
 

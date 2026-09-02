@@ -36,9 +36,14 @@ final class SentenceScrubExperimentViewController: UIViewController {
     /// Curated English for `currentSentence` (e.g. from dialogue content). When
     /// present, shown immediately — no system translation runs at all.
     private var providedEnglish: String?
+    /// Authored dialogue tokens (token sync). When set, scrub uses these
+    /// instead of running the app tokenizer.
+    private var providedTokens: [JapaneseToken]?
     private let recordedClip: RealtimeAudioClip?
     private let onReplayClip: ((RealtimeAudioClip) -> Void)?
     private let dialogueLineAudio: DialogueLineAudioReference?
+    /// Neighboring dialogue lines for the Gemini nuance card.
+    private var dialogueContext: DialogueNuanceContext?
     private let grammarAudioPlayer = GrammarAudioPlayer()
 
     init(
@@ -46,14 +51,18 @@ final class SentenceScrubExperimentViewController: UIViewController {
         englishTranslation: String? = nil,
         recordedClip: RealtimeAudioClip? = nil,
         onReplayClip: ((RealtimeAudioClip) -> Void)? = nil,
-        dialogueLineAudio: DialogueLineAudioReference? = nil
+        dialogueLineAudio: DialogueLineAudioReference? = nil,
+        dialogueContext: DialogueNuanceContext? = nil,
+        tokens: [JapaneseToken]? = nil
     ) {
         currentSentence = sentence
         let trimmedEnglish = englishTranslation?.trimmingCharacters(in: .whitespacesAndNewlines)
         providedEnglish = (trimmedEnglish?.isEmpty ?? true) ? nil : trimmedEnglish
+        providedTokens = tokens.flatMap { $0.isEmpty ? nil : $0 }
         self.recordedClip = recordedClip
         self.onReplayClip = onReplayClip
         self.dialogueLineAudio = dialogueLineAudio
+        self.dialogueContext = dialogueContext
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -66,6 +75,8 @@ final class SentenceScrubExperimentViewController: UIViewController {
         recordedClip = nil
         onReplayClip = nil
         dialogueLineAudio = nil
+        dialogueContext = nil
+        providedTokens = nil
         super.init(coder: coder)
     }
 
@@ -76,17 +87,21 @@ final class SentenceScrubExperimentViewController: UIViewController {
     /// Full-sentence English from the system Translation framework (below the Japanese line).
     private let englishTranslationLabel = UILabel()
 
-    /// Sentence + translation on the leading side; circular play control on the trailing side.
+    /// Sentence + translation stacked; circular play and nuance controls on each row’s trailing side.
     private let sentenceSectionRowStack = UIStackView()
     private let sentenceContentStack = UIStackView()
+    private let translationSectionRowStack = UIStackView()
+    private let nuanceButton = UIButton(type: .system)
+    private let nuanceGlyphView = UIImageView()
+    private let nuanceCardView = DialogueNuanceCardView()
+    private var nuanceLoadTask: Task<Void, Never>?
+    private var nuanceLoadRequest: GeminiDialogueNuance.Request?
 
     private static let audioButtonSize: CGFloat = 56
     private static let audioGlyphColor = UIColor.systemYellow
 
     private let speakSentenceButton = UIButton(type: .system)
     private let speakSentenceGlyphView = UIImageView()
-    private let repeatAfterMeButton = UIButton(type: .system)
-    private let repeatAfterMeGlyphView = UIImageView()
 
     /// Direct (non-SwiftUI) system translation, iOS 26+. Reused across
     /// sentences — the ja→en pair never changes for this screen.
@@ -100,12 +115,6 @@ final class SentenceScrubExperimentViewController: UIViewController {
         return v
     }()
     private let selectionStartDivider = SentenceScrubExperimentViewController.makeHairlineDivider()
-
-    private let hintStack = UIStackView()
-    private let hintIcon = UIImageView()
-    private let hintLabel = UILabel()
-
-    private var didInteract = false
 
     private static func makeHairlineDivider() -> UIView {
         let v = UIView()
@@ -167,6 +176,13 @@ final class SentenceScrubExperimentViewController: UIViewController {
             self.refreshOptionsMenu()
         }
 
+        let repeatAfterMe = UIAction(
+            title: "Repeat after me",
+            image: UIImage(systemName: "person.wave.2")
+        ) { [weak self] _ in
+            self?.openRepeatAfterMe()
+        }
+
         let exampleActions = Self.exampleSentences.map { title, text in
             UIAction(title: title, state: text == currentSentence ? .on : .off) { [weak self] _ in
                 self?.applyExampleSentence(text)
@@ -174,7 +190,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         }
         let examplesMenu = UIMenu(title: "Example sentence", children: exampleActions)
 
-        return UIMenu(children: [overlayToggle, examplesMenu])
+        return UIMenu(children: [overlayToggle, repeatAfterMe, examplesMenu])
     }
 
     private func refreshOptionsMenu() {
@@ -185,22 +201,36 @@ final class SentenceScrubExperimentViewController: UIViewController {
         guard text != currentSentence else { return }
         currentSentence = text
         providedEnglish = nil
+        providedTokens = nil
+        dialogueContext = nil
         wordSpeaker.stop()
         grammarAudioPlayer.stop()
         updateSpeakButtonAccessibility()
         beginEnglishTranslationIfNeeded()
+        applySentenceToScrubView()
 
-        scrubbableSentenceView.configure(
-            sentence: currentSentence,
-            font: titleFontForSentenceLine(),
-            showsFurigana: true
-        )
-
-        didInteract = false
-        hintStack.isHidden = false
-        hintStack.alpha = 1
-
+        resetNuanceCard()
         refreshOptionsMenu()
+    }
+
+    private func applySentenceToScrubView() {
+        let font = titleFontForSentenceLine()
+        if let providedTokens {
+            scrubbableSentenceView.configureWithTokens(
+                sentence: currentSentence,
+                font: font,
+                tokens: providedTokens,
+                showsFurigana: true,
+                clearInteraction: true,
+                preservesTokenBoundaries: true
+            )
+        } else {
+            scrubbableSentenceView.configure(
+                sentence: currentSentence,
+                font: font,
+                showsFurigana: true
+            )
+        }
     }
 
     override func viewDidLoad() {
@@ -214,8 +244,6 @@ final class SentenceScrubExperimentViewController: UIViewController {
             primaryAction: nil,
             menu: makeOptionsMenu()
         )
-
-        let titleFont = titleFontForSentenceLine()
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.alwaysBounceVertical = true
@@ -247,7 +275,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
                 self.present(UINavigationController(rootViewController: kanjiVC), animated: true)
             }
         }
-        scrubbableSentenceView.configure(sentence: currentSentence, font: titleFont, showsFurigana: true)
+        applySentenceToScrubView()
         scrubbableSentenceView.bindDismissOnScroll(scrollView)
         scrubbableSentenceView.bindDismissOnTap(scrollView)
 
@@ -257,22 +285,15 @@ final class SentenceScrubExperimentViewController: UIViewController {
         englishTranslationLabel.numberOfLines = 0
         setEnglishLabelText(providedEnglish ?? "")
 
-        sentenceContentStack.axis = .vertical
-        sentenceContentStack.alignment = .leading
-        sentenceContentStack.spacing = 6
-        sentenceContentStack.addArrangedSubview(scrubbableSentenceView)
-        sentenceContentStack.addArrangedSubview(englishTranslationLabel)
-
-        sentenceContentStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        sentenceContentStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
         sentenceSectionRowStack.axis = .horizontal
         sentenceSectionRowStack.alignment = .top
         sentenceSectionRowStack.spacing = 16
         sentenceSectionRowStack.distribution = .fill
-        sentenceSectionRowStack.addArrangedSubview(sentenceContentStack)
-        sentenceSectionRowStack.addArrangedSubview(repeatAfterMeButton)
+        sentenceSectionRowStack.addArrangedSubview(scrubbableSentenceView)
         sentenceSectionRowStack.addArrangedSubview(speakSentenceButton)
+
+        scrubbableSentenceView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        scrubbableSentenceView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         speakSentenceButton.setContentHuggingPriority(.required, for: .horizontal)
         speakSentenceButton.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -286,50 +307,46 @@ final class SentenceScrubExperimentViewController: UIViewController {
         speakSentenceButton.accessibilityHint = "Plays audio of the Japanese example sentence"
         speakSentenceButton.addTarget(self, action: #selector(speakFullSentenceTapped), for: .touchUpInside)
 
-        repeatAfterMeButton.setContentHuggingPriority(.required, for: .horizontal)
-        repeatAfterMeButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        englishTranslationLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        englishTranslationLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        nuanceButton.setContentHuggingPriority(.required, for: .horizontal)
+        nuanceButton.setContentCompressionResistancePriority(.required, for: .horizontal)
         Self.configureGlassAudioButton(
-            repeatAfterMeButton,
-            glyphView: repeatAfterMeGlyphView,
-            symbolName: "person.wave.2.fill",
-            glyphPointSize: 20,
-            accessibilityLabel: "Repeat after me"
+            nuanceButton,
+            glyphView: nuanceGlyphView,
+            symbolName: "sparkle.magnifyingglass",
+            glyphPointSize: 22,
+            accessibilityLabel: "Implied meaning"
         )
-        repeatAfterMeButton.accessibilityHint = "Listen to the sentence, then repeat it with the tutor"
-        repeatAfterMeButton.addTarget(self, action: #selector(repeatAfterMeTapped), for: .touchUpInside)
+        nuanceButton.accessibilityHint = "Shows the implied meaning of this line"
+        nuanceButton.addTarget(self, action: #selector(nuanceButtonTapped), for: .touchUpInside)
+
+        translationSectionRowStack.axis = .horizontal
+        translationSectionRowStack.alignment = .center
+        translationSectionRowStack.spacing = 16
+        translationSectionRowStack.distribution = .fill
+        translationSectionRowStack.addArrangedSubview(englishTranslationLabel)
+        translationSectionRowStack.addArrangedSubview(nuanceButton)
+
+        sentenceContentStack.axis = .vertical
+        sentenceContentStack.alignment = .fill
+        sentenceContentStack.spacing = 6
+        sentenceContentStack.addArrangedSubview(sentenceSectionRowStack)
+        sentenceContentStack.addArrangedSubview(translationSectionRowStack)
 
         NSLayoutConstraint.activate([
             speakSentenceButton.topAnchor.constraint(equalTo: scrubbableSentenceView.sentenceLineView.topAnchor),
             speakSentenceButton.trailingAnchor.constraint(equalTo: sentenceSectionRowStack.trailingAnchor),
-            repeatAfterMeButton.topAnchor.constraint(equalTo: scrubbableSentenceView.sentenceLineView.topAnchor),
-            repeatAfterMeButton.trailingAnchor.constraint(equalTo: speakSentenceButton.leadingAnchor, constant: -10),
+            nuanceButton.trailingAnchor.constraint(equalTo: translationSectionRowStack.trailingAnchor),
+            nuanceButton.widthAnchor.constraint(equalTo: speakSentenceButton.widthAnchor),
         ])
 
-        hintIcon.translatesAutoresizingMaskIntoConstraints = false
-        hintIcon.image = UIImage(systemName: "hand.tap.fill")
-        hintIcon.tintColor = .tertiaryLabel
-        hintIcon.contentMode = .scaleAspectFit
+        nuanceCardView.isHidden = true
 
-        hintLabel.font = .preferredFont(forTextStyle: .subheadline)
-        hintLabel.textColor = .tertiaryLabel
-        hintLabel.textAlignment = .center
-        hintLabel.numberOfLines = 0
-        hintLabel.text = "Pan across the sentence to explore definitions."
-
-        hintStack.axis = .vertical
-        hintStack.alignment = .center
-        hintStack.spacing = 10
-        hintStack.addArrangedSubview(hintIcon)
-        hintStack.addArrangedSubview(hintLabel)
-
-        NSLayoutConstraint.activate([
-            hintIcon.widthAnchor.constraint(equalToConstant: 36),
-            hintIcon.heightAnchor.constraint(equalToConstant: 36),
-        ])
-
-        contentStack.addArrangedSubview(sentenceSectionRowStack)
-        contentStack.addArrangedSubview(hintStack)
-        contentStack.setCustomSpacing(20, after: hintStack)
+        contentStack.addArrangedSubview(sentenceContentStack)
+        contentStack.addArrangedSubview(nuanceCardView)
+        contentStack.setCustomSpacing(20, after: nuanceCardView)
         contentStack.addArrangedSubview(selectionStartDivider)
         contentStack.setCustomSpacing(16, after: selectionStartDivider)
         contentStack.addArrangedSubview(wordDictionaryDetailView)
@@ -374,13 +391,14 @@ final class SentenceScrubExperimentViewController: UIViewController {
             grammarAudioPlayer.stop()
             wordSpeaker.stop()
             translationTask?.cancel()
+            nuanceLoadTask?.cancel()
         }
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         speakSentenceButton.bringSubviewToFront(speakSentenceGlyphView)
-        repeatAfterMeButton.bringSubviewToFront(repeatAfterMeGlyphView)
+        nuanceButton.bringSubviewToFront(nuanceGlyphView)
     }
 
     private var canPlayDialogueLineAudio: Bool {
@@ -409,9 +427,6 @@ final class SentenceScrubExperimentViewController: UIViewController {
 
     private func setEnglishLabelText(_ text: String) {
         englishTranslationLabel.text = text
-        englishTranslationLabel.isHidden = text
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .isEmpty
     }
 
     /// Translates `currentSentence` via a direct `TranslationSession` (iOS 26 —
@@ -464,16 +479,91 @@ final class SentenceScrubExperimentViewController: UIViewController {
         #endif
     }
 
-    private func handleSelectionChanged(index: Int?, surface: String?) {
-        if index != nil, !didInteract {
-            didInteract = true
-            UIView.animate(withDuration: 0.2, animations: {
-                self.hintStack.alpha = 0
-            }, completion: { _ in
-                self.hintStack.isHidden = true
-            })
+    private func resolvedDialogueNuanceContext() -> DialogueNuanceContext {
+        if let dialogueContext {
+            return dialogueContext
         }
 
+        if let audio = dialogueLineAudio,
+           audio.dialogueLines.indices.contains(audio.lineIndex) {
+            let lines = audio.dialogueLines.map {
+                DialogueNuanceContext.Line(
+                    speaker: "",
+                    japanese: $0,
+                    english: nil
+                )
+            }
+            if let context = DialogueNuanceContext.around(lines: lines, focusedIndex: audio.lineIndex) {
+                return DialogueNuanceContext(
+                    preceding: context.preceding,
+                    focused: DialogueNuanceContext.Line(
+                        speaker: "",
+                        japanese: currentSentence.trimmingCharacters(in: .whitespacesAndNewlines),
+                        english: providedEnglish
+                    ),
+                    following: context.following
+                )
+            }
+        }
+
+        return DialogueNuanceContext.isolated(
+            japanese: currentSentence,
+            english: providedEnglish
+        )
+    }
+
+    @objc private func nuanceButtonTapped() {
+        let trimmed = currentSentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nuanceCardView.isHidden = false
+        beginNuanceLoadIfNeeded()
+    }
+
+    private func resetNuanceCard() {
+        nuanceLoadTask?.cancel()
+        nuanceLoadTask = nil
+        nuanceLoadRequest = nil
+        nuanceCardView.apply(.loading)
+        nuanceCardView.isHidden = true
+    }
+
+    private func beginNuanceLoadIfNeeded() {
+        let request = GeminiDialogueNuance.Request(context: resolvedDialogueNuanceContext())
+        if nuanceLoadRequest == request, nuanceLoadTask != nil {
+            return
+        }
+
+        nuanceLoadTask?.cancel()
+        nuanceLoadRequest = request
+
+        if !GeminiDialogueNuance.isAvailable {
+            nuanceCardView.apply(.unavailable(GeminiDialogueNuance.unavailabilityMessage))
+            return
+        }
+
+        nuanceLoadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            if let cached = await GeminiDialogueNuance.cachedResult(for: request) {
+                guard !Task.isCancelled else { return }
+                self.nuanceCardView.apply(.result(cached))
+                return
+            }
+
+            self.nuanceCardView.apply(.loading)
+            do {
+                let result = try await GeminiDialogueNuance.explain(request)
+                guard !Task.isCancelled else { return }
+                self.nuanceCardView.apply(.result(result))
+            } catch {
+                guard !Task.isCancelled else { return }
+                let message = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+                self.nuanceCardView.apply(.failed(message))
+            }
+        }
+    }
+
+    private func handleSelectionChanged(index: Int?, surface: String?) {
         guard let surface, !surface.isEmpty else {
             wordDictionaryDetailView.configure(surface: "")
             selectionStartDivider.isHidden = true
@@ -509,7 +599,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         wordSpeaker.speak(trimmed)
     }
 
-    @objc private func repeatAfterMeTapped() {
+    private func openRepeatAfterMe() {
         let trimmed = currentSentence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         grammarAudioPlayer.stop()

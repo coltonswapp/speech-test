@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { dialogueApi } from "@/lib/dialogue/client";
-import type { DialogueLine, QuizQuestion } from "@/lib/dialogue/types";
+import { hasSpokenJapanese, type DialogueLine, type QuizQuestion } from "@/lib/dialogue/types";
 
 const CANDIDATE_COUNT = 6;
 
@@ -27,7 +27,7 @@ export function GenerateQuizPanel({
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const canGenerate = lines.some((line) => line.japanese.trim());
+  const canGenerate = hasSpokenJapanese(lines);
 
   async function generate() {
     setIsGenerating(true);

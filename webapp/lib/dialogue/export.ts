@@ -1,10 +1,12 @@
-import type {
-  CollectionFile,
-  DialogueHighlights,
-  DialogueLine,
-  PublishedTokenSync,
-  QuizQuestion,
-  ScenarioFile,
+import {
+  isInlineQuestionLine,
+  isStageLine,
+  type CollectionFile,
+  type DialogueHighlights,
+  type DialogueLine,
+  type PublishedTokenSync,
+  type QuizQuestion,
+  type ScenarioFile,
 } from "@/lib/dialogue/types";
 import { parsePublishedTokenSync } from "@/lib/dialogue/token-sync";
 
@@ -52,21 +54,25 @@ function exportLine(
   scenarioId: string,
   index: number
 ): DialogueLine {
-  // Stage rows live in jsonb as { type: "stage", text, visibility }. Main's
-  // DialogueLine type is still spoken-only; pass them through at runtime so
-  // the public API does not emit empty spoken objects.
-  const raw = line as DialogueLine & {
-    type?: string;
-    text?: string;
-    visibility?: string;
-  };
-  if (raw.type === "stage") {
+  if (isStageLine(line)) {
     return {
       type: "stage",
-      text: raw.text ?? "",
-      visibility: raw.visibility === "cold" ? "cold" : "practice",
-      id: raw.id || `${scenarioId}/line-${index}`,
-    } as unknown as DialogueLine;
+      text: line.text,
+      visibility: line.visibility,
+      id: line.id || `${scenarioId}/stage-${index}`,
+    };
+  }
+  if (isInlineQuestionLine(line)) {
+    return {
+      type: "inline-question",
+      prompt: line.prompt,
+      target: line.target || undefined,
+      layout: line.layout,
+      choices: line.choices,
+      correctChoice: line.correctChoice,
+      wrongAnswerExplanation: line.wrongAnswerExplanation,
+      id: line.id || `${scenarioId}/inline-question-${index}`,
+    };
   }
   return {
     speaker: line.speaker,

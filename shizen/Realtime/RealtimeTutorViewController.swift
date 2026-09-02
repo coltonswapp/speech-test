@@ -1241,12 +1241,21 @@ final class RealtimeTutorViewController: UIViewController {
     private func presentSentenceFocus(forLineAt index: Int) {
         guard lineItems.indices.contains(index) else { return }
         let item = lineItems[index]
+        let contextLines = lineItems.map { line -> DialogueNuanceContext.Line in
+            let speaker: String
+            switch line.speaker {
+            case .user: speaker = "You"
+            case .assistant: speaker = "Tutor"
+            }
+            return DialogueNuanceContext.Line(speaker: speaker, japanese: line.text, english: nil)
+        }
         let scrub = SentenceScrubExperimentViewController(
             sentence: item.text,
             recordedClip: item.audioClip,
             onReplayClip: { [weak self] clip in
                 self?.realtimeService.replayRecordedClip(clip)
-            }
+            },
+            dialogueContext: DialogueNuanceContext.around(lines: contextLines, focusedIndex: index)
         )
         navigationController?.pushViewController(scrub, animated: true)
     }

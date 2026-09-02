@@ -11,10 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { dialogueApi } from "@/lib/dialogue/client";
 import { ttsApi } from "@/lib/tts/client";
 import { scenarioLinesToConversation } from "@/lib/tts/scenario-conversation";
-import type { DialogueLine } from "@/lib/dialogue/types";
+import { isSpokenLine, isStageLine, type DialogueLine } from "@/lib/dialogue/types";
 import { VariantList } from "@/components/tts/variant-list";
 import { VoiceSelect } from "@/components/tts/voice-select";
 import type { EditableDialogueLine } from "@/components/tts/dialogue-line-editor";
+import { flushPendingTokenSync } from "@/lib/dialogue/token-sync-persist";
 
 // The scenario's audio workspace: voices, take generation, staleness, publish,
 // and the shared take list/waveform editor. The scenario's lines are the single
@@ -36,7 +37,7 @@ export function ScenarioAudioPanel({
   const queryClient = useQueryClient();
   const scenarioId = `${collectionId}/${scenarioSlug}`;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["scenario-audio", scenarioId],
     queryFn: () => dialogueApi.getScenarioAudio(collectionId, scenarioSlug),
   });
@@ -55,11 +56,10 @@ export function ScenarioAudioPanel({
   const [speaker2Voice, setSpeaker2Voice] = useState("Puck");
 
   useEffect(() => {
-    if (data?.project) {
-      setSpeaker1Voice(data.project.speaker1Voice ?? "Zephyr");
-      setSpeaker2Voice(data.project.speaker2Voice ?? "Puck");
-    }
-  }, [data?.project]);
+    if (!data) return;
+    setSpeaker1Voice(data.project?.speaker1Voice ?? "Zephyr");
+    setSpeaker2Voice(data.project?.speaker2Voice ?? "Puck");
+  }, [data]);
 
   const invalidateAudioQueries = (projectId?: string) => {
     if (projectId) {
@@ -99,11 +99,16 @@ export function ScenarioAudioPanel({
   const publishMutation = useMutation({
     mutationFn: async () => {
       await onSaveScenario();
+      await flushPendingTokenSync();
       return dialogueApi.publishScenario(collectionId, scenarioSlug);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       invalidateAudioQueries(data?.project?.id);
-      toast.success("Audio published to the learner CDN.");
+      toast.success(
+        result.hasTokenKaraoke
+          ? "Audio published with token karaoke."
+          : "Audio published to the learner CDN."
+      );
     },
     onError: (error) => toast.error(error.message),
   });
@@ -124,11 +129,19 @@ export function ScenarioAudioPanel({
     enabled: !!projectId,
   });
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <div className="flex flex-col gap-4">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+        {error instanceof Error ? error.message : "Failed to load scenario audio."}
       </div>
     );
   }
@@ -149,9 +162,34 @@ export function ScenarioAudioPanel({
     scenario.publishedContentHash !== data.currentContentHash;
   const canPublish = !!selectedVariant && !hasUnsavedChanges;
 
-  const editorLines: EditableDialogueLine[] = conversation.lines.map(
-    (line, index) => ({ id: String(index), speaker: line.speaker, text: line.text })
-  );
+  const editorLines: EditableDialogueLine[] = (() => {
+    const out: EditableDialogueLine[] = [];
+    let spokenI = 0;
+    lines.forEach((line, index) => {
+      if (isStageLine(line)) {
+        if (line.visibility === "cold" && line.text.trim()) {
+          out.push({
+            id: `stage-${index}`,
+            speaker: "speaker1",
+            text: line.text.trim(),
+            kind: "stage",
+          });
+        }
+        return;
+      }
+      if (!isSpokenLine(line)) return;
+      const spoken = conversation.lines[spokenI];
+      spokenI += 1;
+      if (!spoken) return;
+      out.push({
+        id: String(index),
+        speaker: spoken.speaker,
+        text: spoken.text,
+        kind: "spoken",
+      });
+    });
+    return out;
+  })();
 
   const speaker1Label = conversation.speaker1Name ?? "Speaker 1";
   const speaker2Label = conversation.speaker2Name ?? "Speaker 2";
@@ -172,6 +210,19 @@ export function ScenarioAudioPanel({
               synthesis supports two voices — extra speakers alternate between
               them.
             </p>
+          )}
+
+          {(data.castVoices?.length ?? 0) > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                Collection cast:
+              </span>
+              {data.castVoices?.map((entry) => (
+                <Badge key={`${entry.name}:${entry.voice}`} variant="secondary">
+                  {entry.name} → {entry.voice}
+                </Badge>
+              ))}
+            </div>
           )}
 
           <div className="grid max-w-2xl grid-cols-2 gap-4">
@@ -302,6 +353,7 @@ export function ScenarioAudioPanel({
           dialogueLines={editorLines}
           currentContentHash={data.currentContentHash}
           selectedVariantId={selectedVariant}
+          hasUnsavedChanges={hasUnsavedChanges}
         />
       )}
     </div>

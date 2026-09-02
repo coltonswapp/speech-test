@@ -111,6 +111,7 @@ final class SavedGenerationsViewController: UIViewController {
         case dialogueBubbleUnderglow
         case kanjiDecomposition
         case registerLadder
+        case dialogueContentRecording
         case quickLookPDF
 
         var title: String {
@@ -122,7 +123,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .waterfallGrid: return "Waterfall grid"
             case .lessonWaterfallGrid: return "Lesson waterfall grid"
             case .sentenceScrub: return "Sentence scrub"
-            case .languageProgressSnake: return "Language progress (snake)"
+            case .languageProgressSnake: return "Lesson path (sine)"
             case .hiraganaChart: return "Hiragana chart"
             case .katakanaChart: return "Katakana chart"
             case .flashcards: return "Flashcards"
@@ -147,6 +148,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .dialogueBubbleUnderglow: return "Bubble underglow tuner"
             case .kanjiDecomposition: return "Kanji decomposition"
             case .registerLadder: return "Register ladder"
+            case .dialogueContentRecording: return "Dialogue Replay"
             case .quickLookPDF: return "QuickLook PDF repro"
             }
         }
@@ -160,7 +162,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .waterfallGrid: return "Two-column cascade · key/value cards · variable height"
             case .lessonWaterfallGrid: return "Testing watefall grid style lesson screen"
             case .sentenceScrub: return "Pan token underlines · full JMdict entries"
-            case .languageProgressSnake: return "Duolingo-style path · alternating lesson nodes"
+            case .languageProgressSnake: return "Glass stepping stones · sine-wave path · live tuner"
             case .hiraganaChart: return "Manual-layout gojūon reference"
             case .katakanaChart: return "Manual-layout gojūon reference"
             case .flashcards: return "Swipe right · know it / left · review"
@@ -185,6 +187,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .dialogueBubbleUnderglow: return "Single glass bubble · sliders for underglow tuning"
             case .kanjiDecomposition: return "Character-by-character compound breakdown · export cards"
             case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
+            case .dialogueContentRecording: return "TikTok stage · conversation, two-pass, or quiz"
             case .quickLookPDF: return "App Support PDF · QLPreview vs tmp / share / PDFKit"
             }
         }
@@ -223,6 +226,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .dialogueBubbleUnderglow: return "bubble.left.fill"
             case .kanjiDecomposition: return "puzzlepiece.extension"
             case .registerLadder: return "text.badge.star"
+            case .dialogueContentRecording: return "video"
             case .quickLookPDF: return "doc.richtext"
             }
         }
@@ -727,6 +731,11 @@ final class SavedGenerationsViewController: UIViewController {
         case .kanjiDecomposition:
             navigationController?.pushViewController(
                 KanjiDecompositionListViewController(),
+                animated: true
+            )
+        case .dialogueContentRecording:
+            navigationController?.pushViewController(
+                DialogueContentListViewController(),
                 animated: true
             )
         case .registerLadder:

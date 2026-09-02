@@ -153,17 +153,30 @@ export const ttsApi = {
       `/api/tts/projects/${projectId}/variants/${variantId}/select`,
       { method: "POST" }
     ),
+  acceptScript: (projectId: string, variantId: string, contentHash?: string) =>
+    request<{ variant: Variant }>(
+      `/api/tts/projects/${projectId}/variants/${variantId}/accept-script`,
+      {
+        method: "POST",
+        body: JSON.stringify(contentHash ? { contentHash } : {}),
+      }
+    ),
   suggestBreaks: (projectId: string, variantId: string) =>
     request<SuggestBreaksResult>(
       `/api/tts/projects/${projectId}/variants/${variantId}/suggest-breaks`,
       { method: "POST" }
     ),
-  insertLineBreak: (projectId: string, variantId: string, sample: number) =>
+  insertLineBreak: (
+    projectId: string,
+    variantId: string,
+    sample: number,
+    durationSeconds?: number
+  ) =>
     request<{ variant: Variant }>(
       `/api/tts/projects/${projectId}/variants/${variantId}/insert-line-break`,
       {
         method: "POST",
-        body: JSON.stringify({ sample }),
+        body: JSON.stringify({ sample, durationSeconds }),
       }
     ),
   listVoicePreviews: () =>

@@ -10,6 +10,7 @@ import {
   type DialogueFormality,
 } from "@/lib/dialogue/formality";
 import {
+  formatDialogueTranscriptLine,
   generatedLinesSchema,
   generatedScenarioSchema,
   type DialogueLine,
@@ -105,7 +106,7 @@ function buildPrompt(params: GenerateLinesParams): string {
 
   if (params.mode === "append" && params.existingLines?.length) {
     const transcript = params.existingLines
-      .map((line) => `${line.speaker}: ${line.japanese}`)
+      .map((line) => formatDialogueTranscriptLine(line))
       .join("\n");
     sections.push(
       `Existing dialogue (continue naturally from these lines; return ONLY the new lines, do not repeat them):\n${transcript}`

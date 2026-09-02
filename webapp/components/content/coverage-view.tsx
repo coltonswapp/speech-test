@@ -11,7 +11,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { contentApi, type CoveragePoint } from "@/lib/content/client";
 import { scenarioSlug } from "@/lib/dialogue/client";
-import { SectionSwitcher } from "@/components/content/section-switcher";
 
 const coverageFilters = {
   all: "All",
@@ -52,7 +51,6 @@ export function CoverageView() {
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <SectionSwitcher active="coverage" />
           {data && (
             <p className="text-sm text-muted-foreground">
               {data.totals.coveredCount} of {data.totals.pointCount} points

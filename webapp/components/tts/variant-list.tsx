@@ -27,6 +27,7 @@ export function VariantList({
   dialogueLines,
   currentContentHash,
   selectedVariantId,
+  hasUnsavedChanges,
 }: {
   projectId: string;
   dialogueLines?: EditableDialogueLine[];
@@ -34,6 +35,7 @@ export function VariantList({
   currentContentHash?: string;
   /** When set, enables explicit take selection and badges off this id instead of isSelected. */
   selectedVariantId?: string | null;
+  hasUnsavedChanges?: boolean;
 }) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
@@ -82,6 +84,23 @@ export function VariantList({
       queryClient.invalidateQueries({ queryKey: ["tts-variants", projectId] });
       queryClient.invalidateQueries({ queryKey: ["tts-projects"] });
       toast.success("New take generated with the same settings.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const ignoreMutation = useMutation({
+    mutationFn: (variantId: string) =>
+      ttsApi.acceptScript(projectId, variantId, currentContentHash),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tts-variants", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["tts-project", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["tts-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["scenario-audio"] });
+      queryClient.invalidateQueries({ queryKey: ["dialogue-scenario"] });
+      queryClient.invalidateQueries({
+        queryKey: ["dialogue-collection-audio-status"],
+      });
+      toast.success("Kept this take. Text-change badge cleared.");
     },
     onError: (error) => toast.error(error.message),
   });
@@ -163,6 +182,15 @@ export function VariantList({
                           }
                         />
                         <DropdownMenuContent align="end">
+                          {!!currentContentHash &&
+                            variant.contentHash !== currentContentHash && (
+                            <DropdownMenuItem
+                              onClick={() => ignoreMutation.mutate(variant.id)}
+                              disabled={ignoreMutation.isPending}
+                            >
+                              Ignore text changed
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             onClick={() => regenerateMutation.mutate(variant)}
                             disabled={regenerateMutation.isPending}
@@ -205,6 +233,8 @@ export function VariantList({
                         projectId={projectId}
                         variant={variant}
                         dialogueLines={dialogueLines}
+                        currentContentHash={currentContentHash}
+                        hasUnsavedChanges={hasUnsavedChanges}
                       />
                     </div>
                   </AccordionPanel>

@@ -6,6 +6,7 @@
 //  Owns the WebSocket session so any screen can stub it in.
 //
 
+import InteractionKit
 import UIKit
 
 protocol RealtimeTutorHarnessDelegate: AnyObject {

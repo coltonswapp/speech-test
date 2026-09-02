@@ -1,6 +1,6 @@
 //
 //  GameCategoryTabBar.swift
-//  shizen
+//  shizen-chinese
 //
 //  Horizontally scrolling category tabs synced to a paging content scroll view.
 //

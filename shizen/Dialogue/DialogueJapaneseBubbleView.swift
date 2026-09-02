@@ -5,6 +5,7 @@
 //  Rounded iMessage-style bubble behind spoken Japanese dialogue lines.
 //
 
+import InteractionKit
 import UIKit
 
 enum DialogueBubbleBackgroundStyle {
@@ -456,3 +457,5 @@ final class DialogueJapaneseBubbleView: UIView {
         return path
     }
 }
+
+extension DialogueJapaneseBubbleView: SwipeRevealGlassAdjusting {}

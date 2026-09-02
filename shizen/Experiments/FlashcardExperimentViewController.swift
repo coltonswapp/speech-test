@@ -5,6 +5,7 @@
 //  DEBUG experiment: swipeable vocab flashcards (right = know, left = review).
 //
 
+import InteractionKit
 import UIKit
 
 final class FlashcardExperimentViewController: UIViewController {

@@ -1,13 +1,13 @@
 //
 //  NNLoadingSpinner.swift
-//  shizen
+//  InteractionKit
 //
 //  Portable copy from nest-note — drop into any UIKit project
 //
 
 import UIKit
 
-final class NNLoadingSpinner: UIView {
+public final class NNLoadingSpinner: UIView {
 
     private let backgroundLayer = CAShapeLayer()
     private let spinningLayer = CAShapeLayer()
@@ -23,12 +23,12 @@ final class NNLoadingSpinner: UIView {
 
     private var currentColor: UIColor = .systemBlue
 
-    override init(frame: CGRect) {
+    public override init(frame: CGRect) {
         super.init(frame: frame)
         setupSpinner()
     }
 
-    required init?(coder: NSCoder) {
+    public required init?(coder: NSCoder) {
         super.init(coder: coder)
         setupSpinner()
     }
@@ -91,20 +91,20 @@ final class NNLoadingSpinner: UIView {
         spinningLayer.add(rotationAnimation, forKey: "rotation")
     }
 
-    func setSpeed(duration: CFTimeInterval) {
+    public func setSpeed(duration: CFTimeInterval) {
         rotationDuration = duration
         spinningLayer.removeAnimation(forKey: "rotation")
         startSpinningAnimation()
     }
 
-    func configure(with color: UIColor) {
+    public func configure(with color: UIColor) {
         currentColor = color
         backgroundLayer.strokeColor = color.withAlphaComponent(0.4).cgColor
         spinningLayer.strokeColor = color.cgColor
         stateImageView.tintColor = color
     }
 
-    func reset() {
+    public func reset() {
         backgroundLayer.opacity = 1
         spinningLayer.opacity = 1
         stateImageView.alpha = 0
@@ -112,7 +112,7 @@ final class NNLoadingSpinner: UIView {
         startSpinningAnimation()
     }
 
-    func fadeOut(duration: TimeInterval = 0.3, completion: (() -> Void)? = nil) {
+    public func fadeOut(duration: TimeInterval = 0.3, completion: (() -> Void)? = nil) {
         spinningLayer.removeAnimation(forKey: "rotation")
         UIView.animate(withDuration: duration, animations: {
             self.alpha = 0
@@ -122,7 +122,7 @@ final class NNLoadingSpinner: UIView {
         })
     }
 
-    func animateState(success: Bool, completion: (() -> Void)? = nil) {
+    public func animateState(success: Bool, completion: (() -> Void)? = nil) {
         let imageName = success ? "checkmark" : "xmark"
         let configuration = UIImage.SymbolConfiguration(pointSize: bounds.width * 0.6, weight: .bold)
         stateImageView.image = UIImage(systemName: imageName, withConfiguration: configuration)?
@@ -165,7 +165,7 @@ final class NNLoadingSpinner: UIView {
         )
     }
 
-    override func layoutSubviews() {
+    public override func layoutSubviews() {
         super.layoutSubviews()
         updatePaths()
     }

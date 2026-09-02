@@ -3,6 +3,7 @@
 //  shizen
 //
 
+import InteractionKit
 import UIKit
 
 final class GrammarPracticeStepViewController: UIViewController {
@@ -11,7 +12,7 @@ final class GrammarPracticeStepViewController: UIViewController {
     var onSeeInContext: ((String) -> Void)?
 
     private let item: GrammarPracticeItem
-    private let scrubbableSentenceView = ScrubbableSentenceView()
+    private let scrubbableSentenceView = ScrubbableSentenceView(engine: JapaneseScrubSentenceEngine.shared)
     private let promptLabel = UILabel()
     private let choicesStack = UIStackView()
     private var choiceButtons: [KanaChoiceButton] = []

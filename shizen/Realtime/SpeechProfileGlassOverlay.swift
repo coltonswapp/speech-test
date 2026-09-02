@@ -6,6 +6,7 @@
 //  or bottom while encouragement audio plays, then retreats the same way.
 //
 
+import InteractionKit
 import UIKit
 
 enum SpeechProfileOverlayEdge {

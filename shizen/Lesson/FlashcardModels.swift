@@ -5,6 +5,7 @@
 //  Vocab data + the per-card view used by `FlashcardStackView` (DEBUG).
 //
 
+import InteractionKit
 import UIKit
 
 struct VocabFlashcard {
@@ -356,5 +357,23 @@ final class VocabFlashcardView: UIView {
     private func configureShadow() {
         layer.shadowColor = UIColor.black.cgColor
         layer.shadowOpacity = traitCollection.userInterfaceStyle == .dark ? 0.45 : 0.12
+    }
+}
+
+extension VocabFlashcardView: StackableFlashcard {}
+
+extension FlashcardStackView {
+    func setDeck(_ deck: [VocabFlashcard]) {
+        setDeck(count: deck.count) { index in
+            let card = VocabFlashcardView()
+            card.configure(with: deck[index])
+            return card
+        }
+    }
+
+    func refreshFuriganaDisplay(animated: Bool = true) {
+        enumerateVisibleCards { card in
+            (card as? VocabFlashcardView)?.refreshJapaneseDisplay(animated: animated)
+        }
     }
 }

@@ -5,6 +5,7 @@
 //  Compare NaturalLanguage vs MeCab (IPADic) vs Foundation Model using the same underline rendering as lyrics / sentence breakdown.
 //
 
+import InteractionKit
 import UIKit
 
 final class TokenizerLabViewController: UIViewController {
@@ -342,9 +343,9 @@ final class TokenizerLabViewController: UIViewController {
 
         nlTV.configure(sentence: sentence, lyricFont: bodyFont, tokenizer: nlEngine)
         meTV.configure(sentence: sentence, lyricFont: bodyFont, tokenizer: mecabEngine)
-        fmTV.configure(sentence: sentence, lyricFont: bodyFont, tokens: [])
-        geminiTV.configure(sentence: sentence, lyricFont: bodyFont, tokens: [])
-        geminiLiteTV.configure(sentence: sentence, lyricFont: bodyFont, tokens: [])
+        fmTV.configure(sentence: sentence, lyricFont: bodyFont, japaneseTokens: [])
+        geminiTV.configure(sentence: sentence, lyricFont: bodyFont, japaneseTokens: [])
+        geminiLiteTV.configure(sentence: sentence, lyricFont: bodyFont, japaneseTokens: [])
         attachDefinitionTapHandler(to: nlTV)
         attachDefinitionTapHandler(to: meTV)
         attachDefinitionTapHandler(to: fmTV)
@@ -471,9 +472,9 @@ final class TokenizerLabViewController: UIViewController {
         let sentence = customTextView.text ?? ""
         customNL.configure(sentence: sentence, lyricFont: bodyFont, tokenizer: nlEngine)
         customMeCab.configure(sentence: sentence, lyricFont: bodyFont, tokenizer: mecabEngine)
-        customFM.configure(sentence: sentence, lyricFont: bodyFont, tokens: [])
-        customGemini.configure(sentence: sentence, lyricFont: bodyFont, tokens: [])
-        customGeminiLite.configure(sentence: sentence, lyricFont: bodyFont, tokens: [])
+        customFM.configure(sentence: sentence, lyricFont: bodyFont, japaneseTokens: [])
+        customGemini.configure(sentence: sentence, lyricFont: bodyFont, japaneseTokens: [])
+        customGeminiLite.configure(sentence: sentence, lyricFont: bodyFont, japaneseTokens: [])
         if let customIndex = fmTargets.firstIndex(where: { $0.textView === customFM }) {
             fmTargets[customIndex] = FMTarget(textView: customFM, statusLabel: customFMStatus, sentence: sentence)
         }
@@ -527,7 +528,7 @@ final class TokenizerLabViewController: UIViewController {
                         textView.configure(
                             sentence: target.sentence,
                             lyricFont: self.bodyFont,
-                            tokens: result.tokens
+                            japaneseTokens: result.tokens
                         )
                         self.attachDefinitionTapHandler(to: textView)
                         target.statusLabel?.text = "\(result.tokens.count) segments"
@@ -539,7 +540,7 @@ final class TokenizerLabViewController: UIViewController {
                         target.textView?.configure(
                             sentence: target.sentence,
                             lyricFont: self.bodyFont,
-                            tokens: []
+                            japaneseTokens: []
                         )
                     }
                 }
@@ -551,7 +552,7 @@ final class TokenizerLabViewController: UIViewController {
         for target in fmTargets {
             target.statusLabel?.text = message
             if forAll, let textView = target.textView {
-                textView.configure(sentence: target.sentence, lyricFont: bodyFont, tokens: [])
+                textView.configure(sentence: target.sentence, lyricFont: bodyFont, japaneseTokens: [])
             }
         }
     }
@@ -593,7 +594,7 @@ final class TokenizerLabViewController: UIViewController {
                         textView.configure(
                             sentence: target.sentence,
                             lyricFont: self.bodyFont,
-                            tokens: result.tokens
+                            japaneseTokens: result.tokens
                         )
                         self.attachDefinitionTapHandler(to: textView)
                         target.statusLabel?.text = "\(result.tokens.count) segments"
@@ -606,7 +607,7 @@ final class TokenizerLabViewController: UIViewController {
                         textView.configure(
                             sentence: target.sentence,
                             lyricFont: self.bodyFont,
-                            tokens: fallback
+                            japaneseTokens: fallback
                         )
                         self.attachDefinitionTapHandler(to: textView)
                         target.statusLabel?.text = "MeCab fallback · \(error.localizedDescription)"
@@ -621,7 +622,7 @@ final class TokenizerLabViewController: UIViewController {
             target.statusLabel?.text = message
             if forAll, let textView = target.textView {
                 let fallback = JapaneseTokenizer(backend: .mecab).tokenize(target.sentence)
-                textView.configure(sentence: target.sentence, lyricFont: bodyFont, tokens: fallback)
+                textView.configure(sentence: target.sentence, lyricFont: bodyFont, japaneseTokens: fallback)
             }
         }
     }

@@ -1,15 +1,15 @@
 //
 //  LiquidGlassEffectView.swift
-//  shizen
+//  InteractionKit
 //
-//  Shared liquid-glass / blur container styling used by overlay experiments.
+//  Shared liquid-glass / blur container styling used by overlay chrome.
 //
 
 import UIKit
 
-enum LiquidGlassEffectView {
+public enum LiquidGlassEffectView {
 
-    static func makeContainer() -> UIVisualEffectView {
+    public static func makeContainer() -> UIVisualEffectView {
         if #available(iOS 26.0, *) {
             let glassEffect = UIGlassEffect(style: .regular)
             glassEffect.isInteractive = true
@@ -19,17 +19,17 @@ enum LiquidGlassEffectView {
         }
     }
 
-    static func applyCapsuleStyle(to view: UIVisualEffectView, cornerRadius: CGFloat = 40) {
+    public static func applyCapsuleStyle(to view: UIVisualEffectView, cornerRadius: CGFloat = 40) {
         applyRoundedStyle(to: view, cornerRadius: cornerRadius, showsShadow: true)
     }
 
     /// Rounded-rect liquid-glass styling for chat-style dialogue bubbles.
-    static func applyBubbleStyle(to view: UIVisualEffectView, cornerRadius: CGFloat = 18) {
+    public static func applyBubbleStyle(to view: UIVisualEffectView, cornerRadius: CGFloat = 18) {
         applyRoundedStyle(to: view, cornerRadius: cornerRadius, showsShadow: false)
     }
 
-    /// Light-surface glass for vocabulary / grammar pills on dialogue learning pages.
-    static func makeLightPillContainer() -> UIVisualEffectView {
+    /// Light-surface glass for vocabulary / grammar pills on learning pages.
+    public static func makeLightPillContainer() -> UIVisualEffectView {
         if #available(iOS 26.0, *) {
             let glassEffect = UIGlassEffect(style: .regular)
             glassEffect.isInteractive = false
@@ -39,7 +39,7 @@ enum LiquidGlassEffectView {
         }
     }
 
-    static func applyPillStyle(to view: UIVisualEffectView, cornerRadius: CGFloat = 14) {
+    public static func applyPillStyle(to view: UIVisualEffectView, cornerRadius: CGFloat = 14) {
         applyRoundedStyle(to: view, cornerRadius: cornerRadius, showsShadow: true)
     }
 

@@ -1,6 +1,6 @@
 //
 //  CompactDefinitionCalloutView.swift
-//  shizen
+//  InteractionKit
 //
 //  Compact single-gloss callout anchored to a token (above or below).
 //
@@ -8,16 +8,16 @@
 import UIKit
 
 /// Small tappable bubble with an arrow for a single definition gloss.
-final class CompactDefinitionCalloutView: UIControl {
+public final class CompactDefinitionCalloutView: UIControl {
 
-    enum Placement {
+    public enum Placement {
         /// Bubble above the token; arrow at the bottom edge pointing down.
         case above
         /// Bubble below the token; arrow at the top edge pointing up.
         case below
     }
 
-    var onDetailTapped: (() -> Void)?
+    public var onDetailTapped: (() -> Void)?
 
     /// Raised above page content; one step lighter than secondary in dark mode.
     private static let bubbleFill = UIColor { traits in
@@ -78,7 +78,7 @@ final class CompactDefinitionCalloutView: UIControl {
     private static let chevronWidth: CGFloat = 16
     private static let labelChevronGap: CGFloat = 4
 
-    init(text: String) {
+    public init(text: String) {
         super.init(frame: .zero)
         backgroundColor = .clear
         textLabel.text = text
@@ -87,21 +87,21 @@ final class CompactDefinitionCalloutView: UIControl {
         setupUI()
     }
 
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    public required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func setText(_ text: String) {
+    public func setText(_ text: String) {
         textLabel.text = text
         invalidateIntrinsicContentSize()
     }
 
-    func setPlacement(_ placement: Placement) {
+    public func setPlacement(_ placement: Placement) {
         guard self.placement != placement else { return }
         self.placement = placement
         applyPlacementConstraints()
     }
 
     /// Applies the resolved bubble width so the single-line label truncates correctly.
-    func prepareLayout(width: CGFloat) {
+    public func prepareLayout(width: CGFloat) {
         let labelMaxWidth = max(
             0,
             width - Self.horizontalPad * 2 - Self.chevronWidth - Self.labelChevronGap
@@ -110,7 +110,7 @@ final class CompactDefinitionCalloutView: UIControl {
     }
 
     /// Align the arrow toward `pointX` in this view's coordinate space (e.g. token center).
-    func updateArrowPosition(toward pointX: CGFloat) {
+    public func updateArrowPosition(toward pointX: CGFloat) {
         guard let arrowXConstraint, bounds.width > 0 else { return }
         let arrowHalf = arrowSize / 2
         let margin = cornerRadius
@@ -121,7 +121,7 @@ final class CompactDefinitionCalloutView: UIControl {
         layoutIfNeeded()
     }
 
-    func showWithAnimation() {
+    public func showWithAnimation() {
         transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
         alpha = 0
         UIView.animate(
@@ -136,7 +136,7 @@ final class CompactDefinitionCalloutView: UIControl {
         }
     }
 
-    func dismissWithAnimation(completion: (() -> Void)? = nil) {
+    public func dismissWithAnimation(completion: (() -> Void)? = nil) {
         UIView.animate(
             withDuration: 0.2,
             delay: 0,
@@ -152,12 +152,12 @@ final class CompactDefinitionCalloutView: UIControl {
         }
     }
 
-    override var intrinsicContentSize: CGSize {
+    public override var intrinsicContentSize: CGSize {
         fittingSize(maxWidth: .greatestFiniteMagnitude)
     }
 
     /// Size that fits the label, padding, chevron, and arrow tip (single line, truncated at `maxWidth`).
-    func fittingSize(maxWidth: CGFloat) -> CGSize {
+    public func fittingSize(maxWidth: CGFloat) -> CGSize {
         let chrome = Self.horizontalPad * 2 + Self.labelChevronGap + Self.chevronWidth
         let labelMaxWidth = max(0, maxWidth - chrome)
         let unconstrained = textLabel.sizeThatFits(
@@ -171,7 +171,7 @@ final class CompactDefinitionCalloutView: UIControl {
         )
     }
 
-    override func layoutSubviews() {
+    public override func layoutSubviews() {
         super.layoutSubviews()
         updateShadowPath()
     }

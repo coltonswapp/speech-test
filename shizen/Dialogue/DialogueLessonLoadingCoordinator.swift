@@ -6,6 +6,7 @@
 //  screens so the host view controller stays thin.
 //
 
+import InteractionKit
 import UIKit
 
 /// Full-screen loading overlay for a pushed lesson view controller.

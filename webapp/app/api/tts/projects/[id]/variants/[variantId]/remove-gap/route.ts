@@ -6,6 +6,7 @@ import { db } from "@/lib/db/client";
 import { ttsVariant, ttsVariantSentence } from "@/lib/db/schema";
 import { getObject, putObject } from "@/lib/storage/r2";
 import { wavToPcm16, pcm16ToWav } from "@/lib/tts/wav";
+import { shiftTokenSyncBySamples } from "@/lib/dialogue/token-sync";
 
 const bodySchema = z.object({
   startSample: z.number().int().min(0),
@@ -93,6 +94,17 @@ export async function POST(
   const shiftedTrimUpper =
     variant.trimSampleUpper != null ? shift(variant.trimSampleUpper) : null;
 
+  const newLength = newPcm.length / 2;
+  const shiftedTokenSync = shiftTokenSyncBySamples(
+    variant.tokenSync,
+    sampleRate,
+    (s) => {
+      const next = shift(s);
+      if (next <= 0 || next >= newLength) return null;
+      return next;
+    }
+  );
+
   const [updated] = await db
     .update(ttsVariant)
     .set({
@@ -101,6 +113,7 @@ export async function POST(
       trimSampleUpper: shiftedTrimUpper,
       dialogueLineSwitchSamples:
         shiftedLineSwitches.length > 0 ? shiftedLineSwitches : null,
+      tokenSync: shiftedTokenSync,
     })
     .where(eq(ttsVariant.id, variantId))
     .returning();

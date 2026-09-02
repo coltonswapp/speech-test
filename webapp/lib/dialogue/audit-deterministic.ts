@@ -4,6 +4,7 @@ import type {
   DialogueLine,
   GrammarPatternRef,
 } from "@/lib/dialogue/types";
+import { lineGrammarIds } from "@/lib/dialogue/types";
 
 export type DeterministicAuditInput = {
   lines: DialogueLine[];
@@ -30,7 +31,7 @@ function patternKey(pattern: GrammarPatternRef): string {
 function uniqueIdsFromLines(lines: DialogueLine[]): Set<string> {
   const ids = new Set<string>();
   for (const line of lines) {
-    for (const id of line.grammarPointIDs ?? []) {
+    for (const id of lineGrammarIds(line)) {
       ids.add(id);
     }
   }

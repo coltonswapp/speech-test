@@ -1,30 +1,52 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
+import {
+  AUTH_COOKIE,
+  authIsEnforced,
+  authSecret,
+  bearerMatches,
+  isEmailAllowed,
+  isGoogleAuthConfigured,
+  isPublicPath,
+  passphraseCookieMatches,
+} from "@/lib/studio-auth";
 
-const AUTH_COOKIE = "studio_auth";
-
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  if (isPublicPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  if (!authIsEnforced()) {
+    return NextResponse.next();
+  }
+
+  if (bearerMatches(request.headers.get("authorization"))) {
+    return NextResponse.next();
+  }
+
+  if (isGoogleAuthConfigured()) {
+    const token = await getToken({
+      req: request,
+      secret: authSecret(),
+    });
+    if (isEmailAllowed(typeof token?.email === "string" ? token.email : null)) {
+      return NextResponse.next();
+    }
+  }
+
+  const passphrase = process.env.APP_PASSPHRASE?.trim() ?? "";
   if (
-    pathname === "/login" ||
-    pathname.startsWith("/api/login") ||
-    pathname.startsWith("/api/public/") ||
-    pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico"
+    passphrase &&
+    passphraseCookieMatches(request.cookies.get(AUTH_COOKIE)?.value, passphrase)
   ) {
     return NextResponse.next();
   }
 
-  const passphrase = process.env.APP_PASSPHRASE?.trim() ?? "";
-  // No passphrase configured — leave the app open (e.g. local dev without .env set).
-  if (!passphrase) {
-    return NextResponse.next();
-  }
-
-  const cookie = request.cookies.get(AUTH_COOKIE)?.value;
-  if (cookie === passphrase) {
-    return NextResponse.next();
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const loginUrl = new URL("/login", request.url);
@@ -33,7 +55,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

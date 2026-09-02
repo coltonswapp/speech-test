@@ -12,7 +12,6 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SectionSwitcher } from "@/components/content/section-switcher";
 import {
   dialogueApi,
   scenarioSlug,
@@ -20,6 +19,7 @@ import {
   type UnitSummary,
 } from "@/lib/dialogue/client";
 import { cn } from "@/lib/utils";
+import { DialogueFormulaNotes } from "@/components/content/dialogue-formula-notes";
 
 function moveItem<T>(items: T[], from: number, to: number): T[] {
   if (to < 0 || to >= items.length || from === to) return items;
@@ -151,7 +151,6 @@ export function CurriculumView() {
     <div className="flex flex-1 flex-col gap-4 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <SectionSwitcher active="curriculum" />
           <p className="text-sm text-muted-foreground">
             Scan the learner path. Edit a unit or collection to reorder that
             section only.
@@ -161,6 +160,8 @@ export function CurriculumView() {
           View by default
         </Badge>
       </div>
+
+      <DialogueFormulaNotes />
 
       {isLoading ? (
         <div className="flex flex-col gap-3">

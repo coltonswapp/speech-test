@@ -49,21 +49,15 @@ final class DialogueBubbleUnderglowExperimentViewController: UIViewController {
         previewContainer.layer.cornerCurve = .continuous
 
         let font = UIFont.systemFont(ofSize: 22, weight: .medium)
-        var displayInsets = JapaneseFuriganaBuilder.compactDisplayInsets(for: font)
-        displayInsets.top += 6
-
         let label = FuriganaTranscriptLabel()
         label.translatesAutoresizingMaskIntoConstraints = false
         label.numberOfLines = 0
         label.textAlignment = .natural
-        JapaneseFuriganaBuilder.applyScrubDisplay(
+        JapaneseFuriganaBuilder.applyDialogueBubbleDisplay(
             to: label,
-            attributed: JapaneseFuriganaBuilder.scenarioAttributedString(
-                for: "今日はいい天気ですね。",
-                font: font,
-                textColor: .label
-            ),
-            contentInsets: displayInsets
+            text: "今日はいい天気ですね。",
+            font: font,
+            textColor: .label
         )
 
         bubble = DialogueJapaneseBubbleView(label: label)

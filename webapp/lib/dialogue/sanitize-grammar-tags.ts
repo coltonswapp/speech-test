@@ -5,6 +5,7 @@ import type {
   GeneratedLine,
   GeneratedLines,
 } from "@/lib/dialogue/types";
+import { isSpokenLine } from "@/lib/dialogue/types";
 import {
   filterGrammarPointIds,
   filterGrammarPointIdsRequired,
@@ -93,6 +94,7 @@ export function sanitizeScenarioGrammarTags(
   }
 
   const lines = input.lines.map((line, lineIndex) => {
+    if (!isSpokenLine(line)) return line;
     const before = line.grammarPointIDs ?? [];
     const stripped = before.filter((id) => !known.has(id));
     if (stripped.length > 0) {

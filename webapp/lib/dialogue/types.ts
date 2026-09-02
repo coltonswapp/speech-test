@@ -6,7 +6,18 @@ import { dialogueFormalityLevels } from "@/lib/dialogue/formality";
 // (shizen/Resources/Dialogue/*.json), mirroring the Swift decoder
 // DialogueScenarioCollectionFile in shizen/Dialogue/DialogueScenarioCollection.swift.
 
-export const dialogueLineSchema = z.object({
+// Spoken lines keep the existing { speaker, japanese } shape (type omitted).
+// Stage / ト書き rows are non-spoken: italic in the transcript, skipped by
+// TTS, and do not consume a line-switch beat. visibility "cold" is for an
+// opener before the first spoken line (may show on first listen);
+// "practice" is mid-scene (shadow / speak-as-B only).
+// Inline-question rows are also non-spoken: they pause playback after the
+// preceding spoken line and are skipped by TTS and token-sync.
+export const stageVisibilitySchema = z.enum(["cold", "practice"]);
+export type StageVisibility = z.infer<typeof stageVisibilitySchema>;
+
+export const spokenLineSchema = z.object({
+  type: z.literal("spoken").optional(),
   speaker: z.string(),
   japanese: z.string(),
   romaji: z.string().optional(),
@@ -14,7 +25,128 @@ export const dialogueLineSchema = z.object({
   id: z.string().optional(),
   grammarPointIDs: z.array(z.string()).optional(),
 });
+export type SpokenLine = z.infer<typeof spokenLineSchema>;
+
+export const stageLineSchema = z.object({
+  type: z.literal("stage"),
+  text: z.string(),
+  visibility: stageVisibilitySchema,
+  id: z.string().optional(),
+});
+export type StageLine = z.infer<typeof stageLineSchema>;
+
+export const quizLayoutSchema = z.enum(["grid", "list"]);
+
+export const quizQuestionSchema = z.object({
+  prompt: z.string(),
+  layout: quizLayoutSchema,
+  choices: z.array(z.string()),
+  correctChoice: z.string(),
+  wrongAnswerExplanation: z.string(),
+});
+export type QuizQuestion = z.infer<typeof quizQuestionSchema>;
+
+// Mid-listen checkpoint: sits in `lines[]` like a stage row, skipped by TTS,
+// and pauses playback after the preceding spoken line.
+export const inlineQuestionLineSchema = z.object({
+  type: z.literal("inline-question"),
+  prompt: z.string(),
+  target: z.string().optional(),
+  layout: quizLayoutSchema,
+  choices: z.array(z.string()),
+  correctChoice: z.string(),
+  wrongAnswerExplanation: z.string(),
+  id: z.string().optional(),
+});
+export type InlineQuestionLine = z.infer<typeof inlineQuestionLineSchema>;
+
+// Discriminated variants first — spoken is too loose to go first.
+export const dialogueLineSchema = z.union([
+  inlineQuestionLineSchema,
+  stageLineSchema,
+  spokenLineSchema,
+]);
 export type DialogueLine = z.infer<typeof dialogueLineSchema>;
+
+export function isStageLine(line: DialogueLine): line is StageLine {
+  return line.type === "stage";
+}
+
+export function isInlineQuestionLine(
+  line: DialogueLine,
+): line is InlineQuestionLine {
+  return line.type === "inline-question";
+}
+
+export function isSpokenLine(line: DialogueLine): line is SpokenLine {
+  return line.type === undefined || line.type === "spoken";
+}
+
+export function spokenLinesOf(lines: DialogueLine[]): SpokenLine[] {
+  return lines.filter(isSpokenLine);
+}
+
+export function lineGrammarIds(line: DialogueLine): string[] {
+  return isSpokenLine(line) ? (line.grammarPointIDs ?? []) : [];
+}
+
+export function hasSpokenJapanese(lines: DialogueLine[]): boolean {
+  return lines.some(
+    (line) => isSpokenLine(line) && line.japanese.trim().length > 0,
+  );
+}
+
+export function hasOpenerStage(lines: DialogueLine[]): boolean {
+  for (const line of lines) {
+    if (isSpokenLine(line)) return false;
+    if (isStageLine(line)) return true;
+  }
+  return false;
+}
+
+export function defaultStageVisibility(
+  lines: DialogueLine[],
+  insertIndex: number,
+): StageVisibility {
+  return lines.slice(0, insertIndex).some(isSpokenLine) ? "practice" : "cold";
+}
+
+export function emptySpokenLine(speaker: string): SpokenLine {
+  return { speaker, japanese: "", romaji: "", english: "" };
+}
+
+export function emptyStageLine(
+  visibility: StageVisibility,
+  text = "",
+): StageLine {
+  return { type: "stage", text, visibility };
+}
+
+export function emptyInlineQuestionLine(): InlineQuestionLine {
+  return {
+    type: "inline-question",
+    prompt: "",
+    layout: "grid",
+    choices: [],
+    correctChoice: "",
+    wrongAnswerExplanation: "",
+  };
+}
+
+export function formatDialogueTranscriptLine(
+  line: DialogueLine,
+  index?: number,
+): string {
+  const prefix = index === undefined ? "" : `[${index}] `;
+  if (isStageLine(line)) {
+    return `${prefix}[stage/${line.visibility}] ${line.text}`;
+  }
+  if (isInlineQuestionLine(line)) {
+    const target = line.target?.trim() ? ` (${line.target.trim()})` : "";
+    return `${prefix}[inline-question] ${line.prompt}${target}`;
+  }
+  return `${prefix}${line.speaker}: ${line.japanese}`;
+}
 
 // The Swift decoder accepts a bare string or {label, grammarPointID};
 // normalize to object form (export always emits objects).
@@ -33,16 +165,62 @@ export const highlightsSchema = z.object({
 });
 export type DialogueHighlights = z.output<typeof highlightsSchema>;
 
-export const quizLayoutSchema = z.enum(["grid", "list"]);
-
-export const quizQuestionSchema = z.object({
-  prompt: z.string(),
-  layout: quizLayoutSchema,
-  choices: z.array(z.string()),
-  correctChoice: z.string(),
-  wrongAnswerExplanation: z.string(),
+// Working copy on a TTS take: startSeconds is null until stamped.
+export const variantTokenSchema = z.object({
+  text: z.string().min(1),
+  startSeconds: z.number().nullable(),
 });
-export type QuizQuestion = z.infer<typeof quizQuestionSchema>;
+export type VariantToken = z.infer<typeof variantTokenSchema>;
+
+export const variantTokenSyncLineSchema = z.object({
+  text: z.string(),
+  tokens: z.array(variantTokenSchema).min(1),
+});
+export type VariantTokenSyncLine = z.infer<typeof variantTokenSyncLineSchema>;
+
+export const variantTokenSyncSchema = z.object({
+  version: z.literal(1),
+  contentHash: z.string(),
+  lines: z.array(variantTokenSyncLineSchema),
+});
+export type VariantTokenSync = z.infer<typeof variantTokenSyncSchema>;
+
+export const publishedTokenSchema = z.object({
+  text: z.string().min(1),
+  startSeconds: z.number(),
+});
+export type PublishedToken = z.infer<typeof publishedTokenSchema>;
+
+export const publishedTokenSyncLineSchema = z.object({
+  text: z.string(),
+  tokens: z.array(publishedTokenSchema).min(1),
+});
+export type PublishedTokenSyncLine = z.infer<
+  typeof publishedTokenSyncLineSchema
+>;
+
+export const publishedTokenSyncSchema = z.object({
+  version: z.literal(1),
+  variantId: z.string(),
+  contentHash: z.string(),
+  lines: z.array(publishedTokenSyncLineSchema),
+});
+export type PublishedTokenSync = z.infer<typeof publishedTokenSyncSchema>;
+
+export const tokenizeLinesRequestSchema = z.object({
+  texts: z.array(z.string()).min(1).max(48),
+});
+export type TokenizeLinesRequest = z.infer<typeof tokenizeLinesRequestSchema>;
+
+export const tokenizeLinesResultSchema = z.object({
+  lines: z.array(
+    z.object({
+      text: z.string(),
+      tokens: z.array(z.string().min(1)).min(1),
+    }),
+  ),
+});
+export type TokenizeLinesResult = z.infer<typeof tokenizeLinesResultSchema>;
 
 export const scenarioBodySchema = z.object({
   setting: z.string().optional(),
@@ -67,6 +245,7 @@ export const scenarioFileSchema = z.object({
   scenario: scenarioBodySchema,
   highlights: highlightsSchema.optional(),
   quiz: z.array(quizQuestionSchema).optional(),
+  tokenSync: publishedTokenSyncSchema.optional(),
 });
 export type ScenarioFile = z.output<typeof scenarioFileSchema>;
 
@@ -120,6 +299,16 @@ export const createScenarioSchema = z.object({
   setting: z.string().optional(),
 });
 
+export const castVoiceEntrySchema = z.object({
+  name: z.string().min(1),
+  provider: z.enum(["gemini", "openai"]),
+  voice: z.string().min(1),
+});
+
+export const castVoicesSchema = z.array(castVoiceEntrySchema);
+
+export type CastVoiceEntry = z.infer<typeof castVoiceEntrySchema>;
+
 // Dedicated partial schemas for PATCH — NOT .partial() on a schema with
 // .default()s, since Zod still applies defaults to omitted keys, which would
 // silently zero out fields like `lines`/`quiz` on any partial update.
@@ -128,6 +317,7 @@ export const updateCollectionSchema = z.object({
   unitId: z.string().nullable().optional(),
   subtitle: z.string().nullable().optional(),
   premise: z.string().nullable().optional(),
+  castVoices: castVoicesSchema.optional(),
   sceneImage: z.string().nullable().optional(),
   thumbnailUrl: z.string().url().nullable().optional(),
   orderIndex: z.number().int().optional(),

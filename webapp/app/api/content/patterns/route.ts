@@ -3,7 +3,7 @@ import { asc } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { dialogueScenario, teachingPattern } from "@/lib/db/schema";
-import { dialogueLineSchema } from "@/lib/dialogue/types";
+import { dialogueLineSchema, lineGrammarIds } from "@/lib/dialogue/types";
 
 // Pattern library list + linkedScenarioCount computed from existing
 // dialogue_scenario.grammarPointIds and line.grammarPointIDs tags.
@@ -32,7 +32,7 @@ export async function GET() {
     const parsed = linesSchema.safeParse(scenario.lines);
     if (parsed.success) {
       for (const line of parsed.data) {
-        for (const id of line.grammarPointIDs ?? []) tags.add(id);
+        for (const id of lineGrammarIds(line)) tags.add(id);
       }
     }
     for (const tag of tags) {

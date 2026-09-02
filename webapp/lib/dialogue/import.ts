@@ -74,6 +74,7 @@ export async function upsertCollectionFile(
         lines: scenario.scenario.lines,
         highlights: scenario.highlights ?? null,
         quiz: scenario.quiz ?? null,
+        tokenSync: scenario.tokenSync ?? null,
       }))
     );
   }

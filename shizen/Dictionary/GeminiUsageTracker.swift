@@ -18,12 +18,14 @@ enum GeminiUsageFeature: String, Codable, CaseIterable, Hashable {
     case tokenizer
     case contextualGloss
     case registerLadder
+    case dialogueNuance
 
     var displayName: String {
         switch self {
         case .tokenizer: return "Tokenizer"
         case .contextualGloss: return "Contextual gloss"
         case .registerLadder: return "Register ladder"
+        case .dialogueNuance: return "Implied meaning"
         }
     }
 }
@@ -52,6 +54,7 @@ enum GeminiPricing {
     }
 
     private static let rates: [String: Rate] = [
+        "gemini-2.5-flash": Rate(inputPerMillion: 0.30, outputPerMillion: 2.50),
         "gemini-2.5-flash-lite": Rate(inputPerMillion: 0.10, outputPerMillion: 0.40),
         "gemini-3.6-flash": Rate(inputPerMillion: 1.50, outputPerMillion: 7.50),
     ]
@@ -93,7 +96,7 @@ final class GeminiUsageTracker {
     }
 
     /// Estimated average USD cost per calendar day, based on the full retained history
-    /// (bounded by `maxRecords`/retention, so this is "recent average," not lifetime-exact).
+    /// (bounded by 14-day retention, so this is "recent average," not lifetime-exact).
     struct CostEstimate {
         let averagePerDayUSD: Double?
         let averagePerSessionUSD: Double?
@@ -111,6 +114,7 @@ final class GeminiUsageTracker {
     private let queue = DispatchQueue(label: "GeminiUsageTracker", qos: .utility)
 
     private static let maxRecords = 2000
+    private static let retentionDays = 14
 
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
@@ -136,9 +140,16 @@ final class GeminiUsageTracker {
         }
     }
 
-    /// Reads the full log. Safe to call from any thread; performs local file I/O.
+    /// Reads the log, dropping records older than 14 days. Safe to call from any thread.
     func allRecords() -> [GeminiUsageRecord] {
-        queue.sync { (try? load()) ?? [] }
+        queue.sync {
+            let records = (try? load()) ?? []
+            let pruned = recordsWithinRetention(records)
+            if pruned.count != records.count {
+                try? save(pruned)
+            }
+            return pruned
+        }
     }
 
     func summary(since: Date? = nil) -> Summary {
@@ -220,10 +231,17 @@ final class GeminiUsageTracker {
     private func appendAndRotate(_ record: GeminiUsageRecord) {
         var records = (try? load()) ?? []
         records.append(record)
+        records = recordsWithinRetention(records)
         if records.count > Self.maxRecords {
             records.removeFirst(records.count - Self.maxRecords)
         }
         try? save(records)
+    }
+
+    private func recordsWithinRetention(_ records: [GeminiUsageRecord], now: Date = Date()) -> [GeminiUsageRecord] {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -Self.retentionDays, to: now)
+            ?? now.addingTimeInterval(-TimeInterval(Self.retentionDays * 24 * 60 * 60))
+        return records.filter { $0.timestamp >= cutoff }
     }
 
     private func load() throws -> [GeminiUsageRecord] {

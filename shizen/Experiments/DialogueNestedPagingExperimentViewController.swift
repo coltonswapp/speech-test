@@ -655,27 +655,30 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     // MARK: - Setup
 
     private func resolveCollectionAndLoadContent() {
-        if usesLegacyCatalog || collection != nil {
+        if usesLegacyCatalog {
             finishCollectionResolutionAndBuild()
             return
         }
 
-        guard let pendingCollectionID else {
-            finishCollectionResolutionAndBuild()
-            return
-        }
-
-        DialogueScenarioCollectionCatalog.fetchCollection(id: pendingCollectionID) { [weak self] collection in
-            guard let self else { return }
-            guard let collection else {
-                self.loadingCoordinator.finishLoading {
-                    self.showCollectionLoadFailure(id: pendingCollectionID)
+        let id = pendingCollectionID ?? collection?.id
+        if let id, ContentCMSClient.isConfigured {
+            DialogueScenarioCollectionCatalog.fetchCollection(id: id) { [weak self] fresh in
+                guard let self else { return }
+                if let fresh {
+                    self.collection = fresh
                 }
-                return
+                guard self.collection != nil else {
+                    self.loadingCoordinator.finishLoading {
+                        self.showCollectionLoadFailure(id: id)
+                    }
+                    return
+                }
+                self.finishCollectionResolutionAndBuild()
             }
-            self.collection = collection
-            self.finishCollectionResolutionAndBuild()
+            return
         }
+
+        finishCollectionResolutionAndBuild()
     }
 
     private func finishCollectionResolutionAndBuild() {
@@ -935,7 +938,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             children: actions
         )
         let displayOptions: [(DialogueTranscriptDisplayMode, String, String)] = [
-            (.full, "Full transcript", "text.bubble"),
+            (.full, "Japanese · swipe for English", "text.bubble"),
             (.japaneseOnly, "Hide English", "eye.slash"),
             (.listeningSpeakers, "Live meters", "waveform"),
             (.listeningLines, "Live meters · every line", "waveform.path"),
@@ -954,10 +957,54 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             options: [.singleSelection, .displayInline],
             children: displayActions
         )
+        let tokenSyncAction = UIAction(
+            title: "Token sync",
+            subtitle: "Yellow highlight on the spoken word",
+            image: UIImage(systemName: "highlighter"),
+            state: ExperimentSettings.dialogueShowsTokenSync ? .on : .off
+        ) { [weak self] _ in
+            self?.toggleTokenSyncHighlight()
+        }
         return UIMenu(
             title: collection?.title ?? "Scenarios",
-            children: [scenariosSection, settingsSection]
+            children: [
+                scenariosSection,
+                settingsSection,
+                tokenSyncAction,
+                makeTokenSyncHighlightStyleMenu(),
+            ]
         )
+    }
+
+    private func makeTokenSyncHighlightStyleMenu() -> UIMenu {
+        let selected = ExperimentSettings.dialogueTokenSyncHighlightStyle
+        let actions = DialogueTokenSyncHighlightStyle.allCases.map { style in
+            UIAction(
+                title: style.title,
+                subtitle: style.subtitle,
+                state: style == selected ? .on : .off
+            ) { [weak self] _ in
+                self?.setTokenSyncHighlightStyle(style)
+            }
+        }
+        return UIMenu(
+            title: "Token highlight",
+            image: UIImage(systemName: "paintbrush.pointed"),
+            options: .singleSelection,
+            children: actions
+        )
+    }
+
+    private func toggleTokenSyncHighlight() {
+        ExperimentSettings.dialogueShowsTokenSync.toggle()
+        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
+        dialogueViewController?.applyTokenSyncHighlightSetting()
+    }
+
+    private func setTokenSyncHighlightStyle(_ style: DialogueTokenSyncHighlightStyle) {
+        ExperimentSettings.dialogueTokenSyncHighlightStyle = style
+        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
+        dialogueViewController?.applyTokenSyncHighlightSetting()
     }
 
     private func selectTranscriptDisplayMode(_ mode: DialogueTranscriptDisplayMode) {
@@ -987,6 +1034,9 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         if let existing = dialogueViewController {
             existing.stopHostedPlaybackIfDisappearing()
             existing.recordsCompletionOnPlaybackFinish = item.quiz.isEmpty
+            existing.tokenSyncSettingDidChange = { [weak self] in
+                self?.navigationItem.rightBarButtonItem?.menu = self?.makeDialogueMenu()
+            }
             existing.reloadScenario(
                 pointTitle: item.pointTitle,
                 example: item.example,
@@ -1011,6 +1061,9 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         dialogue.sceneImageURL = collection?.thumbnailURL
         dialogue.transcriptDisplayMode = transcriptDisplayMode
         dialogue.recordsCompletionOnPlaybackFinish = item.quiz.isEmpty
+        dialogue.tokenSyncSettingDidChange = { [weak self] in
+            self?.navigationItem.rightBarButtonItem?.menu = self?.makeDialogueMenu()
+        }
         addChild(dialogue)
         dialogue.view.translatesAutoresizingMaskIntoConstraints = false
         dialoguePageView.addSubview(dialogue.view)
@@ -1040,9 +1093,6 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         quizPageView.isHidden = true
 
         let quiz = DialogueQuizViewController()
-        quiz.onSelectionChanged = { [weak self] in
-            self?.updateQuizCheckButtonState()
-        }
         quiz.onQuizPassed = { [weak self] in
             self?.recordQuizCompletion()
         }
@@ -1116,10 +1166,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     }
 
     private func quizCheckTapped() {
-        quizViewController.checkAnswers()
-        updateQuizCheckButtonState()
-        applyQuizCheckButtonProgress(pageTransitionProgress)
-        applyQuizScrollInsetsForPageTransition()
+        // Quiz grades immediately on selection; Check chrome is unused.
     }
 
     /// Quiz-backed scenarios complete through comprehension, not playback:
@@ -1134,7 +1181,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     }
 
     private func updateQuizCheckButtonState() {
-        quizCheckButton.isEnabled = quizViewController.canCheckAnswers
+        quizCheckButton.isEnabled = false
     }
 
     private func updateQuizPageVisibility() {
@@ -1286,11 +1333,8 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         let base = appliedBottomContentInset >= 0
             ? appliedBottomContentInset
             : view.safeAreaInsets.bottom + 16
-        guard hasQuizPage, !quizViewController.hasCheckedAnswers else { return base }
-
-        let visibility = quizCheckButtonVisibility(for: outerPageOffset)
-        let checkButtonClearance = Self.quizCheckButtonHeight + 16
-        return base + checkButtonClearance * visibility.alpha
+        // Immediate-answer quiz: no Check button band.
+        return base
     }
 
     /// Visibility and slide progress for the quiz check button (page index 1 when a quiz exists).
@@ -1304,18 +1348,10 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     }
 
     private func applyQuizCheckButtonProgress(_ outerPageOffset: CGFloat) {
-        guard hasQuizPage, !quizViewController.hasCheckedAnswers else {
-            quizCheckButton.alpha = 0
-            quizCheckButton.isUserInteractionEnabled = false
-            return
-        }
-
-        let visibility = quizCheckButtonVisibility(for: outerPageOffset)
-        let translationX = -Self.quizCheckSlideDistance * visibility.slideProgress
-        quizCheckButton.alpha = visibility.alpha
-        quizCheckButton.transform = CGAffineTransform(translationX: translationX, y: 0)
-        quizCheckButton.isEnabled = quizViewController.canCheckAnswers
-        quizCheckButton.isUserInteractionEnabled = visibility.alpha > 0.65
+        // Immediate-answer quiz: keep Check chrome hidden.
+        quizCheckButton.alpha = 0
+        quizCheckButton.isUserInteractionEnabled = false
+        quizCheckButton.isEnabled = false
     }
 
     private func applyHighlightsScrollInsetsForPageTransition() {

@@ -3,7 +3,7 @@
 // the Audio tab uses it to label voice pickers, the variants route to build
 // the synthesis input, so both sides agree on the speaker1/speaker2 mapping.
 
-import type { DialogueLine } from "@/lib/dialogue/types";
+import { isSpokenLine, type DialogueLine } from "@/lib/dialogue/types";
 import { SpeakerAssigner } from "@/lib/tts/dialogue-import";
 
 export type ConversationLine = {
@@ -27,6 +27,8 @@ export function scenarioLinesToConversation(
   const speakerNames: string[] = [];
 
   for (const line of lines) {
+    // Stage / ト書き rows are not spoken: skip TTS and line-switch beats.
+    if (!isSpokenLine(line)) continue;
     const speakerName = line.speaker.trim();
     const japanese = line.japanese.trim();
     if (!speakerName || !japanese) continue;

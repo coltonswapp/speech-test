@@ -1,8 +1,9 @@
-import type {
-  DialogueHighlights,
-  DialogueLine,
-  ExtractedHighlights,
-  GrammarPatternRef,
+import {
+  lineGrammarIds,
+  type DialogueHighlights,
+  type DialogueLine,
+  type ExtractedHighlights,
+  type GrammarPatternRef,
 } from "@/lib/dialogue/types";
 
 export type GrammarPointLabel = {
@@ -25,7 +26,7 @@ export function uniqueGrammarIdsFromLines(
     }
   }
   for (const line of lines) {
-    for (const id of line.grammarPointIDs ?? []) {
+    for (const id of lineGrammarIds(line)) {
       if (!seen.has(id)) {
         seen.add(id);
         ids.push(id);

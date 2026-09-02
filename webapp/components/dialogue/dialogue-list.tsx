@@ -35,7 +35,6 @@ import {
   scenarioSlug,
   type UnitSummary,
 } from "@/lib/dialogue/client";
-import { SectionSwitcher } from "@/components/content/section-switcher";
 import { CreateCollectionDialog } from "@/components/dialogue/create-collection-dialog";
 
 export function DialogueList({ activeId }: { activeId?: string }) {
@@ -127,7 +126,6 @@ export function DialogueList({ activeId }: { activeId?: string }) {
 
   return (
     <div className="flex w-80 shrink-0 flex-col gap-3 border-r border-border/60 pr-4">
-      <SectionSwitcher active="dialogues" />
 
       <Button
         size="sm"

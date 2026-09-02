@@ -2,7 +2,7 @@
 
 import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { DialogueLine, GeneratedLine } from "@/lib/dialogue/types";
+import type { GeneratedLine, SpokenLine } from "@/lib/dialogue/types";
 
 // Inline pending diff for a proposed LLM revision of one line: current text
 // struck through, proposed text highlighted, with per-line accept/reject.
@@ -12,7 +12,7 @@ function LinePreview({
   line,
   tone,
 }: {
-  line: DialogueLine | GeneratedLine;
+  line: SpokenLine | GeneratedLine;
   tone: "old" | "new";
 }) {
   const toneClass =
@@ -44,7 +44,7 @@ export function LineRevisionDiff({
   onAccept,
   onReject,
 }: {
-  original: DialogueLine;
+  original: SpokenLine;
   proposed: GeneratedLine;
   onAccept: () => void;
   onReject: () => void;

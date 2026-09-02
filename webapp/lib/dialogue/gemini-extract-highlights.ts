@@ -5,6 +5,9 @@ import {
 } from "@/lib/dialogue/gemini-generate";
 import {
   extractedHighlightsSchema,
+  formatDialogueTranscriptLine,
+  hasSpokenJapanese,
+  isSpokenLine,
   type DialogueLine,
   type ExtractedHighlights,
 } from "@/lib/dialogue/types";
@@ -26,6 +29,9 @@ const RESPONSE_SCHEMA = `{"vocabulary":["単語"],"grammarPatterns":[{"label":"�
 function buildPrompt(params: ExtractHighlightsParams): string {
   const transcript = params.lines
     .map((line, index) => {
+      if (!isSpokenLine(line)) {
+        return `Line ${index + 1} — ${formatDialogueTranscriptLine(line)}`;
+      }
       const english = line.english ? ` (${line.english})` : "";
       const tags =
         line.grammarPointIDs && line.grammarPointIDs.length > 0
@@ -85,7 +91,7 @@ function buildPrompt(params: ExtractHighlightsParams): string {
 export async function extractDialogueHighlights(
   params: ExtractHighlightsParams
 ): Promise<ExtractedHighlights> {
-  if (params.lines.every((line) => !line.japanese.trim())) {
+  if (!hasSpokenJapanese(params.lines)) {
     throw new DialogueGenerationError(
       "Dialogue has no Japanese text to extract highlights from."
     );

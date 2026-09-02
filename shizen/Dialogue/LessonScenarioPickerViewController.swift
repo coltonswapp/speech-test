@@ -15,6 +15,9 @@ final class LessonScenarioPickerViewController: UIViewController {
     private let fallbackTitle: String?
     private var collection: DialogueScenarioCollection?
 
+    /// When set, tapping a scenario calls this instead of opening the nested paging player.
+    var onOpenScenario: ((DialogueScenarioCollection, String) -> Void)?
+
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
     private let loadingCoordinator = DialogueLessonLoadingCoordinator()
@@ -49,16 +52,20 @@ final class LessonScenarioPickerViewController: UIViewController {
             applyCollection(ready)
         } else {
             loadingCoordinator.beginLoading()
-            DialogueScenarioCollectionCatalog.fetchCollection(id: collectionID) { [weak self] collection in
-                guard let self else { return }
-                self.loadingCoordinator.finishLoading { [weak self] in
-                    guard let self else { return }
-                    if let collection {
-                        self.applyCollection(collection)
-                    } else {
-                        self.showLoadFailure()
-                    }
+        }
+        DialogueScenarioCollectionCatalog.fetchCollection(id: collectionID) { [weak self] collection in
+            guard let self else { return }
+            let apply = {
+                if let collection {
+                    self.applyCollection(collection)
+                } else if self.collection == nil {
+                    self.showLoadFailure()
                 }
+            }
+            if self.collection == nil {
+                self.loadingCoordinator.finishLoading(completion: apply)
+            } else {
+                apply()
             }
         }
     }
@@ -148,7 +155,7 @@ final class LessonScenarioPickerViewController: UIViewController {
     private func showLoadFailure() {
         let alert = UIAlertController(
             title: "Couldn’t load lesson",
-            message: "Failed to fetch “\(collectionID)”.",
+            message: "Failed to fetch “\(collectionID)” from \(ContentCMSClient.baseURL?.absoluteString ?? "the CMS"). Rebuild the app and force-quit so it isn’t using a cached lesson JSON.",
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
@@ -159,6 +166,10 @@ final class LessonScenarioPickerViewController: UIViewController {
 
     private func openScenario(id: String) {
         guard let collection else { return }
+        if let onOpenScenario {
+            onOpenScenario(collection, id)
+            return
+        }
         let dialogue = DialogueNestedPagingExperimentViewController(
             collection: collection,
             initialScenarioID: id

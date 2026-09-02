@@ -1,10 +1,14 @@
-import type {
-  CollectionFile,
-  DialogueHighlights,
-  DialogueLine,
-  QuizQuestion,
-  ScenarioFile,
+import {
+  isInlineQuestionLine,
+  isStageLine,
+  type CollectionFile,
+  type DialogueHighlights,
+  type DialogueLine,
+  type PublishedTokenSync,
+  type QuizQuestion,
+  type ScenarioFile,
 } from "@/lib/dialogue/types";
+import { parsePublishedTokenSync } from "@/lib/dialogue/token-sync";
 
 // Structural input types satisfied by both the drizzle rows (jsonb columns
 // infer as unknown) and the client-side types in lib/dialogue/client.ts, so
@@ -36,6 +40,7 @@ export type ExportableScenario = {
   lines: unknown;
   highlights: unknown;
   quiz: unknown;
+  tokenSync?: unknown;
 };
 
 // Assembles the exact shizen collection file shape
@@ -49,6 +54,26 @@ function exportLine(
   scenarioId: string,
   index: number
 ): DialogueLine {
+  if (isStageLine(line)) {
+    return {
+      type: "stage",
+      text: line.text,
+      visibility: line.visibility,
+      id: line.id || `${scenarioId}/stage-${index}`,
+    };
+  }
+  if (isInlineQuestionLine(line)) {
+    return {
+      type: "inline-question",
+      prompt: line.prompt,
+      target: line.target || undefined,
+      layout: line.layout,
+      choices: line.choices,
+      correctChoice: line.correctChoice,
+      wrongAnswerExplanation: line.wrongAnswerExplanation,
+      id: line.id || `${scenarioId}/inline-question-${index}`,
+    };
+  }
   return {
     speaker: line.speaker,
     japanese: line.japanese,
@@ -94,6 +119,10 @@ function exportQuiz(quiz: QuizQuestion[] | null): QuizQuestion[] | undefined {
   }));
 }
 
+function exportTokenSync(raw: unknown): PublishedTokenSync | undefined {
+  return parsePublishedTokenSync(raw) ?? undefined;
+}
+
 export function buildScenarioFile(scenario: ExportableScenario): ScenarioFile {
   const lines = (scenario.lines as DialogueLine[]) ?? [];
   return {
@@ -119,6 +148,7 @@ export function buildScenarioFile(scenario: ExportableScenario): ScenarioFile {
     grammarPointIDs:
       scenario.grammarPointIds.length > 0 ? scenario.grammarPointIds : undefined,
     quiz: exportQuiz(scenario.quiz as QuizQuestion[] | null),
+    tokenSync: exportTokenSync(scenario.tokenSync),
   };
 }
 

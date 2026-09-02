@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SectionSwitcher } from "@/components/content/section-switcher";
 import {
   contentApi,
   type TeachingPatternRow,
@@ -129,7 +128,6 @@ export function PatternLibraryView() {
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <SectionSwitcher active="patterns" />
           {data && (
             <p className="text-sm text-muted-foreground">
               {data.patterns.length} patterns

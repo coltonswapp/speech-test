@@ -135,6 +135,17 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         dismissCallout(animated: animated)
     }
 
+    /// Text-container padding is only for ruby / selection overflow. Hug the
+    /// glyphs so this view's leading matches siblings in the same stack.
+    override var alignmentRectInsets: UIEdgeInsets {
+        UIEdgeInsets(
+            top: 0,
+            left: sentenceTextView.textContainerInset.left,
+            bottom: 0,
+            right: 0
+        )
+    }
+
     func configure(
         sentence: String,
         font: UIFont,
@@ -153,6 +164,8 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
     }
 
     /// Renders with precomputed tokens only — no tokenizer or network call.
+    /// When `preservesTokenBoundaries` is true, underlines stay 1:1 with
+    /// `tokens` instead of merging adjacent JMDict compounds.
     func configureWithTokens(
         sentence: String,
         font: UIFont,
@@ -160,7 +173,8 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         showsFurigana: Bool = true,
         accentSubstring: String? = nil,
         accentColor: UIColor = .systemBlue,
-        clearInteraction: Bool = false
+        clearInteraction: Bool = false,
+        preservesTokenBoundaries: Bool = false
     ) {
         tokenizeTask?.cancel()
         usesProvidedTokens = true
@@ -185,8 +199,15 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
             tokens: tokens,
             showsFurigana: showsFurigana,
             accentSubstring: accentSubstring,
-            accentColor: accentColor
+            accentColor: accentColor,
+            preservesTokenBoundaries: preservesTokenBoundaries
         )
+        noteTextLayoutChanged()
+    }
+
+    private func noteTextLayoutChanged() {
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
     }
 
     /// One-shot tokenization for exercise drills; matches the active backend (including async LLM backends).
@@ -247,6 +268,7 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
                 accentSubstring: lastAccentSubstring,
                 accentColor: lastAccentColor
             )
+            noteTextLayoutChanged()
         case .foundationModel, .geminiFlash, .geminiFlashLite, .geminiFlash31Lite:
             sentenceTextView.configure(
                 sentence: lastSentence,
@@ -256,6 +278,7 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
                 accentSubstring: lastAccentSubstring,
                 accentColor: lastAccentColor
             )
+            noteTextLayoutChanged()
             setTokenizing(true)
             tokenizeTask = Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -269,6 +292,7 @@ final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
                     accentSubstring: self.lastAccentSubstring,
                     accentColor: self.lastAccentColor
                 )
+                self.noteTextLayoutChanged()
                 self.setTokenizing(false, animatedSuccess: true)
             }
         }

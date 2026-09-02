@@ -4,7 +4,10 @@ import {
   generateJsonWithRetries,
 } from "@/lib/dialogue/gemini-generate";
 import {
+  formatDialogueTranscriptLine,
   generatedQuizSchema,
+  hasSpokenJapanese,
+  isSpokenLine,
   type DialogueLine,
   type GeneratedQuiz,
   type QuizQuestion,
@@ -23,6 +26,9 @@ const RESPONSE_SCHEMA = `{"questions":[{"prompt":"...","layout":"grid","choices"
 function buildPrompt(params: GenerateQuizParams): string {
   const transcript = params.lines
     .map((line, index) => {
+      if (!isSpokenLine(line)) {
+        return `Line ${index + 1} — ${formatDialogueTranscriptLine(line)}`;
+      }
       const english = line.english ? ` (${line.english})` : "";
       return `Line ${index + 1} — ${line.speaker}: ${line.japanese}${english}`;
     })
@@ -73,7 +79,7 @@ function buildPrompt(params: GenerateQuizParams): string {
 export async function generateQuizQuestions(
   params: GenerateQuizParams,
 ): Promise<GeneratedQuiz> {
-  if (params.lines.every((line) => !line.japanese.trim())) {
+  if (!hasSpokenJapanese(params.lines)) {
     throw new DialogueGenerationError(
       "Dialogue has no Japanese text to generate quiz questions from.",
     );

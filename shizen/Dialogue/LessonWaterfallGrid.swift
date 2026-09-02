@@ -193,7 +193,6 @@ final class LessonWaterfallCardCell: UICollectionViewCell {
 
     private let cardView = UIView()
     private let thumbnailImageView = UIImageView()
-    private let thumbnailLoadingPlaceholder = ImageLoadingPlaceholderView()
     private let lockBadge = LessonLockBadgeView()
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
@@ -226,14 +225,9 @@ final class LessonWaterfallCardCell: UICollectionViewCell {
         thumbnailImageView.translatesAutoresizingMaskIntoConstraints = false
         thumbnailImageView.contentMode = .scaleAspectFill
         thumbnailImageView.clipsToBounds = true
-        thumbnailImageView.layer.cornerRadius = ImageLoadingPlaceholderMetrics.defaultCornerRadius
+        thumbnailImageView.layer.cornerRadius = 20
         thumbnailImageView.layer.cornerCurve = .continuous
-        thumbnailImageView.backgroundColor = ExperimentPalette.pageBackground
-
-        thumbnailLoadingPlaceholder.translatesAutoresizingMaskIntoConstraints = false
-        thumbnailLoadingPlaceholder.message = nil
-        thumbnailLoadingPlaceholder.syncCornerRadius(with: thumbnailImageView)
-        thumbnailLoadingPlaceholder.isHidden = true
+        thumbnailImageView.backgroundColor = .systemGray5
 
         titleLabel.font = .preferredFont(forTextStyle: .headline)
         titleLabel.textColor = .label
@@ -251,7 +245,6 @@ final class LessonWaterfallCardCell: UICollectionViewCell {
         textStack.addArrangedSubview(subtitleLabel)
 
         cardView.addSubview(thumbnailImageView)
-        cardView.addSubview(thumbnailLoadingPlaceholder)
         cardView.addSubview(textStack)
         cardView.addSubview(lockBadge)
         contentView.addSubview(cardView)
@@ -266,11 +259,6 @@ final class LessonWaterfallCardCell: UICollectionViewCell {
             thumbnailImageView.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 10),
             thumbnailImageView.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -10),
             thumbnailImageView.heightAnchor.constraint(equalTo: thumbnailImageView.widthAnchor, multiplier: 0.82),
-
-            thumbnailLoadingPlaceholder.topAnchor.constraint(equalTo: thumbnailImageView.topAnchor),
-            thumbnailLoadingPlaceholder.leadingAnchor.constraint(equalTo: thumbnailImageView.leadingAnchor),
-            thumbnailLoadingPlaceholder.trailingAnchor.constraint(equalTo: thumbnailImageView.trailingAnchor),
-            thumbnailLoadingPlaceholder.bottomAnchor.constraint(equalTo: thumbnailImageView.bottomAnchor),
 
             lockBadge.topAnchor.constraint(equalTo: thumbnailImageView.topAnchor, constant: 10),
             lockBadge.trailingAnchor.constraint(equalTo: thumbnailImageView.trailingAnchor, constant: -10),
@@ -309,8 +297,6 @@ final class LessonWaterfallCardCell: UICollectionViewCell {
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        thumbnailLoadingPlaceholder.stopAnimating()
-        thumbnailLoadingPlaceholder.isHidden = true
         thumbnailImageView.image = nil
         thumbnailImageView.accessibilityIdentifier = nil
     }
@@ -323,8 +309,6 @@ final class LessonWaterfallCardCell: UICollectionViewCell {
 
         let applyImage: (UIImage?) -> Void = { [weak self] source in
             guard let self else { return }
-            self.thumbnailLoadingPlaceholder.stopAnimating()
-            self.thumbnailLoadingPlaceholder.isHidden = true
             if lesson.isLocked, let source {
                 self.thumbnailImageView.image = Self.grayscaleImage(from: source) ?? source
             } else {
@@ -339,8 +323,6 @@ final class LessonWaterfallCardCell: UICollectionViewCell {
             if let cached = LessonThumbnailLoader.cachedImage(for: remoteURL) {
                 applyImage(cached)
             } else {
-                thumbnailLoadingPlaceholder.isHidden = false
-                thumbnailLoadingPlaceholder.startAnimating()
                 LessonThumbnailLoader.load(url: remoteURL) { [weak self] image in
                     guard let self,
                           self.thumbnailImageView.accessibilityIdentifier == token else { return }

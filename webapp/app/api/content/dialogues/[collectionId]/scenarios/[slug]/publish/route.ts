@@ -16,6 +16,7 @@ export async function POST(
       scenario: result.scenario,
       publishedAudioUrl: result.publishedAudioUrl,
       objectKey: result.objectKey,
+      hasTokenKaraoke: result.hasTokenKaraoke,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Publish failed";

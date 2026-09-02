@@ -7,9 +7,11 @@ import type {
   GeneratedLines,
   GeneratedQuiz,
   GeneratedScenario,
+  PublishedTokenSync,
   QuizQuestion,
   ReviseLinesResult,
   SanitizeGrammarResult,
+  TokenizeLinesResult,
 } from "@/lib/dialogue/types";
 import type { Project as TtsProject } from "@/lib/tts/client";
 import { formatApiError } from "@/lib/api-error";
@@ -18,6 +20,7 @@ export type ScenarioAudio = {
   project: TtsProject | null;
   currentContentHash: string;
   speakerNames: string[];
+  castVoices?: Array<{ name: string; voice: string }>;
 };
 
 export type ScenarioAudioStatus = {
@@ -89,6 +92,7 @@ export type DialogueScenario = {
   lines: DialogueLine[];
   highlights: DialogueHighlights | null;
   quiz: QuizQuestion[] | null;
+  tokenSync: PublishedTokenSync | null;
   updatedAt: string;
 };
 
@@ -341,6 +345,11 @@ export const dialogueApi = {
       "/api/content/dialogues/generate-quiz",
       { method: "POST", body: JSON.stringify(body) },
     ),
+  tokenizeLines: (texts: string[]) =>
+    request<TokenizeLinesResult>("/api/content/dialogues/tokenize-lines", {
+      method: "POST",
+      body: JSON.stringify({ texts }),
+    }),
   auditScenario: (body: {
     lines: DialogueLine[];
     highlights?: DialogueHighlights | null;
@@ -370,6 +379,7 @@ export const dialogueApi = {
       scenario: DialogueScenario;
       publishedAudioUrl: string;
       objectKey: string;
+      hasTokenKaraoke: boolean;
     }>(`/api/content/dialogues/${collectionId}/scenarios/${slug}/publish`, {
       method: "POST",
     }),
@@ -386,6 +396,7 @@ export const dialogueApi = {
         menuTitle: string;
         status: "published" | "unchanged" | "skipped" | "failed";
         publishedAudioUrl: string | null;
+        hasTokenKaraoke?: boolean;
         error?: string;
       }>;
       lesson: CollectionFile;

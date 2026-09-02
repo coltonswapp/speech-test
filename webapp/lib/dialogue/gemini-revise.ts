@@ -8,7 +8,9 @@ import {
   type DialogueFormality,
 } from "@/lib/dialogue/formality";
 import {
+  formatDialogueTranscriptLine,
   generatedLinesSchema,
+  isSpokenLine,
   revisedSelectionSchema,
   type DialogueLine,
   type ReviseLinesResult,
@@ -46,6 +48,9 @@ const ALL_RESPONSE_SCHEMA = `{"setting":"...","lines":[{"speaker":"...","japanes
 function transcript(lines: DialogueLine[]): string {
   return lines
     .map((line, index) => {
+      if (!isSpokenLine(line)) {
+        return formatDialogueTranscriptLine(line, index);
+      }
       const parts = [`[${index}] ${line.speaker}: ${line.japanese}`];
       if (line.romaji) parts.push(`    romaji: ${line.romaji}`);
       if (line.english) parts.push(`    english: ${line.english}`);

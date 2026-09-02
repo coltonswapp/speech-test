@@ -28,3 +28,5 @@ webapp/.next/
 
 # Local API keys (copy Secrets.plist.example → Secrets.plist)
 shizen/Secrets.plist
+.vercel
+.env*

@@ -16,7 +16,7 @@ import {
   syncGrammarPatternsFromLines,
   uniqueGrammarIdsFromLines,
 } from "@/lib/dialogue/enrich-highlights";
-import type { DialogueHighlights, DialogueLine } from "@/lib/dialogue/types";
+import { hasSpokenJapanese, type DialogueHighlights, type DialogueLine } from "@/lib/dialogue/types";
 
 const empty: DialogueHighlights = {
   vocabulary: [],
@@ -108,7 +108,7 @@ export function HighlightsEditor({
   ]);
 
   async function extractWithAi() {
-    if (lines.length === 0 || lines.every((line) => !line.japanese.trim())) {
+    if (lines.length === 0 || !hasSpokenJapanese(lines)) {
       toast.error("Add Japanese lines before extracting highlights.");
       return;
     }

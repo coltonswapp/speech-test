@@ -53,9 +53,7 @@ final class RealtimeTutorHarnessView: UIView {
 
     private let statusLabel = UILabel()
     private let meterRow = UIView()
-    private let pillContainer = UIView()
-    private let pillBackground = LiquidGlassEffectView.makeLightPillContainer()
-    private let levelMeterView = AudioLevelBarsView()
+    private let speakingMeter = SpeakingMeterPillView()
     private let trailingAccessoryContainer = UIView()
 
     private var shouldEndAfterTutorPlayback = false
@@ -66,10 +64,7 @@ final class RealtimeTutorHarnessView: UIView {
     private var lastTurnForHaptic: RealtimeConversationTurn?
     private let turnHaptic = UIImpactFeedbackGenerator(style: .medium)
 
-    private static let activeMeterColor = UIColor.systemYellow
-    private static let idleMeterColor = UIColor.tertiaryLabel
-    private static let tutorMeterColor = UIColor.label
-    private static let pillHeight: CGFloat = 64
+    private static let pillHeight = SpeakingMeterPillView.pillHeight
     private static let trailingAccessorySize: CGFloat = 56
     private static let trailingAccessorySpacing: CGFloat = 12
 
@@ -168,8 +163,7 @@ final class RealtimeTutorHarnessView: UIView {
 
     func setFinishedAppearance(status: String = "Nice work!") {
         isListeningDeferred = false
-        levelMeterView.releaseToRest()
-        levelMeterView.barColor = Self.idleMeterColor
+        speakingMeter.setMode(.idle)
         applyStatus(status, animated: true)
     }
 
@@ -197,39 +191,17 @@ final class RealtimeTutorHarnessView: UIView {
         statusLabel.numberOfLines = 1
         statusLabel.alpha = 0
 
-        LiquidGlassEffectView.applyPillStyle(to: pillBackground, cornerRadius: Self.pillHeight / 2)
-        pillBackground.isUserInteractionEnabled = false
-
-        pillContainer.translatesAutoresizingMaskIntoConstraints = false
-        pillContainer.isAccessibilityElement = true
-        pillContainer.accessibilityTraits = .button
-        pillContainer.accessibilityLabel = "Stop conversation"
-        pillContainer.accessibilityHint = "Ends the current tutor session"
-        pillContainer.addSubview(pillBackground)
+        speakingMeter.accessibilityTraits = .button
+        speakingMeter.accessibilityLabel = "Stop conversation"
+        speakingMeter.accessibilityHint = "Ends the current tutor session"
+        speakingMeter.accessibilityValue = nil
 
         let meterTap = UITapGestureRecognizer(target: self, action: #selector(meterPillTapped))
-        pillContainer.addGestureRecognizer(meterTap)
-
-        levelMeterView.translatesAutoresizingMaskIntoConstraints = false
-        levelMeterView.isUserInteractionEnabled = false
-        levelMeterView.barWidth = 8
-        levelMeterView.barSpacing = 10
-        levelMeterView.meterHeight = 28
-        levelMeterView.minBarHeight = 8
-        levelMeterView.heightFill = 0.95
-        levelMeterView.levelGain = 1.6
-        levelMeterView.displayCurve = 1.05
-        levelMeterView.smoothing = 0.66
-        levelMeterView.wobbleAmount = 0.08
-        levelMeterView.diamondFalloff = 0.25
-        levelMeterView.springiness = 0.5
-        levelMeterView.historyStride = 2
-        levelMeterView.barColor = Self.idleMeterColor
-        pillContainer.addSubview(levelMeterView)
+        speakingMeter.addGestureRecognizer(meterTap)
 
         meterRow.translatesAutoresizingMaskIntoConstraints = false
         meterRow.clipsToBounds = false
-        meterRow.addSubview(pillContainer)
+        meterRow.addSubview(speakingMeter)
 
         trailingAccessoryContainer.translatesAutoresizingMaskIntoConstraints = false
         trailingAccessoryContainer.clipsToBounds = false
@@ -251,37 +223,31 @@ final class RealtimeTutorHarnessView: UIView {
 
             meterRow.heightAnchor.constraint(equalToConstant: Self.pillHeight),
 
-            pillContainer.centerXAnchor.constraint(equalTo: meterRow.centerXAnchor),
-            pillContainer.centerYAnchor.constraint(equalTo: meterRow.centerYAnchor),
-            pillContainer.heightAnchor.constraint(equalToConstant: Self.pillHeight),
-            pillContainer.widthAnchor.constraint(equalTo: meterRow.widthAnchor, multiplier: 0.52),
-            pillContainer.widthAnchor.constraint(lessThanOrEqualToConstant: 220),
+            speakingMeter.centerXAnchor.constraint(equalTo: meterRow.centerXAnchor),
+            speakingMeter.centerYAnchor.constraint(equalTo: meterRow.centerYAnchor),
+            speakingMeter.widthAnchor.constraint(
+                equalTo: meterRow.widthAnchor,
+                multiplier: SpeakingMeterPillView.preferredWidthMultiplier
+            ),
+            speakingMeter.widthAnchor.constraint(
+                lessThanOrEqualToConstant: SpeakingMeterPillView.maxWidth
+            ),
 
             trailingAccessoryContainer.leadingAnchor.constraint(
-                equalTo: pillContainer.trailingAnchor,
+                equalTo: speakingMeter.trailingAnchor,
                 constant: Self.trailingAccessorySpacing
             ),
-            trailingAccessoryContainer.centerYAnchor.constraint(equalTo: pillContainer.centerYAnchor),
+            trailingAccessoryContainer.centerYAnchor.constraint(equalTo: speakingMeter.centerYAnchor),
             trailingAccessoryContainer.widthAnchor.constraint(equalToConstant: Self.trailingAccessorySize),
             trailingAccessoryContainer.heightAnchor.constraint(equalToConstant: Self.trailingAccessorySize),
             trailingAccessoryContainer.trailingAnchor.constraint(
                 lessThanOrEqualTo: meterRow.trailingAnchor
             ),
-
-            pillBackground.topAnchor.constraint(equalTo: pillContainer.topAnchor),
-            pillBackground.leadingAnchor.constraint(equalTo: pillContainer.leadingAnchor),
-            pillBackground.trailingAnchor.constraint(equalTo: pillContainer.trailingAnchor),
-            pillBackground.bottomAnchor.constraint(equalTo: pillContainer.bottomAnchor),
-
-            levelMeterView.centerXAnchor.constraint(equalTo: pillContainer.centerXAnchor),
-            levelMeterView.centerYAnchor.constraint(equalTo: pillContainer.centerYAnchor),
-            levelMeterView.heightAnchor.constraint(equalToConstant: 28),
         ])
     }
 
     private func applyIdleAppearance(status: String?) {
-        levelMeterView.releaseToRest()
-        levelMeterView.barColor = Self.idleMeterColor
+        speakingMeter.setMode(.idle)
         applyStatus(status, animated: false)
     }
 
@@ -306,8 +272,8 @@ final class RealtimeTutorHarnessView: UIView {
 
     private func updateTurnChrome(_ turn: RealtimeConversationTurn) {
         if isListeningDeferred {
-            levelMeterView.barColor = Self.idleMeterColor
-            levelMeterView.fadeToMinimum()
+            speakingMeter.setMode(.idle)
+            speakingMeter.fadeToMinimum()
             switch turn {
             case .connecting:
                 applyStatus("Connecting…", animated: true)
@@ -324,30 +290,28 @@ final class RealtimeTutorHarnessView: UIView {
 
         switch turn {
         case .connecting:
-            levelMeterView.barColor = Self.idleMeterColor
-            levelMeterView.fadeToMinimum()
+            speakingMeter.setMode(.idle)
+            speakingMeter.fadeToMinimum()
             applyStatus("Connecting…", animated: true)
         case .yourTurn:
-            levelMeterView.barColor = Self.activeMeterColor
+            speakingMeter.setMode(.listening)
             applyStatus("Your turn to speak…", animated: true)
         case .tutorTurn:
-            levelMeterView.barColor = Self.tutorMeterColor
+            speakingMeter.setMode(.playback)
             applyStatus("Tutor speaking…", animated: true)
         case .paused:
-            levelMeterView.barColor = Self.idleMeterColor
-            levelMeterView.fadeToMinimum()
+            speakingMeter.setMode(.idle)
+            speakingMeter.fadeToMinimum()
             applyStatus("Paused", animated: true)
         case .stopped:
-            levelMeterView.barColor = Self.idleMeterColor
-            levelMeterView.reset()
+            speakingMeter.setMode(.idle)
+            speakingMeter.reset()
             applyStatus(nil, animated: true)
         }
     }
 
     private func pushMeterLevel(_ level: Float) {
-        let clamped = max(0, min(1, level))
-        let eased = clamped * clamped * (3 - 2 * clamped)
-        levelMeterView.setLevel(eased)
+        speakingMeter.pushLevel(level)
     }
 
     @objc private func meterPillTapped() {
@@ -387,8 +351,7 @@ extension RealtimeTutorHarnessView: RealtimeServiceDelegate {
             break
         case .disconnected, .failed:
             if !didNotifySingleTurnCompletion {
-                levelMeterView.barColor = Self.idleMeterColor
-                levelMeterView.releaseToRest()
+                speakingMeter.setMode(.idle)
             }
         }
         delegate?.tutorHarness(self, didChangeConnectionState: state)
@@ -450,7 +413,7 @@ extension RealtimeTutorHarnessView: RealtimeServiceDelegate {
 
     func realtimeService(_ service: RealtimeService, didChangeMicMuted isMuted: Bool) {
         if isMuted {
-            levelMeterView.fadeToMinimum()
+            speakingMeter.fadeToMinimum()
         }
     }
 }

@@ -56,6 +56,16 @@
             ]
           },
           {
+            "type": "inline-question",
+            "id": "train-station/buying-a-ticket/inline-question-0",
+            "prompt": "Do you know what 一人 means?",
+            "target": "一人",
+            "layout": "grid",
+            "choices": ["one person", "one ticket", "first class", "one way"],
+            "correctChoice": "one person",
+            "wrongAnswerExplanation": "一人 (ひとり) means one person — the tourist is buying a single ticket."
+          },
+          {
             "speaker": "Attendant",
             "japanese": "かしこまりました。少々お待ちください。",
             "romaji": "Kashikomarimashita. Shōshō omachi kudasai.",

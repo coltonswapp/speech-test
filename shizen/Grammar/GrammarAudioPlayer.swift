@@ -7,6 +7,7 @@
 //
 
 import AVFoundation
+import QuartzCore
 import TTSCore
 
 enum GrammarAudioCatalog {
@@ -147,7 +148,7 @@ enum GrammarAudioCatalog {
 enum GrammarExampleDialogueLines {
     static func lines(for example: GrammarExample) -> [String] {
         guard let scenario = example.scenario, !scenario.lines.isEmpty else { return [] }
-        return scenario.lines.map(\.japanese)
+        return scenario.lines.filter(\.isSpokenLine).map(\.japanese)
     }
 }
 
@@ -163,8 +164,15 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
     private var audioPlayer: AVAudioPlayer?
     private var preparedClip: PreparedClip?
     private var preparedCacheKey: String?
+    private var clipPrepareGeneration = 0
     private var lineStopTimer: Timer?
+    private var sequenceDisplayLink: CADisplayLink?
+    private var sequenceStarts: [(index: Int, time: TimeInterval)] = []
+    private var sequenceAnnounced: Set<Int> = []
+    private var sequenceLineHandler: ((Int) -> Void)?
+    private var timeHandler: ((TimeInterval) -> Void)?
     private var playbackCompletion: (() -> Void)?
+    private var playbackRate: Float = 1
 
     func play(
         publishedAudioUrl: String? = nil,
@@ -174,41 +182,39 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
         playLineIndex: Int? = nil,
         fallbackText: String,
         languageIdentifier: String = "ja-JP",
+        onTime: ((TimeInterval) -> Void)? = nil,
         onFinished: (() -> Void)? = nil
     ) {
+        playbackRate = 1
+        timeHandler = onTime
         playbackCompletion = onFinished
-        GrammarAudioCatalog.ensureLocalURL(
+        withLocalURLReadyForPlayback(
             publishedAudioUrl: publishedAudioUrl,
             audioKey: audioKey,
-            cacheMetadata: cacheMetadata
-        ) { [weak self] url in
+            cacheMetadata: cacheMetadata,
+            dialogueLines: dialogueLines
+        ) { [weak self] url, cacheKey in
             guard let self else { return }
-            self.performOnMain {
-                let cacheKey = GrammarAudioCatalog.playbackCacheKey(
-                    publishedAudioUrl: publishedAudioUrl,
-                    audioKey: audioKey
-                )
-                guard let url else {
-                    self.playFallback(fallbackText, languageIdentifier: languageIdentifier)
+            guard let url else {
+                self.playFallback(fallbackText, languageIdentifier: languageIdentifier)
+                return
+            }
+
+            if !dialogueLines.isEmpty,
+               self.prepareClipIfNeeded(cacheKey: cacheKey, url: url, dialogueLines: dialogueLines),
+               let clip = self.preparedClip {
+                if let playLineIndex, clip.lines.indices.contains(playLineIndex) {
+                    self.playTimeRange(clip.lines[playLineIndex].timeRange, url: url)
                     return
                 }
+                self.playTimeRange(0..<self.playerDuration(for: url), url: url)
+                return
+            }
 
-                if !dialogueLines.isEmpty,
-                   self.prepareClipIfNeeded(cacheKey: cacheKey, url: url, dialogueLines: dialogueLines),
-                   let clip = self.preparedClip {
-                    if let playLineIndex, clip.lines.indices.contains(playLineIndex) {
-                        self.playTimeRange(clip.lines[playLineIndex].timeRange, url: url)
-                        return
-                    }
-                    self.playTimeRange(0..<self.playerDuration(for: url), url: url)
-                    return
-                }
-
-                if self.playWholeFile(url: url) {
-                    self.fallbackSpeaker.stop()
-                } else {
-                    self.playFallback(fallbackText, languageIdentifier: languageIdentifier)
-                }
+            if self.playWholeFile(url: url) {
+                self.fallbackSpeaker.stop()
+            } else {
+                self.playFallback(fallbackText, languageIdentifier: languageIdentifier)
             }
         }
     }
@@ -220,6 +226,7 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
         cacheMetadata: RemoteAudioCacheMetadata? = nil,
         dialogueLines: [String],
         fallbackText: String,
+        onTime: ((TimeInterval) -> Void)? = nil,
         onFinished: (() -> Void)? = nil
     ) {
         play(
@@ -229,19 +236,114 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
             dialogueLines: dialogueLines,
             playLineIndex: index,
             fallbackText: fallbackText,
+            onTime: onTime,
             onFinished: onFinished
         )
     }
 
+    /// Plays selected spoken lines as one continuous clip span — native gaps only,
+    /// matching live Dialogue. Line callbacks follow `AVAudioPlayer.currentTime`.
+    func playDialogueSequence(
+        spokenIndices: [Int],
+        publishedAudioUrl: String? = nil,
+        audioKey: String?,
+        cacheMetadata: RemoteAudioCacheMetadata? = nil,
+        dialogueLines: [String],
+        fallbackText: String,
+        rate: Float = 1,
+        onSpokenIndexStart: @escaping (Int) -> Void,
+        onTime: ((TimeInterval) -> Void)? = nil,
+        onFinished: (() -> Void)? = nil
+    ) {
+        playbackRate = rate
+        timeHandler = onTime
+        playbackCompletion = onFinished
+        withLocalURLReadyForPlayback(
+            publishedAudioUrl: publishedAudioUrl,
+            audioKey: audioKey,
+            cacheMetadata: cacheMetadata,
+            dialogueLines: dialogueLines
+        ) { [weak self] url, cacheKey in
+            guard let self else { return }
+            guard let url else {
+                onSpokenIndexStart(spokenIndices.first ?? 0)
+                self.playFallback(fallbackText, languageIdentifier: "ja-JP")
+                return
+            }
+            guard !dialogueLines.isEmpty,
+                  self.prepareClipIfNeeded(cacheKey: cacheKey, url: url, dialogueLines: dialogueLines),
+                  let clip = self.preparedClip
+            else {
+                onSpokenIndexStart(spokenIndices.first ?? 0)
+                self.playFallback(fallbackText, languageIdentifier: "ja-JP")
+                return
+            }
+
+            let items: [(index: Int, range: Range<TimeInterval>)] = spokenIndices.compactMap { index in
+                guard clip.lines.indices.contains(index) else { return nil }
+                return (index, clip.lines[index].timeRange)
+            }
+            guard let first = items.first, let last = items.last else {
+                onSpokenIndexStart(spokenIndices.first ?? 0)
+                self.playFallback(fallbackText, languageIdentifier: "ja-JP")
+                return
+            }
+
+            self.sequenceLineHandler = onSpokenIndexStart
+            self.sequenceStarts = items.map { ($0.index, $0.range.lowerBound) }
+            self.sequenceAnnounced = []
+            self.playTimeRange(
+                first.range.lowerBound..<last.range.upperBound,
+                url: url,
+                stopWhenDone: true
+            )
+            self.announceSequenceLines(at: self.audioPlayer?.currentTime ?? first.range.lowerBound)
+            self.startTimeTicksIfNeeded()
+        }
+    }
+
     func stop() {
+        clipPrepareGeneration += 1
         performOnMain { [weak self] in
             guard let self else { return }
             self.lineStopTimer?.invalidate()
             self.lineStopTimer = nil
+            self.clearSequenceTracking()
             self.audioPlayer?.stop()
             self.audioPlayer = nil
             self.fallbackSpeaker.stop()
             self.playbackCompletion = nil
+            self.timeHandler = nil
+            self.playbackRate = 1
+        }
+    }
+
+    private func clearSequenceTracking() {
+        sequenceDisplayLink?.invalidate()
+        sequenceDisplayLink = nil
+        sequenceStarts = []
+        sequenceAnnounced = []
+        sequenceLineHandler = nil
+    }
+
+    @objc private func handleSequenceTick() {
+        guard let player = audioPlayer else { return }
+        announceSequenceLines(at: player.currentTime)
+        timeHandler?(player.currentTime)
+    }
+
+    private func startTimeTicksIfNeeded() {
+        guard sequenceDisplayLink == nil else { return }
+        guard timeHandler != nil || sequenceLineHandler != nil else { return }
+        let link = CADisplayLink(target: self, selector: #selector(handleSequenceTick))
+        link.add(to: .main, forMode: .common)
+        sequenceDisplayLink = link
+    }
+
+    private func announceSequenceLines(at time: TimeInterval) {
+        for item in sequenceStarts where !sequenceAnnounced.contains(item.index) && time + 0.03 >= item.time {
+            sequenceAnnounced.insert(item.index)
+            sequenceLineHandler?(item.index)
         }
     }
 
@@ -250,6 +352,7 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
     }
 
     private func notifyPlaybackFinished() {
+        clearSequenceTracking()
         guard let completion = playbackCompletion else { return }
         playbackCompletion = nil
         completion()
@@ -257,30 +360,85 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
 
     // MARK: - Segmented playback
 
-    @discardableResult
-    private func prepareClipIfNeeded(cacheKey: String, url: URL, dialogueLines: [String]) -> Bool {
+    /// Resolves the file, then waits for alignment metadata without blocking main.
+    /// `body` always runs on the main queue.
+    private func withLocalURLReadyForPlayback(
+        publishedAudioUrl: String?,
+        audioKey: String?,
+        cacheMetadata: RemoteAudioCacheMetadata?,
+        dialogueLines: [String],
+        body: @escaping (_ url: URL?, _ cacheKey: String) -> Void
+    ) {
+        clipPrepareGeneration += 1
+        let generation = clipPrepareGeneration
+        let cacheKey = GrammarAudioCatalog.playbackCacheKey(
+            publishedAudioUrl: publishedAudioUrl,
+            audioKey: audioKey
+        )
+        GrammarAudioCatalog.ensureLocalURL(
+            publishedAudioUrl: publishedAudioUrl,
+            audioKey: audioKey,
+            cacheMetadata: cacheMetadata
+        ) { [weak self] url in
+            guard let self, self.clipPrepareGeneration == generation else { return }
+            self.performOnMain {
+                guard self.clipPrepareGeneration == generation else { return }
+                self.clearSequenceTracking()
+
+                let finish = {
+                    guard self.clipPrepareGeneration == generation else { return }
+                    body(url, cacheKey)
+                }
+
+                guard let url, !dialogueLines.isEmpty,
+                      !self.isClipPrepared(cacheKey: cacheKey, url: url, dialogueLines: dialogueLines)
+                else {
+                    finish()
+                    return
+                }
+
+                DialogueAlignmentMetadata.readPayload(from: url) { _ in
+                    finish()
+                }
+            }
+        }
+    }
+
+    private func isClipPrepared(cacheKey: String, url: URL, dialogueLines: [String]) -> Bool {
         let normalizedDialogue = dialogueLines
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+        return preparedCacheKey == cacheKey
+            && preparedClip?.url == url
+            && preparedClip?.lines.map(\.text) == normalizedDialogue
+    }
 
-        if preparedCacheKey == cacheKey,
-           let preparedClip,
-           preparedClip.url == url,
-           preparedClip.lines.map(\.text) == normalizedDialogue {
+    @discardableResult
+    private func prepareClipIfNeeded(cacheKey: String, url: URL, dialogueLines: [String]) -> Bool {
+        if isClipPrepared(cacheKey: cacheKey, url: url, dialogueLines: dialogueLines) {
             return true
         }
 
         let duration = playerDuration(for: url)
         guard duration > 0 else { return false }
 
-        let pcm = try? TTSAudioFileLoader.loadMonoFloatSamples(from: url)
-        let aligned = TTSAudioAlignment.segmentTimeRanges(
-            lineTexts: dialogueLines,
-            duration: duration,
-            samples: pcm?.samples,
-            sampleRate: pcm?.sampleRate ?? 24_000,
-            audioURL: url
-        )
+        let aligned: [AlignedTimeLine]
+        if let embedded = DialogueAlignmentMetadata.readLineSwitchSeconds(from: url),
+           let fromMetadata = DialogueAlignmentMetadata.segmentTimeRanges(
+               lineTexts: dialogueLines,
+               duration: duration,
+               lineSwitchSeconds: embedded
+           ) {
+            aligned = fromMetadata
+        } else {
+            let pcm = try? TTSAudioFileLoader.loadMonoFloatSamples(from: url)
+            aligned = TTSAudioAlignment.segmentTimeRanges(
+                lineTexts: dialogueLines,
+                duration: duration,
+                samples: pcm?.samples,
+                sampleRate: pcm?.sampleRate ?? 24_000
+            )
+        }
         guard !aligned.isEmpty else { return false }
 
         preparedCacheKey = cacheKey
@@ -292,13 +450,15 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
         if let audioPlayer, audioPlayer.url == url, audioPlayer.duration > 0 {
             return audioPlayer.duration
         }
-        guard let player = try? AVAudioPlayer(contentsOf: url), player.duration > 0 else { return 0 }
-        audioPlayer = player
-        player.prepareToPlay()
+        guard let player = makePlayer(url: url), player.duration > 0 else { return 0 }
         return player.duration
     }
 
-    private func playTimeRange(_ range: Range<TimeInterval>, url: URL) {
+    private func playTimeRange(
+        _ range: Range<TimeInterval>,
+        url: URL,
+        stopWhenDone: Bool = true
+    ) {
         lineStopTimer?.invalidate()
         lineStopTimer = nil
         fallbackSpeaker.stop()
@@ -315,11 +475,18 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
         let end = min(player.duration, range.upperBound)
         guard end > start else { return }
 
+        player.enableRate = true
+        let rate = max(0.5, min(2.0, playbackRate))
+        player.rate = rate
         player.currentTime = start
         player.play()
+        startTimeTicksIfNeeded()
 
-        lineStopTimer = Timer.scheduledTimer(withTimeInterval: end - start, repeats: false) { [weak self] _ in
-            player.stop()
+        let wallDuration = (end - start) / TimeInterval(rate)
+        lineStopTimer = Timer.scheduledTimer(withTimeInterval: wallDuration, repeats: false) { [weak self] _ in
+            if stopWhenDone {
+                player.stop()
+            }
             self?.lineStopTimer = nil
             self?.notifyPlaybackFinished()
         }
@@ -337,6 +504,8 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
 
         do {
             try PlaybackAudioSession.activateForPlayback()
+            player.enableRate = true
+            player.rate = 1
             player.currentTime = 0
             player.play()
             return true
@@ -348,10 +517,12 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
     @discardableResult
     private func makePlayer(url: URL) -> AVAudioPlayer? {
         if let audioPlayer, audioPlayer.url == url {
+            audioPlayer.enableRate = true
             return audioPlayer
         }
         guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
         player.delegate = self
+        player.enableRate = true
         player.prepareToPlay()
         audioPlayer = player
         return player

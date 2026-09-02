@@ -9,6 +9,8 @@ export type EditableDialogueLine = {
   id: string;
   speaker: "speaker1" | "speaker2";
   text: string;
+  /** Cold stage captions are list-only in the sentence map; they are not spoken. */
+  kind?: "spoken" | "stage";
 };
 
 const speakerColor: Record<"speaker1" | "speaker2", string> = {

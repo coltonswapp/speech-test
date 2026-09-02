@@ -86,7 +86,7 @@ final class JMDictStore {
         }
     }
 
-    /// Looks up entries for a surface string: inflected-form → lemma (when recognized), exact match, lemma again, tail trim, expression prefix.
+    /// Looks up entries for a surface string: inflected-form → lemma (when recognized, including i-adjective くて/かった), exact match, lemma again, tail trim, expression prefix.
     func entries(forSurface surface: String) -> [JMDictEntry] {
         lookup(forSurface: surface).entries
     }
@@ -118,16 +118,19 @@ final class JMDictStore {
                     result = rows
                     return
                 }
-                // Tail trim: conjugated forms
-                var shortened = trimmed
-                while shortened.count > 1 {
-                    shortened = String(shortened.dropLast())
-                    if let rows = try exactMatch(in: db, surface: shortened), !rows.isEmpty {
-                        if Self.shouldRejectSpuriousSingleKanjiTailMatch(trimmed: shortened, original: trimmed) {
-                            continue
+                // Tail trim: conjugated forms. Skip when the surface is a known i-adjective
+                // inflection (うるさくて) — prefix matches like うる (to sell) are worse than a miss.
+                if Self.iAdjectiveLemmaCandidate(surface: trimmed) == nil {
+                    var shortened = trimmed
+                    while shortened.count > 1 {
+                        shortened = String(shortened.dropLast())
+                        if let rows = try exactMatch(in: db, surface: shortened), !rows.isEmpty {
+                            if Self.shouldRejectSpuriousSingleKanjiTailMatch(trimmed: shortened, original: trimmed) {
+                                continue
+                            }
+                            result = rows
+                            return
                         }
-                        result = rows
-                        return
                     }
                 }
                 result = try prefixMatchExpression(in: db, surface: trimmed, limit: 20)
@@ -552,6 +555,17 @@ final class JMDictStore {
         "いて",
         "って",
         "んで",
+        "くなかった",
+        "くなくて",
+        "くなければ",
+        "くなくても",
+        "くない",
+        "かったら",
+        "ければ",
+        "けりゃ",
+        "くても",
+        "かった",
+        "くて",
         "よう",
         "ろう",
         "もう",
@@ -613,6 +627,10 @@ final class JMDictStore {
             return false
         }
         if let stemK = godanRenyoOkuriganaKana(dictionaryFinalKana: lemmaExprLast), o == stemK {
+            return true
+        }
+        // i-adjective 連用形: 高い → 高**く**, 暑い → 暑**く**
+        if o == "く", lemmaExprLast == "い" {
             return true
         }
         return false
@@ -733,6 +751,13 @@ final class JMDictStore {
         }
         if surface.hasSuffix("して"), lemmaExpression.hasSuffix("す"), !lemmaExpression.hasSuffix("する"), lemmaReading.hasSuffix("す") {
             return String(lemmaReading.dropLast()) + "して"
+        }
+        if let adjReading = iAdjectiveInflectedReading(
+            surface: surface,
+            lemmaExpression: lemmaExpression,
+            lemmaReading: lemmaReading
+        ) {
+            return adjReading
         }
         if surface.hasSuffix("て"), surface.count > 1,
            !surface.hasSuffix("いて"),
@@ -1127,6 +1152,7 @@ final class JMDictStore {
     /// Map common inflected endings to dictionary-form guesses (best matching row wins on `score`).
     private func bestLemmaGuessExactMatch(in db: Database, surface: String) throws -> [JMDictEntry]? {
         let guesses = Self.buildInflectionLemmaCandidates(surface: surface)
+        let adjLemma = Self.iAdjectiveLemmaCandidate(surface: surface)
         let mustBeVerb = Self.surfaceRequiresVerbLemma(surface)
         var bestRows: [JMDictEntry]?
         var bestScore = Int.min
@@ -1135,7 +1161,19 @@ final class JMDictStore {
                 print("JMDict bestLemma: candidate '\(g)' — no match")
                 continue
             }
-            if mustBeVerb {
+            if g == adjLemma {
+                let adjRows = rows.filter { Self.isIAdjectiveEntry($0) }
+                if !adjRows.isEmpty {
+                    rows = adjRows
+                } else if Self.iAdjectiveInflectionSuffix(in: surface) == "く" {
+                    // 行く → 行い is a real noun; only accept く → い when tagged adj-i (赤く → 赤い).
+                    continue
+                } else {
+                    let nonVerb = rows.filter { !Self.isVerbEntry($0) }
+                    guard !nonVerb.isEmpty else { continue }
+                    rows = nonVerb
+                }
+            } else if mustBeVerb {
                 let verbRows = rows.filter { Self.isVerbEntry($0) }
                 guard !verbRows.isEmpty else { continue }
                 rows = verbRows
@@ -1152,6 +1190,8 @@ final class JMDictStore {
     /// True when the surface ending unambiguously indicates a verb conjugation,
     /// so only verb lemma candidates should be considered.
     private static func surfaceRequiresVerbLemma(_ surface: String) -> Bool {
+        // うるさくて / 高くない look like they end in て / ない but are i-adjective inflections.
+        if iAdjectiveLemmaCandidate(surface: surface) != nil { return false }
         let verbEndings = [
             "って", "んで", "いて", "いで", "して",
             "ました", "ます", "ません", "ましょう",
@@ -1167,6 +1207,75 @@ final class JMDictStore {
         return tags.split(whereSeparator: { $0 == " " || $0 == "\t" }).contains {
             $0.hasPrefix("v") && $0 != "vs"
         }
+    }
+
+    private static func isIAdjectiveEntry(_ entry: JMDictEntry) -> Bool {
+        guard let tags = entry.tags else { return false }
+        return tags.split(whereSeparator: { $0 == " " || $0 == "\t" }).contains {
+            $0.hasPrefix("adj-i")
+        }
+    }
+
+    /// Longest-first i-adjective inflection endings (くて, かった, くない, adverbial く, …).
+    private static let iAdjectiveInflectionSuffixes: [String] = [
+        "くなかった",
+        "くなくて",
+        "くなければ",
+        "くなくても",
+        "くない",
+        "かったら",
+        "ければ",
+        "けりゃ",
+        "くても",
+        "かった",
+        "くて",
+        "く",
+    ]
+
+    /// Dictionary-form guess for an i-adjective inflection (うるさくて → うるさい).
+    /// Returns nil for verb-looking なくて/なかった that are not くなくて/くなかった.
+    private static func iAdjectiveLemmaCandidate(surface: String) -> String? {
+        guard let suffix = iAdjectiveInflectionSuffix(in: surface) else { return nil }
+        let stem = String(surface.dropLast(suffix.count))
+        guard !stem.isEmpty else { return nil }
+        return stem + "い"
+    }
+
+    private static func iAdjectiveInflectionSuffix(in surface: String) -> String? {
+        for suffix in iAdjectiveInflectionSuffixes {
+            guard surface.hasSuffix(suffix), surface.count > suffix.count else { continue }
+            // 行かなくて / 行かなかった are verb negatives, not 赤い-style くて/かった.
+            if suffix == "くて",
+               surface.hasSuffix("なくて"),
+               !surface.hasSuffix("くなくて") {
+                continue
+            }
+            if suffix == "かった",
+               surface.hasSuffix("なかった"),
+               !surface.hasSuffix("くなかった") {
+                continue
+            }
+            return suffix
+        }
+        return nil
+    }
+
+    /// 高い/たかい + 高くて → たかくて; うるさい + うるさくて → うるさくて.
+    private static func iAdjectiveInflectedReading(
+        surface: String,
+        lemmaExpression: String,
+        lemmaReading: String
+    ) -> String? {
+        guard lemmaExpression.hasSuffix("い"),
+              lemmaReading.hasSuffix("い"),
+              lemmaReading.count > 1,
+              let suffix = iAdjectiveInflectionSuffix(in: surface)
+        else { return nil }
+        let surfaceStem = String(surface.dropLast(suffix.count))
+        let lemmaStem = String(lemmaExpression.dropLast())
+        let readingStem = String(lemmaReading.dropLast())
+        guard surfaceStem == lemmaStem || surfaceStem == readingStem else { return nil }
+        return readingStem + suffix
     }
 
     private static func godanUFromIRenyoStem(_ stem: String) -> String? {
@@ -1215,6 +1324,10 @@ final class JMDictStore {
             guard !s.isEmpty, !seen.contains(s) else { return }
             seen.insert(s)
             out.append(s)
+        }
+
+        if let adj = iAdjectiveLemmaCandidate(surface: surface) {
+            add(adj)
         }
 
         if surface.hasSuffix("ましょう"), surface.count > 4 {

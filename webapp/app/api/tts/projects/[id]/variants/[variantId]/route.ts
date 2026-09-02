@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { ttsProject, ttsVariant } from "@/lib/db/schema";
+import { variantTokenSyncSchema } from "@/lib/dialogue/types";
 
 const updateVariantSchema = z.object({
   trimSampleLower: z.number().int().nullable().optional(),
@@ -12,6 +13,7 @@ const updateVariantSchema = z.object({
   notes: z.string().nullable().optional(),
   rating: z.number().int().nullable().optional(),
   isSelected: z.boolean().optional(),
+  tokenSync: variantTokenSyncSchema.nullable().optional(),
 });
 
 export async function GET(

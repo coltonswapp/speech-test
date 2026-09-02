@@ -222,62 +222,6 @@ export const tokenizeLinesResultSchema = z.object({
 });
 export type TokenizeLinesResult = z.infer<typeof tokenizeLinesResultSchema>;
 
-// Working copy on a TTS take: startSeconds is null until stamped.
-export const variantTokenSchema = z.object({
-  text: z.string().min(1),
-  startSeconds: z.number().nullable(),
-});
-export type VariantToken = z.infer<typeof variantTokenSchema>;
-
-export const variantTokenSyncLineSchema = z.object({
-  text: z.string(),
-  tokens: z.array(variantTokenSchema).min(1),
-});
-export type VariantTokenSyncLine = z.infer<typeof variantTokenSyncLineSchema>;
-
-export const variantTokenSyncSchema = z.object({
-  version: z.literal(1),
-  contentHash: z.string(),
-  lines: z.array(variantTokenSyncLineSchema),
-});
-export type VariantTokenSync = z.infer<typeof variantTokenSyncSchema>;
-
-export const publishedTokenSchema = z.object({
-  text: z.string().min(1),
-  startSeconds: z.number(),
-});
-export type PublishedToken = z.infer<typeof publishedTokenSchema>;
-
-export const publishedTokenSyncLineSchema = z.object({
-  text: z.string(),
-  tokens: z.array(publishedTokenSchema).min(1),
-});
-export type PublishedTokenSyncLine = z.infer<
-  typeof publishedTokenSyncLineSchema
->;
-
-export const publishedTokenSyncSchema = z.object({
-  version: z.literal(1),
-  variantId: z.string(),
-  contentHash: z.string(),
-  lines: z.array(publishedTokenSyncLineSchema),
-});
-export type PublishedTokenSync = z.infer<typeof publishedTokenSyncSchema>;
-
-export const tokenizeLinesRequestSchema = z.object({
-  texts: z.array(z.string()).min(1).max(48),
-});
-export type TokenizeLinesRequest = z.infer<typeof tokenizeLinesRequestSchema>;
-
-export const tokenizeLinesResultSchema = z.object({
-  lines: z.array(
-    z.object({
-      text: z.string(),
-      tokens: z.array(z.string().min(1)).min(1),
-    })
-  ),
-});
-export type TokenizeLinesResult = z.infer<typeof tokenizeLinesResultSchema>;
 
 export const scenarioBodySchema = z.object({
   setting: z.string().optional(),

@@ -23,7 +23,7 @@ function TrackRow({
     <Link
       href={`/tts/${project.id}`}
       className={cn(
-        "flex flex-col gap-0.5 rounded-md px-3 py-2 text-sm transition-colors",
+        "flex touch-manipulation flex-col gap-0.5 rounded-md px-3 py-2.5 text-sm transition-colors md:py-2",
         project.id === activeId
           ? "bg-accent text-accent-foreground"
           : "hover:bg-accent/50"
@@ -155,10 +155,10 @@ export function TrackSidebar({ activeId }: { activeId?: string }) {
   }, [projects]);
 
   return (
-    <div className="flex w-72 shrink-0 flex-col gap-3 border-r border-border/60 pr-4">
+    <div className="flex w-full max-h-52 shrink-0 flex-col gap-3 overflow-hidden border-b border-border/60 pb-3 md:max-h-none md:w-72 md:border-b-0 md:border-r md:pb-0 md:pr-4">
       <Button
         size="sm"
-        className="w-full justify-start gap-2"
+        className="min-h-10 w-full touch-manipulation justify-start gap-2 md:min-h-8"
         onClick={() => createMutation.mutate()}
         disabled={createMutation.isPending}
       >
@@ -168,7 +168,7 @@ export function TrackSidebar({ activeId }: { activeId?: string }) {
       <Button
         size="sm"
         variant="outline"
-        className="w-full justify-start gap-2"
+        className="min-h-10 w-full touch-manipulation justify-start gap-2 md:min-h-8"
         onClick={() => collectionInputRef.current?.click()}
         disabled={importCollectionMutation.isPending}
       >

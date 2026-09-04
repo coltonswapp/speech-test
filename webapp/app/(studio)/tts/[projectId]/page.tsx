@@ -9,7 +9,7 @@ export default async function TTSTrackPage({
   const { projectId } = await params;
 
   return (
-    <div className="flex flex-1 gap-6">
+    <div className="flex min-w-0 flex-1 flex-col gap-4 md:flex-row md:gap-6">
       <TrackSidebar activeId={projectId} />
       <TrackComposer projectId={projectId} />
     </div>

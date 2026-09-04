@@ -137,9 +137,9 @@ export function VariantList({
                 variant.contentHash !== currentContentHash;
               return (
                 <AccordionItem key={variant.id} value={variant.id}>
-                  <div className="flex items-center">
-                    <AccordionTrigger className="flex-1 justify-start gap-2">
-                      <span className="flex items-center gap-2 text-sm">
+                  <div className="flex min-w-0 items-center gap-1">
+                    <AccordionTrigger className="min-h-11 flex-1 touch-manipulation justify-start gap-2 py-2 md:min-h-0">
+                      <span className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
                         <span>
                           {new Date(variant.createdAt).toLocaleString()}
                         </span>
@@ -174,7 +174,7 @@ export function VariantList({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="size-8 shrink-0"
+                              className="size-10 shrink-0 touch-manipulation md:size-8"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <MoreVertical className="size-4" />
@@ -222,7 +222,7 @@ export function VariantList({
                         <Button
                           variant="outline"
                           size="sm"
-                          className="w-fit"
+                          className="min-h-11 w-full touch-manipulation sm:w-fit md:min-h-8"
                           onClick={() => selectMutation.mutate(variant.id)}
                           disabled={selectMutation.isPending}
                         >

@@ -963,7 +963,7 @@ export function WaveformEditor({
                 e.preventDefault();
                 setDragging({ kind: "suggested", index: i });
               }}
-              className="absolute top-0 z-10 h-full w-3 -translate-x-1/2 cursor-ew-resize"
+              className="absolute top-0 z-10 h-full w-5 -translate-x-1/2 touch-manipulation cursor-ew-resize sm:w-3"
               style={{ left: `${(sample / totalSamples) * 100}%` }}
               title={`Suggested break at ${(sample / variant.sampleRate).toFixed(2)}s`}
             >
@@ -978,7 +978,7 @@ export function WaveformEditor({
                 e.preventDefault();
                 setDragging({ kind: "mark", index: i });
               }}
-              className="absolute top-0 z-10 h-full w-3 -translate-x-1/2 cursor-ew-resize"
+              className="absolute top-0 z-10 h-full w-5 -translate-x-1/2 touch-manipulation cursor-ew-resize sm:w-3"
               style={{ left: `${(sample / totalSamples) * 100}%` }}
               title={`Line switch at ${(sample / variant.sampleRate).toFixed(2)}s`}
             >
@@ -988,18 +988,40 @@ export function WaveformEditor({
         </div>
       )}
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <Button
-          size="icon-sm"
+          size="icon"
           variant="outline"
+          className="size-11 touch-manipulation md:size-8"
+          aria-label={isPlaying ? "Pause" : "Play"}
           onClick={() => toggleMainPlayback()}
         >
           {isPlaying ? (
-            <Pause className="size-3.5" />
+            <Pause className="size-5 md:size-3.5" />
           ) : (
-            <Play className="size-3.5" />
+            <Play className="size-5 md:size-3.5" />
           )}
         </Button>
+        {isConversation && timingMode === "lines" && (
+          <>
+            <Button
+              size="sm"
+              className="min-h-11 touch-manipulation px-3 md:min-h-8"
+              onClick={markLineSwitchAtPlayhead}
+            >
+              Mark
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-11 touch-manipulation px-3 md:min-h-8"
+              onClick={removeLineSwitchMarkNearestPlayhead}
+              disabled={marks.length === 0}
+            >
+              Undo mark
+            </Button>
+          </>
+        )}
         <span className="text-xs tabular-nums text-muted-foreground">
           {formatTime(currentTime)} / {formatTime(duration)}
         </span>
@@ -1012,14 +1034,14 @@ export function WaveformEditor({
               key={rate}
               size="xs"
               variant={playbackRate === rate ? "secondary" : "ghost"}
-              className="h-6 min-w-8 px-1.5 tabular-nums"
+              className="h-8 min-w-9 touch-manipulation px-1.5 tabular-nums md:h-6 md:min-w-8"
               onClick={() => setPlaybackRate(rate)}
             >
               {rate}×
             </Button>
           ))}
         </div>
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+        <div className="h-2 min-w-[4rem] flex-1 overflow-hidden rounded-full bg-muted">
           <div
             className="h-full bg-primary transition-[width] duration-75"
             style={{ width: `${Math.min(100, level * 300)}%` }}
@@ -1029,13 +1051,18 @@ export function WaveformEditor({
 
       {isConversation && timingMode === "lines" && (
         <p className="text-xs text-muted-foreground">
-          Scrub the waveform above (Space play/pause, M mark line switch). Drag green
-          triangles on the bottom rail to fine-tune. Orange = auto breaks.
+          Scrub the waveform, then tap <span className="font-medium text-foreground">Mark</span>{" "}
+          (or the active line) when the next line starts —{" "}
+          <span className="font-medium text-foreground">Undo mark</span> removes the nearest.
+          On desktop: Space play/pause, M mark. Drag green triangles to fine-tune. Orange = auto breaks.
         </p>
       )}
       {isConversation && timingMode === "tokens" && (
         <p className="text-xs text-muted-foreground">
-          Space play/pause. Stamp tokens in the list above (T stamps, Backspace undoes).
+          Play/pause below. Stamp tokens in the list above — tap{" "}
+          <span className="font-medium text-foreground">Stamp</span> or the next (amber) word.
+          <span className="font-medium text-foreground"> Undo</span> clears the last stamp.
+          On desktop: Space play/pause, T stamps, Backspace undoes.
         </p>
       )}
 
@@ -1106,26 +1133,37 @@ export function WaveformEditor({
             )}
             {isConversation && (
               <>
-                <Button size="sm" variant="outline" onClick={markLineSwitchAtPlayhead}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="min-h-10 touch-manipulation md:min-h-7"
+                  onClick={markLineSwitchAtPlayhead}
+                >
                   Mark line switch
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="min-h-10 touch-manipulation md:min-h-7"
+                  onClick={removeLineSwitchMarkNearestPlayhead}
+                  disabled={marks.length === 0}
+                >
+                  Undo nearest mark
+                </Button>
                 {marks.length > 0 && (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={removeLineSwitchMarkNearestPlayhead}
-                    >
-                      Remove nearest mark
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={clearLineSwitchMarks}>
-                      Clear line marks
-                    </Button>
-                  </>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="min-h-10 touch-manipulation md:min-h-7"
+                    onClick={clearLineSwitchMarks}
+                  >
+                    Clear line marks
+                  </Button>
                 )}
                 <Button
                   size="sm"
                   variant="outline"
+                  className="min-h-10 touch-manipulation md:min-h-7"
                   onClick={() => insertLineBreak(PLAYHEAD_BREAK_SECONDS)}
                   disabled={insertSilenceMutation.isPending}
                 >
@@ -1134,6 +1172,7 @@ export function WaveformEditor({
                 <Button
                   size="sm"
                   variant="outline"
+                  className="min-h-10 touch-manipulation md:min-h-7"
                   onClick={() => insertLineBreak(PLAYHEAD_BREAK_HALF_SECONDS)}
                   disabled={insertSilenceMutation.isPending}
                 >
@@ -1168,7 +1207,7 @@ export function WaveformEditor({
   );
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-3">
       {isConversation ? (
         <div ref={sectionRef} className="relative flex flex-col">
           <div
@@ -1187,9 +1226,13 @@ export function WaveformEditor({
                 }
               }}
             >
-              <TabsList>
-                <TabsTrigger value="lines">Line timing</TabsTrigger>
-                <TabsTrigger value="tokens">Token timing</TabsTrigger>
+              <TabsList className="h-auto min-h-10 touch-manipulation">
+                <TabsTrigger value="lines" className="min-h-9 px-3">
+                  Line timing
+                </TabsTrigger>
+                <TabsTrigger value="tokens" className="min-h-9 px-3">
+                  Token timing
+                </TabsTrigger>
               </TabsList>
             </Tabs>
             {timingMode === "lines" && (
@@ -1277,30 +1320,48 @@ export function WaveformEditor({
                   ref={(el) => {
                     rowRefs.current[row.index] = el;
                   }}
+                  onClick={() => {
+                    if (isActive) {
+                      markLineSwitchAtPlayhead();
+                      return;
+                    }
+                    if (usesMarks) playRow(row);
+                  }}
                   className={cn(
-                    "flex items-start gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors",
+                    "flex touch-manipulation items-start gap-2 rounded-md border px-2 py-2.5 text-xs transition-colors md:py-1.5",
                     isHighlighted
                       ? "border-primary bg-primary/10"
-                      : "border-border/40"
+                      : "border-border/40",
+                    "cursor-pointer"
                   )}
                   style={{
                     scrollMarginTop: 56 + sectionHeaderHeight + 16,
                     scrollMarginBottom: playerBarHeight + 24,
                   }}
+                  title={
+                    isActive
+                      ? "Tap to mark a line switch at the playhead"
+                      : usesMarks
+                        ? "Tap to play this line"
+                        : undefined
+                  }
                 >
                   <button
                     type="button"
-                    onClick={() => playRow(row)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playRow(row);
+                    }}
                     disabled={!usesMarks}
-                    className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    className="mt-0.5 flex size-9 shrink-0 items-center justify-center touch-manipulation text-muted-foreground hover:text-foreground disabled:opacity-30 md:size-auto"
                   >
                     {isLooping ? (
-                      <Pause className="size-3.5" />
+                      <Pause className="size-4 md:size-3.5" />
                     ) : (
-                      <Play className="size-3.5" />
+                      <Play className="size-4 md:size-3.5" />
                     )}
                   </button>
-                  <div className="flex flex-1 flex-col gap-1">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <div className="flex items-center gap-1.5">
                       <span
                         className={cn(
@@ -1398,7 +1459,7 @@ export function WaveformEditor({
           <div ref={playerSpacerRef} aria-hidden />
           <div
             ref={playerBarRef}
-            className="flex flex-col gap-3 border-t border-border/60 bg-background pt-3 pb-3 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.35)]"
+            className="flex flex-col gap-3 border-t border-border/60 bg-background pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.35)]"
           >
             {playerTools}
           </div>

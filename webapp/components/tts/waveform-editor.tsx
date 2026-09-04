@@ -151,6 +151,9 @@ export function WaveformEditor({
   const rowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const playerBarRef = useRef<HTMLDivElement>(null);
   const playerSpacerRef = useRef<HTMLDivElement>(null);
+  // iOS Safari starts AudioContext suspended; createMediaElementSource routes
+  // media through it, so play is silent until we resume on a user gesture.
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const sectionRef = useRef<HTMLDivElement>(null);
   const sectionHeaderRef = useRef<HTMLDivElement>(null);
   const variantRef = useRef(variant);
@@ -403,7 +406,11 @@ export function WaveformEditor({
       if (cancelled) return;
       const media = ws.getMediaElement();
       if (!media) return;
+      media.setAttribute("playsinline", "true");
+      media.playsInline = true;
+      media.volume = 1;
       audioCtx = new AudioContext();
+      audioCtxRef.current = audioCtx;
       const source = audioCtx.createMediaElementSource(media);
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 256;
@@ -433,6 +440,7 @@ export function WaveformEditor({
       window.removeEventListener("scroll", onScroll, true);
       window.clearTimeout(scrollRedrawTimer);
       cancelAnimationFrame(rafId);
+      audioCtxRef.current = null;
       audioCtx?.close().catch(() => {});
       // Drop region refs — the plugin/DOM are about to go away. Cut-mode
       // listeners are torn down by the isCutMode effect when duration resets.
@@ -624,9 +632,17 @@ export function WaveformEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTime, duration, marks]);
 
+  function resumeAudioContext() {
+    const ctx = audioCtxRef.current;
+    if (ctx && ctx.state === "suspended") {
+      void ctx.resume();
+    }
+  }
+
   function playRow(row: SentenceMapRow) {
     const ws = wavesurferRef.current;
     if (!ws || !usesMarks) return;
+    resumeAudioContext();
     // Explicitly pausing before seeking (rather than seeking straight into a
     // still-playing element, e.g. jumping from row 4 to row 3) ensures the new
     // position reliably takes. Unlike wavesurfer's own play(start, end) — an
@@ -643,6 +659,7 @@ export function WaveformEditor({
   /** Main transport: clears per-row loop so full-track QC can run through the map. */
   function toggleMainPlayback() {
     setLoopingRowIndex(null);
+    resumeAudioContext();
     wavesurferRef.current?.playPause();
   }
 

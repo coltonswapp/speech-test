@@ -407,7 +407,6 @@ export function WaveformEditor({
       const media = ws.getMediaElement();
       if (!media) return;
       media.setAttribute("playsinline", "true");
-      (media as HTMLAudioElement).playsInline = true;
       media.volume = 1;
       audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;

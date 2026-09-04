@@ -37,7 +37,13 @@ import {
 } from "@/lib/dialogue/client";
 import { CreateCollectionDialog } from "@/components/dialogue/create-collection-dialog";
 
-export function DialogueList({ activeId }: { activeId?: string }) {
+export function DialogueList({
+  activeId,
+  className,
+}: {
+  activeId?: string;
+  className?: string;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -125,7 +131,12 @@ export function DialogueList({ activeId }: { activeId?: string }) {
   );
 
   return (
-    <div className="flex w-80 shrink-0 flex-col gap-3 border-r border-border/60 pr-4">
+    <div
+      className={cn(
+        "flex w-80 shrink-0 flex-col gap-3 border-r border-border/60 pr-4",
+        className,
+      )}
+    >
 
       <Button
         size="sm"

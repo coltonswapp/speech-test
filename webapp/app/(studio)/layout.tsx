@@ -4,6 +4,7 @@ import { StudioNav } from "@/components/studio-nav";
 import { QueryProvider } from "@/components/query-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NewDesignToggle } from "@/components/new-design-toggle";
+import { StudioMobileMenu } from "@/components/studio-mobile-menu";
 
 export default function StudioLayout({
   children,
@@ -22,7 +23,8 @@ export default function StudioLayout({
               Shizen Studio
             </Link>
             <StudioNav />
-            <div className="flex shrink-0 items-center gap-3 border-l border-border/60 pl-4">
+            {/* Desktop: everything inline. */}
+            <div className="hidden shrink-0 items-center gap-3 border-l border-border/60 pl-4 md:flex">
               <NewDesignToggle />
               <ThemeToggle />
               <Link
@@ -31,6 +33,11 @@ export default function StudioLayout({
               >
                 Sign out
               </Link>
+            </div>
+            {/* Mobile: theme stays one tap away; the rest folds into a menu. */}
+            <div className="flex shrink-0 items-center gap-1 md:hidden">
+              <ThemeToggle />
+              <StudioMobileMenu />
             </div>
           </div>
         </header>

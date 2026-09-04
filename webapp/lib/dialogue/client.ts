@@ -89,6 +89,7 @@ export type DialogueScenario = {
   publishedAt: string | null;
   grammarPointIds: string[];
   setting: string | null;
+  thumbnailUrl: string | null;
   lines: DialogueLine[];
   highlights: DialogueHighlights | null;
   quiz: QuizQuestion[] | null;
@@ -246,6 +247,35 @@ export const dialogueApi = {
   deleteScenario: (collectionId: string, slug: string) =>
     request<{ ok: true }>(
       `/api/content/dialogues/${collectionId}/scenarios/${slug}`,
+      { method: "DELETE" },
+    ),
+  uploadScenarioThumbnail: async (
+    collectionId: string,
+    slug: string,
+    file: File,
+  ) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(
+      `/api/content/dialogues/${collectionId}/scenarios/${slug}/thumbnail`,
+      { method: "POST", body: formData },
+    );
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(
+        typeof body?.error === "string"
+          ? body.error
+          : "Thumbnail upload failed",
+      );
+    }
+    return res.json() as Promise<{
+      scenario: DialogueScenario;
+      thumbnailUrl: string;
+    }>;
+  },
+  clearScenarioThumbnail: (collectionId: string, slug: string) =>
+    request<{ scenario: DialogueScenario }>(
+      `/api/content/dialogues/${collectionId}/scenarios/${slug}/thumbnail`,
       { method: "DELETE" },
     ),
   importCollection: async (file: File) => {

@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import {
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type Ref,
+} from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Play, Pause } from "lucide-react";
@@ -39,6 +48,20 @@ function formatStamp(seconds: number): string {
   return `${seconds.toFixed(2)}s`;
 }
 
+/**
+ * Stamp/undo handed up to the host so the shared transport dock (and its
+ * M / Backspace hotkeys) can drive token timing without duplicating the logic.
+ */
+export type TokenSyncActions = {
+  stamp: () => void;
+  undo: () => void;
+};
+
+export type TokenSyncAvailability = {
+  canStamp: boolean;
+  canUndo: boolean;
+};
+
 export function TokenSyncEditor({
   variant,
   spokenLines,
@@ -47,7 +70,8 @@ export function TokenSyncEditor({
   usesMarks,
   currentContentHash,
   hasUnsavedChanges,
-  enableHotkeys,
+  actionsRef,
+  onAvailabilityChange,
   onPersist,
   onGetPlayhead,
   onPlayLine,
@@ -60,7 +84,8 @@ export function TokenSyncEditor({
   usesMarks: boolean;
   currentContentHash?: string;
   hasUnsavedChanges?: boolean;
-  enableHotkeys?: boolean;
+  actionsRef?: Ref<TokenSyncActions | null>;
+  onAvailabilityChange?: (state: TokenSyncAvailability) => void;
   onPersist: (tokenSync: VariantTokenSync | null) => void;
   onGetPlayhead?: () => number;
   onPlayLine?: (lineIndex: number) => void;
@@ -300,31 +325,15 @@ export function TokenSyncEditor({
   stampRef.current = stamp;
   undoRef.current = undo;
 
-  const enableHotkeysRef = useRef(enableHotkeys);
-  enableHotkeysRef.current = enableHotkeys;
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (!enableHotkeysRef.current) return;
-      const target = event.target as HTMLElement | null;
-      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) {
-        return;
-      }
-      if (event.key === "t" || event.key === "T" || event.key === ".") {
-        const selection = window.getSelection();
-        if (selection && !selection.isCollapsed && selection.toString().length > 0) {
-          return;
-        }
-        event.preventDefault();
-        stampRef.current();
-      } else if (event.key === "Backspace") {
-        event.preventDefault();
-        undoRef.current();
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  // Stable handle: always calls through to the latest stamp/undo closures.
+  useImperativeHandle(
+    actionsRef,
+    () => ({
+      stamp: () => stampRef.current(),
+      undo: () => undoRef.current(),
+    }),
+    []
+  );
 
   const tokenizeDisabled =
     spokenTexts.length === 0 ||
@@ -335,6 +344,12 @@ export function TokenSyncEditor({
   const canStamp =
     !!sync && status !== "stale" && !hasUnsavedChanges && !!stampTarget;
   const canUndo = !!sync && !hasUnsavedChanges && stampedCount > 0;
+
+  // The host passes a state setter here, so the identity is stable and this
+  // only fires when availability actually flips.
+  useEffect(() => {
+    onAvailabilityChange?.({ canStamp, canUndo });
+  }, [canStamp, canUndo, onAvailabilityChange]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -371,19 +386,19 @@ export function TokenSyncEditor({
         <li>Tokenize splits each line into tap-sized words. The first word of each line is already timed from the line mark.</li>
         <li>Play the take from the waveform below.</li>
         <li>
-          Tap <span className="font-medium text-foreground">Stamp</span> (or the
-          next amber word) as that word starts. On desktop you can also press{" "}
-          <span className="font-medium text-foreground">T</span>. Filled chips
-          show their time.
+          Tap <span className="font-medium text-foreground">Mark</span> in the
+          player (or the next highlighted word) as that word starts. On a
+          keyboard press <span className="font-medium text-foreground">M</span>.
+          Filled chips show their time.
         </li>
         <li>
-          Tap any other untimed word to make it next. Stamp always uses the live
+          Tap any other untimed word to make it next. Mark always uses the live
           playhead — tapping a chip does not jump the take.
         </li>
         <li>
-          <span className="font-medium text-foreground">Undo</span> (or{" "}
-          <span className="font-medium text-foreground">Backspace</span> on
-          desktop) clears the last stamp.{" "}
+          <span className="font-medium text-foreground">Undo mark</span> (or{" "}
+          <span className="font-medium text-foreground">Backspace</span>) clears
+          the last stamp.{" "}
           <span className="font-medium text-foreground">Clear times</span>{" "}
           resets a line but keeps its first-word line mark.{" "}
           <span className="font-medium text-foreground">Clear all times</span>{" "}
@@ -416,23 +431,6 @@ export function TokenSyncEditor({
           disabled={tokenizeDisabled}
         >
           {tokenizeMutation.isPending ? "Tokenizing…" : "Tokenize"}
-        </Button>
-        <Button
-          size="sm"
-          className="min-h-11 min-w-[5.5rem] touch-manipulation px-4 md:min-h-8"
-          onClick={stamp}
-          disabled={!canStamp}
-        >
-          Stamp
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="min-h-11 touch-manipulation md:min-h-8"
-          onClick={undo}
-          disabled={!canUndo}
-        >
-          Undo
         </Button>
         <Button
           size="sm"

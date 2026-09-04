@@ -1,17 +1,44 @@
 "use client";
 
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin, { type Region } from "wavesurfer.js/dist/plugins/regions.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Play, Pause, Scissors, Download } from "lucide-react";
+import {
+  Play,
+  Pause,
+  Scissors,
+  Download,
+  SkipBack,
+  LocateFixed,
+  LocateOff,
+  Crop,
+  Check,
+  Save,
+  Flag,
+  Undo2,
+  Eraser,
+  Plus,
+  SquareSplitHorizontal,
+  X,
+} from "lucide-react";
 import { ttsApi, type Variant } from "@/lib/tts/client";
 import { cn } from "@/lib/utils";
 import type { EditableDialogueLine } from "@/components/tts/dialogue-line-editor";
-import { TokenSyncEditor } from "@/components/dialogue/token-sync-editor";
+import {
+  TokenSyncEditor,
+  type TokenSyncActions,
+} from "@/components/dialogue/token-sync-editor";
 import type { VariantTokenSync } from "@/lib/dialogue/types";
 import { enqueueTokenSyncSave } from "@/lib/dialogue/token-sync-persist";
 
@@ -68,6 +95,38 @@ function buildMapList(
 const PLAYHEAD_BREAK_SECONDS = 0.15;
 const PLAYHEAD_BREAK_HALF_SECONDS = 0.5;
 const PLAYBACK_RATES = [0.5, 0.75, 1] as const;
+
+/**
+ * After the user scrolls the page themselves, hold off auto-following the
+ * playhead for this long so the page doesn't fight their finger/wheel.
+ */
+const USER_SCROLL_HOLDOFF_MS = 2500;
+
+const COARSE_POINTER_QUERY = "(pointer: coarse)";
+function subscribeCoarsePointer(onChange: () => void) {
+  const query = window.matchMedia(COARSE_POINTER_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+function getCoarsePointer() {
+  return window.matchMedia(COARSE_POINTER_QUERY).matches;
+}
+function getCoarsePointerServer() {
+  return false;
+}
+
+/**
+ * How far the audible output trails the media element's reported position:
+ * the Web Audio graph's own buffering plus the hardware/Bluetooth output
+ * latency. Both are estimates the browser exposes; ignore anything absurd.
+ */
+function playbackLatencySeconds(ctx: AudioContext | null): number {
+  if (!ctx) return 0;
+  const base = typeof ctx.baseLatency === "number" ? ctx.baseLatency : 0;
+  const output = typeof ctx.outputLatency === "number" ? ctx.outputLatency : 0;
+  const total = base + output;
+  return Number.isFinite(total) && total > 0 && total < 1 ? total : 0;
+}
 
 type SentenceMapRow = {
   index: number;
@@ -167,13 +226,7 @@ export function WaveformEditor({
   const [currentTime, setCurrentTime] = useState(0);
   const [level, setLevel] = useState(0);
   const [loopingRowIndex, setLoopingRowIndex] = useState<number | null>(null);
-  const [suggested, setSuggested] = useState<{ samples: number[]; summary: string }>({
-    samples: [],
-    summary: "",
-  });
-  const [dragging, setDragging] = useState<
-    { kind: "mark" | "suggested"; index: number } | null
-  >(null);
+  const [dragging, setDragging] = useState<{ index: number } | null>(null);
   const [playerBarHeight, setPlayerBarHeight] = useState(0);
   const [sectionHeaderHeight, setSectionHeaderHeight] = useState(0);
   const [timingMode, setTimingMode] = useState<"lines" | "tokens">("lines");
@@ -181,6 +234,28 @@ export function WaveformEditor({
     useState<(typeof PLAYBACK_RATES)[number]>(1);
   const playbackRateRef = useRef(playbackRate);
   playbackRateRef.current = playbackRate;
+  // Output latency (Web Audio graph + hardware) measured once the take is
+  // ready, so the hint copy can tell the user marks are being shifted.
+  const [latencyMs, setLatencyMs] = useState(0);
+  // Token-mode Mark/Undo live in the shared transport dock; the TokenSyncEditor
+  // hands its stamp/undo up through this ref and reports whether they're usable.
+  const tokenActionsRef = useRef<TokenSyncActions | null>(null);
+  const [tokenActionState, setTokenActionState] = useState({
+    canStamp: false,
+    canUndo: false,
+  });
+
+  // Page-level auto-scroll fights the user's own scrolling on touch devices,
+  // so default it off there; the Follow toggle lets either side override.
+  const isCoarsePointer = useSyncExternalStore(
+    subscribeCoarsePointer,
+    getCoarsePointer,
+    getCoarsePointerServer
+  );
+  const [followOverride, setFollowOverride] = useState<boolean | null>(null);
+  const followPlayhead = followOverride ?? !isCoarsePointer;
+  // True for USER_SCROLL_HOLDOFF_MS after the user scrolls on their own.
+  const userScrollHoldRef = useRef(false);
 
   // Bust the media URL whenever the take's bytes change (cut / commit-trim /
   // insert-line-break). WaveSurfer only remounts when this string changes, and
@@ -203,16 +278,46 @@ export function WaveformEditor({
     spokenLines.length
   );
 
-  // Keep the currently-playing line in view as the page scrolls — the pinned
-  // waveform dock at the bottom would otherwise cover rows near the edge.
+  const activeRow =
+    activeRowIndex != null ? sentenceRows[activeRowIndex] ?? null : null;
+
+  // Hold off auto-follow for a beat after the user scrolls on their own.
+  // Programmatic scrollIntoView fires `scroll` but never `wheel`/`touchmove`,
+  // so these two events isolate genuine user intent.
   useEffect(() => {
-    if (timingMode !== "lines") return;
-    if (activeRowIndex == null) return;
-    rowRefs.current[activeRowIndex]?.scrollIntoView({
+    let releaseTimer = 0;
+    function noteUserScroll() {
+      userScrollHoldRef.current = true;
+      window.clearTimeout(releaseTimer);
+      releaseTimer = window.setTimeout(() => {
+        userScrollHoldRef.current = false;
+      }, USER_SCROLL_HOLDOFF_MS);
+    }
+    window.addEventListener("wheel", noteUserScroll, { passive: true });
+    window.addEventListener("touchmove", noteUserScroll, { passive: true });
+    return () => {
+      window.removeEventListener("wheel", noteUserScroll);
+      window.removeEventListener("touchmove", noteUserScroll);
+      window.clearTimeout(releaseTimer);
+    };
+  }, []);
+
+  function scrollRowIntoView(index: number) {
+    rowRefs.current[index]?.scrollIntoView({
       behavior: "smooth",
       block: "nearest",
     });
-  }, [activeRowIndex, timingMode]);
+  }
+
+  // Keep the currently-playing line in view as the page scrolls — the pinned
+  // waveform dock at the bottom would otherwise cover rows near the edge.
+  // Skipped while Follow is off or the user just scrolled themselves.
+  useEffect(() => {
+    if (timingMode !== "lines" || !followPlayhead) return;
+    if (activeRowIndex == null) return;
+    if (userScrollHoldRef.current) return;
+    scrollRowIntoView(activeRowIndex);
+  }, [activeRowIndex, timingMode, followPlayhead]);
 
   // Track chrome heights for scroll-margin on active sentence rows.
   useEffect(() => {
@@ -410,6 +515,7 @@ export function WaveformEditor({
       media.volume = 1;
       audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
+      setLatencyMs(Math.round(playbackLatencySeconds(audioCtx) * 1000));
       const source = audioCtx.createMediaElementSource(media);
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 256;
@@ -502,10 +608,23 @@ export function WaveformEditor({
     };
   }, [isCutMode, duration]);
 
+  /**
+   * The position the user is actually hearing right now. While playing, the
+   * media element's currentTime runs ahead of the speaker by the output
+   * latency, so a Mark tapped "on the beat" would otherwise land late. When
+   * paused/scrubbed the playhead is exactly where the user put it, so no shift.
+   */
+  function heardPlayheadSeconds(): number {
+    const ws = wavesurferRef.current;
+    const raw = ws?.getCurrentTime() ?? currentTime;
+    if (!ws?.isPlaying()) return raw;
+    return Math.max(0, raw - playbackLatencySeconds(audioCtxRef.current));
+  }
+
   function currentEditSample(): number {
     if (!duration) return 0;
     return Math.min(
-      Math.max(Math.round(currentTime * variant.sampleRate), 0),
+      Math.max(Math.round(heardPlayheadSeconds() * variant.sampleRate), 0),
       totalSamples - 1
     );
   }
@@ -538,20 +657,6 @@ export function WaveformEditor({
   function clearLineSwitchMarks() {
     if (marks.length === 0) return;
     setMarks([]);
-  }
-
-  const suggestBreaksMutation = useMutation({
-    mutationFn: () => ttsApi.suggestBreaks(projectId, variant.id),
-    onSuccess: (result) => {
-      setSuggested({ samples: result.suggestedSamples, summary: result.summary });
-    },
-    onError: (error) => toast.error(error.message),
-  });
-
-  function applySuggestedMarks() {
-    if (suggested.samples.length === 0) return;
-    setMarks(suggested.samples);
-    setSuggested({ samples: [], summary: "" });
   }
 
   const insertSilenceMutation = useMutation({
@@ -611,19 +716,48 @@ export function WaveformEditor({
   const timingModeRef = useRef(timingMode);
   timingModeRef.current = timingMode;
 
+  /** Mark in whichever timing mode is active: a line switch, or the next token. */
+  function markAtPlayhead() {
+    if (timingModeRef.current === "lines") {
+      markLineSwitchAtPlayhead();
+    } else {
+      tokenActionsRef.current?.stamp();
+    }
+  }
+
+  function undoMark() {
+    if (timingModeRef.current === "lines") {
+      removeLineSwitchMarkNearestPlayhead();
+    } else {
+      tokenActionsRef.current?.undo();
+    }
+  }
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
-      if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
+      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.code === "Space") {
         e.preventDefault();
         toggleMainPlayback();
-      } else if (
-        timingModeRef.current === "lines" &&
-        (e.key === "m" || e.key === "M")
-      ) {
+      } else if (e.key === "m" || e.key === "M") {
+        // Token mode lets you drag-select text to split/merge tokens; don't
+        // stamp while a selection is in progress.
+        const selection = window.getSelection();
+        if (
+          timingModeRef.current === "tokens" &&
+          selection &&
+          !selection.isCollapsed &&
+          selection.toString().length > 0
+        ) {
+          return;
+        }
         e.preventDefault();
-        markLineSwitchAtPlayhead();
+        markAtPlayhead();
+      } else if (e.key === "Backspace" && timingModeRef.current === "tokens") {
+        e.preventDefault();
+        tokenActionsRef.current?.undo();
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -662,6 +796,20 @@ export function WaveformEditor({
     wavesurferRef.current?.playPause();
   }
 
+  /** Jump back to the start and play the whole take from the top. */
+  function restartPlayback() {
+    const ws = wavesurferRef.current;
+    if (!ws) return;
+    setLoopingRowIndex(null);
+    resumeAudioContext();
+    // Same pause → seek → play sequence as playRow: keeps play() inside the
+    // click's gesture window and makes the seek take reliably.
+    if (ws.isPlaying()) ws.pause();
+    ws.setTime(0);
+    setCurrentTime(0);
+    void ws.play();
+  }
+
   useEffect(() => {
     wavesurferRef.current?.setPlaybackRate(playbackRate, true);
   }, [playbackRate]);
@@ -695,7 +843,7 @@ export function WaveformEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loopingRowIndex]);
 
-  // Drag handling for green (confirmed) and orange (suggested) marker triangles.
+  // Drag handling for green line-switch marker triangles.
   useEffect(() => {
     if (!dragging) return;
     const strip = stripRef.current;
@@ -708,12 +856,12 @@ export function WaveformEditor({
       const sample = Math.round(ratio * totalSamples);
       const left = `${(sample / totalSamples) * 100}%`;
       const el = strip.querySelector<HTMLElement>(
-        `[data-${dragging.kind}="${dragging.index}"]`
+        `[data-mark="${dragging.index}"]`
       );
       if (el) el.style.left = left;
       const guideRoot = containerRef.current?.parentElement;
       const guide = guideRoot?.querySelector<HTMLElement>(
-        `[data-${dragging.kind}-guide="${dragging.index}"]`
+        `[data-mark-guide="${dragging.index}"]`
       );
       if (guide) guide.style.left = left;
       strip.dataset.pendingSample = String(sample);
@@ -723,17 +871,9 @@ export function WaveformEditor({
       const pending = strip?.dataset.pendingSample;
       if (pending != null && dragging) {
         const sample = Number(pending);
-        if (dragging.kind === "mark") {
-          const next = [...marks];
-          next[dragging.index] = sample;
-          setMarks(next.sort((a, b) => a - b));
-        } else {
-          setSuggested((prev) => {
-            const next = [...prev.samples];
-            next[dragging.index] = sample;
-            return { ...prev, samples: next.sort((a, b) => a - b) };
-          });
-        }
+        const next = [...marks];
+        next[dragging.index] = sample;
+        setMarks(next.sort((a, b) => a - b));
       }
       if (strip) delete strip.dataset.pendingSample;
       setDragging(null);
@@ -938,24 +1078,12 @@ export function WaveformEditor({
         <div ref={containerRef} className="h-[72px] w-full" />
         {isConversation && timingMode === "lines" && duration > 0 && (
           <div className="pointer-events-none absolute inset-0 z-[1]">
-            {suggested.samples.map((sample, i) => (
-              <div
-                key={`suggested-guide-${i}`}
-                data-suggested-guide={i}
-                className={`absolute top-0 bottom-0 -translate-x-1/2 ${
-                  dragging?.kind === "suggested" && dragging.index === i
-                    ? "w-0.5 bg-orange-500/50"
-                    : "w-px bg-orange-500/30"
-                }`}
-                style={{ left: `${(sample / totalSamples) * 100}%` }}
-              />
-            ))}
             {marks.map((sample, i) => (
               <div
                 key={`mark-guide-${i}`}
                 data-mark-guide={i}
                 className={`absolute top-0 bottom-0 -translate-x-1/2 ${
-                  dragging?.kind === "mark" && dragging.index === i
+                  dragging?.index === i
                     ? "w-0.5 bg-emerald-500/55"
                     : "w-px bg-emerald-500/35"
                 }`}
@@ -971,28 +1099,13 @@ export function WaveformEditor({
           ref={stripRef}
           className="relative h-4 w-full overflow-visible rounded-sm bg-muted/50"
         >
-          {suggested.samples.map((sample, i) => (
-            <div
-              key={`suggested-${i}`}
-              data-suggested={i}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                setDragging({ kind: "suggested", index: i });
-              }}
-              className="absolute top-0 z-10 h-full w-5 -translate-x-1/2 touch-manipulation cursor-ew-resize sm:w-3"
-              style={{ left: `${(sample / totalSamples) * 100}%` }}
-              title={`Suggested break at ${(sample / variant.sampleRate).toFixed(2)}s`}
-            >
-              <div className="mx-auto h-0 w-0 border-x-4 border-t-4 border-x-transparent border-t-orange-500" />
-            </div>
-          ))}
           {marks.map((sample, i) => (
             <div
               key={`mark-${i}`}
               data-mark={i}
               onPointerDown={(e) => {
                 e.preventDefault();
-                setDragging({ kind: "mark", index: i });
+                setDragging({ index: i });
               }}
               className="absolute top-0 z-10 h-full w-5 -translate-x-1/2 touch-manipulation cursor-ew-resize sm:w-3"
               style={{ left: `${(sample / totalSamples) * 100}%` }}
@@ -1004,26 +1117,59 @@ export function WaveformEditor({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <Button
-          size="icon"
-          variant="outline"
-          className="size-11 touch-manipulation md:size-8"
-          aria-label={isPlaying ? "Pause" : "Play"}
-          onClick={() => toggleMainPlayback()}
+      {isConversation && timingMode === "lines" && activeRow && (
+        <button
+          type="button"
+          onClick={() => scrollRowIntoView(activeRow.index)}
+          title="Jump to this line in the sentence map"
+          className="flex min-w-0 items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-left text-xs touch-manipulation hover:bg-primary/10"
         >
-          {isPlaying ? (
-            <Pause className="size-5 md:size-3.5" />
-          ) : (
-            <Play className="size-5 md:size-3.5" />
-          )}
-        </Button>
-        {isConversation && timingMode === "lines" && (
+          <span className="shrink-0 font-mono text-[10px] text-primary">
+            #{activeRow.index + 1}
+          </span>
+          <span className="min-w-0 flex-1 truncate">{activeRow.text}</span>
+        </button>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1">
+          <Button
+            size="icon"
+            variant="outline"
+            className="size-11 touch-manipulation md:size-8"
+            aria-label="Restart from the beginning"
+            title="Restart"
+            onClick={restartPlayback}
+            disabled={duration === 0}
+          >
+            <SkipBack className="size-5 md:size-3.5" />
+          </Button>
+          <Button
+            size="icon"
+            variant="outline"
+            className="size-11 touch-manipulation md:size-8"
+            aria-label={isPlaying ? "Pause" : "Play"}
+            onClick={() => toggleMainPlayback()}
+          >
+            {isPlaying ? (
+              <Pause className="size-5 md:size-3.5" />
+            ) : (
+              <Play className="size-5 md:size-3.5" />
+            )}
+          </Button>
+        </div>
+        {isConversation && (
           <>
             <Button
               size="sm"
               className="min-h-11 touch-manipulation px-3 md:min-h-8"
-              onClick={markLineSwitchAtPlayhead}
+              onClick={markAtPlayhead}
+              disabled={timingMode === "tokens" && !tokenActionState.canStamp}
+              title={
+                timingMode === "lines"
+                  ? "Mark a line switch at the playhead (M)"
+                  : "Stamp the next word at the playhead (M)"
+              }
             >
               Mark
             </Button>
@@ -1031,8 +1177,17 @@ export function WaveformEditor({
               size="sm"
               variant="outline"
               className="min-h-11 touch-manipulation px-3 md:min-h-8"
-              onClick={removeLineSwitchMarkNearestPlayhead}
-              disabled={marks.length === 0}
+              onClick={undoMark}
+              disabled={
+                timingMode === "lines"
+                  ? marks.length === 0
+                  : !tokenActionState.canUndo
+              }
+              title={
+                timingMode === "lines"
+                  ? "Remove the mark nearest the playhead"
+                  : "Clear the last stamped word (Backspace)"
+              }
             >
               Undo mark
             </Button>
@@ -1041,6 +1196,27 @@ export function WaveformEditor({
         <span className="text-xs tabular-nums text-muted-foreground">
           {formatTime(currentTime)} / {formatTime(duration)}
         </span>
+        {isConversation && timingMode === "lines" && (
+          <Button
+            size="icon"
+            variant={followPlayhead ? "secondary" : "ghost"}
+            className="size-11 touch-manipulation md:size-8"
+            aria-pressed={followPlayhead}
+            aria-label={
+              followPlayhead
+                ? "Stop auto-scrolling to the playing line"
+                : "Auto-scroll to the playing line"
+            }
+            title={followPlayhead ? "Following playhead" : "Follow playhead"}
+            onClick={() => setFollowOverride(!followPlayhead)}
+          >
+            {followPlayhead ? (
+              <LocateFixed className="size-5 md:size-3.5" />
+            ) : (
+              <LocateOff className="size-5 md:size-3.5" />
+            )}
+          </Button>
+        )}
         <div
           className="flex items-center rounded-md border border-border/60 p-0.5"
           title="Playback speed"
@@ -1067,83 +1243,73 @@ export function WaveformEditor({
 
       {isConversation && timingMode === "lines" && (
         <p className="text-xs text-muted-foreground">
-          Scrub the waveform, then tap <span className="font-medium text-foreground">Mark</span>{" "}
-          (or the active line) when the next line starts —{" "}
+          Play, then tap <span className="font-medium text-foreground">Mark</span>{" "}
+          (or the active line) the moment the next line starts —{" "}
           <span className="font-medium text-foreground">Undo mark</span> removes the nearest.
-          On desktop: Space play/pause, M mark. Drag green triangles to fine-tune. Orange = auto breaks.
+          Keyboard: Space play/pause, M mark. Drag green triangles to fine-tune.
+          {latencyMs >= 20 && (
+            <>
+              {" "}
+              Marks land ~{latencyMs}ms before the cursor to offset audio output latency.
+            </>
+          )}
         </p>
       )}
       {isConversation && timingMode === "tokens" && (
         <p className="text-xs text-muted-foreground">
-          Play/pause below. Stamp tokens in the list above — tap{" "}
-          <span className="font-medium text-foreground">Stamp</span> or the next (amber) word.
-          <span className="font-medium text-foreground"> Undo</span> clears the last stamp.
-          On desktop: Space play/pause, T stamps, Backspace undoes.
+          Play, then tap <span className="font-medium text-foreground">Mark</span>{" "}
+          (or the next highlighted word) as that word starts.
+          <span className="font-medium text-foreground"> Undo mark</span> clears the last stamp.
+          Keyboard: Space play/pause, M mark, Backspace undo.
+          {latencyMs >= 20 && (
+            <>
+              {" "}
+              Stamps land ~{latencyMs}ms before the cursor to offset audio output latency.
+            </>
+          )}
         </p>
-      )}
-
-      {isConversation && timingMode === "lines" && duration > 0 && (
-        <div className="flex flex-col gap-2 rounded-md border border-orange-500/20 bg-orange-500/5 p-2.5">
-          <p className="text-xs font-semibold">Line break alignment</p>
-          <p className="text-xs text-muted-foreground">
-            {suggestBreaksMutation.isPending
-              ? "Detecting…"
-              : suggested.summary || "Detect where the app would split your dialogue lines."}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => suggestBreaksMutation.mutate()}
-              disabled={suggestBreaksMutation.isPending}
-            >
-              Detect breaks
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={applySuggestedMarks}
-              disabled={suggested.samples.length === 0}
-            >
-              Apply suggested
-            </Button>
-            {marks.length > 0 && (
-              <span className="text-xs text-emerald-600 dark:text-emerald-400">
-                {marks.length} green mark{marks.length === 1 ? "" : "s"}
-              </span>
-            )}
-          </div>
-        </div>
       )}
 
       {(timingMode === "lines" || !isConversation) && (
         <>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
             <Button
               size="sm"
               variant="outline"
+              className="min-h-10 touch-manipulation md:min-h-7"
               onClick={() => setIsTrimMode((v) => !v)}
+              title={isTrimMode ? "Finish trimming" : "Trim the take"}
             >
-              {isTrimMode ? "Done trimming" : "Trim…"}
+              {isTrimMode ? (
+                <Check className="size-3.5" />
+              ) : (
+                <Crop className="size-3.5" />
+              )}
+              {isTrimMode ? "Done" : "Trim"}
             </Button>
             {isTrimMode && (
               <>
                 <Button
                   size="sm"
                   variant="outline"
+                  className="min-h-10 touch-manipulation md:min-h-7"
                   onClick={() => saveTrimMutation.mutate()}
                   disabled={saveTrimMutation.isPending}
+                  title="Save the current trim region"
                 >
-                  Save trim
+                  <Save className="size-3.5" />
+                  Save
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
+                  className="min-h-10 touch-manipulation md:min-h-7"
                   onClick={() => commitTrimMutation.mutate()}
                   disabled={commitTrimMutation.isPending}
+                  title="Apply trim to take"
                 >
                   <Scissors className="size-3.5" />
-                  Apply trim to take
+                  Apply
                 </Button>
               </>
             )}
@@ -1154,8 +1320,10 @@ export function WaveformEditor({
                   variant="outline"
                   className="min-h-10 touch-manipulation md:min-h-7"
                   onClick={markLineSwitchAtPlayhead}
+                  title="Mark a line switch at the playhead"
                 >
-                  Mark line switch
+                  <Flag className="size-3.5" />
+                  Mark
                 </Button>
                 <Button
                   size="sm"
@@ -1163,8 +1331,10 @@ export function WaveformEditor({
                   className="min-h-10 touch-manipulation md:min-h-7"
                   onClick={removeLineSwitchMarkNearestPlayhead}
                   disabled={marks.length === 0}
+                  title="Remove the mark nearest the playhead"
                 >
-                  Undo nearest mark
+                  <Undo2 className="size-3.5" />
+                  Undo
                 </Button>
                 {marks.length > 0 && (
                   <Button
@@ -1172,8 +1342,10 @@ export function WaveformEditor({
                     variant="outline"
                     className="min-h-10 touch-manipulation md:min-h-7"
                     onClick={clearLineSwitchMarks}
+                    title="Clear all line-switch marks"
                   >
-                    Clear line marks
+                    <Eraser className="size-3.5" />
+                    Clear
                   </Button>
                 )}
                 <Button
@@ -1182,8 +1354,10 @@ export function WaveformEditor({
                   className="min-h-10 touch-manipulation md:min-h-7"
                   onClick={() => insertLineBreak(PLAYHEAD_BREAK_SECONDS)}
                   disabled={insertSilenceMutation.isPending}
+                  title="Insert a 0.15s line break at the playhead"
                 >
-                  Insert line break (0.15s)
+                  <Plus className="size-3.5" />
+                  0.15s
                 </Button>
                 <Button
                   size="sm"
@@ -1191,23 +1365,38 @@ export function WaveformEditor({
                   className="min-h-10 touch-manipulation md:min-h-7"
                   onClick={() => insertLineBreak(PLAYHEAD_BREAK_HALF_SECONDS)}
                   disabled={insertSilenceMutation.isPending}
+                  title="Insert a 0.5s line break at the playhead"
                 >
-                  Insert line break (0.5s)
+                  <Plus className="size-3.5" />
+                  0.5s
                 </Button>
               </>
             )}
-            <Button size="sm" variant="outline" onClick={toggleCutMode}>
-              {isCutMode ? "Cancel cut" : "Cut section…"}
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-10 touch-manipulation md:min-h-7"
+              onClick={toggleCutMode}
+              title={isCutMode ? "Cancel cutting a section" : "Cut a section from the take"}
+            >
+              {isCutMode ? (
+                <X className="size-3.5" />
+              ) : (
+                <SquareSplitHorizontal className="size-3.5" />
+              )}
+              {isCutMode ? "Cancel" : "Cut"}
             </Button>
             {isCutMode && (
               <Button
                 size="sm"
                 variant="outline"
+                className="min-h-10 touch-manipulation md:min-h-7"
                 onClick={removeCutRegion}
                 disabled={!hasCutRegion || removeGapMutation.isPending}
+                title="Remove the selected section"
               >
                 <Scissors className="size-3.5" />
-                Remove selected section
+                Remove
               </Button>
             )}
           </div>
@@ -1443,10 +1632,9 @@ export function WaveformEditor({
               usesMarks={usesMarks}
               currentContentHash={currentContentHash}
               hasUnsavedChanges={hasUnsavedChanges}
-              enableHotkeys
-              onGetPlayhead={() =>
-                wavesurferRef.current?.getCurrentTime() ?? currentTime
-              }
+              actionsRef={tokenActionsRef}
+              onAvailabilityChange={setTokenActionState}
+              onGetPlayhead={heardPlayheadSeconds}
               onPlayLine={(lineIndex) => {
                 const ws = wavesurferRef.current;
                 if (!ws) return;

@@ -14,7 +14,14 @@ export type MinimapSection = {
  * section is nearest the top of the viewport via IntersectionObserver and
  * highlights it; clicking an entry smooth-scrolls to that section.
  */
-export function ScenarioMinimap({ sections }: { sections: MinimapSection[] }) {
+export function ScenarioMinimap({
+  sections,
+  onSelect,
+}: {
+  sections: MinimapSection[];
+  /** Overrides the default scroll — e.g. to unfold a collapsed section first. */
+  onSelect?: (id: string) => void;
+}) {
   const [activeId, setActiveId] = useState(sections[0]?.id);
 
   useEffect(() => {
@@ -57,7 +64,8 @@ export function ScenarioMinimap({ sections }: { sections: MinimapSection[] }) {
           href={`#${section.id}`}
           onClick={(e) => {
             e.preventDefault();
-            scrollToId(section.id);
+            if (onSelect) onSelect(section.id);
+            else scrollToId(section.id);
             setActiveId(section.id);
           }}
           className={cn(

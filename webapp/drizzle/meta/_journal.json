@@ -43,6 +43,13 @@
       "when": 1784129206932,
       "tag": "0005_token_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784129206933,
+      "tag": "0006_dialogue_scenario_thumbnail",
+      "breakpoints": true
     }
   ]
 }

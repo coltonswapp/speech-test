@@ -1,4 +1,4 @@
-import { DialogueList } from "@/components/dialogue/dialogue-list";
+import { DialogueShell } from "@/components/dialogue/dialogue-shell";
 import { CollectionEditor } from "@/components/dialogue/collection-editor";
 
 export default async function DialogueCollectionPage({
@@ -9,9 +9,8 @@ export default async function DialogueCollectionPage({
   const { collectionId } = await params;
 
   return (
-    <div className="flex flex-1 gap-6">
-      <DialogueList activeId={collectionId} />
+    <DialogueShell activeId={collectionId} collapseSidebarOnMobile>
       <CollectionEditor collectionId={collectionId} />
-    </div>
+    </DialogueShell>
   );
 }

@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import {
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type Ref,
+} from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Play, Pause } from "lucide-react";
@@ -39,6 +48,20 @@ function formatStamp(seconds: number): string {
   return `${seconds.toFixed(2)}s`;
 }
 
+/**
+ * Stamp/undo handed up to the host so the shared transport dock (and its
+ * M / Backspace hotkeys) can drive token timing without duplicating the logic.
+ */
+export type TokenSyncActions = {
+  stamp: () => void;
+  undo: () => void;
+};
+
+export type TokenSyncAvailability = {
+  canStamp: boolean;
+  canUndo: boolean;
+};
+
 export function TokenSyncEditor({
   variant,
   spokenLines,
@@ -47,7 +70,8 @@ export function TokenSyncEditor({
   usesMarks,
   currentContentHash,
   hasUnsavedChanges,
-  enableHotkeys,
+  actionsRef,
+  onAvailabilityChange,
   onPersist,
   onGetPlayhead,
   onPlayLine,
@@ -60,7 +84,8 @@ export function TokenSyncEditor({
   usesMarks: boolean;
   currentContentHash?: string;
   hasUnsavedChanges?: boolean;
-  enableHotkeys?: boolean;
+  actionsRef?: Ref<TokenSyncActions | null>;
+  onAvailabilityChange?: (state: TokenSyncAvailability) => void;
   onPersist: (tokenSync: VariantTokenSync | null) => void;
   onGetPlayhead?: () => number;
   onPlayLine?: (lineIndex: number) => void;
@@ -300,31 +325,15 @@ export function TokenSyncEditor({
   stampRef.current = stamp;
   undoRef.current = undo;
 
-  const enableHotkeysRef = useRef(enableHotkeys);
-  enableHotkeysRef.current = enableHotkeys;
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (!enableHotkeysRef.current) return;
-      const target = event.target as HTMLElement | null;
-      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) {
-        return;
-      }
-      if (event.key === "t" || event.key === "T" || event.key === ".") {
-        const selection = window.getSelection();
-        if (selection && !selection.isCollapsed && selection.toString().length > 0) {
-          return;
-        }
-        event.preventDefault();
-        stampRef.current();
-      } else if (event.key === "Backspace") {
-        event.preventDefault();
-        undoRef.current();
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  // Stable handle: always calls through to the latest stamp/undo closures.
+  useImperativeHandle(
+    actionsRef,
+    () => ({
+      stamp: () => stampRef.current(),
+      undo: () => undoRef.current(),
+    }),
+    []
+  );
 
   const tokenizeDisabled =
     spokenTexts.length === 0 ||
@@ -335,6 +344,12 @@ export function TokenSyncEditor({
   const canStamp =
     !!sync && status !== "stale" && !hasUnsavedChanges && !!stampTarget;
   const canUndo = !!sync && !hasUnsavedChanges && stampedCount > 0;
+
+  // The host passes a state setter here, so the identity is stable and this
+  // only fires when availability actually flips.
+  useEffect(() => {
+    onAvailabilityChange?.({ canStamp, canUndo });
+  }, [canStamp, canUndo, onAvailabilityChange]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -371,18 +386,20 @@ export function TokenSyncEditor({
         <li>Tokenize splits each line into tap-sized words. The first word of each line is already timed from the line mark.</li>
         <li>Play the take from the waveform below.</li>
         <li>
-          Press <span className="font-medium text-foreground">Stamp</span> or{" "}
-          <span className="font-medium text-foreground">T</span> as the next
-          (amber) word starts. Filled chips show their time.
+          Tap <span className="font-medium text-foreground">Mark</span> in the
+          player (or the next highlighted word) as that word starts. On a
+          keyboard press <span className="font-medium text-foreground">M</span>.
+          Filled chips show their time.
         </li>
         <li>
-          Click an untimed word to stamp that one next. Stamp / T always uses
-          the live playhead — clicking a chip does not jump the take.
+          Tap any other untimed word to make it next. Mark always uses the live
+          playhead — tapping a chip does not jump the take.
         </li>
         <li>
-          <span className="font-medium text-foreground">Undo</span> or{" "}
-          <span className="font-medium text-foreground">Backspace</span> clears
-          the last stamp. <span className="font-medium text-foreground">Clear times</span>{" "}
+          <span className="font-medium text-foreground">Undo mark</span> (or{" "}
+          <span className="font-medium text-foreground">Backspace</span>) clears
+          the last stamp.{" "}
+          <span className="font-medium text-foreground">Clear times</span>{" "}
           resets a line but keeps its first-word line mark.{" "}
           <span className="font-medium text-foreground">Clear all times</span>{" "}
           does the same for the whole take. Drag-select text to split or merge
@@ -405,10 +422,11 @@ export function TokenSyncEditor({
           the lesson to ship these times to the app.
         </p>
       )}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="sticky top-28 z-10 -mx-1 flex flex-wrap items-center gap-2 bg-background/95 px-1 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <Button
           size="sm"
           variant="outline"
+          className="min-h-11 touch-manipulation md:min-h-8"
           onClick={() => tokenizeMutation.mutate()}
           disabled={tokenizeDisabled}
         >
@@ -416,22 +434,8 @@ export function TokenSyncEditor({
         </Button>
         <Button
           size="sm"
-          onClick={stamp}
-          disabled={!canStamp}
-        >
-          Stamp
-        </Button>
-        <Button
-          size="sm"
           variant="outline"
-          onClick={undo}
-          disabled={!canUndo}
-        >
-          Undo last stamp
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
+          className="min-h-11 touch-manipulation md:min-h-8"
           onClick={clearAllTimes}
           disabled={!canUndo}
         >
@@ -458,12 +462,12 @@ export function TokenSyncEditor({
                     }
                     disabled={!onPlayLine || (!windows?.[lineIndex] && lineIndex !== 0)}
                     onClick={() => playLine(lineIndex)}
-                    className="shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    className="flex size-9 shrink-0 touch-manipulation items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30 md:size-auto"
                   >
                     {playingLineIndex === lineIndex ? (
-                      <Pause className="size-3.5" />
+                      <Pause className="size-4 md:size-3.5" />
                     ) : (
-                      <Play className="size-3.5" />
+                      <Play className="size-4 md:size-3.5" />
                     )}
                   </button>
                   <p className="text-[11px] text-muted-foreground">
@@ -506,9 +510,15 @@ export function TokenSyncEditor({
                     );
                     if (!(tokenEl instanceof HTMLElement)) return;
                     const tokenIndex = Number(tokenEl.dataset.tokenIndex);
-                    if (Number.isInteger(tokenIndex)) {
-                      selectToken(lineIndex, tokenIndex);
+                    if (!Number.isInteger(tokenIndex)) return;
+                    const isNextTarget =
+                      stampTarget?.lineIndex === lineIndex &&
+                      stampTarget.tokenIndex === tokenIndex;
+                    if (isNextTarget) {
+                      stamp();
+                      return;
                     }
+                    selectToken(lineIndex, tokenIndex);
                   }}
                   onMerge={(tokenIndex) => merge(lineIndex, tokenIndex)}
                 />
@@ -624,11 +634,13 @@ function TokenChip({
       data-token-index={tokenIndex}
       title={
         untimed
-          ? "Click to stamp this word next, then press Stamp when it starts."
+          ? isNext
+            ? "Tap to stamp this word at the playhead"
+            : "Tap to make this the next word to stamp"
           : `Stamped at ${formatStamp(startSeconds)}. Stamp times the next untimed word from the playhead.`
       }
       className={cn(
-        "mx-px inline-block whitespace-nowrap cursor-pointer rounded-md border px-1 py-px align-middle",
+        "mx-px inline-block cursor-pointer touch-manipulation whitespace-nowrap rounded-md border px-1.5 py-1 align-middle md:px-1 md:py-px",
         untimed && "border-dashed border-rose-400 bg-rose-500/15",
         !untimed && "border-sky-500/30 bg-sky-500/10",
         isNext && untimed && "border-solid ring-2 ring-rose-400",

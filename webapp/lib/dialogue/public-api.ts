@@ -65,6 +65,7 @@ export function toExportableScenario(
     publishedAt: scenario.publishedAt?.toISOString() ?? null,
     grammarPointIds: scenario.grammarPointIds,
     setting: scenario.setting,
+    thumbnailUrl: scenario.thumbnailUrl,
     lines: scenario.lines,
     highlights: scenario.highlights,
     quiz: scenario.quiz,

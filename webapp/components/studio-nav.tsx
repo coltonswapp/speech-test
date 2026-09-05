@@ -126,13 +126,15 @@ export function StudioNav() {
     const update = () => {
       const children = Array.from(measure.children) as HTMLElement[];
       if (children.length < links.length + 1) return;
+      const containerWidth = nav.getBoundingClientRect().width;
+      // Hidden on small screens (the mobile dropdown takes over) — nothing to lay out.
+      if (containerWidth <= 0) return;
       const itemWidths = children
         .slice(0, links.length)
         .map((el) => el.getBoundingClientRect().width);
       const moreWidth = children[links.length].getBoundingClientRect().width;
       const styles = getComputedStyle(nav);
       const gap = Number.parseFloat(styles.columnGap || styles.gap) || 0;
-      const containerWidth = nav.getBoundingClientRect().width;
       const next = computeVisibleIndices(
         itemWidths,
         moreWidth,
@@ -152,88 +154,132 @@ export function StudioNav() {
   }, [activeIndex, mode]);
 
   const overflowActive = overflow.some((i) => i === activeIndex);
+  const activeLink = activeIndex >= 0 ? links[activeIndex] : null;
+  const ActiveIcon = activeLink?.icon;
 
   return (
-    <nav
-      ref={navRef}
-      data-slot="studio-nav"
-      className="relative flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
-    >
-      <div
-        ref={measureRef}
-        aria-hidden
-        className="pointer-events-none absolute flex w-max items-center gap-1 whitespace-nowrap"
-        style={{ visibility: "hidden", left: 0, top: 0 }}
-      >
-        {links.map((link) => {
-          const Icon = link.icon;
-          return (
-            <span key={link.href} className={pillClassName}>
-              <Icon data-slot="nav-icon" />
-              {link.label}
-            </span>
-          );
-        })}
-        <button type="button" tabIndex={-1} className={cn(pillClassName, "appearance-none border-0 bg-transparent")}>
-          More
-          <ChevronDownIcon className="size-3.5" />
-        </button>
-      </div>
-
-      {visible.map((index) => {
-        const link = links[index];
-        const active = index === activeIndex;
-        const Icon = link.icon;
-        return (
-          <Link
-            key={link.href}
-            href={link.href}
-            className={cn(
-              pillClassName,
-              active
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Icon data-slot="nav-icon" />
-            {link.label}
-          </Link>
-        );
-      })}
-
-      {overflow.length > 0 && (
+    <>
+      {/* Mobile: one dropdown that names the current section and lists them all. */}
+      <div className="flex min-w-0 flex-1 items-center md:hidden">
         <DropdownMenu>
           <DropdownMenuTrigger
+            aria-label="Navigate to section"
             className={cn(
               pillClassName,
-              "cursor-pointer appearance-none border-0 bg-transparent",
-              overflowActive
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:text-foreground",
+              "min-h-10 min-w-0 max-w-full cursor-pointer appearance-none border border-border/60 bg-transparent touch-manipulation",
+              "text-foreground",
             )}
           >
-            More
-            <ChevronDownIcon className="size-3.5" />
+            {ActiveIcon ? (
+              <ActiveIcon className="size-4 shrink-0 text-muted-foreground" />
+            ) : null}
+            <span className="truncate">{activeLink?.label ?? "Sections"}</span>
+            <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-40 w-auto">
-            {overflow.map((index) => {
-              const link = links[index];
+          <DropdownMenuContent align="start" className="min-w-52 w-auto">
+            {links.map((link, index) => {
               const active = index === activeIndex;
               const Icon = link.icon;
               return (
                 <DropdownMenuItem
                   key={link.href}
-                  className={cn(active && "bg-accent text-accent-foreground")}
+                  className={cn(
+                    "min-h-10 touch-manipulation",
+                    active && "bg-accent text-accent-foreground",
+                  )}
                   onClick={() => router.push(link.href)}
                 >
-                  <Icon data-slot="nav-icon" />
+                  <Icon className="size-4 text-muted-foreground" />
                   {link.label}
                 </DropdownMenuItem>
               );
             })}
           </DropdownMenuContent>
         </DropdownMenu>
-      )}
-    </nav>
+      </div>
+
+      {/* Desktop: inline pills, spilling into "More" only when they don't fit. */}
+      <nav
+        ref={navRef}
+        data-slot="studio-nav"
+        className="relative hidden min-w-0 flex-1 items-center gap-1 overflow-hidden md:flex"
+      >
+        <div
+          ref={measureRef}
+          aria-hidden
+          className="pointer-events-none absolute flex w-max items-center gap-1 whitespace-nowrap"
+          style={{ visibility: "hidden", left: 0, top: 0 }}
+        >
+          {links.map((link) => {
+            const Icon = link.icon;
+            return (
+              <span key={link.href} className={pillClassName}>
+                <Icon data-slot="nav-icon" />
+                {link.label}
+              </span>
+            );
+          })}
+          <button type="button" tabIndex={-1} className={cn(pillClassName, "appearance-none border-0 bg-transparent")}>
+            More
+            <ChevronDownIcon className="size-3.5" />
+          </button>
+        </div>
+
+        {visible.map((index) => {
+          const link = links[index];
+          const active = index === activeIndex;
+          const Icon = link.icon;
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={cn(
+                pillClassName,
+                active
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Icon data-slot="nav-icon" />
+              {link.label}
+            </Link>
+          );
+        })}
+
+        {overflow.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={cn(
+                pillClassName,
+                "cursor-pointer appearance-none border-0 bg-transparent",
+                overflowActive
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              More
+              <ChevronDownIcon className="size-3.5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-40 w-auto">
+              {overflow.map((index) => {
+                const link = links[index];
+                const active = index === activeIndex;
+                const Icon = link.icon;
+                return (
+                  <DropdownMenuItem
+                    key={link.href}
+                    className={cn(active && "bg-accent text-accent-foreground")}
+                    onClick={() => router.push(link.href)}
+                  >
+                    <Icon data-slot="nav-icon" />
+                    {link.label}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </nav>
+    </>
   );
 }

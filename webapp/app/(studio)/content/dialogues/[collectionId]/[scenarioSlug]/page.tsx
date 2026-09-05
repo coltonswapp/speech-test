@@ -1,4 +1,4 @@
-import { DialogueList } from "@/components/dialogue/dialogue-list";
+import { DialogueShell } from "@/components/dialogue/dialogue-shell";
 import { ScenarioEditor } from "@/components/dialogue/scenario-editor";
 
 export default async function DialogueScenarioPage({
@@ -9,9 +9,11 @@ export default async function DialogueScenarioPage({
   const { collectionId, scenarioSlug } = await params;
 
   return (
-    <div className="flex flex-1 gap-6">
-      <DialogueList activeId={`${collectionId}/${scenarioSlug}`} />
+    <DialogueShell
+      activeId={`${collectionId}/${scenarioSlug}`}
+      collapseSidebarOnMobile
+    >
       <ScenarioEditor collectionId={collectionId} scenarioSlug={scenarioSlug} />
-    </div>
+    </DialogueShell>
   );
 }

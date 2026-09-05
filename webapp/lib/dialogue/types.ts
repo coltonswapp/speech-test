@@ -243,6 +243,8 @@ export const scenarioFileSchema = z.object({
   publishedContentHash: z.string().optional(),
   publishedAt: z.string().optional(),
   grammarPointIDs: z.array(z.string()).optional(),
+  // Per-scenario CDN thumbnail; absent → the app uses the collection's.
+  thumbnailUrl: z.string().url().optional(),
   scenario: scenarioBodySchema,
   highlights: highlightsSchema.optional(),
   quiz: z.array(quizQuestionSchema).optional(),
@@ -335,6 +337,7 @@ export const updateScenarioSchema = z.object({
   audioKey: z.string().nullable().optional(),
   grammarPointIds: z.array(z.string()).optional(),
   setting: z.string().nullable().optional(),
+  thumbnailUrl: z.string().url().nullable().optional(),
   lines: z.array(dialogueLineSchema).optional(),
   highlights: highlightsSchema.nullable().optional(),
   quiz: z.array(quizQuestionSchema).nullable().optional(),

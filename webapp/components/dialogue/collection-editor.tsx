@@ -614,6 +614,15 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
             key={scenario.id}
             className="flex items-center gap-2 rounded-md border border-border/60 p-3"
           >
+            {scenario.thumbnailUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={scenario.thumbnailUrl}
+                alt=""
+                title="Has its own thumbnail"
+                className="size-9 shrink-0 rounded border object-cover"
+              />
+            )}
             <div className="flex min-w-0 flex-1 flex-col">
               <Link
                 href={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}

@@ -4,9 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Sparkles, Trash2, ClipboardCheck, ShieldCheck } from "lucide-react";
+import {
+  Sparkles,
+  Trash2,
+  ClipboardCheck,
+  ShieldCheck,
+  ChevronRight,
+} from "lucide-react";
 import { GrammarPointPicker } from "@/components/content/grammar-point-picker";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +23,7 @@ import { contentApi } from "@/lib/content/client";
 import { dialogueApi, type DialogueScenario } from "@/lib/dialogue/client";
 import { enrichDialogueHighlights } from "@/lib/dialogue/enrich-dialogue-highlights";
 import { scrollToId } from "@/lib/scroll-to-id";
+import { cn } from "@/lib/utils";
 import { LineEditor } from "@/components/dialogue/line-editor";
 import { GenerateLinesPanel } from "@/components/dialogue/generate-lines-panel";
 import { HighlightsEditor } from "@/components/dialogue/highlights-editor";
@@ -42,6 +50,37 @@ const SECTIONS = [
 ];
 const SECTION_IDS = SECTIONS.map((section) => section.id);
 
+// Which sections the user has folded away. Remembered across scenarios so
+// e.g. "Lines collapsed, Audio open" survives moving to the next scene.
+const COLLAPSED_SECTIONS_KEY = "studio:scenario-editor:collapsed-sections";
+
+function readCollapsedSections(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(COLLAPSED_SECTIONS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(
+      parsed.filter(
+        (id): id is string => typeof id === "string" && SECTION_IDS.includes(id),
+      ),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function writeCollapsedSections(collapsed: Set<string>) {
+  try {
+    window.localStorage.setItem(
+      COLLAPSED_SECTIONS_KEY,
+      JSON.stringify([...collapsed]),
+    );
+  } catch {
+    // localStorage unavailable (private mode, etc.) — keep the in-memory state.
+  }
+}
+
 export function ScenarioEditor({
   collectionId,
   scenarioSlug,
@@ -58,6 +97,15 @@ export function ScenarioEditor({
     queryFn: () => dialogueApi.getScenario(collectionId, scenarioSlug),
   });
 
+  // Only needed to preview the inherited lesson thumbnail; the scenario
+  // itself is loaded above.
+  const { data: collectionData } = useQuery({
+    queryKey: ["dialogue-collection", collectionId],
+    queryFn: () => dialogueApi.getCollection(collectionId),
+  });
+  const collectionThumbnailUrl =
+    collectionData?.collection.thumbnailUrl ?? null;
+
   const [draft, setDraft] = useState<DialogueScenario | null>(null);
   const [rawText, setRawText] = useState("");
   const [rawError, setRawError] = useState<string | null>(null);
@@ -69,6 +117,23 @@ export function ScenarioEditor({
   const [isAuditing, setIsAuditing] = useState(false);
   const [isSanitizing, setIsSanitizing] = useState(false);
   const [isEnrichingHighlights, setIsEnrichingHighlights] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    readCollapsedSections,
+  );
+
+  function setSectionsCollapsed(ids: string[], collapsed: boolean) {
+    const next = new Set(collapsedSections);
+    for (const id of ids) {
+      if (collapsed) next.add(id);
+      else next.delete(id);
+    }
+    writeCollapsedSections(next);
+    setCollapsedSections(next);
+  }
+
+  function toggleSection(id: string) {
+    setSectionsCollapsed([id], !collapsedSections.has(id));
+  }
 
   const { data: pointsData } = useQuery({
     queryKey: ["content-points", "all-labels"],
@@ -104,6 +169,13 @@ export function ScenarioEditor({
     }
     if (SECTION_IDS.includes(tab)) {
       setView("editor");
+      // Deep link into a folded section: unfold it so there's something to land on.
+      setCollapsedSections((current) => {
+        if (!current.has(tab)) return current;
+        const next = new Set(current);
+        next.delete(tab);
+        return next;
+      });
       requestAnimationFrame(() => scrollToId(tab));
     }
   }, [searchParams]);
@@ -115,6 +187,7 @@ export function ScenarioEditor({
 
   function scrollToSection(id: string) {
     setView("editor");
+    if (collapsedSections.has(id)) setSectionsCollapsed([id], false);
     requestAnimationFrame(() => scrollToId(id));
   }
 
@@ -132,6 +205,7 @@ export function ScenarioEditor({
         audioKey: current.audioKey,
         grammarPointIds: current.grammarPointIds,
         setting: current.setting,
+        thumbnailUrl: current.thumbnailUrl,
         lines: current.lines,
         highlights: current.highlights,
         quiz: current.quiz,
@@ -150,6 +224,41 @@ export function ScenarioEditor({
         queryKey: ["scenario-audio", `${collectionId}/${scenarioSlug}`],
       });
       toast.success("Scenario saved.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  // Thumbnail changes hit the CDN immediately (not part of the draft), so
+  // only the thumbnailUrl is copied back into the draft — other unsaved
+  // edits are preserved.
+  function applyThumbnailFromServer(scenario: DialogueScenario) {
+    setDraft((prev) =>
+      prev ? { ...prev, thumbnailUrl: scenario.thumbnailUrl } : prev,
+    );
+    queryClient.invalidateQueries({
+      queryKey: ["dialogue-scenario", collectionId, scenarioSlug],
+    });
+    queryClient.invalidateQueries({
+      queryKey: ["dialogue-collection", collectionId],
+    });
+  }
+
+  const uploadThumbnailMutation = useMutation({
+    mutationFn: (file: File) =>
+      dialogueApi.uploadScenarioThumbnail(collectionId, scenarioSlug, file),
+    onSuccess: ({ scenario }) => {
+      applyThumbnailFromServer(scenario);
+      toast.success("Scenario thumbnail uploaded to CDN.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const clearThumbnailMutation = useMutation({
+    mutationFn: () =>
+      dialogueApi.clearScenarioThumbnail(collectionId, scenarioSlug),
+    onSuccess: ({ scenario }) => {
+      applyThumbnailFromServer(scenario);
+      toast.success("Scenario thumbnail removed — lesson thumbnail applies.");
     },
     onError: (error) => toast.error(error.message),
   });
@@ -412,18 +521,48 @@ export function ScenarioEditor({
       />
 
       <Tabs value={view} onValueChange={(value) => value && setView(value)}>
-        <TabsList>
-          <TabsTrigger value="editor">Editor</TabsTrigger>
-          <TabsTrigger value="raw">Raw JSON</TabsTrigger>
-        </TabsList>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <TabsList>
+            <TabsTrigger value="editor">Editor</TabsTrigger>
+            <TabsTrigger value="raw">Raw JSON</TabsTrigger>
+          </TabsList>
+          {view === "editor" && (
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={collapsedSections.size === SECTION_IDS.length}
+                onClick={() => setSectionsCollapsed(SECTION_IDS, true)}
+              >
+                Collapse all
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={collapsedSections.size === 0}
+                onClick={() => setSectionsCollapsed(SECTION_IDS, false)}
+              >
+                Expand all
+              </Button>
+            </div>
+          )}
+        </div>
 
         <TabsContent value="editor" className="flex gap-8 pt-4">
-          <div className="flex min-w-0 flex-1 flex-col gap-10">
-            <section
+          <div className="flex min-w-0 flex-1 flex-col gap-6">
+            <CollapsibleSection
               id="overview"
-              className="flex max-w-2xl scroll-mt-20 flex-col gap-4"
+              title="Overview"
+              summary={draft.menuSubtitle ?? draft.setting ?? undefined}
+              collapsed={collapsedSections.has("overview")}
+              onToggle={() => toggleSection("overview")}
+              className="max-w-2xl"
+              bodyClassName="gap-4"
             >
-              <h2 className="text-lg font-semibold tracking-tight">Overview</h2>
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
                   <Label>Menu title</Label>
@@ -515,6 +654,93 @@ export function ScenarioEditor({
                 />
               </div>
 
+              <div className="flex flex-col gap-3 rounded-md border p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <Label>Scenario thumbnail</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Optional. Overrides the lesson thumbnail for this
+                      scenario only; exported as{" "}
+                      <code className="text-xs">thumbnailUrl</code> on the
+                      scenario. Leave empty to inherit the lesson&apos;s.
+                    </p>
+                  </div>
+                  <Badge variant={draft.thumbnailUrl ? "default" : "secondary"}>
+                    {draft.thumbnailUrl ? "own thumbnail" : "inherits lesson"}
+                  </Badge>
+                </div>
+                {draft.thumbnailUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={draft.thumbnailUrl}
+                    alt={`${draft.menuTitle} thumbnail`}
+                    className="h-40 w-full max-w-sm rounded-md border object-cover"
+                  />
+                ) : collectionThumbnailUrl ? (
+                  <div className="flex max-w-sm flex-col gap-1">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={collectionThumbnailUrl}
+                      alt="Inherited lesson thumbnail"
+                      className="h-40 w-full rounded-md border object-cover opacity-70"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Showing the lesson thumbnail the app will use.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex h-40 max-w-sm items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+                    No thumbnail — the lesson has none either
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <label
+                    className={buttonVariants({
+                      variant: "outline",
+                      className: "cursor-pointer",
+                    })}
+                  >
+                    {uploadThumbnailMutation.isPending
+                      ? "Uploading…"
+                      : draft.thumbnailUrl
+                        ? "Replace image"
+                        : "Upload image"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      disabled={uploadThumbnailMutation.isPending}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        if (file) uploadThumbnailMutation.mutate(file);
+                      }}
+                    />
+                  </label>
+                  {draft.thumbnailUrl && (
+                    <>
+                      <a
+                        href={draft.thumbnailUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={buttonVariants({ variant: "ghost" })}
+                      >
+                        Open CDN URL
+                      </a>
+                      <Button
+                        variant="outline"
+                        onClick={() => clearThumbnailMutation.mutate()}
+                        disabled={clearThumbnailMutation.isPending}
+                      >
+                        {clearThumbnailMutation.isPending
+                          ? "Removing…"
+                          : "Remove (use lesson thumbnail)"}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+
               <Button
                 className="w-fit gap-2"
                 onClick={() => {
@@ -533,13 +759,17 @@ export function ScenarioEditor({
                   ? "Regenerate dialogue"
                   : "Generate dialogue from setting"}
               </Button>
-            </section>
+            </CollapsibleSection>
 
-            <section
+            <CollapsibleSection
               id="lines"
-              className="flex max-w-5xl scroll-mt-20 flex-col gap-6"
+              title="Lines"
+              summary={`${draft.lines.length} line${draft.lines.length === 1 ? "" : "s"}`}
+              collapsed={collapsedSections.has("lines")}
+              onToggle={() => toggleSection("lines")}
+              className="max-w-5xl"
+              bodyClassName="gap-6"
             >
-              <h2 className="text-lg font-semibold tracking-tight">Lines</h2>
               <LineEditor
                 lines={draft.lines}
                 onChange={(lines) => update("lines", lines)}
@@ -593,12 +823,14 @@ export function ScenarioEditor({
                   );
                 }}
               />
-            </section>
+            </CollapsibleSection>
 
-            <section id="audio" className="scroll-mt-20">
-              <h2 className="mb-4 text-lg font-semibold tracking-tight">
-                Audio
-              </h2>
+            <CollapsibleSection
+              id="audio"
+              title="Audio"
+              collapsed={collapsedSections.has("audio")}
+              onToggle={() => toggleSection("audio")}
+            >
               <ScenarioAudioPanel
                 collectionId={collectionId}
                 scenarioSlug={scenarioSlug}
@@ -609,13 +841,14 @@ export function ScenarioEditor({
                 }
                 onSaveScenario={() => saveMutation.mutateAsync()}
               />
-            </section>
+            </CollapsibleSection>
 
-            <section id="highlights" className="scroll-mt-20">
-              <h2 className="mb-4 flex items-center gap-1 text-lg font-semibold tracking-tight">
-                Highlights
-                {isEnrichingHighlights ? "…" : ""}
-              </h2>
+            <CollapsibleSection
+              id="highlights"
+              title={`Highlights${isEnrichingHighlights ? "…" : ""}`}
+              collapsed={collapsedSections.has("highlights")}
+              onToggle={() => toggleSection("highlights")}
+            >
               <HighlightsEditor
                 key={draft.id}
                 highlights={draft.highlights}
@@ -625,12 +858,14 @@ export function ScenarioEditor({
                 setting={draft.setting}
                 menuTitle={draft.menuTitle}
               />
-            </section>
+            </CollapsibleSection>
 
-            <section id="quiz" className="scroll-mt-20">
-              <h2 className="mb-4 text-lg font-semibold tracking-tight">
-                Quiz
-              </h2>
+            <CollapsibleSection
+              id="quiz"
+              title="Quiz"
+              collapsed={collapsedSections.has("quiz")}
+              onToggle={() => toggleSection("quiz")}
+            >
               <QuizEditor
                 quiz={draft.quiz}
                 onChange={(quiz) => update("quiz", quiz)}
@@ -638,10 +873,10 @@ export function ScenarioEditor({
                 setting={draft.setting}
                 menuTitle={draft.menuTitle}
               />
-            </section>
+            </CollapsibleSection>
           </div>
 
-          <ScenarioMinimap sections={SECTIONS} />
+          <ScenarioMinimap sections={SECTIONS} onSelect={scrollToSection} />
         </TabsContent>
 
         <TabsContent value="raw" className="flex flex-col gap-3 pt-4">
@@ -668,5 +903,63 @@ export function ScenarioEditor({
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+/**
+ * One editor section with a fold-away body. The body stays mounted (just
+ * hidden) so panels keep their in-progress state — e.g. GenerateLinesPanel's
+ * auto-generate-on-mount guard and the audio waveform instance survive a
+ * collapse/expand round trip.
+ */
+function CollapsibleSection({
+  id,
+  title,
+  summary,
+  collapsed,
+  onToggle,
+  className,
+  bodyClassName,
+  children,
+}: {
+  id: string;
+  title: string;
+  summary?: string;
+  collapsed: boolean;
+  onToggle: () => void;
+  className?: string;
+  bodyClassName?: string;
+  children: React.ReactNode;
+}) {
+  const bodyId = `${id}-body`;
+  return (
+    <section id={id} className={cn("flex scroll-mt-20 flex-col gap-4", className)}>
+      <button
+        type="button"
+        aria-expanded={!collapsed}
+        aria-controls={bodyId}
+        onClick={onToggle}
+        className="group flex min-h-10 w-full items-center gap-2 rounded-md text-left touch-manipulation"
+      >
+        <ChevronRight
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground",
+            !collapsed && "rotate-90",
+          )}
+        />
+        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+        {collapsed && summary ? (
+          <span className="min-w-0 truncate text-sm text-muted-foreground">
+            {summary}
+          </span>
+        ) : null}
+      </button>
+      <div
+        id={bodyId}
+        className={cn("flex flex-col", bodyClassName, collapsed && "hidden")}
+      >
+        {children}
+      </div>
+    </section>
   );
 }

@@ -7,7 +7,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, GripVertical } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,9 +34,33 @@ type EditTarget =
   | { kind: "collection"; id: string }
   | null;
 
+const UNFILED_KEY = "unfiled";
+const unitKey = (id: string) => `unit:${id}`;
+const collectionKey = (id: string) => `collection:${id}`;
+
 export function CurriculumView() {
   const queryClient = useQueryClient();
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
+  // Everything starts collapsed so the page reads as a table of contents;
+  // expand a unit to see its collections, a collection to see its scenarios.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+
+  const isExpanded = (key: string) => expanded.has(key);
+
+  function setKeysExpanded(keys: string[], open: boolean) {
+    setExpanded((current) => {
+      const next = new Set(current);
+      for (const key of keys) {
+        if (open) next.add(key);
+        else next.delete(key);
+      }
+      return next;
+    });
+  }
+
+  function toggleExpanded(key: string) {
+    setKeysExpanded([key], !expanded.has(key));
+  }
 
   const { data: unitsData, isLoading: unitsLoading } = useQuery({
     queryKey: ["curriculum-units"],
@@ -131,20 +155,35 @@ export function CurriculumView() {
 
   const isLoading = unitsLoading || collectionsLoading;
 
+  const allKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (const unit of units) {
+      keys.push(unitKey(unit.id));
+      for (const collection of unit.collections ?? []) {
+        keys.push(collectionKey(collection.id));
+      }
+    }
+    if (unfiled.length > 0) {
+      keys.push(UNFILED_KEY);
+      for (const collection of unfiled) keys.push(collectionKey(collection.id));
+    }
+    return keys;
+  }, [units, unfiled]);
+  const anyExpanded = allKeys.some((key) => expanded.has(key));
+
   function toggleUnitEdit(unitId: string) {
-    setEditTarget((current) =>
-      current?.kind === "unit" && current.id === unitId
-        ? null
-        : { kind: "unit", id: unitId },
-    );
+    const entering = !(editTarget?.kind === "unit" && editTarget.id === unitId);
+    setEditTarget(entering ? { kind: "unit", id: unitId } : null);
+    // Reordering collections needs them on screen.
+    if (entering) setKeysExpanded([unitKey(unitId)], true);
   }
 
   function toggleCollectionEdit(collectionId: string) {
-    setEditTarget((current) =>
-      current?.kind === "collection" && current.id === collectionId
-        ? null
-        : { kind: "collection", id: collectionId },
+    const entering = !(
+      editTarget?.kind === "collection" && editTarget.id === collectionId
     );
+    setEditTarget(entering ? { kind: "collection", id: collectionId } : null);
+    if (entering) setKeysExpanded([collectionKey(collectionId)], true);
   }
 
   return (
@@ -152,13 +191,25 @@ export function CurriculumView() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <p className="text-sm text-muted-foreground">
-            Scan the learner path. Edit a unit or collection to reorder that
-            section only.
+            Scan the learner path. Expand a unit or collection to drill in; Edit
+            to reorder that section only.
           </p>
         </div>
-        <Badge variant="outline" className="text-xs font-normal">
-          View by default
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            disabled={isLoading || allKeys.length === 0}
+            onClick={() => setKeysExpanded(allKeys, !anyExpanded)}
+          >
+            {anyExpanded ? "Collapse all" : "Expand all"}
+          </Button>
+          <Badge variant="outline" className="text-xs font-normal">
+            View by default
+          </Badge>
+        </div>
       </div>
 
       <DialogueFormulaNotes />
@@ -198,6 +249,8 @@ export function CurriculumView() {
 
               const editingUnit =
                 editTarget?.kind === "unit" && editTarget.id === unit.id;
+              const unitOpen = isExpanded(unitKey(unit.id));
+              const unitPanelId = `curriculum-unit-${unit.id}`;
 
               return (
                 <section
@@ -207,11 +260,29 @@ export function CurriculumView() {
                     editingUnit && "ring-1 ring-foreground/15",
                   )}
                 >
-                  <header className="flex items-start gap-2 border-b px-3 py-3.5">
+                  <header
+                    className={cn(
+                      "flex items-start gap-2 px-3 py-3.5",
+                      unitOpen && "border-b",
+                    )}
+                  >
                     {editingUnit ? (
                       <GripVertical className="mt-1 size-4 shrink-0 text-muted-foreground/50" />
                     ) : null}
-                    <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      aria-expanded={unitOpen}
+                      aria-controls={unitPanelId}
+                      onClick={() => toggleExpanded(unitKey(unit.id))}
+                      className="flex min-w-0 flex-1 items-start gap-2 rounded-md text-left touch-manipulation hover:text-foreground"
+                    >
+                      <ChevronRight
+                        className={cn(
+                          "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform",
+                          unitOpen && "rotate-90",
+                        )}
+                      />
+                      <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="truncate text-sm font-semibold">
                           {unit.title}
@@ -240,7 +311,8 @@ export function CurriculumView() {
                           {unit.subtitle}
                         </p>
                       ) : null}
-                    </div>
+                      </div>
+                    </button>
                     <div className="flex shrink-0 items-center gap-1">
                       <Button
                         type="button"
@@ -271,7 +343,8 @@ export function CurriculumView() {
                     </div>
                   </header>
 
-                  <div className="flex flex-col gap-2 p-2 pl-6">
+                  {unitOpen ? (
+                  <div id={unitPanelId} className="flex flex-col gap-2 p-2 pl-6">
                     {unitCollections.length === 0 ? (
                       <p className="px-2 py-3 text-xs text-muted-foreground">
                         No collections in this unit yet.
@@ -283,9 +356,16 @@ export function CurriculumView() {
                             a.orderIndex - b.orderIndex ||
                             a.id.localeCompare(b.id),
                         );
+                        const publishedInCollection = scenarios.filter((s) =>
+                          Boolean(s.publishedAudioUrl),
+                        ).length;
                         const editingCollection =
                           editTarget?.kind === "collection" &&
                           editTarget.id === collection.id;
+                        const collectionOpen = isExpanded(
+                          collectionKey(collection.id),
+                        );
+                        const collectionPanelId = `curriculum-collection-${collection.id}`;
 
                         return (
                           <div
@@ -295,7 +375,28 @@ export function CurriculumView() {
                               editingCollection && "ring-1 ring-foreground/15",
                             )}
                           >
-                            <div className="flex items-center gap-2 px-2.5 py-2.5">
+                            <div className="flex items-center gap-1 px-1.5 py-1.5">
+                              <button
+                                type="button"
+                                aria-expanded={collectionOpen}
+                                aria-controls={collectionPanelId}
+                                aria-label={
+                                  collectionOpen
+                                    ? `Collapse ${collection.title}`
+                                    : `Expand ${collection.title}`
+                                }
+                                onClick={() =>
+                                  toggleExpanded(collectionKey(collection.id))
+                                }
+                                className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground touch-manipulation hover:bg-background/60 hover:text-foreground"
+                              >
+                                <ChevronRight
+                                  className={cn(
+                                    "size-4 transition-transform",
+                                    collectionOpen && "rotate-90",
+                                  )}
+                                />
+                              </button>
                               <div className="min-w-0 flex-1">
                                 <Link
                                   href={`/content/dialogues/${collection.id}`}
@@ -304,7 +405,8 @@ export function CurriculumView() {
                                   {collection.title}
                                 </Link>
                                 <p className="text-[11px] text-muted-foreground">
-                                  {scenarios.length} scenarios
+                                  {scenarios.length} scenarios ·{" "}
+                                  {publishedInCollection}/{scenarios.length} audio
                                 </p>
                               </div>
                               <div className="flex shrink-0 items-center gap-1">
@@ -353,7 +455,8 @@ export function CurriculumView() {
                                 ) : null}
                               </div>
                             </div>
-                            <ol className="border-t px-2 py-1.5">
+                            {collectionOpen ? (
+                            <ol id={collectionPanelId} className="border-t px-2 py-1.5">
                               {scenarios.map((scenario, scenarioIndex) => (
                                 <li
                                   key={scenario.id}
@@ -416,27 +519,54 @@ export function CurriculumView() {
                                 </li>
                               ))}
                             </ol>
+                            ) : null}
                           </div>
                         );
                       })
                     )}
                   </div>
+                  ) : null}
                 </section>
               );
             })}
 
             {unfiled.length > 0 ? (
               <section className="rounded-lg border border-dashed bg-background/40">
-                <header className="border-b border-dashed px-3 py-2.5">
-                  <h2 className="text-sm font-semibold text-muted-foreground">
-                    Unfiled
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    Collections not assigned to a unit. Assign them in Dialogues.
-                    Edit a collection below to reorder its scenarios.
-                  </p>
+                <header
+                  className={cn(
+                    "px-3 py-2.5",
+                    isExpanded(UNFILED_KEY) && "border-b border-dashed",
+                  )}
+                >
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded(UNFILED_KEY)}
+                    aria-controls="curriculum-unfiled"
+                    onClick={() => toggleExpanded(UNFILED_KEY)}
+                    className="flex w-full items-start gap-2 text-left touch-manipulation"
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform",
+                        isExpanded(UNFILED_KEY) && "rotate-90",
+                      )}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-sm font-semibold text-muted-foreground">
+                        Unfiled
+                        <span className="ml-2 text-xs font-normal">
+                          {unfiled.length} collection{unfiled.length === 1 ? "" : "s"}
+                        </span>
+                      </h2>
+                      <p className="text-xs text-muted-foreground">
+                        Collections not assigned to a unit. Assign them in Dialogues.
+                        Edit a collection below to reorder its scenarios.
+                      </p>
+                    </div>
+                  </button>
                 </header>
-                <ul className="flex flex-col gap-2 p-2">
+                {isExpanded(UNFILED_KEY) ? (
+                <ul id="curriculum-unfiled" className="flex flex-col gap-2 p-2">
                   {unfiled.map((collection) => {
                     const scenarios = [...collection.scenarios].sort(
                       (a, b) =>
@@ -445,6 +575,8 @@ export function CurriculumView() {
                     const editingCollection =
                       editTarget?.kind === "collection" &&
                       editTarget.id === collection.id;
+                    const collectionOpen = isExpanded(collectionKey(collection.id));
+                    const collectionPanelId = `curriculum-collection-${collection.id}`;
                     return (
                       <li
                         key={collection.id}
@@ -453,7 +585,28 @@ export function CurriculumView() {
                           editingCollection && "ring-1 ring-foreground/15",
                         )}
                       >
-                        <div className="flex items-center gap-2 px-2.5 py-2">
+                        <div className="flex items-center gap-1 px-1.5 py-1.5">
+                          <button
+                            type="button"
+                            aria-expanded={collectionOpen}
+                            aria-controls={collectionPanelId}
+                            aria-label={
+                              collectionOpen
+                                ? `Collapse ${collection.title}`
+                                : `Expand ${collection.title}`
+                            }
+                            onClick={() =>
+                              toggleExpanded(collectionKey(collection.id))
+                            }
+                            className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground touch-manipulation hover:bg-background/60 hover:text-foreground"
+                          >
+                            <ChevronRight
+                              className={cn(
+                                "size-4 transition-transform",
+                                collectionOpen && "rotate-90",
+                              )}
+                            />
+                          </button>
                           <Link
                             href={`/content/dialogues/${collection.id}`}
                             className="min-w-0 flex-1 truncate text-sm hover:underline"
@@ -475,8 +628,8 @@ export function CurriculumView() {
                             {editingCollection ? "Done" : "Edit"}
                           </Button>
                         </div>
-                        {editingCollection ? (
-                          <ol className="border-t px-2 py-1.5">
+                        {collectionOpen ? (
+                          <ol id={collectionPanelId} className="border-t px-2 py-1.5">
                             {scenarios.map((scenario, scenarioIndex) => (
                               <li
                                 key={scenario.id}
@@ -491,6 +644,22 @@ export function CurriculumView() {
                                 >
                                   {scenario.menuTitle}
                                 </Link>
+                                {scenario.publishedAudioUrl ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[9px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                                  >
+                                    audio
+                                  </Badge>
+                                ) : (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[9px] text-muted-foreground"
+                                  >
+                                    draft
+                                  </Badge>
+                                )}
+                                {editingCollection ? (
                                 <ReorderButtons
                                   size="xs"
                                   disabled={busy}
@@ -519,6 +688,7 @@ export function CurriculumView() {
                                     })
                                   }
                                 />
+                                ) : null}
                               </li>
                             ))}
                           </ol>
@@ -527,6 +697,7 @@ export function CurriculumView() {
                     );
                   })}
                 </ul>
+                ) : null}
               </section>
             ) : null}
           </div>

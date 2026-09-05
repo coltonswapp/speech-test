@@ -151,9 +151,9 @@ export function TrackComposer({ projectId }: { projectId: string }) {
       : promptText.trim().length > 0;
 
   return (
-    <div className="flex flex-1 flex-col gap-6">
+    <div className="flex min-w-0 flex-1 flex-col gap-6">
       {sourceScenarioId && (
-        <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/50 px-3 py-2 text-sm">
+        <div className="flex flex-col gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <span className="text-muted-foreground">
             This track is backed by the scenario{" "}
             <span className="font-medium text-foreground">
@@ -195,7 +195,7 @@ export function TrackComposer({ projectId }: { projectId: string }) {
       )}
 
       {sourceScenarioId ? (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-2">
             <Label>Voice for {speaker1Name || "Speaker 1"}</Label>
             <VoiceSelect
@@ -251,7 +251,7 @@ export function TrackComposer({ projectId }: { projectId: string }) {
         </>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label>Speaker 1 name</Label>
               <Input
@@ -294,15 +294,17 @@ export function TrackComposer({ projectId }: { projectId: string }) {
         </>
       )}
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
         <Button
           variant="outline"
+          className="min-h-11 touch-manipulation sm:min-h-8"
           onClick={() => saveMutation.mutate()}
           disabled={saveMutation.isPending}
         >
           Save
         </Button>
         <Button
+          className="min-h-11 touch-manipulation sm:min-h-8"
           onClick={() => generateMutation.mutate()}
           disabled={generateMutation.isPending || !canGenerate}
         >

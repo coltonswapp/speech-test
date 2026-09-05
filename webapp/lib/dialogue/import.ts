@@ -71,6 +71,7 @@ export async function upsertCollectionFile(
         audioKey: scenario.audioKey ?? null,
         grammarPointIds: scenario.grammarPointIDs ?? [],
         setting: scenario.scenario.setting ?? null,
+        thumbnailUrl: scenario.thumbnailUrl ?? null,
         lines: scenario.scenario.lines,
         highlights: scenario.highlights ?? null,
         quiz: scenario.quiz ?? null,

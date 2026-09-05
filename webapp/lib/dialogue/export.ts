@@ -37,6 +37,7 @@ export type ExportableScenario = {
   publishedAt: string | null;
   grammarPointIds: string[];
   setting: string | null;
+  thumbnailUrl: string | null;
   lines: unknown;
   highlights: unknown;
   quiz: unknown;
@@ -147,6 +148,7 @@ export function buildScenarioFile(scenario: ExportableScenario): ScenarioFile {
     ),
     grammarPointIDs:
       scenario.grammarPointIds.length > 0 ? scenario.grammarPointIds : undefined,
+    thumbnailUrl: scenario.thumbnailUrl ?? undefined,
     quiz: exportQuiz(scenario.quiz as QuizQuestion[] | null),
     tokenSync: exportTokenSync(scenario.tokenSync),
   };

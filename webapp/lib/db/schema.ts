@@ -246,6 +246,10 @@ export const dialogueScenario = pgTable("dialogue_scenario", {
   publishedAt: timestamp("published_at", { withTimezone: true }),
   grammarPointIds: text("grammar_point_ids").array().notNull().default([]),
   setting: text("setting"),
+  // Optional per-scenario CDN thumbnail. Null = inherit the collection's
+  // thumbnail_url (the common case); set only for scenarios that deserve
+  // their own art.
+  thumbnailUrl: text("thumbnail_url"),
   lines: jsonb("lines").notNull().default([]),
   highlights: jsonb("highlights"),
   quiz: jsonb("quiz"),

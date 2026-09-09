@@ -110,6 +110,7 @@ final class SavedGenerationsViewController: UIViewController {
         case dialogueNestedPaging
         case dialogueBubbleUnderglow
         case kanjiDecomposition
+        case kanjiSpotlight
         case registerLadder
         case dialogueContentRecording
         case quickLookPDF
@@ -147,6 +148,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .dialogueNestedPaging: return "Dialogue nested paging"
             case .dialogueBubbleUnderglow: return "Bubble underglow tuner"
             case .kanjiDecomposition: return "Kanji decomposition"
+            case .kanjiSpotlight: return "Kanji spotlight"
             case .registerLadder: return "Register ladder"
             case .dialogueContentRecording: return "Dialogue Replay"
             case .quickLookPDF: return "QuickLook PDF repro"
@@ -186,6 +188,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .dialogueNestedPaging: return "Nested vertical scroll · boundary handoff · rectangles → circles"
             case .dialogueBubbleUnderglow: return "Single glass bubble · sliders for underglow tuning"
             case .kanjiDecomposition: return "Character-by-character compound breakdown · export cards"
+            case .kanjiSpotlight: return "One kanji · curated compounds & verbs · export cards"
             case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
             case .dialogueContentRecording: return "TikTok stage · conversation, two-pass, or quiz"
             case .quickLookPDF: return "App Support PDF · QLPreview vs tmp / share / PDFKit"
@@ -225,6 +228,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .dialogueNestedPaging: return "rectangle.arrowtriangle.2.inward"
             case .dialogueBubbleUnderglow: return "bubble.left.fill"
             case .kanjiDecomposition: return "puzzlepiece.extension"
+            case .kanjiSpotlight: return "lightbulb"
             case .registerLadder: return "text.badge.star"
             case .dialogueContentRecording: return "video"
             case .quickLookPDF: return "doc.richtext"
@@ -731,6 +735,11 @@ final class SavedGenerationsViewController: UIViewController {
         case .kanjiDecomposition:
             navigationController?.pushViewController(
                 KanjiDecompositionListViewController(),
+                animated: true
+            )
+        case .kanjiSpotlight:
+            navigationController?.pushViewController(
+                KanjiSpotlightListViewController(),
                 animated: true
             )
         case .dialogueContentRecording:

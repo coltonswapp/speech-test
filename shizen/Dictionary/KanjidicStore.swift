@@ -127,6 +127,69 @@ final class KanjidicStore {
         }
     }
 
+    /// Highest-frequency kanji first (`freq` ascending; missing freq sorted last).
+    func popularKanji(limit: Int = 80) -> [KanjidicDetail] {
+        openDatabaseIfNeeded()
+        guard let dbQueue, limit > 0 else { return [] }
+        do {
+            return try dbQueue.read { db in
+                try KanjidicDetail.fetchAll(
+                    db,
+                    sql: """
+                        SELECT character, on_readings, kun_readings, meanings, grade, jlpt, freq, stroke_count
+                        FROM kanji
+                        WHERE freq IS NOT NULL
+                        ORDER BY freq ASC, character ASC
+                        LIMIT ?
+                        """,
+                    arguments: [limit]
+                )
+            }
+        } catch {
+            print("KanjidicStore: popularKanji query error: \(error)")
+            return []
+        }
+    }
+
+    /// Search by exact character, meaning substring, or on/kun reading substring.
+    func searchKanji(query: String, limit: Int = 40) -> [KanjidicDetail] {
+        openDatabaseIfNeeded()
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let dbQueue, !trimmed.isEmpty, limit > 0 else { return [] }
+
+        // Single-character queries: prefer exact glyph match, then fall through to LIKE search.
+        if trimmed.count == 1, let exact = detail(forKanji: trimmed) {
+            return [exact]
+        }
+
+        let like = "%\(trimmed)%"
+        do {
+            return try dbQueue.read { db in
+                try KanjidicDetail.fetchAll(
+                    db,
+                    sql: """
+                        SELECT character, on_readings, kun_readings, meanings, grade, jlpt, freq, stroke_count
+                        FROM kanji
+                        WHERE character = ?
+                           OR meanings LIKE ?
+                           OR on_readings LIKE ?
+                           OR kun_readings LIKE ?
+                        ORDER BY
+                            CASE WHEN character = ? THEN 0 ELSE 1 END,
+                            CASE WHEN freq IS NULL THEN 1 ELSE 0 END,
+                            freq ASC,
+                            character ASC
+                        LIMIT ?
+                        """,
+                    arguments: [trimmed, like, like, like, trimmed, limit]
+                )
+            }
+        } catch {
+            print("KanjidicStore: searchKanji query error: \(error)")
+            return []
+        }
+    }
+
     private static func orderedUniqueKanjiScalars(in surface: String) -> [String] {
         var seen = Set<String>()
         var order: [String] = []

@@ -3,7 +3,7 @@
 //  shizen
 //
 //  Shared export canvas presets and offscreen rendering for social slideshow
-//  experiments (kanji decomposition, register ladder, etc.).
+//  experiments (kanji decomposition, kanji spotlight, register ladder, etc.).
 //
 
 import UIKit

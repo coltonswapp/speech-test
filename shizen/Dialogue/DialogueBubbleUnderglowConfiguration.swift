@@ -32,6 +32,7 @@ enum DialogueBubbleUnderglowColor: Int, CaseIterable {
     case mint
     case indigo
     case red
+    case gray
 
     var title: String {
         switch self {
@@ -45,6 +46,7 @@ enum DialogueBubbleUnderglowColor: Int, CaseIterable {
         case .mint: return "Mint"
         case .indigo: return "Indigo"
         case .red: return "Red"
+        case .gray: return "Gray"
         }
     }
 
@@ -60,6 +62,7 @@ enum DialogueBubbleUnderglowColor: Int, CaseIterable {
         case .mint: return "mint"
         case .indigo: return "indigo"
         case .red: return "red"
+        case .gray: return "gray"
         }
     }
 
@@ -80,12 +83,39 @@ enum DialogueBubbleUnderglowColor: Int, CaseIterable {
         case .mint: return .systemMint
         case .indigo: return .systemIndigo
         case .red: return .systemRed
+        case .gray: return .systemGray
         }
     }
 
     /// Karaoke wash: same hue as the bubble glow, translucent so glyphs stay readable.
     var tokenHighlightUIColor: UIColor {
         uiColor.withAlphaComponent(0.55)
+    }
+
+    /// Solid Messages-style fill. Gray uses the system incoming-bubble wash.
+    var messageFillUIColor: UIColor {
+        switch self {
+        case .gray: return .secondarySystemFill
+        default: return uiColor
+        }
+    }
+
+    var messagePrefersDarkText: Bool {
+        switch self {
+        case .gray, .yellow, .mint: return true
+        default: return false
+        }
+    }
+
+    var messageTextUIColor: UIColor {
+        messagePrefersDarkText ? .label : .white
+    }
+
+    /// On saturated fills, a colored wash fights white glyphs — use a dark tint.
+    var messageTokenHighlightUIColor: UIColor {
+        messagePrefersDarkText
+            ? tokenHighlightUIColor
+            : UIColor.black.withAlphaComponent(0.25)
     }
 }
 
@@ -144,6 +174,65 @@ enum DialogueHighlightColorPreset: String, CaseIterable {
     }
 
     static func matching(leading: DialogueBubbleUnderglowColor, trailing: DialogueBubbleUnderglowColor) -> DialogueHighlightColorPreset? {
+        allCases.first { $0.leading == leading && $0.trailing == trailing }
+    }
+}
+
+/// Named left/right fill pairs for Messages-style dialogue bubbles.
+enum DialogueMessageColorPreset: String, CaseIterable {
+    case classic
+    case sunset
+    case ocean
+    case berry
+    case forest
+    case neon
+    case soft
+    case warm
+
+    var title: String {
+        switch self {
+        case .classic: return "Classic"
+        case .sunset: return "Sunset"
+        case .ocean: return "Ocean"
+        case .berry: return "Berry"
+        case .forest: return "Forest"
+        case .neon: return "Neon"
+        case .soft: return "Soft"
+        case .warm: return "Warm"
+        }
+    }
+
+    var subtitle: String {
+        "\(leading.title) · \(trailing.title)"
+    }
+
+    var leading: DialogueBubbleUnderglowColor {
+        switch self {
+        case .classic: return .gray
+        case .sunset: return .orange
+        case .ocean: return .teal
+        case .berry: return .purple
+        case .forest: return .green
+        case .neon: return .indigo
+        case .soft: return .mint
+        case .warm: return .yellow
+        }
+    }
+
+    var trailing: DialogueBubbleUnderglowColor {
+        switch self {
+        case .classic: return .blue
+        case .sunset: return .pink
+        case .ocean: return .blue
+        case .berry: return .pink
+        case .forest: return .mint
+        case .neon: return .orange
+        case .soft: return .purple
+        case .warm: return .orange
+        }
+    }
+
+    static func matching(leading: DialogueBubbleUnderglowColor, trailing: DialogueBubbleUnderglowColor) -> DialogueMessageColorPreset? {
         allCases.first { $0.leading == leading && $0.trailing == trailing }
     }
 }

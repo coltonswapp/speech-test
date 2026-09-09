@@ -7,6 +7,7 @@
 //
 
 import AVFoundation
+import InteractionKit
 import UIKit
 
 /// Peak-normalized RMS in [0, 1] from a mic tap buffer.

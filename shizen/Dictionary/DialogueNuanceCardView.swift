@@ -5,6 +5,7 @@
 //  Rounded “IN THIS SENTENCE”-style card for dialogue-line nuances.
 //
 
+import InteractionKit
 import UIKit
 
 final class DialogueNuanceCardView: UIView {

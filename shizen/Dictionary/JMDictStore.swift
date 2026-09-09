@@ -58,6 +58,17 @@ struct JMDictLookupResult {
         let reading = primary.displayReading.trimmingCharacters(in: .whitespacesAndNewlines)
         return reading.isEmpty ? nil : reading
     }
+
+    /// Highest-scored headword, whether or not it differs from `surface`.
+    var resolvedLemma: String? {
+        let primary = entries.max(by: { ($0.score ?? 0) < ($1.score ?? 0) }) ?? entries.first
+        let expr = primary?.expression.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return expr.isEmpty ? nil : expr
+    }
+
+    var primaryEntry: JMDictEntry? {
+        entries.max(by: { ($0.score ?? 0) < ($1.score ?? 0) }) ?? entries.first
+    }
 }
 
 final class JMDictStore {
@@ -91,7 +102,7 @@ final class JMDictStore {
         lookup(forSurface: surface).entries
     }
 
-    func lookup(forSurface surface: String) -> JMDictLookupResult {
+    func lookup(forSurface surface: String, inSentence sentence: String? = nil) -> JMDictLookupResult {
         let trimmed = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return JMDictLookupResult(surface: trimmed, entries: [])
@@ -102,11 +113,21 @@ final class JMDictStore {
             return JMDictLookupResult(surface: trimmed, entries: [])
         }
 
+        let treatAsRenyoStem = Self.continuativeAuxiliaryFollows(trimmed, in: sentence)
+        // Furigana expansion reads JMdict — do it before this queue's read so lemma
+        // alignment cannot re-enter GRDB (Database methods are not reentrant).
+        let surfaceKana = JapaneseTokenizer.hiraganaReading(for: trimmed)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         var result: [JMDictEntry] = []
         do {
             try dbQueue.read { db in
-                if Self.looksInflectedForLemmaGuess(trimmed),
-                   let rows = try bestLemmaGuessExactMatch(in: db, surface: trimmed), !rows.isEmpty {
+                if treatAsRenyoStem || Self.looksInflectedForLemmaGuess(trimmed),
+                   let rows = try bestLemmaGuessExactMatch(
+                    in: db,
+                    surface: trimmed,
+                    treatAsRenyoStem: treatAsRenyoStem,
+                    surfaceKana: surfaceKana
+                   ), !rows.isEmpty {
                     result = rows
                     return
                 }
@@ -114,7 +135,11 @@ final class JMDictStore {
                     result = rows
                     return
                 }
-                if let rows = try bestLemmaGuessExactMatch(in: db, surface: trimmed), !rows.isEmpty {
+                if let rows = try bestLemmaGuessExactMatch(
+                    in: db,
+                    surface: trimmed,
+                    surfaceKana: surfaceKana
+                ), !rows.isEmpty {
                     result = rows
                     return
                 }
@@ -350,7 +375,7 @@ final class JMDictStore {
         guard let dbQueue, !surface.isEmpty else { return nil }
         do {
             return try dbQueue.read { db in
-                try bestLemmaGuessExactMatch(in: db, surface: surface)?.first?.expression
+                try bestLemmaGuessExactMatch(in: db, surface: surface, surfaceKana: surface)?.first?.expression
             }
         } catch {
             print("JMDictStore: bestLemmaGuessExpression error: \(error)")
@@ -523,25 +548,57 @@ final class JMDictStore {
         return reading
     }
 
-    /// Hiragana aligned with **kanji only** (ruby-style): drops kana already written as okurigana on `surface`
-    /// (e.g. 歩いて → **ある**, not あるいて).
-    func readingForSurface(_ surface: String, matching entry: JMDictEntry) -> String {
+    /// Full hiragana for the tapped surface (e.g. 探してます → さがしてます), including okurigana.
+    func inflectedReadingForSurface(_ surface: String, matching entry: JMDictEntry) -> String {
         let expr = entry.expression
         let reading = entry.displayReading.trimmingCharacters(in: .whitespacesAndNewlines)
-        let contextual: String
-        if surface == expr {
-            contextual = reading
-        } else if let ctx = Self.contextualReadingFromLemma(
+        if surface == expr { return reading }
+        if let ctx = Self.contextualReadingFromLemma(
             surface: surface,
             lemmaExpression: expr,
             lemmaReading: reading,
             tags: entry.tags
         ) {
-            contextual = ctx
-        } else {
-            contextual = reading
+            return ctx
         }
+        return reading
+    }
+
+    /// Hiragana aligned with **kanji only** (ruby-style): drops kana already written as okurigana on `surface`
+    /// (e.g. 歩いて → **ある**, not あるいて).
+    func readingForSurface(_ surface: String, matching entry: JMDictEntry) -> String {
+        let contextual = inflectedReadingForSurface(surface, matching: entry)
         return Self.readingForKanjiRubyOnly(surface: surface, fullReading: contextual, entry: entry)
+    }
+
+    /// Full kana for romaji / speech. Prefers the inflected dictionary reading, then furigana expansion.
+    func kanaReadingForDisplay(surface: String, matching entry: JMDictEntry?) -> String {
+        let yomi = entry
+            .map { inflectedReadingForSurface(surface, matching: $0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            ?? ""
+        if !yomi.isEmpty, !Self.containsKanji(yomi) {
+            return yomi
+        }
+        let fromFurigana = JapaneseTokenizer.hiraganaReading(for: surface)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !fromFurigana.isEmpty, !Self.containsKanji(fromFurigana) {
+            return fromFurigana
+        }
+        return yomi.isEmpty ? surface.trimmingCharacters(in: .whitespacesAndNewlines) : yomi
+    }
+
+    func romajiForDisplay(surface: String, matching entry: JMDictEntry?) -> String {
+        HiraganaRomaji.romanize(kanaReadingForDisplay(surface: surface, matching: entry))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func containsKanji(_ text: String) -> Bool {
+        text.contains { character in
+            character.unicodeScalars.contains { scalar in
+                let value = scalar.value
+                return (0x3400...0x4DBF).contains(value) || (0x4E00...0x9FFF).contains(value)
+            }
+        }
     }
 
     /// Longest-first endings we can drop from **both** surface and reading together (ます / て) before okurigana trimming.
@@ -716,6 +773,31 @@ final class JMDictStore {
         lemmaReading: String,
         tags: String?
     ) -> String? {
+        if let progressive = progressiveReading(
+            surface: surface,
+            lemmaExpression: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+        ) {
+            return progressive
+        }
+
+        // 探してます / 読んでました: te-form + ます contraction of ている / でいる.
+        let masuFamilySuffixes = ["ませんでした", "ましょう", "ました", "ません", "ます"]
+        for suffix in masuFamilySuffixes {
+            guard surface.hasSuffix(suffix), surface.count > suffix.count else { continue }
+            let stem = String(surface.dropLast(suffix.count))
+            guard stem.hasSuffix("て") || stem.hasSuffix("で"),
+                  let teReading = conjunctiveReading(
+                    surface: stem,
+                    lemmaExpression: lemmaExpression,
+                    lemmaReading: lemmaReading,
+                    tags: tags
+                  )
+            else { continue }
+            return teReading + suffix
+        }
+
         if surface.hasSuffix("ましょう"), surface.count > 4,
            let stem = stemReadingForMasuForms(lemmaExpression: lemmaExpression, lemmaReading: lemmaReading, tags: tags) {
             return stem + "ましょう"
@@ -732,25 +814,55 @@ final class JMDictStore {
            let stem = stemReadingForMasuForms(lemmaExpression: lemmaExpression, lemmaReading: lemmaReading, tags: tags) {
             return stem + "ます"
         }
-        if surface.hasSuffix("いて"), lemmaExpression.hasSuffix("く"), lemmaReading.hasSuffix("く") {
-            return String(lemmaReading.dropLast()) + "いて"
+        if let conjunctive = conjunctiveReading(
+            surface: surface,
+            lemmaExpression: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+        ) {
+            return conjunctive
         }
-        if surface.hasSuffix("いで"), lemmaExpression.hasSuffix("ぐ"), lemmaReading.hasSuffix("ぐ") {
-            return String(lemmaReading.dropLast()) + "いで"
+        if (surface.hasSuffix("てる") || surface.hasSuffix("でる")), surface.count > 2,
+           let teReading = conjunctiveReading(
+            surface: String(surface.dropLast()),
+            lemmaExpression: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+           ) {
+            return teReading + "る"
         }
-        if surface.hasSuffix("って"), lemmaReading.count >= 2,
-           let last = lemmaExpression.last, "うつる".contains(last) {
-            return String(lemmaReading.dropLast()) + "って"
+        if (surface.hasSuffix("てた") || surface.hasSuffix("でた")), surface.count > 2,
+           let teReading = conjunctiveReading(
+            surface: String(surface.dropLast()),
+            lemmaExpression: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+           ) {
+            return teReading + "た"
         }
-        if surface.hasSuffix("んで"), lemmaExpression.count >= 2,
-           let last = lemmaExpression.last, "むぶぬ".contains(last) {
-            return String(lemmaReading.dropLast()) + "んで"
+        if let continuative = continuativeAuxiliaryReading(
+            surface: surface,
+            lemmaExpression: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+        ) {
+            return continuative
         }
-        if surface.hasSuffix("して"), lemmaExpression.hasSuffix("する"), lemmaReading.hasSuffix("する") {
-            return String(lemmaReading.dropLast(2)) + "して"
+        if let renyo = renyoStemReading(
+            surface: surface,
+            lemmaExpression: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+        ) {
+            return renyo
         }
-        if surface.hasSuffix("して"), lemmaExpression.hasSuffix("す"), !lemmaExpression.hasSuffix("する"), lemmaReading.hasSuffix("す") {
-            return String(lemmaReading.dropLast()) + "して"
+        if let negative = verbNegativeReading(
+            surface: surface,
+            lemmaExpression: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+        ) {
+            return negative
         }
         if let adjReading = iAdjectiveInflectedReading(
             surface: surface,
@@ -758,19 +870,6 @@ final class JMDictStore {
             lemmaReading: lemmaReading
         ) {
             return adjReading
-        }
-        if surface.hasSuffix("て"), surface.count > 1,
-           !surface.hasSuffix("いて"),
-           !surface.hasSuffix("って"),
-           !surface.hasSuffix("んで"),
-           !surface.hasSuffix("して"),
-           !surface.hasSuffix("いで"),
-           !surface.hasSuffix("くて"),
-           !surface.hasSuffix("ぐて"),
-           lemmaExpression.hasSuffix("る"),
-           lemmaReading.hasSuffix("る"),
-           isIchidanRuLemma(lemmaExpression: lemmaExpression, tags: tags) {
-            return String(lemmaReading.dropLast()) + "て"
         }
         if surface.hasSuffix("よう"), surface.count > 2,
            lemmaExpression.hasSuffix("る"),
@@ -783,6 +882,175 @@ final class JMDictStore {
             return volitional
         }
         return nil
+    }
+
+    /// 探しています / 飲んでいる: te-form + いる / います.
+    private static func progressiveReading(
+        surface: String,
+        lemmaExpression: String,
+        lemmaReading: String,
+        tags: String?
+    ) -> String? {
+        for auxiliary in progressiveAuxiliaries {
+            for te in ["て", "で"] {
+                let suffix = te + auxiliary
+                guard surface.hasSuffix(suffix), surface.count > suffix.count else { continue }
+                let teSurface = String(surface.dropLast(auxiliary.count))
+                guard let teReading = conjunctiveReading(
+                    surface: teSurface,
+                    lemmaExpression: lemmaExpression,
+                    lemmaReading: lemmaReading,
+                    tags: tags
+                ) else { continue }
+                return teReading + auxiliary
+            }
+        }
+        return nil
+    }
+
+    /// Longest-first auxiliaries after て/で (います before た/る).
+    private static let progressiveAuxiliaries: [String] = [
+        "いませんでした",
+        "いました",
+        "いません",
+        "います",
+        "いない",
+        "いた",
+        "いる",
+    ]
+
+    /// Te / ta reading from a dictionary lemma (探して / さがす → さがして, 探した → さがした).
+    private static func conjunctiveReading(
+        surface: String,
+        lemmaExpression: String,
+        lemmaReading: String,
+        tags: String?
+    ) -> String? {
+        let iku = isIkuLemma(lemmaExpression: lemmaExpression, lemmaReading: lemmaReading)
+
+        if surface.hasSuffix("いて"), !iku, lemmaExpression.hasSuffix("く"), lemmaReading.hasSuffix("く") {
+            return String(lemmaReading.dropLast()) + "いて"
+        }
+        if surface.hasSuffix("いた"),
+           !surface.hasSuffix("ました"),
+           !iku,
+           lemmaExpression.hasSuffix("く"),
+           lemmaReading.hasSuffix("く") {
+            return String(lemmaReading.dropLast()) + "いた"
+        }
+        if surface.hasSuffix("いで"), lemmaExpression.hasSuffix("ぐ"), lemmaReading.hasSuffix("ぐ") {
+            return String(lemmaReading.dropLast()) + "いで"
+        }
+        if surface.hasSuffix("いだ"), lemmaExpression.hasSuffix("ぐ"), lemmaReading.hasSuffix("ぐ") {
+            return String(lemmaReading.dropLast()) + "いだ"
+        }
+        if surface.hasSuffix("って") || surface.hasSuffix("った") {
+            let ending = surface.hasSuffix("って") ? "って" : "った"
+            if iku, lemmaReading.hasSuffix("く") {
+                return String(lemmaReading.dropLast()) + ending
+            }
+            if lemmaReading.count >= 2, let last = lemmaExpression.last, "うつる".contains(last) {
+                return String(lemmaReading.dropLast()) + ending
+            }
+        }
+        if surface.hasSuffix("んで") || surface.hasSuffix("んだ") {
+            let ending = surface.hasSuffix("んで") ? "んで" : "んだ"
+            if lemmaExpression.count >= 2, let last = lemmaExpression.last, "むぶぬ".contains(last) {
+                return String(lemmaReading.dropLast()) + ending
+            }
+        }
+        if surface.hasSuffix("して") || (surface.hasSuffix("した") && !surface.hasSuffix("ました")) {
+            let ending = surface.hasSuffix("して") ? "して" : "した"
+            if lemmaExpression.hasSuffix("する"), lemmaReading.hasSuffix("する") {
+                return String(lemmaReading.dropLast(2)) + ending
+            }
+            if lemmaExpression.hasSuffix("す"), !lemmaExpression.hasSuffix("する"), lemmaReading.hasSuffix("す") {
+                return String(lemmaReading.dropLast()) + ending
+            }
+        }
+        if (surface.hasSuffix("て") || surface.hasSuffix("た")),
+           surface.count > 1,
+           !surface.hasSuffix("いて"),
+           !surface.hasSuffix("って"),
+           !surface.hasSuffix("んで"),
+           !surface.hasSuffix("して"),
+           !surface.hasSuffix("いで"),
+           !surface.hasSuffix("くて"),
+           !surface.hasSuffix("ぐて"),
+           !surface.hasSuffix("いた"),
+           !surface.hasSuffix("った"),
+           !surface.hasSuffix("んだ"),
+           !surface.hasSuffix("した"),
+           lemmaExpression.hasSuffix("る"),
+           lemmaReading.hasSuffix("る"),
+           isIchidanRuLemma(lemmaExpression: lemmaExpression, tags: tags) {
+            let ending = surface.hasSuffix("て") ? "て" : "た"
+            return String(lemmaReading.dropLast()) + ending
+        }
+        return nil
+    }
+
+    private static func isIkuLemma(lemmaExpression: String, lemmaReading: String) -> Bool {
+        lemmaExpression == "行く" || lemmaExpression == "いく" || lemmaReading == "いく"
+    }
+
+    /// 探さない / さがす → さがさない.
+    private static func verbNegativeReading(
+        surface: String,
+        lemmaExpression: String,
+        lemmaReading: String,
+        tags: String?
+    ) -> String? {
+        if iAdjectiveLemmaCandidate(surface: surface) != nil { return nil }
+        guard let suffix = verbNegativeSuffixes.first(where: {
+            surface.hasSuffix($0) && surface.count > $0.count
+        }) else { return nil }
+        guard let stem = negativeStemReading(
+            lemmaExpression: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+        ) else { return nil }
+        return stem + suffix
+    }
+
+    private static let verbNegativeSuffixes: [String] = [
+        "なくちゃいけない",
+        "なきゃいけない",
+        "なくちゃ",
+        "なきゃ",
+        "なければ",
+        "なかった",
+        "なくて",
+        "ない",
+    ]
+
+    private static func negativeStemReading(
+        lemmaExpression: String,
+        lemmaReading: String,
+        tags: String?
+    ) -> String? {
+        if lemmaExpression.hasSuffix("する"), lemmaReading.hasSuffix("する") {
+            return String(lemmaReading.dropLast(2)) + "し"
+        }
+        if lemmaReading == "くる" || lemmaExpression == "来る" {
+            return String(lemmaReading.dropLast(2)) + "こ"
+        }
+        if lemmaExpression.hasSuffix("る"),
+           lemmaReading.hasSuffix("る"),
+           isIchidanRuLemma(lemmaExpression: lemmaExpression, tags: tags) {
+            return String(lemmaReading.dropLast())
+        }
+        return godanAStemReading(fromDictionaryReading: lemmaReading)
+    }
+
+    private static func godanAStemReading(fromDictionaryReading r: String) -> String? {
+        guard let last = r.last else { return nil }
+        let map: [Character: Character] = [
+            "く": "か", "ぐ": "が", "す": "さ", "つ": "た", "ぬ": "な",
+            "ぶ": "ば", "む": "ま", "る": "ら", "う": "わ",
+        ]
+        guard let a = map[last] else { return nil }
+        return String(r.dropLast()) + String(a)
     }
 
     /// Godan volitional (行**こう**, 読**もう**) → inflected reading from dictionary form (行く/いく → いこう).
@@ -1150,16 +1418,32 @@ final class JMDictStore {
     }
 
     /// Map common inflected endings to dictionary-form guesses (best matching row wins on `score`).
-    private func bestLemmaGuessExactMatch(in db: Database, surface: String) throws -> [JMDictEntry]? {
-        let guesses = Self.buildInflectionLemmaCandidates(surface: surface)
+    private func bestLemmaGuessExactMatch(
+        in db: Database,
+        surface: String,
+        treatAsRenyoStem: Bool = false,
+        surfaceKana: String
+    ) throws -> [JMDictEntry]? {
+        let guesses = Self.buildInflectionLemmaCandidates(
+            surface: surface,
+            treatAsRenyoStem: treatAsRenyoStem
+        )
         let adjLemma = Self.iAdjectiveLemmaCandidate(surface: surface)
-        let mustBeVerb = Self.surfaceRequiresVerbLemma(surface)
+        let mustBeVerb = treatAsRenyoStem || Self.surfaceRequiresVerbLemma(surface)
+
+        var bestAlignedRows: [JMDictEntry]?
+        var bestAlignedScore = Int.min
         var bestRows: [JMDictEntry]?
         var bestScore = Int.min
+
         for g in guesses {
             guard var rows = try exactMatch(in: db, surface: g), !rows.isEmpty else {
                 print("JMDict bestLemma: candidate '\(g)' — no match")
                 continue
+            }
+            let expressionRows = rows.filter { $0.expression == g }
+            if !expressionRows.isEmpty {
+                rows = expressionRows
             }
             if g == adjLemma {
                 let adjRows = rows.filter { Self.isIAdjectiveEntry($0) }
@@ -1178,13 +1462,45 @@ final class JMDictStore {
                 guard !verbRows.isEmpty else { continue }
                 rows = verbRows
             }
+
+            let aligned = rows.filter { entry in
+                Self.inflectedReadingMatchesSurface(
+                    surface: surface,
+                    surfaceKana: surfaceKana,
+                    entry: entry
+                )
+            }
             let top = rows.first?.score ?? Int.min
+            if !aligned.isEmpty {
+                let alignedTop = aligned.first?.score ?? Int.min
+                if alignedTop > bestAlignedScore {
+                    bestAlignedScore = alignedTop
+                    bestAlignedRows = aligned
+                }
+            }
             if top > bestScore {
                 bestScore = top
                 bestRows = rows
             }
         }
-        return bestRows
+        return bestAlignedRows ?? bestRows
+    }
+
+    private static func inflectedReadingMatchesSurface(
+        surface: String,
+        surfaceKana: String,
+        entry: JMDictEntry
+    ) -> Bool {
+        let lemmaReading = entry.displayReading.trimmingCharacters(in: .whitespacesAndNewlines)
+        let inflected = contextualReadingFromLemma(
+            surface: surface,
+            lemmaExpression: entry.expression,
+            lemmaReading: lemmaReading,
+            tags: entry.tags
+        ) ?? lemmaReading
+        if inflected == surface || inflected == surfaceKana { return true }
+        guard !surfaceKana.isEmpty, inflected != lemmaReading else { return false }
+        return surfaceKana == inflected
     }
 
     /// True when the surface ending unambiguously indicates a verb conjugation,
@@ -1195,8 +1511,11 @@ final class JMDictStore {
         let verbEndings = [
             "って", "んで", "いて", "いで", "して",
             "ました", "ます", "ません", "ましょう",
+            "ています", "でいます", "ている", "でいる",
+            "ていた", "でいた",
             "なかった", "なくて", "なければ", "なきゃ", "なくちゃ",
             "ない", "て",
+            "った", "んだ", "いた", "いだ", "した", "た",
             "よう", "ろう", "もう", "ぼう", "のう", "とう", "そう", "ごう", "こう", "おう",
         ]
         return verbEndings.contains { surface.hasSuffix($0) && surface.count > $0.count }
@@ -1205,7 +1524,7 @@ final class JMDictStore {
     private static func isVerbEntry(_ entry: JMDictEntry) -> Bool {
         guard let tags = entry.tags else { return false }
         return tags.split(whereSeparator: { $0 == " " || $0 == "\t" }).contains {
-            $0.hasPrefix("v") && $0 != "vs"
+            $0.hasPrefix("v")
         }
     }
 
@@ -1317,7 +1636,104 @@ final class JMDictStore {
         if let g = godanUFromNegativeStem(stem) { add(g) }
     }
 
-    private static func buildInflectionLemmaCandidates(surface: String) -> [String] {
+    /// 遅れそうです: 遅れ is a noun in JMdict, but そう after it is the verb stem of 遅れる.
+    private static func continuativeAuxiliaryFollows(_ surface: String, in sentence: String?) -> Bool {
+        guard let sentence, !surface.isEmpty else { return false }
+        var searchStart = sentence.startIndex
+        while let range = sentence.range(of: surface, range: searchStart..<sentence.endIndex) {
+            let after = sentence[range.upperBound...]
+            if continuativeAuxiliarySuffixes.contains(where: { after.hasPrefix($0) }) {
+                return true
+            }
+            searchStart = range.upperBound
+        }
+        return false
+    }
+
+    /// Longest-first 連用形 auxiliaries (そう / たい / すぎ…).
+    private static let continuativeAuxiliarySuffixes: [String] = [
+        "たかった",
+        "たがって",
+        "たがる",
+        "そうです",
+        "そうだ",
+        "すぎました",
+        "すぎます",
+        "すぎる",
+        "すぎた",
+        "ながら",
+        "そう",
+        "すぎ",
+        "たい",
+        "たく",
+    ]
+
+    static func isRenyoStem(_ surface: String, of lemma: String) -> Bool {
+        if lemma.hasSuffix("る"), String(lemma.dropLast()) == surface { return true }
+        if let dict = godanUFromIRenyoStem(surface), dict == lemma { return true }
+        return false
+    }
+
+    private static func addContinuativeAuxiliaryLemmaCandidates(from surface: String, add: (String) -> Void) {
+        for suffix in continuativeAuxiliarySuffixes {
+            guard surface.hasSuffix(suffix), surface.count > suffix.count else { continue }
+            addRenyoStemLemmaCandidates(from: String(surface.dropLast(suffix.count)), add: add)
+            add(String(surface.dropLast(suffix.count)) + "い")
+        }
+    }
+
+    private static func addRenyoStemLemmaCandidates(from stem: String, add: (String) -> Void) {
+        guard !stem.isEmpty else { return }
+        add(stem + "る")
+        if let g = godanUFromIRenyoStem(stem) { add(g) }
+    }
+
+    private static func continuativeAuxiliaryReading(
+        surface: String,
+        lemmaExpression: String,
+        lemmaReading: String,
+        tags: String?
+    ) -> String? {
+        for suffix in continuativeAuxiliarySuffixes {
+            guard surface.hasSuffix(suffix), surface.count > suffix.count else { continue }
+            let stem = String(surface.dropLast(suffix.count))
+            guard let stemReading = renyoStemReading(
+                surface: stem,
+                lemmaExpression: lemmaExpression,
+                lemmaReading: lemmaReading,
+                tags: tags
+            ) else { continue }
+            return stemReading + suffix
+        }
+        return nil
+    }
+
+    private static func renyoStemReading(
+        surface: String,
+        lemmaExpression: String,
+        lemmaReading: String,
+        tags: String?
+    ) -> String? {
+        guard let stem = stemReadingForMasuForms(
+            lemmaExpression: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+        ) else { return nil }
+        if lemmaExpression.hasSuffix("る"),
+           (surface + "る" == lemmaExpression || surface + "る" == lemmaReading) {
+            return stem
+        }
+        if let dict = godanUFromIRenyoStem(surface),
+           dict == lemmaExpression || dict == lemmaReading {
+            return stem
+        }
+        return nil
+    }
+
+    private static func buildInflectionLemmaCandidates(
+        surface: String,
+        treatAsRenyoStem: Bool = false
+    ) -> [String] {
         var out: [String] = []
         var seen = Set<String>()
         func add(_ s: String) {
@@ -1330,26 +1746,24 @@ final class JMDictStore {
             add(adj)
         }
 
+        if treatAsRenyoStem {
+            addRenyoStemLemmaCandidates(from: surface, add: add)
+        }
+        addContinuativeAuxiliaryLemmaCandidates(from: surface, add: add)
+
         if surface.hasSuffix("ましょう"), surface.count > 4 {
-            let stem = String(surface.dropLast(4))
-            add(stem + "る")
-            if let g = godanUFromIRenyoStem(stem) { add(g) }
+            addMasuStemLemmaCandidates(from: String(surface.dropLast(4)), add: add)
         }
         if surface.hasSuffix("ました"), surface.count > 3 {
-            let stem = String(surface.dropLast(3))
-            add(stem + "る")
-            if let g = godanUFromIRenyoStem(stem) { add(g) }
+            addMasuStemLemmaCandidates(from: String(surface.dropLast(3)), add: add)
         }
         if surface.hasSuffix("ません"), surface.count > 3 {
-            let stem = String(surface.dropLast(3))
-            add(stem + "る")
-            if let g = godanUFromIRenyoStem(stem) { add(g) }
+            addMasuStemLemmaCandidates(from: String(surface.dropLast(3)), add: add)
         }
         if surface.hasSuffix("ます"), surface.count > 2 {
-            let stem = String(surface.dropLast(2))
-            add(stem + "る")
-            if let g = godanUFromIRenyoStem(stem) { add(g) }
+            addMasuStemLemmaCandidates(from: String(surface.dropLast(2)), add: add)
         }
+        addProgressiveLemmaCandidates(from: surface, add: add)
         if surface.hasSuffix("なくちゃいけない"), surface.count > 7 {
             addVerbLemmaCandidates(fromNegativeStem: String(surface.dropLast(7)), add: add)
         }
@@ -1380,6 +1794,61 @@ final class JMDictStore {
         {
             addVerbLemmaCandidates(fromNegativeStem: String(surface.dropLast(2)), add: add)
         }
+        addTeFormLemmaCandidates(from: surface, add: add)
+        addTaFormLemmaCandidates(from: surface, add: add)
+
+        // Tokenizer splits mid-contraction: 残ってる → 残っ + てる. The bare っ-final
+        // stem is the godan 連用形 double-consonant form; try つ and う endings.
+        if surface.hasSuffix("っ"), surface.count > 1 {
+            let stem = String(surface.dropLast())
+            add(stem + "つ")
+            add(stem + "う")
+            add(stem + "る")
+        }
+
+        // 探してる / 読んでた: casual ている / ていた.
+        if (surface.hasSuffix("てる") || surface.hasSuffix("でる")
+            || surface.hasSuffix("てた") || surface.hasSuffix("でた")),
+           surface.count > 2 {
+            addTeFormLemmaCandidates(from: String(surface.dropLast()), add: add)
+        }
+
+        if surface.hasSuffix("よう"), surface.count > 2 {
+            add(String(surface.dropLast(2)) + "る")
+        }
+        if surface.hasSuffix("う"), surface.count > 2 {
+            let stem = String(surface.dropLast())
+            if let dict = godanUFromVolitionalStem(stem) { add(dict) }
+        }
+
+        return out
+    }
+
+    /// ます-stem lemmas, plus te-form lemmas when the stem is itself a te-form (探してます → 探す).
+    private static func addMasuStemLemmaCandidates(from stem: String, add: (String) -> Void) {
+        guard !stem.isEmpty else { return }
+        add(stem + "る")
+        if let g = godanUFromIRenyoStem(stem) { add(g) }
+        if stem.hasSuffix("てい") || stem.hasSuffix("でい") {
+            addTeFormLemmaCandidates(from: String(stem.dropLast()), add: add)
+        }
+        if stem.hasSuffix("て") || stem.hasSuffix("で") {
+            addTeFormLemmaCandidates(from: stem, add: add)
+        }
+    }
+
+    /// 探しています / 飲んでいる: strip いる / います and lemma-guess the te-form.
+    private static func addProgressiveLemmaCandidates(from surface: String, add: (String) -> Void) {
+        for auxiliary in progressiveAuxiliaries {
+            for te in ["て", "で"] {
+                let suffix = te + auxiliary
+                guard surface.hasSuffix(suffix), surface.count > suffix.count else { continue }
+                addTeFormLemmaCandidates(from: String(surface.dropLast(auxiliary.count)), add: add)
+            }
+        }
+    }
+
+    private static func addTeFormLemmaCandidates(from surface: String, add: (String) -> Void) {
         if surface.hasSuffix("いて"), surface.count > 2 {
             add(String(surface.dropLast(2)) + "く")
         }
@@ -1392,41 +1861,19 @@ final class JMDictStore {
             add(stem + "る")
             add(stem + "う")
             add(stem + "つ")
-        }
-        // Tokenizer splits mid-contraction: 残ってる → 残っ + てる. The bare っ-final
-        // stem is the godan 連用形 double-consonant form; try つ and う endings.
-        if surface.hasSuffix("っ"), surface.count > 1 {
-            let stem = String(surface.dropLast())
-            add(stem + "つ")
-            add(stem + "う")
-            add(stem + "る")
+            add(stem + "く") // 行く is irregular 行って
         }
         if surface.hasSuffix("んで"), surface.count > 2 {
-            let b = String(surface.dropLast(2))
-            if b.last == "ん", b.count >= 2 {
-                let h = String(b.dropLast())
-                add(h + "む")
-                add(h + "ぶ")
-                add(h + "ぬ")
-            }
+            let stem = String(surface.dropLast(2))
+            add(stem + "む")
+            add(stem + "ぶ")
+            add(stem + "ぬ")
         }
         if surface.hasSuffix("して"), surface.count > 2 {
             let stem = String(surface.dropLast(2))
-            if stem.last == "し" {
-                let h = String(stem.dropLast())
-                add(h + "する")
-                add(h + "す")
-            }
+            add(stem + "す")
+            add(stem + "する")
         }
-
-        if surface.hasSuffix("よう"), surface.count > 2 {
-            add(String(surface.dropLast(2)) + "る")
-        }
-        if surface.hasSuffix("う"), surface.count > 2 {
-            let stem = String(surface.dropLast())
-            if let dict = godanUFromVolitionalStem(stem) { add(dict) }
-        }
-
         if surface.hasSuffix("て"), surface.count > 1,
            !surface.hasSuffix("いて"),
            !surface.hasSuffix("って"),
@@ -1438,7 +1885,42 @@ final class JMDictStore {
         {
             add(String(surface.dropLast()) + "る")
         }
+    }
 
-        return out
+    private static func addTaFormLemmaCandidates(from surface: String, add: (String) -> Void) {
+        if surface.hasSuffix("ました") { return }
+        if surface.hasSuffix("いた"), surface.count > 2, !surface.hasSuffix("ました") {
+            add(String(surface.dropLast(2)) + "く")
+        }
+        if surface.hasSuffix("いだ"), surface.count > 2 {
+            add(String(surface.dropLast(2)) + "ぐ")
+        }
+        if surface.hasSuffix("った"), surface.count > 2 {
+            let stem = String(surface.dropLast(2))
+            add(stem + "る")
+            add(stem + "う")
+            add(stem + "つ")
+            add(stem + "く")
+        }
+        if surface.hasSuffix("んだ"), surface.count > 2 {
+            let stem = String(surface.dropLast(2))
+            add(stem + "む")
+            add(stem + "ぶ")
+            add(stem + "ぬ")
+        }
+        if surface.hasSuffix("した"), surface.count > 2 {
+            let stem = String(surface.dropLast(2))
+            add(stem + "す")
+            add(stem + "する")
+        }
+        if surface.hasSuffix("た"), surface.count > 1,
+           !surface.hasSuffix("いた"),
+           !surface.hasSuffix("った"),
+           !surface.hasSuffix("んだ"),
+           !surface.hasSuffix("した"),
+           !surface.hasSuffix("ました")
+        {
+            add(String(surface.dropLast()) + "る")
+        }
     }
 }

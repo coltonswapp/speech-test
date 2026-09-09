@@ -1,0 +1,121 @@
+{
+  "version": "1.0",
+  "flow": {
+    "name": "shizen_onboarding",
+    "steps": [
+      {
+        "id": "why_learning",
+        "type": "survey",
+        "config": {
+          "type": "survey",
+          "title": "Why are you learning Japanese?",
+          "subtitle": "This will help us create better content for you.",
+          "options": [
+            { "title": "Travel ✈️", "value": "travel" },
+            { "title": "Make Friends 🤝💖", "value": "friends" },
+            { "title": "Business 💼", "value": "business" }
+          ],
+          "multi_select": false,
+          "layout": "list",
+          "cta_text": "Next"
+        }
+      },
+      {
+        "id": "current_level",
+        "type": "slider",
+        "config": {
+          "type": "slider",
+          "title": "How is your Japanese right now?",
+          "subtitle": "Slide the slider to indicate your level.",
+          "levels": [
+            {
+              "title": "Brand New",
+              "description": "I'm completely new to Japanese. I know a few vocabulary words but can't say a full phrase.",
+              "value": "brand_new"
+            },
+            {
+              "title": "Beginner",
+              "description": "I can introduce myself and recognize some phrases, but conversations move too fast.",
+              "value": "beginner"
+            },
+            {
+              "title": "Intermediate",
+              "description": "I can follow familiar topics, but I still miss details when people speak naturally.",
+              "value": "intermediate"
+            },
+            {
+              "title": "Advanced",
+              "description": "I understand most everyday Japanese and want to get more natural and precise.",
+              "value": "advanced"
+            }
+          ],
+          "cta_text": "Next"
+        }
+      },
+      {
+        "id": "listening_ear",
+        "type": "listening_quiz",
+        "config": {
+          "type": "listening_quiz",
+          "title": "Let's test your listening ear real quick...",
+          "subtitle": "Listen to the audio and select the English translation.",
+          "options": [
+            { "title": "I need to go to the store", "value": "store" },
+            { "title": "Where is the train station?", "value": "station" },
+            { "title": "The weather is nice today", "value": "weather" }
+          ],
+          "cta_text": "Next"
+        }
+      },
+      {
+        "id": "listening_challenge",
+        "type": "survey",
+        "config": {
+          "type": "survey",
+          "title": "What is the biggest challenge when it comes to listening?",
+          "subtitle": "Select from the options below.",
+          "options": [
+            { "title": "People speak too fast", "value": "too_fast" },
+            { "title": "Hearing what is said", "value": "hearing" },
+            { "title": "Don't know enough vocabulary words", "value": "vocabulary" },
+            { "title": "Don't hear enough people speak", "value": "exposure" }
+          ],
+          "multi_select": false,
+          "layout": "list",
+          "cta_text": "Next"
+        }
+      },
+      {
+        "id": "value_prop_listen",
+        "type": "demo",
+        "config": {
+          "type": "demo",
+          "title": "Shizen aims to help you learn Japanese naturally, through listening",
+          "subtitle": "Listen below.",
+          "variant": "bars",
+          "cta_text": "Next"
+        }
+      },
+      {
+        "id": "inspect_dialogue",
+        "type": "demo",
+        "config": {
+          "type": "demo",
+          "title": "Shizen then allows you to dive deeper to inspect dialogue.",
+          "subtitle": "Scrub your finger below.",
+          "variant": "inspect",
+          "cta_text": "Next"
+        }
+      },
+      {
+        "id": "finish",
+        "type": "finish",
+        "config": {
+          "type": "finish",
+          "title": "You're in",
+          "subtitle": "We'll use your answers to personalize practice."
+        }
+      }
+    ]
+  }
+}

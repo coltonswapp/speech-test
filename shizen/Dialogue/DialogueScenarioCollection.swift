@@ -22,6 +22,12 @@ struct DialogueScenarioCollection: Hashable {
     let thumbnailURL: URL?
     let scenarios: [Scenario]
 
+    /// Thumbnail to show for a scenario: its own override when the CMS set
+    /// one, otherwise the collection-wide thumbnail.
+    func thumbnailURL(for scenario: Scenario) -> URL? {
+        scenario.thumbnailURL ?? thumbnailURL
+    }
+
     struct Scenario: Hashable {
         let id: String
         let menuTitle: String
@@ -30,6 +36,10 @@ struct DialogueScenarioCollection: Hashable {
         let highlights: DialogueLearningHighlights
         let quiz: [DialogueQuizQuestion]
         let grammarPointIDs: [String]
+        /// Optional per-scenario CDN thumbnail. Prefer
+        /// `DialogueScenarioCollection.thumbnailURL(for:)`, which applies the
+        /// collection fallback.
+        let thumbnailURL: URL?
         let lines: [TaggedLine]
 
         struct TaggedLine: Hashable {
@@ -67,6 +77,7 @@ private struct DialogueScenarioCollectionFile: Decodable {
         let publishedContentHash: String?
         let publishedAt: String?
         let grammarPointIDs: [String]?
+        let thumbnailUrl: String?
         let scenario: ScenarioBody
         let highlights: HighlightsRecord?
         let quiz: [QuizRecord]?
@@ -75,7 +86,7 @@ private struct DialogueScenarioCollectionFile: Decodable {
         enum CodingKeys: String, CodingKey {
             case id, menuTitle, menuSubtitle, japanese, romaji, english
             case targetSubstring, audioKey, publishedAudioUrl, publishedVariantId
-            case publishedContentHash, publishedAt, grammarPointIDs
+            case publishedContentHash, publishedAt, grammarPointIDs, thumbnailUrl
             case scenario, highlights, quiz, tokenSync
         }
 
@@ -94,6 +105,7 @@ private struct DialogueScenarioCollectionFile: Decodable {
             publishedContentHash = try container.decodeIfPresent(String.self, forKey: .publishedContentHash)
             publishedAt = try container.decodeIfPresent(String.self, forKey: .publishedAt)
             grammarPointIDs = try container.decodeIfPresent([String].self, forKey: .grammarPointIDs)
+            thumbnailUrl = try container.decodeIfPresent(String.self, forKey: .thumbnailUrl)
             scenario = try container.decode(ScenarioBody.self, forKey: .scenario)
             highlights = try container.decodeIfPresent(HighlightsRecord.self, forKey: .highlights)
             quiz = try container.decodeIfPresent([QuizRecord].self, forKey: .quiz)
@@ -374,6 +386,7 @@ private extension DialogueScenarioCollection {
                 highlights: highlights,
                 quiz: quiz,
                 grammarPointIDs: scenarioGrammarIDs,
+                thumbnailURL: record.thumbnailUrl.flatMap(URL.init(string:)),
                 lines: taggedLines
             )
         }

@@ -87,7 +87,7 @@ final class FuriganaTranscriptLabel: UILabel {
     /// Marker fill behind the spoken token. Text stays `foregroundColor`.
     /// Default matches the yellow bubble underglow; prefer the bubble's own glow when known.
     static let tokenSyncHighlightColor = DialogueBubbleUnderglowColor.yellow.tokenHighlightUIColor
-    /// On Messages-style solid bubbles, yellow is unreadable — 25% black wash.
+    /// On saturated Messages-style fills, a colored wash fights white glyphs.
     static let tokenSyncHighlightColorOnBlueBubble = UIColor.black.withAlphaComponent(0.25)
     /// Underline-like bar as a fraction of point size; sits on the baseline
     /// and overlaps the lower part of the glyphs.

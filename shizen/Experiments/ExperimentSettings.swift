@@ -72,7 +72,7 @@ enum DialogueContentBubbleStyle: String, CaseIterable {
     var subtitle: String? {
         switch self {
         case .glass: return nil
-        case .messages: return "Blue and gray with tails"
+        case .messages: return "Solid fills with tails"
         }
     }
 
@@ -141,10 +141,13 @@ enum ExperimentSettings {
     private static let dialogueContentBubbleStyleKey = "ExperimentDialogueContentBubbleStyle"
     private static let dialogueContentSecondPassRateKey = "ExperimentDialogueContentSecondPassRate"
     private static let dialogueContentShowsStageLinesKey = "ExperimentDialogueContentShowsStageLines"
+    private static let dialogueContentDelaysStageLinesKey = "ExperimentDialogueContentDelaysStageLines"
     private static let dialogueShowsTokenSyncKey = "ExperimentDialogueShowsTokenSync"
     private static let dialogueTokenSyncHighlightStyleKey = "ExperimentDialogueTokenSyncHighlightStyle"
     private static let dialogueHighlightLeadingColorKey = "ExperimentDialogueHighlightLeadingColor"
     private static let dialogueHighlightTrailingColorKey = "ExperimentDialogueHighlightTrailingColor"
+    private static let dialogueMessageLeadingColorKey = "ExperimentDialogueMessageLeadingColor"
+    private static let dialogueMessageTrailingColorKey = "ExperimentDialogueMessageTrailingColor"
 
     /// Success chimes, selection clicks, and incorrect feedback in experiment flows.
     static var soundsEnabled: Bool {
@@ -223,6 +226,15 @@ enum ExperimentSettings {
         set { UserDefaults.standard.set(newValue, forKey: dialogueContentShowsStageLinesKey) }
     }
 
+    /// Dialogue Replay: hold 1.25s on each stage caption before the next spoken run.
+    static var dialogueContentDelaysStageLines: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: dialogueContentDelaysStageLinesKey) == nil { return true }
+            return UserDefaults.standard.bool(forKey: dialogueContentDelaysStageLinesKey)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: dialogueContentDelaysStageLinesKey) }
+    }
+
     /// Yellow marker behind the currently spoken token during dialogue playback.
     static var dialogueShowsTokenSync: Bool {
         get {
@@ -275,5 +287,39 @@ enum ExperimentSettings {
     static func applyDialogueHighlightPreset(_ preset: DialogueHighlightColorPreset) {
         dialogueHighlightLeadingColor = preset.leading
         dialogueHighlightTrailingColor = preset.trailing
+    }
+
+    /// Messages-style solid fill for the leading (left) speaker.
+    static var dialogueMessageLeadingColor: DialogueBubbleUnderglowColor {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: dialogueMessageLeadingColorKey),
+                  let value = DialogueBubbleUnderglowColor(storageKey: raw)
+            else { return .gray }
+            return value
+        }
+        set { UserDefaults.standard.set(newValue.storageKey, forKey: dialogueMessageLeadingColorKey) }
+    }
+
+    /// Messages-style solid fill for the trailing (right) speaker.
+    static var dialogueMessageTrailingColor: DialogueBubbleUnderglowColor {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: dialogueMessageTrailingColorKey),
+                  let value = DialogueBubbleUnderglowColor(storageKey: raw)
+            else { return .blue }
+            return value
+        }
+        set { UserDefaults.standard.set(newValue.storageKey, forKey: dialogueMessageTrailingColorKey) }
+    }
+
+    static func dialogueMessageColor(for side: DialogueSpeakerSide) -> DialogueBubbleUnderglowColor {
+        switch side {
+        case .leading: return dialogueMessageLeadingColor
+        case .trailing: return dialogueMessageTrailingColor
+        }
+    }
+
+    static func applyDialogueMessageColorPreset(_ preset: DialogueMessageColorPreset) {
+        dialogueMessageLeadingColor = preset.leading
+        dialogueMessageTrailingColor = preset.trailing
     }
 }

@@ -12,14 +12,26 @@ final class FlashcardExperimentViewController: UIViewController {
 
     private let stackView = FlashcardStackView()
     private let instructionsLabel = UILabel()
+    private let cards: [VocabFlashcard]
+    private let screenTitle: String
 
     private var knownIndices: Set<Int> = []
     private var reviewIndices: Set<Int> = []
     private var furiganaToggleButton: UIBarButtonItem?
 
+    init(title: String = "Flashcards", cards: [VocabFlashcard] = VocabFlashcardBank.starter) {
+        screenTitle = title
+        self.cards = cards
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "Flashcards"
+        title = screenTitle
         navigationItem.largeTitleDisplayMode = .never
         configureNavigationItems()
         view.backgroundColor = ExperimentPalette.pageBackground
@@ -48,7 +60,7 @@ final class FlashcardExperimentViewController: UIViewController {
             instructionsLabel.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
         ])
 
-        stackView.setDeck(VocabFlashcardBank.starter)
+        stackView.setDeck(cards)
     }
 
     private func configureNavigationItems() {

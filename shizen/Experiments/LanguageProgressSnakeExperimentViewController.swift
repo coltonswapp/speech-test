@@ -7,9 +7,8 @@
 //  sheet live-adjusts spacing, frequency, and amplitude.
 //
 
+import InteractionKit
 import UIKit
-
-// MARK: - Tuning
 
 private struct LessonPathConfiguration: Equatable {
     var spacing: CGFloat
@@ -45,10 +44,23 @@ private struct LessonPathConfiguration: Equatable {
     fileprivate var bottomInset: CGFloat { 48 }
     fileprivate var horizontalInset: CGFloat { 22 }
 
+    func maxSwing(width: CGFloat) -> CGFloat {
+        max(0, width / 2 - horizontalInset - nodeSize / 2)
+    }
+
     func xCenter(for index: CGFloat, width: CGFloat) -> CGFloat {
-        let halfNode = nodeSize / 2
-        let maxSwing = max(0, width / 2 - horizontalInset - halfNode)
-        return width / 2 + maxSwing * amplitude * sin(index * frequency + phase)
+        width / 2 + maxSwing(width: width) * amplitude * sin(index * frequency + phase)
+    }
+
+    /// Center-to-center Y step. Peaks have little X travel, so this grows there
+    /// to keep stones from stacking tighter than they do on the slopes.
+    func yAdvance(from index: CGFloat, width: CGFloat) -> CGFloat {
+        let base = nodeSize + spacing
+        let dx = abs(xCenter(for: index + 1, width: width) - xCenter(for: index, width: width))
+        let maxDx = 2 * maxSwing(width: width) * amplitude * abs(sin(frequency / 2))
+        guard maxDx > 0.5 else { return base }
+        let target = hypot(base, maxDx)
+        return max(base, (target * target - dx * dx).squareRoot())
     }
 
     static func iconPointSize(for nodeSize: CGFloat) -> CGFloat {
@@ -767,9 +779,10 @@ private final class LessonSinePathLayout: UICollectionViewLayout {
                 attributes.zIndex = Int(LessonPathConfiguration.stoneZPosition)
                 sectionItems.append(attributes)
 
-                yCursor += size
                 if item < count - 1 {
-                    yCursor += configuration.spacing
+                    yCursor += configuration.yAdvance(from: CGFloat(globalIndex), width: width)
+                } else {
+                    yCursor += size
                 }
                 globalIndex += 1
             }
@@ -1264,10 +1277,13 @@ private final class LessonPartRingView: UIView {
             layer.path = path.cgPath
             layer.lineWidth = lineWidth
             let filled = index < completedParts
-            layer.strokeColor = Self.segmentColor(
-                filled: filled,
-                highlighted: highlightCompleted
-            ).resolvedColor(with: traitCollection).cgColor
+            if filled {
+                layer.opacity = Float(highlightCompleted ? 0.82 : 0.38)
+                layer.strokeColor = UIColor.systemBlue.resolvedColor(with: traitCollection).cgColor
+            } else {
+                layer.opacity = 0.08
+                layer.strokeColor = UIColor.systemGray.resolvedColor(with: traitCollection).cgColor
+            }
         }
     }
 
@@ -1276,7 +1292,8 @@ private final class LessonPartRingView: UIView {
         segmentLayers.forEach { $0.removeFromSuperlayer() }
         segmentLayers = (0 ..< partCount).map { _ in
             let layer = CAShapeLayer()
-            layer.fillColor = nil
+            layer.isOpaque = false
+            layer.fillColor = UIColor.clear.cgColor
             layer.lineCap = .round
             layer.lineJoin = .round
             self.layer.addSublayer(layer)
@@ -1284,18 +1301,6 @@ private final class LessonPartRingView: UIView {
         }
     }
 
-    private static func segmentColor(filled: Bool, highlighted: Bool) -> UIColor {
-        if filled && highlighted {
-            return UIColor.systemYellow.withAlphaComponent(0.82)
-        }
-        return UIColor { traits in
-            let isDark = traits.userInterfaceStyle == .dark
-            if filled {
-                return (isDark ? UIColor.white : UIColor.black).withAlphaComponent(isDark ? 0.42 : 0.28)
-            }
-            return (isDark ? UIColor.white : UIColor.black).withAlphaComponent(isDark ? 0.18 : 0.14)
-        }
-    }
 }
 
 // MARK: - Lesson title tip

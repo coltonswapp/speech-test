@@ -104,7 +104,8 @@ extension ScrubbableSentenceView {
         showsFurigana: Bool = true,
         accentSubstring: String? = nil,
         accentColor: UIColor = .systemBlue,
-        clearInteraction: Bool = false
+        clearInteraction: Bool = false,
+        preservesTokenBoundaries: Bool = false
     ) {
         configureWithTokens(
             sentence: sentence,
@@ -114,7 +115,8 @@ extension ScrubbableSentenceView {
             showsFurigana: showsFurigana,
             accentSubstring: accentSubstring,
             accentColor: accentColor,
-            clearInteraction: clearInteraction
+            clearInteraction: clearInteraction,
+            preservesTokenBoundaries: preservesTokenBoundaries
         )
     }
 }

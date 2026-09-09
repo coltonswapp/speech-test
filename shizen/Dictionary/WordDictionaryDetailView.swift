@@ -21,8 +21,19 @@ final class WordDictionaryDetailView: UIView {
     private let selectedWordLabel = FuriganaTranscriptLabel()
     private let romajiLabel = UILabel()
     private let dictionaryFormLabel = UILabel()
+    private let wordActionsStack = UIStackView()
     private let speakWordButton = UIButton(type: .system)
     private let speakWordGlyphView = UIImageView()
+    private let saveVocabularyButton = UIButton(type: .system)
+    private let saveVocabularyGlyphView = UIImageView()
+#if DEBUG
+    private let kanjiDecompositionButton = UIButton(type: .system)
+    private let kanjiDecompositionGlyphView = UIImageView()
+#endif
+    private let saveHaptic = UIImpactFeedbackGenerator(style: .light)
+    private var saveDraft: SavedVocabularyItem?
+    private var isShowingSaveConfirmation = false
+    private var saveButtonHideTask: Task<Void, Never>?
 
     private let contextualCardContainer = UIView()
     private let contextualCardSurface = UIView()
@@ -59,6 +70,11 @@ final class WordDictionaryDetailView: UIView {
     /// Invoked when the user taps a kanji chip; host opens the kanji detail screen.
     var onSelectKanji: ((String) -> Void)?
 
+#if DEBUG
+    /// Invoked when the user taps the kanji decomposition shortcut beside Speak.
+    var onRequestKanjiDecomposition: (() -> Void)?
+#endif
+
     /// When false, the COMPOUNDS section is never built or shown (e.g. inline in the scrub experiment).
     var showsCompounds = true {
         didSet {
@@ -83,11 +99,17 @@ final class WordDictionaryDetailView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         setupUI()
+        observeSavedVocabularyChanges()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         setupUI()
+        observeSavedVocabularyChanges()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     func configure(surface: String, sentence: String? = nil) {
@@ -98,20 +120,26 @@ final class WordDictionaryDetailView: UIView {
         guard !surface.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             isHidden = true
             speechText = ""
+            saveDraft = nil
             dictionaryFormLabel.isHidden = true
             contextualCardContainer.isHidden = true
+            refreshSaveButton()
+#if DEBUG
+            kanjiDecompositionButton.isHidden = true
+#endif
             return
         }
 
         isHidden = false
-        let lookup = JMDictStore.shared.lookup(forSurface: surface)
+        let lookup = JMDictStore.shared.lookup(forSurface: surface, inSentence: sentence)
         let entries = lookup.entries
+        let displayHeadword = lookup.dictionaryForm ?? surface
 
         let wordFont = selectedWordLabel.font ?? UIFont.preferredFont(forTextStyle: .largeTitle)
         JapaneseFuriganaBuilder.applyScrubDisplay(
             to: selectedWordLabel,
             attributed: JapaneseFuriganaBuilder.attributedString(
-                for: surface,
+                for: displayHeadword,
                 font: wordFont,
                 textColor: .label
             ),
@@ -123,18 +151,27 @@ final class WordDictionaryDetailView: UIView {
             )
         )
 
-        let primary = entries.max { ($0.score ?? 0) < ($1.score ?? 0) } ?? entries.first
-        let yomi =
-            primary
-            .map { JMDictStore.shared.readingForSurface(surface, matching: $0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            ?? ""
-        let readingForRomaji = !yomi.isEmpty ? yomi : surface
-        let romaji = HiraganaRomaji.romanize(readingForRomaji)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let primary = lookup.primaryEntry
+        let showingLemmaAsHeadword = displayHeadword != surface
+        let readingForRomaji: String
+        let romaji: String
+        if showingLemmaAsHeadword {
+            let lemmaKana = (lookup.dictionaryFormReading ?? displayHeadword)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            readingForRomaji = JMDictStore.shared.kanaReadingForDisplay(
+                surface: displayHeadword,
+                matching: primary
+            )
+            romaji = HiraganaRomaji.romanize(readingForRomaji.isEmpty ? lemmaKana : readingForRomaji)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            readingForRomaji = JMDictStore.shared.kanaReadingForDisplay(surface: surface, matching: primary)
+            romaji = JMDictStore.shared.romajiForDisplay(surface: surface, matching: primary)
+        }
         romajiLabel.isHidden = romaji.isEmpty
         romajiLabel.text = romaji.isEmpty ? nil : romaji
 
-        if let dictionaryForm = lookup.dictionaryForm {
+        if let dictionaryForm = lookup.dictionaryForm, !showingLemmaAsHeadword {
             let reading = lookup.dictionaryFormReading ?? dictionaryForm
             let lemmaRomaji = HiraganaRomaji.romanize(reading)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -149,8 +186,20 @@ final class WordDictionaryDetailView: UIView {
             dictionaryFormLabel.isHidden = true
         }
 
-        speechText = (!yomi.isEmpty ? yomi : surface)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        speechText = readingForRomaji.isEmpty ? surface.trimmingCharacters(in: .whitespacesAndNewlines) : readingForRomaji
+
+        let gloss = primary.map { Self.primaryGloss(from: $0) }.flatMap { $0.isEmpty ? nil : $0 }
+        let trimmedSentence = sentence?.trimmingCharacters(in: .whitespacesAndNewlines)
+        saveDraft = SavedVocabularyItem(
+            id: UUID().uuidString,
+            surface: surface.trimmingCharacters(in: .whitespacesAndNewlines),
+            dictionaryForm: lookup.dictionaryForm,
+            reading: readingForRomaji.isEmpty ? nil : readingForRomaji,
+            gloss: gloss,
+            sentence: (trimmedSentence?.isEmpty ?? true) ? nil : trimmedSentence,
+            createdAt: Date()
+        )
+        refreshSaveButton()
 
         rebuildKanjiChips(surface: surface)
         rebuildCompoundContent(surface: surface)
@@ -184,6 +233,10 @@ final class WordDictionaryDetailView: UIView {
             lookup: lookup,
             primaryEntry: primary
         )
+
+#if DEBUG
+        updateKanjiDecompositionButton(for: entries)
+#endif
     }
 
     private static func shouldRequestContextualGloss(
@@ -358,7 +411,6 @@ final class WordDictionaryDetailView: UIView {
         wordContentStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         wordHeaderStack.addArrangedSubview(wordContentStack)
-        wordHeaderStack.addArrangedSubview(speakWordButton)
 
         speakWordButton.setContentHuggingPriority(.required, for: .horizontal)
         speakWordButton.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -370,6 +422,44 @@ final class WordDictionaryDetailView: UIView {
             accessibilityLabel: "Speak word"
         )
         speakWordButton.addTarget(self, action: #selector(speakWordTapped), for: .touchUpInside)
+
+        wordActionsStack.axis = .horizontal
+        wordActionsStack.alignment = .center
+        wordActionsStack.spacing = 10
+        wordActionsStack.setContentHuggingPriority(.required, for: .horizontal)
+        wordActionsStack.setContentCompressionResistancePriority(.required, for: .horizontal)
+        wordActionsStack.addArrangedSubview(speakWordButton)
+
+        saveVocabularyButton.setContentHuggingPriority(.required, for: .horizontal)
+        saveVocabularyButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        Self.configureGlassAudioButton(
+            saveVocabularyButton,
+            glyphView: saveVocabularyGlyphView,
+            symbolName: "folder.badge.plus",
+            glyphPointSize: 20,
+            accessibilityLabel: "Save word"
+        )
+        saveVocabularyButton.accessibilityHint = "Adds this word to a folder"
+        saveVocabularyButton.addTarget(self, action: #selector(saveVocabularyTapped), for: .touchUpInside)
+        saveHaptic.prepare()
+        wordActionsStack.addArrangedSubview(saveVocabularyButton)
+
+#if DEBUG
+        kanjiDecompositionButton.setContentHuggingPriority(.required, for: .horizontal)
+        kanjiDecompositionButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        Self.configureGlassAudioButton(
+            kanjiDecompositionButton,
+            glyphView: kanjiDecompositionGlyphView,
+            symbolName: "puzzlepiece.extension",
+            glyphPointSize: 20,
+            accessibilityLabel: "Kanji decomposition"
+        )
+        kanjiDecompositionButton.accessibilityHint = "Open kanji decomposition cards for this word"
+        kanjiDecompositionButton.addTarget(self, action: #selector(kanjiDecompositionTapped), for: .touchUpInside)
+        kanjiDecompositionButton.isHidden = true
+        wordActionsStack.addArrangedSubview(kanjiDecompositionButton)
+#endif
+        wordHeaderStack.addArrangedSubview(wordActionsStack)
 
         let wordFont: UIFont = {
             let base = UIFont.preferredFont(forTextStyle: .largeTitle)
@@ -567,6 +657,10 @@ final class WordDictionaryDetailView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         speakWordButton.bringSubviewToFront(speakWordGlyphView)
+        saveVocabularyButton.bringSubviewToFront(saveVocabularyGlyphView)
+#if DEBUG
+        kanjiDecompositionButton.bringSubviewToFront(kanjiDecompositionGlyphView)
+#endif
         if !contextualCardContainer.isHidden {
             contextualCardSurface.layer.shadowPath = UIBezierPath(
                 roundedRect: contextualCardSurface.bounds,
@@ -580,6 +674,153 @@ final class WordDictionaryDetailView: UIView {
     @objc private func speakWordTapped() {
         wordSpeaker.speak(speechText)
     }
+
+    @objc private func saveVocabularyTapped() {
+        let surface = lastConfiguredSurface.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !surface.isEmpty, let draft = saveDraft, let presenter = nearestViewController() else { return }
+
+        saveHaptic.impactOccurred()
+        saveHaptic.prepare()
+
+        let sheet = UIAlertController(
+            title: "Save to folder",
+            message: surface,
+            preferredStyle: .actionSheet
+        )
+        for folder in SavedVocabularyStore.shared.folders() {
+            let alreadyInFolder = SavedVocabularyStore.shared.contains(surface: surface, inFolderID: folder.id)
+            let title = alreadyInFolder ? "\(folder.name) (added)" : folder.name
+            sheet.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                self?.saveDraft(draft, toFolderID: folder.id)
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "New folder…", style: .default) { [weak self] _ in
+            self?.promptNewFolder(for: draft)
+        })
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        if let popover = sheet.popoverPresentationController {
+            popover.sourceView = saveVocabularyButton
+            popover.sourceRect = saveVocabularyButton.bounds
+        }
+        presenter.present(sheet, animated: true)
+    }
+
+    private func promptNewFolder(for draft: SavedVocabularyItem) {
+        guard let presenter = nearestViewController() else { return }
+        let alert = UIAlertController(title: "New folder", message: nil, preferredStyle: .alert)
+        alert.addTextField { field in
+            field.placeholder = "Folder name"
+            field.autocapitalizationType = .words
+        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Create", style: .default) { [weak self] _ in
+            let name = alert.textFields?.first?.text ?? ""
+            let folder = SavedVocabularyStore.shared.createFolder(name: name)
+            self?.saveDraft(draft, toFolderID: folder.id)
+        })
+        presenter.present(alert, animated: true)
+    }
+
+    private func saveDraft(_ draft: SavedVocabularyItem, toFolderID folderID: String) {
+        var item = draft
+        item.id = UUID().uuidString
+        item.createdAt = Date()
+        SavedVocabularyStore.shared.save(item, toFolderID: folderID)
+        refreshSaveButton(showConfirmation: true)
+    }
+
+    private func nearestViewController() -> UIViewController? {
+        var responder: UIResponder? = self
+        while let current = responder {
+            if let viewController = current as? UIViewController {
+                return viewController
+            }
+            responder = current.next
+        }
+        return nil
+    }
+
+    private func observeSavedVocabularyChanges() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSavedVocabularyDidChange),
+            name: SavedVocabularyStore.didChangeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleSavedVocabularyDidChange() {
+        guard !isShowingSaveConfirmation else { return }
+        refreshSaveButton()
+    }
+
+    private func refreshSaveButton(showConfirmation: Bool = false) {
+        let surface = lastConfiguredSurface.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isSaved = !surface.isEmpty && SavedVocabularyStore.shared.contains(surface: surface)
+
+        if showConfirmation, isSaved {
+            showSaveConfirmationThenHide()
+            return
+        }
+
+        saveButtonHideTask?.cancel()
+        saveButtonHideTask = nil
+        isShowingSaveConfirmation = false
+        saveVocabularyButton.alpha = 1
+        saveVocabularyButton.isUserInteractionEnabled = true
+        saveVocabularyButton.isHidden = surface.isEmpty || isSaved
+        Self.applyGlyph(
+            saveVocabularyGlyphView,
+            symbolName: "folder.badge.plus",
+            tintColor: Self.audioGlyphColor,
+            glyphPointSize: 20
+        )
+        saveVocabularyButton.accessibilityLabel = "Save word"
+        saveVocabularyButton.accessibilityHint = "Adds this word to a folder"
+    }
+
+    private func showSaveConfirmationThenHide() {
+        saveButtonHideTask?.cancel()
+        isShowingSaveConfirmation = true
+        saveVocabularyButton.alpha = 1
+        saveVocabularyButton.isHidden = false
+        saveVocabularyButton.isUserInteractionEnabled = false
+        Self.applyGlyph(
+            saveVocabularyGlyphView,
+            symbolName: "checkmark",
+            tintColor: .systemBlue,
+            glyphPointSize: 20
+        )
+        saveVocabularyButton.accessibilityLabel = "Saved word"
+        saveVocabularyButton.accessibilityHint = "Adds this word to a folder"
+
+        saveButtonHideTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 850_000_000)
+            guard let self, !Task.isCancelled, self.isShowingSaveConfirmation else { return }
+            self.isShowingSaveConfirmation = false
+            self.saveVocabularyButton.isHidden = true
+            self.saveVocabularyButton.alpha = 1
+            self.saveVocabularyButton.isUserInteractionEnabled = true
+            Self.applyGlyph(
+                self.saveVocabularyGlyphView,
+                symbolName: "folder.badge.plus",
+                tintColor: Self.audioGlyphColor,
+                glyphPointSize: 20
+            )
+        }
+    }
+
+#if DEBUG
+    @objc private func kanjiDecompositionTapped() {
+        onRequestKanjiDecomposition?()
+    }
+
+    private func updateKanjiDecompositionButton(for entries: [JMDictEntry]) {
+        let primary = entries.max { ($0.score ?? 0) < ($1.score ?? 0) } ?? entries.first
+        let canDecompose = primary.map { KanjiDecompositionWord.make(from: $0) != nil } ?? false
+        kanjiDecompositionButton.isHidden = !canDecompose
+    }
+#endif
 
     // MARK: - Content builders
 
@@ -811,11 +1052,7 @@ final class WordDictionaryDetailView: UIView {
         button.translatesAutoresizingMaskIntoConstraints = false
         button.accessibilityLabel = accessibilityLabel
 
-        let symbolConfig = UIImage.SymbolConfiguration(pointSize: glyphPointSize, weight: .semibold)
-        glyphView.image = UIImage(systemName: symbolName, withConfiguration: symbolConfig)?
-            .withRenderingMode(.alwaysTemplate)
-        glyphView.tintColor = audioGlyphColor
-        glyphView.preferredSymbolConfiguration = symbolConfig
+        applyGlyph(glyphView, symbolName: symbolName, tintColor: audioGlyphColor, glyphPointSize: glyphPointSize)
         glyphView.contentMode = .scaleAspectFit
         glyphView.isUserInteractionEnabled = false
         glyphView.translatesAutoresizingMaskIntoConstraints = false
@@ -829,6 +1066,22 @@ final class WordDictionaryDetailView: UIView {
             glyphView.widthAnchor.constraint(equalToConstant: glyphPointSize + 6),
             glyphView.heightAnchor.constraint(equalToConstant: glyphPointSize + 6),
         ])
+    }
+
+    private static func applyGlyph(
+        _ glyphView: UIImageView,
+        symbolName: String,
+        tintColor: UIColor,
+        glyphPointSize: CGFloat
+    ) {
+        let symbolConfig = UIImage.SymbolConfiguration(pointSize: glyphPointSize, weight: .semibold)
+        glyphView.removeAllSymbolEffects()
+        glyphView.preferredSymbolConfiguration = symbolConfig
+        glyphView.tintColor = tintColor
+        UIView.performWithoutAnimation {
+            glyphView.image = UIImage(systemName: symbolName, withConfiguration: symbolConfig)?
+                .withRenderingMode(.alwaysTemplate)
+        }
     }
 
 }

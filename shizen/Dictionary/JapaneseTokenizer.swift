@@ -514,6 +514,26 @@ extension JapaneseTokenizer {
 
     private static let furiganaAnnotationsCache = NSCache<NSString, FuriganaAnnotationsBox>()
 
+    /// Expands kanji via furigana so mixed surfaces become kana (探してます → さがしてます).
+    static func hiraganaReading(for text: String) -> String {
+        let annotations = furiganaAnnotations(for: text)
+            .sorted { $0.range.lowerBound < $1.range.lowerBound }
+        guard !annotations.isEmpty else { return text }
+
+        var result = ""
+        var cursor = text.startIndex
+        for annotation in annotations {
+            guard annotation.range.lowerBound >= cursor,
+                  annotation.range.upperBound <= text.endIndex
+            else { continue }
+            result += text[cursor..<annotation.range.lowerBound]
+            result += annotation.reading
+            cursor = annotation.range.upperBound
+        }
+        result += text[cursor...]
+        return result
+    }
+
     static func furiganaAnnotations(for text: String) -> [FuriganaAnnotation] {
         guard !text.isEmpty else { return [] }
         if mecabInitFailed { return [] }

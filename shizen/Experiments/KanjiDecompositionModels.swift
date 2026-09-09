@@ -43,16 +43,45 @@ struct KanjiDecompositionWord: Hashable {
             entry: entry
         )
     }
+
+    /// Every semicolon-separated gloss across all JMdict senses for this word.
+    /// Higher-score senses come first so the common reading (e.g. 現金 → cash)
+    /// is not dropped when search landed on a figurative sense.
+    var allDefinitionOptions: [String] {
+        var entries = JMDictStore.shared.entries(forSurface: expression)
+        if !entries.contains(where: { $0.id == entry.id }) {
+            entries.insert(entry, at: 0)
+        }
+        entries.sort { ($0.score ?? 0) > ($1.score ?? 0) }
+
+        var seen = Set<String>()
+        var options: [String] = []
+        for sense in entries {
+            for gloss in sense.glossaryParts where seen.insert(gloss).inserted {
+                options.append(gloss)
+            }
+        }
+        return options
+    }
 }
 
 extension JMDictEntry {
     /// First gloss only, e.g. "lightbulb; light bulb" -> "lightbulb".
     var firstGloss: String {
-        glossary
-            .split(separator: ";", maxSplits: 1, omittingEmptySubsequences: true)
-            .first
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            ?? glossary
+        glossaryParts.first ?? glossary
+    }
+
+    /// Individual English glosses from a JMdict sense (`glossary` is `;`-separated).
+    var glossaryParts: [String] {
+        let parts = glossary
+            .split(separator: ";", omittingEmptySubsequences: true)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if parts.isEmpty {
+            let trimmed = glossary.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? [] : [trimmed]
+        }
+        return parts
     }
 }
 

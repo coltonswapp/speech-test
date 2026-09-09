@@ -515,16 +515,100 @@ final class SentenceScrubExperimentViewController: UIViewController {
     @objc private func nuanceButtonTapped() {
         let trimmed = currentSentence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        nuanceCardView.isHidden = false
         beginNuanceLoadIfNeeded()
+        revealNuanceCardIfNeeded()
+    }
+
+    /// Grows the card out of the implied-meaning button so the new section
+    /// is visibly tied to that control, then eases the stack open beneath it.
+    private func revealNuanceCardIfNeeded() {
+        guard nuanceCardView.isHidden else { return }
+
+        var fromTransform = CGAffineTransform.identity
+        UIView.performWithoutAnimation {
+            nuanceCardView.alpha = 0
+            nuanceCardView.isHidden = false
+            view.layoutIfNeeded()
+            fromTransform = nuanceCardTransformFromButton()
+            nuanceCardView.transform = fromTransform
+            nuanceCardView.isHidden = true
+            view.layoutIfNeeded()
+        }
+
+        nuanceCardView.transform = fromTransform
+        nuanceCardView.alpha = 0
+
+        UIView.animate(
+            withDuration: 0.46,
+            delay: 0,
+            usingSpringWithDamping: 0.82,
+            initialSpringVelocity: 0.35,
+            options: [.curveEaseOut, .allowUserInteraction]
+        ) {
+            self.nuanceCardView.isHidden = false
+            self.nuanceCardView.alpha = 1
+            self.nuanceCardView.transform = .identity
+            self.view.layoutIfNeeded()
+        }
+
+        UIView.animate(
+            withDuration: 0.16,
+            delay: 0,
+            options: [.curveEaseOut, .allowUserInteraction, .beginFromCurrentState]
+        ) {
+            self.nuanceButton.transform = CGAffineTransform(scaleX: 0.86, y: 0.86)
+        } completion: { _ in
+            UIView.animate(
+                withDuration: 0.38,
+                delay: 0,
+                usingSpringWithDamping: 0.55,
+                initialSpringVelocity: 0.9,
+                options: [.allowUserInteraction]
+            ) {
+                self.nuanceButton.transform = .identity
+            }
+        }
+    }
+
+    private func animateNuanceCardLayoutIfVisible() {
+        guard !nuanceCardView.isHidden else { return }
+        UIView.animate(
+            withDuration: 0.28,
+            delay: 0,
+            usingSpringWithDamping: 0.9,
+            initialSpringVelocity: 0.15,
+            options: [.allowUserInteraction, .beginFromCurrentState]
+        ) {
+            self.view.layoutIfNeeded()
+        }
+    }
+
+    private func nuanceCardTransformFromButton() -> CGAffineTransform {
+        let buttonCenter = nuanceButton.convert(
+            CGPoint(x: nuanceButton.bounds.midX, y: nuanceButton.bounds.midY),
+            to: nuanceCardView.superview
+        )
+        let cardFrame = nuanceCardView.frame
+        let cardCenter = CGPoint(x: cardFrame.midX, y: cardFrame.midY)
+        let scaleX = min(1, max(0.16, nuanceButton.bounds.width / max(cardFrame.width, 1)))
+        let scaleY = min(1, max(0.16, nuanceButton.bounds.height / max(cardFrame.height, 1)))
+        return CGAffineTransform(
+            translationX: buttonCenter.x - cardCenter.x,
+            y: buttonCenter.y - cardCenter.y
+        ).scaledBy(x: scaleX, y: scaleY)
     }
 
     private func resetNuanceCard() {
         nuanceLoadTask?.cancel()
         nuanceLoadTask = nil
         nuanceLoadRequest = nil
+        nuanceCardView.layer.removeAllAnimations()
+        nuanceCardView.transform = .identity
+        nuanceCardView.alpha = 1
         nuanceCardView.apply(.loading)
         nuanceCardView.isHidden = true
+        nuanceButton.layer.removeAllAnimations()
+        nuanceButton.transform = .identity
     }
 
     private func beginNuanceLoadIfNeeded() {
@@ -546,6 +630,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
             if let cached = await GeminiDialogueNuance.cachedResult(for: request) {
                 guard !Task.isCancelled else { return }
                 self.nuanceCardView.apply(.result(cached))
+                self.animateNuanceCardLayoutIfVisible()
                 return
             }
 
@@ -554,11 +639,13 @@ final class SentenceScrubExperimentViewController: UIViewController {
                 let result = try await GeminiDialogueNuance.explain(request)
                 guard !Task.isCancelled else { return }
                 self.nuanceCardView.apply(.result(result))
+                self.animateNuanceCardLayoutIfVisible()
             } catch {
                 guard !Task.isCancelled else { return }
                 let message = (error as? LocalizedError)?.errorDescription
                     ?? error.localizedDescription
                 self.nuanceCardView.apply(.failed(message))
+                self.animateNuanceCardLayoutIfVisible()
             }
         }
     }

@@ -38,7 +38,9 @@ final class KanjiDecompositionPagerViewController: UIViewController {
     private var badgeLongPressGesture: UILongPressGestureRecognizer?
     private var badgePanGesture: UIPanGestureRecognizer?
     private var exportBarButton: UIBarButtonItem?
-    private var introPartLabel = "Kanji is literal, part 1"
+    private var introPartLabel = KanjiDecompositionPartLabelStore.nextPartLabel()
+    /// Session-only override for the final gloss on the last slide.
+    private var definitionOverride: String?
     private var selectedExportSize: KanjiDecompositionExportSize = .story {
         didSet {
             guard selectedExportSize != oldValue else { return }
@@ -79,6 +81,7 @@ final class KanjiDecompositionPagerViewController: UIViewController {
         installPageViewController()
         installControls()
         installBadgeLayoutGestures()
+        installFinalDefinitionEditGesture()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -129,13 +132,64 @@ final class KanjiDecompositionPagerViewController: UIViewController {
                 badgeLayoutStore: badgeLayoutStore,
                 makeCardView: {
                     let cardView = KanjiDecompositionCombinedCardView()
-                    cardView.configure(word: self.word)
+                    cardView.configure(word: self.word, meaningOverride: self.definitionOverride)
                     return cardView
                 }
             )
         )
 
         return result
+    }
+
+    private func installFinalDefinitionEditGesture() {
+        // Only the combined “final reveal” slide has the definition label.
+        guard
+            let combined = pages.first(where: { $0.cardView is KanjiDecompositionCombinedCardView })?
+                .cardView as? KanjiDecompositionCombinedCardView
+        else { return }
+
+        combined.installMeaningTapGesture(target: self, action: #selector(handleFinalDefinitionTap(_:)))
+    }
+
+    private var effectiveFinalDefinitionText: String {
+        definitionOverride ?? word.entry.firstGloss
+    }
+
+    private func applyFinalDefinitionOverrideToCards() {
+        let text = effectiveFinalDefinitionText
+        for page in pages {
+            guard let combined = page.cardView as? KanjiDecompositionCombinedCardView else { continue }
+            combined.applyMeaningText(text)
+        }
+    }
+
+    @objc private func handleFinalDefinitionTap(_ gesture: UITapGestureRecognizer) {
+        guard !isPositioningBadges else { return }
+
+        let currentText = effectiveFinalDefinitionText
+
+        let options = word.allDefinitionOptions
+        let picker = KanjiDecompositionFinalDefinitionPickerViewController(
+            definitions: options,
+            selectedDefinition: currentText
+        )
+        picker.onSave = { [weak self] chosen in
+            guard let self else { return }
+            if let chosen {
+                self.definitionOverride = (chosen == self.word.entry.firstGloss) ? nil : chosen
+            } else {
+                self.definitionOverride = nil
+            }
+            self.applyFinalDefinitionOverrideToCards()
+        }
+
+        let nav = UINavigationController(rootViewController: picker)
+        nav.modalPresentationStyle = .pageSheet
+        if let sheet = nav.sheetPresentationController {
+            sheet.detents = [.medium(), .large()]
+            sheet.prefersGrabberVisible = true
+        }
+        present(nav, animated: true)
     }
 
     private func installPageViewController() {
@@ -302,6 +356,7 @@ final class KanjiDecompositionPagerViewController: UIViewController {
         guard pendingPhotoSaves <= 0 else { return }
 
         if photoSaveErrors.isEmpty {
+            KanjiDecompositionPartLabelStore.recordExport(from: introPartLabel)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } else {
             let savedCount = photoSaveTotal - photoSaveErrors.count

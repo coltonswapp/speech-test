@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct KanjiSpotlightSubject: Hashable {
+struct KanjiSpotlightSubject: Hashable, @unchecked Sendable {
     let character: String
     let detail: KanjidicDetail
 
@@ -42,14 +42,17 @@ struct KanjiSpotlightSubject: Hashable {
 }
 
 /// One hand-picked showcase entry for a spotlight deck.
-struct KanjiSpotlightShowcaseItem: Hashable {
-    enum Kind: Hashable {
+struct KanjiSpotlightShowcaseItem: Hashable, @unchecked Sendable {
+    enum Kind: Hashable, Sendable {
         case compound
         case verb
     }
 
     let entry: JMDictEntry
     let kind: Kind
+
+    /// Stable diffable-data-source identity (avoids MainActor-isolated Hashable issues).
+    var itemID: String { "\(kind)-\(entry.sequence)-\(entry.expression)" }
 
     var expression: String { entry.expression }
     var reading: String { entry.displayReading }
@@ -67,13 +70,13 @@ struct KanjiSpotlightShowcaseItem: Hashable {
         return "\(kana) · \(romanized)"
     }
 
-    static func == (lhs: KanjiSpotlightShowcaseItem, rhs: KanjiSpotlightShowcaseItem) -> Bool {
+    nonisolated static func == (lhs: KanjiSpotlightShowcaseItem, rhs: KanjiSpotlightShowcaseItem) -> Bool {
         lhs.entry.sequence == rhs.entry.sequence
             && lhs.entry.expression == rhs.entry.expression
             && lhs.kind == rhs.kind
     }
 
-    func hash(into hasher: inout Hasher) {
+    nonisolated func hash(into hasher: inout Hasher) {
         hasher.combine(entry.sequence)
         hasher.combine(entry.expression)
         hasher.combine(kind)
@@ -82,7 +85,7 @@ struct KanjiSpotlightShowcaseItem: Hashable {
 
 final class KanjiSpotlightDeck {
     let subject: KanjiSpotlightSubject
-    /// Ordered curator picks (compounds then verbs as selected).
+    /// Curator picks in slide order.
     private(set) var items: [KanjiSpotlightShowcaseItem]
 
     init(subject: KanjiSpotlightSubject, items: [KanjiSpotlightShowcaseItem]) {

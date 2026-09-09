@@ -14,7 +14,7 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
 
     private var compoundCandidates: [KanjiSpotlightShowcaseItem] = []
     private var verbCandidates: [KanjiSpotlightShowcaseItem] = []
-    /// Selected items in tap order (compounds and verbs interleaved by selection).
+    /// Selected items in deck / slide order (compounds and verbs interleaved).
     private var selectedInOrder: [KanjiSpotlightShowcaseItem] = []
 
     private var collectionView: UICollectionView!
@@ -29,7 +29,7 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
 
     /// Distinct row IDs so the same showcase item can appear in Selected and
     /// in the candidate lists at the same time.
-    private enum Row: Hashable {
+    private nonisolated enum Row: Hashable, Sendable {
         case selected(KanjiSpotlightShowcaseItem)
         case compound(KanjiSpotlightShowcaseItem)
         case verb(KanjiSpotlightShowcaseItem)
@@ -80,6 +80,7 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
         collectionView = UICollectionView(frame: view.bounds, collectionViewLayout: layout)
         collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         collectionView.delegate = self
+        collectionView.dragInteractionEnabled = true
         view.addSubview(collectionView)
 
         let cellRegistration = UICollectionView.CellRegistration<UICollectionViewListCell, Row> {
@@ -96,7 +97,7 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
                 configuration.secondaryText = item.gloss
                 configuration.secondaryTextProperties.color = .secondaryLabel
                 configuration.secondaryTextProperties.numberOfLines = 2
-                cell.accessories = [.checkmark()]
+                cell.accessories = [.reorder(displayed: .always), .checkmark()]
             case .compound, .verb:
                 configuration.text = "\(item.expression)  \(item.readingLine)"
                 configuration.textProperties.font = .preferredFont(forTextStyle: .body)
@@ -129,7 +130,7 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
             switch section {
             case .selected:
                 configuration.text = "Selected"
-                configuration.secondaryText = "Deck order · tap to remove"
+                configuration.secondaryText = "Deck order · drag to reorder · tap to remove"
             case .compounds:
                 configuration.text = "Compounds"
                 configuration.secondaryText = "Pick 2–3 with distinct readings"
@@ -162,7 +163,7 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
             case .compounds:
                 let selected = self.selectedInOrder.filter { $0.kind == .compound }.count
                 configuration.text =
-                    "Selected \(selected)/\(KanjiSpotlightCatalog.maxCompounds). Order is tap order."
+                    "Selected \(selected)/\(KanjiSpotlightCatalog.maxCompounds)."
             case .verbs:
                 let selected = self.selectedInOrder.filter { $0.kind == .verb }.count
                 configuration.text =
@@ -184,6 +185,18 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
                 using: footerRegistration,
                 for: indexPath
             )
+        }
+
+        dataSource.reorderingHandlers.canReorderItem = { row in
+            if case .selected = row { return true }
+            return false
+        }
+        dataSource.reorderingHandlers.didReorder = { [weak self] transaction in
+            guard let self else { return }
+            self.selectedInOrder = transaction.finalSnapshot
+                .itemIdentifiers(inSection: .selected)
+                .map(\.item)
+            self.reconfigureSelectedRows()
         }
     }
 
@@ -214,6 +227,24 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
         snapshot.appendItems(selectedInOrder.map(Row.selected), toSection: .selected)
         snapshot.appendItems(compoundCandidates.map(Row.compound), toSection: .compounds)
         snapshot.appendItems(verbCandidates.map(Row.verb), toSection: .verbs)
+        dataSource.apply(snapshot, animatingDifferences: false)
+
+        // Candidate row IDs do not change when selection does, so mark them
+        // (and Selected, for the 1./2. prefixes) for reconfiguration.
+        var visible = dataSource.snapshot()
+        let stale = visible.itemIdentifiers(inSection: .selected)
+            + visible.itemIdentifiers(inSection: .compounds)
+            + visible.itemIdentifiers(inSection: .verbs)
+        guard !stale.isEmpty else { return }
+        visible.reconfigureItems(stale)
+        dataSource.apply(visible, animatingDifferences: false)
+    }
+
+    private func reconfigureSelectedRows() {
+        var snapshot = dataSource.snapshot()
+        let selectedRows = snapshot.itemIdentifiers(inSection: .selected)
+        guard !selectedRows.isEmpty else { return }
+        snapshot.reconfigureItems(selectedRows)
         dataSource.apply(snapshot, animatingDifferences: false)
     }
 
@@ -261,5 +292,21 @@ extension KanjiSpotlightCuratorViewController: UICollectionViewDelegate {
         guard let row = dataSource.itemIdentifier(for: indexPath) else { return }
         toggleSelection(row.item)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
+        targetIndexPathForMoveOfItemFromOriginalIndexPath originalIndexPath: IndexPath,
+        atCurrentIndexPath currentIndexPath: IndexPath,
+        toProposedIndexPath proposedIndexPath: IndexPath
+    ) -> IndexPath {
+        let selectedSection = Section.selected.rawValue
+        guard originalIndexPath.section == selectedSection else { return originalIndexPath }
+        guard proposedIndexPath.section == selectedSection else {
+            let count = collectionView.numberOfItems(inSection: selectedSection)
+            let clampedItem = min(max(proposedIndexPath.item, 0), max(count - 1, 0))
+            return IndexPath(item: clampedItem, section: selectedSection)
+        }
+        return proposedIndexPath
     }
 }

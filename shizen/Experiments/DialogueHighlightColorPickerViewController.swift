@@ -2,8 +2,8 @@
 //  DialogueHighlightColorPickerViewController.swift
 //  shizen
 //
-//  Sheet of left/right highlight presets for Dialogue Recording, with a live
-//  example of underglow + token karaoke on each side.
+//  Sheet of left/right color presets for Dialogue Recording. Glass previews
+//  underglow + token karaoke; Messages previews solid fills, tails, and karaoke.
 //
 
 import UIKit
@@ -14,12 +14,17 @@ final class DialogueHighlightColorPickerViewController: UIViewController {
 
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
+    private let introLabel = UILabel()
+    private let styleControl = UISegmentedControl(
+        items: DialogueContentBubbleStyle.allCases.map(\.title)
+    )
     private let previewCard = UIView()
     private let previewStack = UIStackView()
     private var leadingBubble: DialogueJapaneseBubbleView!
     private var trailingBubble: DialogueJapaneseBubbleView!
     private let presetStack = UIStackView()
     private var presetButtons: [UIButton] = []
+    private var previewStyle: DialogueContentBubbleStyle = ExperimentSettings.dialogueContentBubbleStyle
 
     private static let leadingSample = "駅はどこですか？"
     private static let trailingSample = "まっすぐ行ってください。"
@@ -41,6 +46,7 @@ final class DialogueHighlightColorPickerViewController: UIViewController {
         rebuildPresetButtons()
         refreshPreview()
         refreshPresetSelection()
+        refreshIntro()
     }
 
     private func configureLayout() {
@@ -55,11 +61,13 @@ final class DialogueHighlightColorPickerViewController: UIViewController {
         contentStack.layoutMargins = UIEdgeInsets(top: 12, left: 20, bottom: 28, right: 20)
         scrollView.addSubview(contentStack)
 
-        let intro = UILabel()
-        intro.font = .preferredFont(forTextStyle: .subheadline)
-        intro.textColor = .secondaryLabel
-        intro.numberOfLines = 0
-        intro.text = "Pick a preset for each side’s underglow and spoken-word highlight."
+        introLabel.font = .preferredFont(forTextStyle: .subheadline)
+        introLabel.textColor = .secondaryLabel
+        introLabel.numberOfLines = 0
+
+        styleControl.selectedSegmentIndex = DialogueContentBubbleStyle.allCases
+            .firstIndex(of: previewStyle) ?? 0
+        styleControl.addTarget(self, action: #selector(styleChanged), for: .valueChanged)
 
         configurePreviewCard()
 
@@ -70,7 +78,8 @@ final class DialogueHighlightColorPickerViewController: UIViewController {
         presetStack.axis = .vertical
         presetStack.spacing = 10
 
-        contentStack.addArrangedSubview(intro)
+        contentStack.addArrangedSubview(introLabel)
+        contentStack.addArrangedSubview(styleControl)
         contentStack.addArrangedSubview(previewCard)
         contentStack.addArrangedSubview(presetsHeader)
         contentStack.addArrangedSubview(presetStack)
@@ -178,42 +187,86 @@ final class DialogueHighlightColorPickerViewController: UIViewController {
             textColor: .label
         )
         let bubble = DialogueJapaneseBubbleView(label: label)
-        bubble.setBackgroundStyle(.glass)
-        bubble.setTailEdge(.none)
-        bubble.setEmphasis(1)
-        bubble.setUnderglowConfiguration(.forSpeaker(side))
-        applySampleHighlight(on: bubble, text: text, highlight: highlight, side: side)
+        applyChrome(to: bubble, text: text, highlight: highlight, side: side)
         return bubble
+    }
+
+    private func applyChrome(
+        to bubble: DialogueJapaneseBubbleView,
+        text: String,
+        highlight: String,
+        side: DialogueSpeakerSide
+    ) {
+        let textColor: UIColor
+        let highlightColor: UIColor
+        switch previewStyle {
+        case .glass:
+            bubble.setTailEdge(.none)
+            bubble.setSolidFillStaysVisible(false)
+            bubble.setBackgroundStyle(.glass)
+            bubble.setUnderglowConfiguration(.forSpeaker(side))
+            textColor = .label
+            highlightColor = ExperimentSettings.dialogueHighlightColor(for: side).tokenHighlightUIColor
+        case .messages:
+            let color = ExperimentSettings.dialogueMessageColor(for: side)
+            bubble.setBackgroundStyle(.solid)
+            bubble.setSolidFillStaysVisible(true)
+            bubble.setSolidFillColor(color.messageFillUIColor)
+            bubble.setTailEdge(side == .leading ? .leading : .trailing)
+            textColor = color.messageTextUIColor
+            highlightColor = color.messageTokenHighlightUIColor
+        }
+        bubble.setEmphasis(1)
+        JapaneseFuriganaBuilder.applyDialogueBubbleDisplay(
+            to: bubble.label,
+            text: text,
+            font: Self.sampleFont,
+            textColor: textColor
+        )
+        applySampleHighlight(
+            on: bubble,
+            text: text,
+            highlight: highlight,
+            textColor: textColor,
+            highlightColor: highlightColor
+        )
     }
 
     private func applySampleHighlight(
         on bubble: DialogueJapaneseBubbleView,
         text: String,
         highlight: String,
-        side: DialogueSpeakerSide
+        textColor: UIColor,
+        highlightColor: UIColor
     ) {
         let nsText = text as NSString
         let range = nsText.range(of: highlight)
         guard range.location != NSNotFound else { return }
         bubble.label.setTokenHighlightPreservingLayout(
-            foregroundColor: .label,
+            foregroundColor: textColor,
             highlightedRange: range,
             fullHeight: ExperimentSettings.dialogueTokenSyncHighlightStyle == .full,
-            highlightColor: ExperimentSettings.dialogueHighlightColor(for: side).tokenHighlightUIColor
+            highlightColor: highlightColor
         )
     }
 
     private func rebuildPresetButtons() {
         presetButtons.forEach { $0.removeFromSuperview() }
         presetButtons = []
-        for preset in DialogueHighlightColorPreset.allCases {
-            let button = makePresetButton(for: preset)
+        for (index, preset) in currentPresets.enumerated() {
+            let button = makePresetButton(title: preset.title, subtitle: preset.subtitle, leading: preset.leading, trailing: preset.trailing, tag: index)
             presetStack.addArrangedSubview(button)
             presetButtons.append(button)
         }
     }
 
-    private func makePresetButton(for preset: DialogueHighlightColorPreset) -> UIButton {
+    private func makePresetButton(
+        title: String,
+        subtitle: String,
+        leading: DialogueBubbleUnderglowColor,
+        trailing: DialogueBubbleUnderglowColor,
+        tag: Int
+    ) -> UIButton {
         var config = UIButton.Configuration.plain()
         config.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 72)
         config.background.cornerRadius = 16
@@ -221,13 +274,13 @@ final class DialogueHighlightColorPickerViewController: UIViewController {
         config.baseForegroundColor = .label
 
         config.attributedTitle = AttributedString(
-            preset.title,
+            title,
             attributes: AttributeContainer([
                 .font: UIFont.preferredFont(forTextStyle: .body).withWeight(.semibold),
             ])
         )
         config.attributedSubtitle = AttributedString(
-            preset.subtitle,
+            subtitle,
             attributes: AttributeContainer([
                 .font: UIFont.preferredFont(forTextStyle: .caption1),
                 .foregroundColor: UIColor.secondaryLabel,
@@ -242,11 +295,11 @@ final class DialogueHighlightColorPickerViewController: UIViewController {
         button.layer.borderWidth = ExperimentCardStroke.normalWidth
         button.layer.borderColor = ExperimentPalette.cardBorder.cgColor
         button.contentHorizontalAlignment = .leading
-        button.tag = DialogueHighlightColorPreset.allCases.firstIndex(of: preset) ?? 0
+        button.tag = tag
         button.addTarget(self, action: #selector(presetTapped(_:)), for: .touchUpInside)
-        button.accessibilityLabel = "\(preset.title), \(preset.subtitle)"
+        button.accessibilityLabel = "\(title), \(subtitle)"
 
-        let swatches = makeSwatchPair(leading: preset.leading, trailing: preset.trailing)
+        let swatches = makeSwatchPair(leading: leading, trailing: trailing)
         swatches.translatesAutoresizingMaskIntoConstraints = false
         swatches.isUserInteractionEnabled = false
         button.addSubview(swatches)
@@ -262,13 +315,20 @@ final class DialogueHighlightColorPickerViewController: UIViewController {
         leading: DialogueBubbleUnderglowColor,
         trailing: DialogueBubbleUnderglowColor
     ) -> UIView {
-        let leadingDot = makeSwatch(color: leading.uiColor)
-        let trailingDot = makeSwatch(color: trailing.uiColor)
+        let leadingDot = makeSwatch(color: swatchColor(for: leading))
+        let trailingDot = makeSwatch(color: swatchColor(for: trailing))
         let stack = UIStackView(arrangedSubviews: [leadingDot, trailingDot])
         stack.axis = .horizontal
         stack.spacing = 8
         stack.alignment = .center
         return stack
+    }
+
+    private func swatchColor(for color: DialogueBubbleUnderglowColor) -> UIColor {
+        switch previewStyle {
+        case .glass: return color.uiColor
+        case .messages: return color == .gray ? color.uiColor : color.messageFillUIColor
+        }
     }
 
     private func makeSwatch(color: UIColor) -> UIView {
@@ -286,17 +346,37 @@ final class DialogueHighlightColorPickerViewController: UIViewController {
         return view
     }
 
+    private var currentPresets: [(title: String, subtitle: String, leading: DialogueBubbleUnderglowColor, trailing: DialogueBubbleUnderglowColor)] {
+        switch previewStyle {
+        case .glass:
+            return DialogueHighlightColorPreset.allCases.map {
+                ($0.title, $0.subtitle, $0.leading, $0.trailing)
+            }
+        case .messages:
+            return DialogueMessageColorPreset.allCases.map {
+                ($0.title, $0.subtitle, $0.leading, $0.trailing)
+            }
+        }
+    }
+
+    private func refreshIntro() {
+        switch previewStyle {
+        case .glass:
+            introLabel.text = "Pick a preset for each side’s underglow and spoken-word highlight."
+        case .messages:
+            introLabel.text = "Pick a preset for each side’s bubble color and spoken-word highlight."
+        }
+    }
+
     private func refreshPreview() {
-        leadingBubble.setUnderglowConfiguration(.forSpeaker(.leading))
-        trailingBubble.setUnderglowConfiguration(.forSpeaker(.trailing))
-        applySampleHighlight(
-            on: leadingBubble,
+        applyChrome(
+            to: leadingBubble,
             text: Self.leadingSample,
             highlight: Self.leadingHighlight,
             side: .leading
         )
-        applySampleHighlight(
-            on: trailingBubble,
+        applyChrome(
+            to: trailingBubble,
             text: Self.trailingSample,
             highlight: Self.trailingHighlight,
             side: .trailing
@@ -304,13 +384,21 @@ final class DialogueHighlightColorPickerViewController: UIViewController {
     }
 
     private func refreshPresetSelection() {
-        let selected = DialogueHighlightColorPreset.matching(
-            leading: ExperimentSettings.dialogueHighlightLeadingColor,
-            trailing: ExperimentSettings.dialogueHighlightTrailingColor
-        )
+        let selectedIndex: Int?
+        switch previewStyle {
+        case .glass:
+            selectedIndex = DialogueHighlightColorPreset.matching(
+                leading: ExperimentSettings.dialogueHighlightLeadingColor,
+                trailing: ExperimentSettings.dialogueHighlightTrailingColor
+            ).flatMap { DialogueHighlightColorPreset.allCases.firstIndex(of: $0) }
+        case .messages:
+            selectedIndex = DialogueMessageColorPreset.matching(
+                leading: ExperimentSettings.dialogueMessageLeadingColor,
+                trailing: ExperimentSettings.dialogueMessageTrailingColor
+            ).flatMap { DialogueMessageColorPreset.allCases.firstIndex(of: $0) }
+        }
         for (index, button) in presetButtons.enumerated() {
-            let preset = DialogueHighlightColorPreset.allCases[index]
-            let isOn = preset == selected
+            let isOn = index == selectedIndex
             button.layer.borderWidth = isOn
                 ? ExperimentCardStroke.emphasisWidth
                 : ExperimentCardStroke.normalWidth
@@ -321,10 +409,28 @@ final class DialogueHighlightColorPickerViewController: UIViewController {
         }
     }
 
+    @objc private func styleChanged() {
+        let styles = DialogueContentBubbleStyle.allCases
+        guard styles.indices.contains(styleControl.selectedSegmentIndex) else { return }
+        previewStyle = styles[styleControl.selectedSegmentIndex]
+        UISelectionFeedbackGenerator().selectionChanged()
+        refreshIntro()
+        rebuildPresetButtons()
+        refreshPreview()
+        refreshPresetSelection()
+    }
+
     @objc private func presetTapped(_ sender: UIButton) {
-        let presets = DialogueHighlightColorPreset.allCases
-        guard presets.indices.contains(sender.tag) else { return }
-        ExperimentSettings.applyDialogueHighlightPreset(presets[sender.tag])
+        switch previewStyle {
+        case .glass:
+            let presets = DialogueHighlightColorPreset.allCases
+            guard presets.indices.contains(sender.tag) else { return }
+            ExperimentSettings.applyDialogueHighlightPreset(presets[sender.tag])
+        case .messages:
+            let presets = DialogueMessageColorPreset.allCases
+            guard presets.indices.contains(sender.tag) else { return }
+            ExperimentSettings.applyDialogueMessageColorPreset(presets[sender.tag])
+        }
         UISelectionFeedbackGenerator().selectionChanged()
         refreshPreview()
         refreshPresetSelection()

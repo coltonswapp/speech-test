@@ -48,7 +48,7 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
     public var onProgressiveRevealCommit: (() -> Void)?
 
     /// When false, rightward pans are ignored (no expand / sentence focus).
-    var allowsExpand = true {
+    public var allowsExpand = true {
         didSet {
             updateAccessibilityHint()
         }
@@ -62,17 +62,17 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
     }
 
     /// Symbol shown while swiping left. Defaults to reveal-mode sparkles.
-    var progressiveRevealSymbolName = "sparkles" {
+    public var progressiveRevealSymbolName = "sparkles" {
         didSet {
             applyProgressiveRevealSymbol()
         }
     }
 
     /// Color the right-swipe icon interpolates toward at commit.
-    var expandActiveColor = UIColor.systemBlue
+    public var expandActiveColor = UIColor.systemBlue
 
     /// Symbol shown while swiping right. Defaults to sentence-focus magnifying glass.
-    var expandSymbolName = "magnifyingglass" {
+    public var expandSymbolName = "magnifyingglass" {
         didSet {
             applyExpandSymbol()
         }
@@ -80,7 +80,7 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
 
     /// When true, a right-swipe commit snaps back instead of staying offset
     /// (used when the action is not a push, e.g. Role Play checkmark).
-    var expandResetsAfterCommit = false
+    public var expandResetsAfterCommit = false
 
     /// After a focus push, hold the offset briefly then snap back so the bubble
     /// is centered again when the user returns from sentence scrub.
@@ -90,20 +90,20 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
     /// When true, a left-swipe commit snaps back. When false, the affordance
     /// stays exposed until `reset` (Role Play keeps the speaker icon up while
     /// the line plays).
-    var progressiveRevealResetsAfterCommit = true
+    public var progressiveRevealResetsAfterCommit = true
 
     /// Replaces the default “focus this sentence” hint when right-swipe means something else.
-    var expandAccessibilityHint: String? {
+    public var expandAccessibilityHint: String? {
         didSet {
             updateAccessibilityHint()
         }
     }
 
     /// Color the left-swipe icon interpolates toward at commit.
-    var progressiveRevealActiveColor = UIColor.systemYellow
+    public var progressiveRevealActiveColor = UIColor.systemYellow
 
     /// Replaces the default “reveal more” hint when left-swipe means something else.
-    var progressiveRevealAccessibilityHint: String? {
+    public var progressiveRevealAccessibilityHint: String? {
         didSet {
             updateAccessibilityHint()
         }
@@ -116,7 +116,7 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
 
     /// Leading-edge status chrome (Role Play microphone / completion check).
     /// Moves with the bubble so a left-swipe replay carries it along.
-    enum LeadingAccessory: Equatable {
+    public enum LeadingAccessory: Equatable {
         case hidden
         case microphone
         case microphoneOff
@@ -124,35 +124,35 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
     }
 
     /// Trailing-edge Hear chrome on revealed Role Play lines.
-    enum TrailingAccessory: Equatable {
+    public enum TrailingAccessory: Equatable {
         case hidden
         case speaker
     }
 
     /// Cluster Hear (and Role Play mic) on the inner edge of the bubble,
     /// bottom-aligned with the speaker label.
-    enum ChromeEdge {
+    public enum ChromeEdge {
         case leading
         case trailing
     }
 
-    var chromeEdge: ChromeEdge = .trailing {
+    public var chromeEdge: ChromeEdge = .trailing {
         didSet {
             guard oldValue != chromeEdge else { return }
             updateChromeEdgeConstraints()
         }
     }
 
-    private(set) var leadingAccessory: LeadingAccessory = .hidden
-    private(set) var trailingAccessory: TrailingAccessory = .hidden
+    public private(set) var leadingAccessory: LeadingAccessory = .hidden
+    public private(set) var trailingAccessory: TrailingAccessory = .hidden
 
-    var leadingAccessoryActiveColor = UIColor.systemBlue
-    var trailingAccessoryActiveColor = UIColor.systemYellow
-    var onTrailingAccessoryTap: (() -> Void)?
+    public var leadingAccessoryActiveColor = UIColor.systemBlue
+    public var trailingAccessoryActiveColor = UIColor.systemYellow
+    public var onTrailingAccessoryTap: (() -> Void)?
 
     /// Diameter of Role Play mic / Hear chrome. Hosts use this to keep
     /// inter-row spacing from clipping the buttons that sit above the bubble.
-    static let accessoryChromeSize: CGFloat = 38
+    public static let accessoryChromeSize: CGFloat = 38
     private static var chromeButtonSize: CGFloat { accessoryChromeSize }
     private static let chromeIconSize: CGFloat = 19
     private static let chromeSpacing: CGFloat = 6
@@ -320,11 +320,11 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
         updateAccessibilityHint()
     }
 
-    required init?(coder: NSCoder) {
+    public required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func setLeadingAccessory(_ style: LeadingAccessory, animated: Bool, bounce: Bool = false) {
+    public func setLeadingAccessory(_ style: LeadingAccessory, animated: Bool, bounce: Bool = false) {
         let previous = leadingAccessory
         let styleChanged = previous != style
         leadingAccessory = style
@@ -339,7 +339,7 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
         }
     }
 
-    func setLeadingAccessoryPulse(_ on: Bool) {
+    public func setLeadingAccessoryPulse(_ on: Bool) {
         let key = "leadingAccessoryPulse"
         if on, leadingAccessory == .microphone {
             guard leadingAccessoryIcon.layer.animation(forKey: key) == nil else { return }
@@ -359,7 +359,7 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
         }
     }
 
-    func setTrailingAccessory(_ style: TrailingAccessory, animated: Bool) {
+    public func setTrailingAccessory(_ style: TrailingAccessory, animated: Bool) {
         let styleChanged = trailingAccessory != style
         trailingAccessory = style
         guard styleChanged else { return }
@@ -377,12 +377,12 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
     }
 
     /// Host-applied emphasis (scale / edge-plant). Swipe translation is layered on top.
-    func setBaseBubbleTransform(_ transform: CGAffineTransform) {
+    public func setBaseBubbleTransform(_ transform: CGAffineTransform) {
         baseBubbleTransform = transform
         applyComposedBubbleTransform()
     }
 
-    func reset(animated: Bool, completion: (() -> Void)? = nil) {
+    public func reset(animated: Bool, completion: (() -> Void)? = nil) {
         expandResetGeneration += 1
         isCommitted = false
         if Self.committedContainer === self {
@@ -627,7 +627,7 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
     /// The speaker label must already share a hierarchy with this container
     /// (e.g. both in the message column) before calling — activating a
     /// cross-hierarchy constraint crashes Auto Layout.
-    func alignChromeBottom(to speakerLabel: UIView?) {
+    public func alignChromeBottom(to speakerLabel: UIView?) {
         NSLayoutConstraint.deactivate(chromeBottomConstraints)
         let anchor: NSLayoutYAxisAnchor
         if let speakerLabel, Self.sharesCommonAncestor(speakerLabel, with: self) {
@@ -723,12 +723,12 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
         }
     }
 
-    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+    public override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         if super.point(inside: point, with: event) { return true }
         return chromeContains(point)
     }
 
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+    public override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         if trailingAccessory != .hidden, trailingAccessoryButton.isUserInteractionEnabled,
            trailingAccessoryContains(point) {
             let local = trailingAccessoryButton.convert(point, from: self)
@@ -994,10 +994,18 @@ private extension UIColor {
 /// Full-width dialogue row. Role Play chrome can sit above the bubble (aligned
 /// with the speaker label), so the row forwards hits that land outside the
 /// bubble bounds into the swipe container.
-final class DialogueLineRowView: UIView {
-    weak var swipeContainer: DialogueBubbleSwipeRevealContainer?
+public final class DialogueLineRowView: UIView {
+    public weak var swipeContainer: DialogueBubbleSwipeRevealContainer?
 
-    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+    public override init(frame: CGRect) {
+        super.init(frame: frame)
+    }
+
+    public required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
+    public override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         if super.point(inside: point, with: event) { return true }
         if let swipeContainer {
             let converted = swipeContainer.convert(point, from: self)
@@ -1006,7 +1014,7 @@ final class DialogueLineRowView: UIView {
         return bounds.insetBy(dx: -48, dy: 0).contains(point)
     }
 
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+    public override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         if let swipeContainer {
             let converted = swipeContainer.convert(point, from: self)
             if let hit = swipeContainer.hitTest(converted, with: event) {

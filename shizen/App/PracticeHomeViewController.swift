@@ -2,8 +2,8 @@
 //  PracticeHomeViewController.swift
 //  shizen
 //
-//  Practice tab: daily frequency card (mirrors Daily Dialogue) + flashcard
-//  stack previews. Placeholder data until review engines wire in.
+//  Practice tab: daily frequency card (mirrors Daily Dialogue) + live
+//  vocabulary folders. Tapping a stack opens its word list.
 //
 
 import UIKit
@@ -19,41 +19,6 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
 
     private static let horizontalInset: CGFloat = 16
 
-    private static let placeholderDecks: [PracticeDeckPreview] = [
-        PracticeDeckPreview(
-            id: "today",
-            title: "Today’s stack",
-            subtitle: "24 due · ~8 min",
-            sampleJapanese: "食べる",
-            accentLabel: "Due",
-            opensFlashcards: true
-        ),
-        PracticeDeckPreview(
-            id: "train-station",
-            title: "Train Station",
-            subtitle: "12 words from dialogue",
-            sampleJapanese: "切符",
-            accentLabel: "Lesson",
-            opensFlashcards: true
-        ),
-        PracticeDeckPreview(
-            id: "kana",
-            title: "Kana review",
-            subtitle: "8 characters · SRS",
-            sampleJapanese: "きゃ",
-            accentLabel: "Kana",
-            opensFlashcards: true
-        ),
-        PracticeDeckPreview(
-            id: "weak",
-            title: "Weak spots",
-            subtitle: "Missed recently",
-            sampleJapanese: "聞く",
-            accentLabel: "Focus",
-            opensFlashcards: true
-        ),
-    ]
-
     override func viewDidLoad() {
         super.viewDidLoad()
         navigationItem.largeTitleDisplayMode = .never
@@ -62,16 +27,27 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
         configureDailyPracticeSection()
         configureStacksSection()
         layoutViews()
-        refreshDailyPracticeCard()
+        refreshPracticeContent()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(refreshPracticeContent),
+            name: SavedVocabularyStore.didChangeNotification,
+            object: nil
+        )
 
         if #available(iOS 26.0, *) {
             scrollView.topEdgeEffect.style = .soft
         }
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        refreshDailyPracticeCard()
+        refreshPracticeContent()
     }
 
     // MARK: - Layout
@@ -89,7 +65,7 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
     private func configureDailyPracticeSection() {
         dailyPracticeCard.translatesAutoresizingMaskIntoConstraints = false
         dailyPracticeCard.onStartTapped = { [weak self] in
-            self?.openFlashcards(title: "Today’s stack")
+            self?.openFolder(id: SavedVocabularyStore.inboxID)
         }
         contentStack.addArrangedSubview(dailyPracticeCard)
     }
@@ -97,22 +73,12 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
     private func configureStacksSection() {
         let header = makeSectionHeader(
             title: "Stacks",
-            subtitle: "Swipe to clear · tap a deck to practice"
+            subtitle: "Tap a folder to see its words"
         )
 
         decksStack.axis = .vertical
         decksStack.spacing = 14
         decksStack.translatesAutoresizingMaskIntoConstraints = false
-
-        for deck in Self.placeholderDecks {
-            let card = PracticeDeckPreviewCardView()
-            card.configure(with: deck)
-            card.onTapped = { [weak self] in
-                guard deck.opensFlashcards else { return }
-                self?.openFlashcards(title: deck.title)
-            }
-            decksStack.addArrangedSubview(card)
-        }
 
         let sectionStack = UIStackView(arrangedSubviews: [header, decksStack])
         sectionStack.axis = .vertical
@@ -165,11 +131,44 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
 
     // MARK: - Data
 
+    @objc private func refreshPracticeContent() {
+        refreshDailyPracticeCard()
+        reloadDeckCards()
+    }
+
     private func refreshDailyPracticeCard() {
         let dayKeys = DialogueProgressGridSupport.recentDayKeys()
         dailyPracticeCard.configure(
             dayKeys: dayKeys,
-            completedCounts: Self.placeholderPracticeCounts(for: dayKeys)
+            completedCounts: Self.placeholderPracticeCounts(for: dayKeys),
+            savedWordCount: SavedVocabularyStore.shared.items(inFolderID: SavedVocabularyStore.inboxID).count
+        )
+    }
+
+    private func reloadDeckCards() {
+        decksStack.arrangedSubviews.forEach { view in
+            decksStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+
+        for folder in SavedVocabularyStore.shared.folders() {
+            let preview = Self.preview(for: folder)
+            let card = PracticeDeckPreviewCardView()
+            card.configure(with: preview)
+            card.onTapped = { [weak self] in
+                self?.openFolder(id: folder.id)
+            }
+            decksStack.addArrangedSubview(card)
+        }
+    }
+
+    private static func preview(for folder: SavedVocabularyFolder) -> PracticeDeckPreview {
+        PracticeDeckPreview(
+            id: folder.id,
+            title: folder.name,
+            subtitle: folder.subtitle,
+            sampleJapanese: folder.sampleJapanese,
+            accentLabel: folder.id == SavedVocabularyStore.inboxID ? "Inbox" : "Folder"
         )
     }
 
@@ -183,10 +182,11 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
 
     // MARK: - Navigation
 
-    private func openFlashcards(title: String) {
-        let flashcards = FlashcardExperimentViewController()
-        flashcards.title = title
-        navigationController?.pushViewController(flashcards, animated: true)
+    private func openFolder(id: String) {
+        navigationController?.pushViewController(
+            SavedVocabularyListViewController(folderID: id),
+            animated: true
+        )
     }
 }
 
@@ -198,13 +198,12 @@ private struct PracticeDeckPreview {
     let subtitle: String
     let sampleJapanese: String
     let accentLabel: String
-    let opensFlashcards: Bool
 }
 
 // MARK: - Daily Practice card
 
 /// Mirrors `DailyDialogueCardView`: title/subtitle, contribution-style frequency
-/// grid, and a Start button that opens today's stack.
+/// grid, and a Start button that opens saved vocabulary.
 private final class DailyPracticeCardView: UIView {
 
     var onStartTapped: (() -> Void)?
@@ -247,7 +246,7 @@ private final class DailyPracticeCardView: UIView {
         titleLabel.textColor = .label
         titleLabel.numberOfLines = 0
 
-        subtitleLabel.text = "Clear what’s due. Short stacks, every day."
+        subtitleLabel.text = "Save words from sentence scrub, then start here."
         subtitleLabel.font = .preferredFont(forTextStyle: .subheadline)
         subtitleLabel.textColor = .secondaryLabel
         subtitleLabel.numberOfLines = 0
@@ -331,9 +330,19 @@ private final class DailyPracticeCardView: UIView {
         onStartTapped?()
     }
 
-    func configure(dayKeys: [String], completedCounts: [String: Int]) {
+    func configure(dayKeys: [String], completedCounts: [String: Int], savedWordCount: Int) {
         gridView.dayKeys = dayKeys
         gridView.completedCounts = completedCounts
+        if savedWordCount == 0 {
+            subtitleLabel.text = "Save words from sentence scrub, then start here."
+            startButton.configuration?.title = "Review"
+        } else if savedWordCount == 1 {
+            subtitleLabel.text = "1 saved word in your inbox."
+            startButton.configuration?.title = "Start"
+        } else {
+            subtitleLabel.text = "\(savedWordCount) saved words in your inbox."
+            startButton.configuration?.title = "Start"
+        }
     }
 }
 

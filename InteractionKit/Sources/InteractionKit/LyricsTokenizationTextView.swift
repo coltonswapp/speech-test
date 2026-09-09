@@ -229,6 +229,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
 
   /// - Parameter showsFurigana: When true, applies ruby via `applyRuby` and extra line height.
   /// - Parameter accentSubstring: Optional substring drawn in `accentColor` (e.g. a learner's fill-in choice).
+  /// - Parameter preservesTokenBoundaries: When true, keep `tokens` 1:1 (skip full-sentence expand).
   public func configure(
     sentence: String,
     lyricFont: UIFont,
@@ -236,26 +237,8 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     lookupSurfaces: [String]? = nil,
     showsFurigana: Bool = false,
     accentSubstring: String? = nil,
-    accentColor: UIColor = .systemBlue
-  ) {
-    let tokenizer = tokenizerOverride ?? japaneseTokenizer
-    applyTokenConfiguration(
-      sentence: sentence,
-      lyricFont: lyricFont,
-      tokens: tokenizer.tokenize(sentence),
-      showsFurigana: showsFurigana,
-      accentSubstring: accentSubstring,
-      accentColor: accentColor
-    )
-  }
-
-  func configure(
-    sentence: String,
-    lyricFont: UIFont,
-    tokens precomputedTokens: [JapaneseToken],
-    showsFurigana: Bool = false,
-    accentSubstring: String? = nil,
     accentColor: UIColor = .systemBlue,
+    applyRuby: ((NSMutableAttributedString, String, UIFont) -> Void)? = nil,
     preservesTokenBoundaries: Bool = false
   ) {
     self.applyRuby = applyRuby
@@ -289,9 +272,13 @@ public final class LyricsInsetUnderlineTextView: UITextView {
         base: sentence,
         tokens: rawTokens
       )
-    tokenLookupSurfaces = preservesTokenBoundaries
-      ? tokens.map(\.text)
-      : JMDictStore.shared.effectiveLookupSurfaces(for: tokens)
+    if preservesTokenBoundaries {
+      tokenLookupSurfaces = tokens.map(\.text)
+    } else if let lookupSurfaces, lookupSurfaces.count == tokens.count {
+      tokenLookupSurfaces = lookupSurfaces
+    } else {
+      tokenLookupSurfaces = tokens.map(\.text)
+    }
     selectedTokenIndex = nil
     let edge = textContainerEdgeOutset
     let rubyTop = showsFurigana ? Self.rubyOverlayTopInset(for: lyricFont) : 0

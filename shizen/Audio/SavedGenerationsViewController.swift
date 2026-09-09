@@ -79,22 +79,22 @@ final class SavedGenerationsViewController: UIViewController {
     }
 
     private nonisolated enum DebugSettingsRow: Int, CaseIterable, Hashable, Sendable {
+        case onboarding
         case textToSpeech
         case kanaLearningFlow
         case kanaProgressPath
         case kanaProgressGrid
-        case waterfallGrid
         case lessonWaterfallGrid
-        case sentenceScrub
         case languageProgressSnake
         case hiraganaChart
         case katakanaChart
         case flashcards
+        case savedVocabulary
+        case lemmaResolution
         case kanaSpelling
         case kanaListenSpelling
         case kanaSoundMatch
         case kanaPairMatch
-        case kanaSoundMatchBounce
         case kanaLessonComplete
         case kanaLessonEncouragementBreak
         case emojiStickers
@@ -105,33 +105,31 @@ final class SavedGenerationsViewController: UIViewController {
         case characterSpeaking
         case speechProfileOverlay
         case glassProgressVoiceOverlay
-        case glassNotchShelf
         case dialogueExperimentHarness
-        case dialogueNestedPaging
-        case dialogueBubbleUnderglow
         case kanjiDecomposition
+        case kanjiSpotlight
+        case swiftUIShaders
         case registerLadder
         case dialogueContentRecording
-        case quickLookPDF
 
         var title: String {
             switch self {
+            case .onboarding: return "Auth + onboarding"
             case .textToSpeech: return "Text to Speech"
             case .kanaLearningFlow: return "Kana learning flow"
             case .kanaProgressPath: return "Kana progress path"
             case .kanaProgressGrid: return "Kana progress grid"
-            case .waterfallGrid: return "Waterfall grid"
             case .lessonWaterfallGrid: return "Lesson waterfall grid"
-            case .sentenceScrub: return "Sentence scrub"
             case .languageProgressSnake: return "Lesson path (sine)"
             case .hiraganaChart: return "Hiragana chart"
             case .katakanaChart: return "Katakana chart"
             case .flashcards: return "Flashcards"
+            case .savedVocabulary: return "Saved vocabulary"
+            case .lemmaResolution: return "Lemma resolution"
             case .kanaSpelling: return "Kana spelling"
             case .kanaListenSpelling: return "Listen & spell"
             case .kanaSoundMatch: return "Kana → sound"
             case .kanaPairMatch: return "Kana pair match"
-            case .kanaSoundMatchBounce: return "Match bounce tuner"
             case .kanaLessonComplete: return "Lesson complete"
             case .kanaLessonEncouragementBreak: return "Streak break screen"
             case .emojiStickers: return "Emoji stickers"
@@ -142,35 +140,33 @@ final class SavedGenerationsViewController: UIViewController {
             case .characterSpeaking: return "Speaking meters"
             case .speechProfileOverlay: return "Speech profile overlay"
             case .glassProgressVoiceOverlay: return "Glass progress + voice"
-            case .glassNotchShelf: return "Notch shelf glass"
             case .dialogueExperimentHarness: return "Dialogue lyrics harness"
-            case .dialogueNestedPaging: return "Dialogue nested paging"
-            case .dialogueBubbleUnderglow: return "Bubble underglow tuner"
             case .kanjiDecomposition: return "Kanji decomposition"
+            case .kanjiSpotlight: return "Kanji spotlight"
+            case .swiftUIShaders: return "SwiftUI shaders"
             case .registerLadder: return "Register ladder"
             case .dialogueContentRecording: return "Dialogue Replay"
-            case .quickLookPDF: return "QuickLook PDF repro"
             }
         }
 
         var subtitle: String {
             switch self {
+            case .onboarding: return "Landing stubs · survey / slider / listening quiz · placeholder demos"
             case .textToSpeech: return "Stream OpenAI TTS · sentence chunks · lyrics"
             case .kanaLearningFlow: return "Progress tiles · hiragana & katakana lessons · SRS"
             case .kanaProgressPath: return "Row-by-row hiragana lessons · SRS · chart"
             case .kanaProgressGrid: return "Hiragana & katakana heatmaps · 92 squares · size slider"
-            case .waterfallGrid: return "Two-column cascade · key/value cards · variable height"
             case .lessonWaterfallGrid: return "Testing watefall grid style lesson screen"
-            case .sentenceScrub: return "Pan token underlines · full JMdict entries"
             case .languageProgressSnake: return "Glass stepping stones · sine-wave path · live tuner"
             case .hiraganaChart: return "Manual-layout gojūon reference"
             case .katakanaChart: return "Manual-layout gojūon reference"
             case .flashcards: return "Swipe right · know it / left · review"
+            case .savedVocabulary: return "Words saved from sentence scrub and the dictionary"
+            case .lemmaResolution: return "Verb forms → dictionary headword · romaji · regression check"
             case .kanaSpelling: return "Tap tiles to spell the target word"
             case .kanaListenSpelling: return "Hear the word, then spell it in kana"
             case .kanaSoundMatch: return "6 steps · hiragana ↔ romaji matching"
             case .kanaPairMatch: return "Tap to match · 4 pairs · kana ↔ romaji"
-            case .kanaSoundMatchBounce: return "Sliders · preview success bounce"
             case .kanaLessonComplete: return "Preview summary · entry animation & encouragement"
             case .kanaLessonEncouragementBreak: return "Mid-lesson combo break · notch audio · header slides away"
             case .emojiStickers: return "Die-cut white halo · pick preset or type"
@@ -181,35 +177,33 @@ final class SavedGenerationsViewController: UIViewController {
             case .characterSpeaking: return "Live meters · encouragement clips"
             case .speechProfileOverlay: return "Liquid-glass capsule · drops in while audio plays"
             case .glassProgressVoiceOverlay: return "Progress chrome in glass container · toggle voice overlay"
-            case .glassNotchShelf: return "Shelf under notch · voice meter peels out"
             case .dialogueExperimentHarness: return "Scenario audio · UIMenu clip switch · alignment QA"
-            case .dialogueNestedPaging: return "Nested vertical scroll · boundary handoff · rectangles → circles"
-            case .dialogueBubbleUnderglow: return "Single glass bubble · sliders for underglow tuning"
             case .kanjiDecomposition: return "Character-by-character compound breakdown · export cards"
+            case .kanjiSpotlight: return "One kanji · curated compounds & verbs · export cards"
+            case .swiftUIShaders: return "Kris Puckett Metal shaders · playground"
             case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
             case .dialogueContentRecording: return "TikTok stage · conversation, two-pass, or quiz"
-            case .quickLookPDF: return "App Support PDF · QLPreview vs tmp / share / PDFKit"
             }
         }
 
         var symbolName: String {
             switch self {
+            case .onboarding: return "person.crop.circle.badge.checkmark"
             case .textToSpeech: return "waveform"
             case .kanaLearningFlow: return "square.grid.2x2"
             case .kanaProgressPath: return "point.topleft.down.curvedto.point.bottomright.up"
             case .kanaProgressGrid: return "square.grid.3x3.fill"
-            case .waterfallGrid: return "rectangle.grid.2x2"
             case .lessonWaterfallGrid: return "rectangle.grid.2x2.fill"
-            case .sentenceScrub: return "text.cursor"
             case .languageProgressSnake: return "point.3.connected.trianglepath.dotted"
             case .hiraganaChart: return "textformat.characters"
             case .katakanaChart: return "textformat.characters.dottedunderline"
             case .flashcards: return "rectangle.stack"
+            case .savedVocabulary: return "folder.badge.plus"
+            case .lemmaResolution: return "text.badge.checkmark"
             case .kanaSpelling: return "character.cursor.ibeam"
             case .kanaListenSpelling: return "ear"
             case .kanaSoundMatch: return "speaker.wave.2"
             case .kanaPairMatch: return "square.on.square"
-            case .kanaSoundMatchBounce: return "slider.horizontal.3"
             case .kanaLessonComplete: return "checkmark.seal"
             case .kanaLessonEncouragementBreak: return "flame"
             case .emojiStickers: return "face.smiling"
@@ -220,14 +214,12 @@ final class SavedGenerationsViewController: UIViewController {
             case .characterSpeaking: return "person.bust"
             case .speechProfileOverlay: return "capsule.portrait"
             case .glassProgressVoiceOverlay: return "chart.bar.doc.horizontal"
-            case .glassNotchShelf: return "iphone.gen3"
             case .dialogueExperimentHarness: return "waveform.path"
-            case .dialogueNestedPaging: return "rectangle.arrowtriangle.2.inward"
-            case .dialogueBubbleUnderglow: return "bubble.left.fill"
             case .kanjiDecomposition: return "puzzlepiece.extension"
+            case .kanjiSpotlight: return "lightbulb"
+            case .swiftUIShaders: return "sparkles"
             case .registerLadder: return "text.badge.star"
             case .dialogueContentRecording: return "video"
-            case .quickLookPDF: return "doc.richtext"
             }
         }
     }
@@ -610,6 +602,8 @@ final class SavedGenerationsViewController: UIViewController {
 
     private func handleDebugSelection(_ row: DebugSettingsRow) {
         switch row {
+        case .onboarding:
+            presentOnboardingPlayground()
         case .textToSpeech:
             navigationController?.pushViewController(
                 TextToSpeechExperimentViewController(),
@@ -624,19 +618,11 @@ final class SavedGenerationsViewController: UIViewController {
             navigationController?.pushViewController(KanaProgressPathViewController(), animated: true)
         case .kanaProgressGrid:
             navigationController?.pushViewController(KanaProgressGridExperimentViewController(), animated: true)
-        case .waterfallGrid:
-            navigationController?.pushViewController(
-                WaterfallCollectionExperimentViewController(),
-                animated: true
-            )
         case .lessonWaterfallGrid:
             navigationController?.pushViewController(
                 LessonWaterfallGridExperimentViewController(),
                 animated: true
             )
-        case .sentenceScrub:
-            let scrub = SentenceScrubExperimentViewController()
-            navigationController?.pushViewController(scrub, animated: true)
         case .languageProgressSnake:
             let snake = LanguageProgressSnakeExperimentViewController()
             navigationController?.pushViewController(snake, animated: true)
@@ -649,6 +635,16 @@ final class SavedGenerationsViewController: UIViewController {
         case .flashcards:
             let flashcards = FlashcardExperimentViewController()
             navigationController?.pushViewController(flashcards, animated: true)
+        case .savedVocabulary:
+            navigationController?.pushViewController(
+                SavedVocabularyListViewController(folderID: SavedVocabularyStore.inboxID),
+                animated: true
+            )
+        case .lemmaResolution:
+            navigationController?.pushViewController(
+                LemmaResolutionExperimentViewController(),
+                animated: true
+            )
         case .kanaSpelling:
             presentKanaSpellingFlow()
         case .kanaListenSpelling:
@@ -658,11 +654,6 @@ final class SavedGenerationsViewController: UIViewController {
         case .kanaPairMatch:
             navigationController?.pushViewController(
                 KanaPairMatchExperimentViewController(),
-                animated: true
-            )
-        case .kanaSoundMatchBounce:
-            navigationController?.pushViewController(
-                KanaSoundMatchBounceExperimentViewController(),
                 animated: true
             )
         case .kanaLessonComplete:
@@ -702,35 +693,24 @@ final class SavedGenerationsViewController: UIViewController {
                 GlassProgressVoiceOverlayExperimentViewController(),
                 animated: true
             )
-        case .glassNotchShelf:
-            navigationController?.pushViewController(
-                GlassNotchShelfExperimentViewController(),
-                animated: true
-            )
         case .dialogueExperimentHarness:
             navigationController?.pushViewController(
                 DialogueExperimentHarnessViewController(),
                 animated: true
             )
-        case .dialogueNestedPaging:
-            let dialogueVC: DialogueNestedPagingExperimentViewController
-            if let collection = DialogueScenarioCollectionCatalog.trainStation {
-                dialogueVC = DialogueNestedPagingExperimentViewController(collection: collection)
-            } else {
-                dialogueVC = DialogueNestedPagingExperimentViewController()
-            }
-            navigationController?.pushViewController(
-                dialogueVC,
-                animated: true
-            )
-        case .dialogueBubbleUnderglow:
-            navigationController?.pushViewController(
-                DialogueBubbleUnderglowExperimentViewController(),
-                animated: true
-            )
         case .kanjiDecomposition:
             navigationController?.pushViewController(
                 KanjiDecompositionListViewController(),
+                animated: true
+            )
+        case .kanjiSpotlight:
+            navigationController?.pushViewController(
+                KanjiSpotlightListViewController(),
+                animated: true
+            )
+        case .swiftUIShaders:
+            navigationController?.pushViewController(
+                SwiftUIShadersPlaygroundViewController(),
                 animated: true
             )
         case .dialogueContentRecording:
@@ -743,12 +723,16 @@ final class SavedGenerationsViewController: UIViewController {
                 RegisterLadderPromptViewController(),
                 animated: true
             )
-        case .quickLookPDF:
-            navigationController?.pushViewController(
-                QuickLookPDFReproViewController(),
-                animated: true
-            )
         }
+    }
+
+    private func presentOnboardingPlayground() {
+        let landing = AuthLandingViewController()
+        landing.isPreviewMode = true
+        let nav = UINavigationController(rootViewController: landing)
+        nav.setNavigationBarHidden(true, animated: false)
+        nav.modalPresentationStyle = .fullScreen
+        present(nav, animated: true)
     }
 
     private func presentKanaSpellingFlow() {

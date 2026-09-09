@@ -1,5 +1,5 @@
 {
-  "originHash" : "82bf679c509deabad2135853ba36cdd73b3e56094c8d29873092bff241ee75b3",
+  "originHash" : "072298f37a60c1bf308b3643fa687ed1aca0076a3b35ce0263c7482009671d5e",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -17,6 +17,15 @@
       "state" : {
         "revision" : "1f096492e37fc05fc2e7304091f54889974c5368",
         "version" : "0.8.0"
+      }
+    },
+    {
+      "identity" : "swiftuishaders",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/krispuckett/SwiftUIShaders.git",
+      "state" : {
+        "revision" : "aa8eb4d260a47ff4c78dbdc26020a5cdf95b594f",
+        "version" : "1.0.0"
       }
     },
     {

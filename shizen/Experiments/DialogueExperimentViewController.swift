@@ -587,6 +587,28 @@ class DialogueExperimentViewController: UIViewController {
         refreshScrollEdgeEffects()
     }
 
+    /// Swaps the scene image when the host moves to a scenario whose thumbnail
+    /// differs (per-scenario CDN override vs. the collection default). No-op
+    /// when nothing changed, so the existing image isn't flashed on reload.
+    func updateSceneImage(url: URL?, assetName: String?) {
+        guard url != sceneImageURL || assetName != sceneImageName else { return }
+        sceneImageURL = url
+        sceneImageName = assetName
+        guard isViewLoaded, dialogueShowsScenarioChrome() else { return }
+
+        if scrollHeaderStack.arrangedSubviews.contains(sceneImageContainer) {
+            configureSceneImageView()
+            return
+        }
+        // The header was built without an image (collection had none); add the
+        // container now that this scenario supplies one.
+        guard url != nil || assetName.flatMap({ UIImage(named: $0) }) != nil else { return }
+        scrollHeaderStack.insertArrangedSubview(sceneImageContainer, at: 0)
+        scrollHeaderStack.setCustomSpacing(20, after: sceneImageContainer)
+        configureSceneImageView()
+        sceneImageWidthConstraint?.isActive = true
+    }
+
     deinit {
         progressDisplayLink?.invalidate()
     }

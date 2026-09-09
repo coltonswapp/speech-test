@@ -74,6 +74,12 @@ final class DialogueContentRecordingViewController: UIViewController, DialogueCo
     private static let stageLineRowSpacing: CGFloat = 52
     /// Extra stack gap opened while a stage line is focused.
     private static let stageLineFocusExtraSpacing: CGFloat = 24
+    /// Hold after a stage caption appears. Off skips to the line animation only.
+    private static var stageLineHoldDuration: TimeInterval {
+        ExperimentSettings.dialogueContentDelaysStageLines
+            ? DialogueContentPlaybackTiming.stageLineHold
+            : DialogueContentPlaybackTiming.lineAnimationDuration
+    }
     private static let incomingOffset: CGFloat = 88
     private static let watermarkPulseHz: Double = 0.45
     private static let watermarkPulseTravel: CGFloat = 10
@@ -218,6 +224,15 @@ final class DialogueContentRecordingViewController: UIViewController, DialogueCo
                 self?.toggleStageLines()
             },
             UIAction(
+                title: "Stage delay",
+                subtitle: "1.25s when a caption appears",
+                image: UIImage(systemName: "timer"),
+                attributes: ExperimentSettings.dialogueContentShowsStageLines ? [] : .disabled,
+                state: ExperimentSettings.dialogueContentDelaysStageLines ? .on : .off
+            ) { [weak self] _ in
+                self?.toggleStageLineDelay()
+            },
+            UIAction(
                 title: "Token sync",
                 subtitle: "Highlight on the spoken word",
                 image: UIImage(systemName: "highlighter"),
@@ -239,15 +254,28 @@ final class DialogueContentRecordingViewController: UIViewController, DialogueCo
     }
 
     private func highlightColorsSubtitle() -> String {
-        if let preset = DialogueHighlightColorPreset.matching(
-            leading: ExperimentSettings.dialogueHighlightLeadingColor,
-            trailing: ExperimentSettings.dialogueHighlightTrailingColor
-        ) {
-            return preset.title
+        switch ExperimentSettings.dialogueContentBubbleStyle {
+        case .glass:
+            if let preset = DialogueHighlightColorPreset.matching(
+                leading: ExperimentSettings.dialogueHighlightLeadingColor,
+                trailing: ExperimentSettings.dialogueHighlightTrailingColor
+            ) {
+                return preset.title
+            }
+            let leading = ExperimentSettings.dialogueHighlightLeadingColor.title
+            let trailing = ExperimentSettings.dialogueHighlightTrailingColor.title
+            return "\(leading) · \(trailing)"
+        case .messages:
+            if let preset = DialogueMessageColorPreset.matching(
+                leading: ExperimentSettings.dialogueMessageLeadingColor,
+                trailing: ExperimentSettings.dialogueMessageTrailingColor
+            ) {
+                return preset.title
+            }
+            let leading = ExperimentSettings.dialogueMessageLeadingColor.title
+            let trailing = ExperimentSettings.dialogueMessageTrailingColor.title
+            return "\(leading) · \(trailing)"
         }
-        let leading = ExperimentSettings.dialogueHighlightLeadingColor.title
-        let trailing = ExperimentSettings.dialogueHighlightTrailingColor.title
-        return "\(leading) · \(trailing)"
     }
 
     private func presentHighlightColors() {
@@ -266,8 +294,10 @@ final class DialogueContentRecordingViewController: UIViewController, DialogueCo
     }
 
     private func refreshHighlightColors() {
+        let style = ExperimentSettings.dialogueContentBubbleStyle
         for row in bubbleRows {
             (row as? DialogueContentBubbleRow)?.refreshUnderglow()
+            row.applyStyle(style)
         }
         refreshTokenKaraokeDisplay()
     }
@@ -312,6 +342,11 @@ final class DialogueContentRecordingViewController: UIViewController, DialogueCo
 
     private func toggleStageLines() {
         ExperimentSettings.dialogueContentShowsStageLines.toggle()
+        overflowButton?.menu = makeOverflowMenu()
+    }
+
+    private func toggleStageLineDelay() {
+        ExperimentSettings.dialogueContentDelaysStageLines.toggle()
         overflowButton?.menu = makeOverflowMenu()
     }
 
@@ -688,7 +723,10 @@ final class DialogueContentRecordingViewController: UIViewController, DialogueCo
                 includingStageLines: ExperimentSettings.dialogueContentShowsStageLines
             )
             activePlaybackLines = lines
-            let director = DialogueContentFullConversationDirector(lines: lines)
+            let director = DialogueContentFullConversationDirector(
+                lines: lines,
+                stageLineHold: Self.stageLineHoldDuration
+            )
             director.delegate = self
             fullDirector = director
             director.start()
@@ -1385,12 +1423,12 @@ private final class DialogueContentBubbleRow: DialogueContentStackRow {
             bubble.setBackgroundStyle(.glass)
             applyLabelColor(.label)
         case .messages:
-            let isLeading = line.speakerSide == .leading
+            let color = ExperimentSettings.dialogueMessageColor(for: line.speakerSide)
             bubble.setBackgroundStyle(.solid)
             bubble.setSolidFillStaysVisible(true)
-            bubble.setSolidFillColor(isLeading ? .secondarySystemFill : .systemBlue)
-            bubble.setTailEdge(isLeading ? .leading : .trailing)
-            applyLabelColor(isLeading ? .label : .white)
+            bubble.setSolidFillColor(color.messageFillUIColor)
+            bubble.setTailEdge(line.speakerSide == .leading ? .leading : .trailing)
+            applyLabelColor(color.messageTextUIColor)
         }
         invalidateIntrinsicContentSize()
         setNeedsLayout()
@@ -1439,7 +1477,8 @@ private final class DialogueContentBubbleRow: DialogueContentStackRow {
 
     private var tokenHighlightColor: UIColor {
         if ExperimentSettings.dialogueContentBubbleStyle == .messages {
-            return FuriganaTranscriptLabel.tokenSyncHighlightColorOnBlueBubble
+            return ExperimentSettings.dialogueMessageColor(for: line.speakerSide)
+                .messageTokenHighlightUIColor
         }
         return bubble.tokenHighlightColor
     }

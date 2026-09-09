@@ -8,6 +8,7 @@
 //
 
 import AVFoundation
+import InteractionKit
 import Speech
 import TTSCore
 import UIKit

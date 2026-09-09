@@ -541,6 +541,8 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         let highlights: DialogueLearningHighlights
         let quiz: [DialogueQuizQuestion]
         let grammarPointIDs: [String]
+        /// Already resolved: scenario override, else collection thumbnail.
+        let thumbnailURL: URL?
     }
 
     /// Drive the controller from a standalone collection (preferred when already in hand).
@@ -890,7 +892,8 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
                     example: entry.example,
                     highlights: entry.learningHighlights,
                     quiz: [],
-                    grammarPointIDs: entry.learningHighlights.grammarPatterns.compactMap(\.grammarPointID)
+                    grammarPointIDs: entry.learningHighlights.grammarPatterns.compactMap(\.grammarPointID),
+                    thumbnailURL: nil
                 )
             }
         }
@@ -904,7 +907,8 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
                 example: scenario.example,
                 highlights: scenario.highlights,
                 quiz: scenario.quiz,
-                grammarPointIDs: scenario.grammarPointIDs
+                grammarPointIDs: scenario.grammarPointIDs,
+                thumbnailURL: collection.thumbnailURL(for: scenario)
             )
         }
     }
@@ -1037,6 +1041,10 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             existing.tokenSyncSettingDidChange = { [weak self] in
                 self?.navigationItem.rightBarButtonItem?.menu = self?.makeDialogueMenu()
             }
+            existing.updateSceneImage(
+                url: item.thumbnailURL,
+                assetName: collection?.sceneImageName
+            )
             existing.reloadScenario(
                 pointTitle: item.pointTitle,
                 example: item.example,
@@ -1058,7 +1066,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             grammarPointIDs: item.grammarPointIDs
         )
         dialogue.sceneImageName = collection?.sceneImageName
-        dialogue.sceneImageURL = collection?.thumbnailURL
+        dialogue.sceneImageURL = item.thumbnailURL
         dialogue.transcriptDisplayMode = transcriptDisplayMode
         dialogue.recordsCompletionOnPlaybackFinish = item.quiz.isEmpty
         dialogue.tokenSyncSettingDidChange = { [weak self] in

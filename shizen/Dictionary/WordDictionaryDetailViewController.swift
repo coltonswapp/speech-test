@@ -52,6 +52,12 @@ final class WordDictionaryDetailViewController: UIViewController {
         detailView.onSelectKanji = { [weak self] character in
             self?.presentKanjiDetail(character)
         }
+#if DEBUG
+        detailView.onRequestKanjiDecomposition = { [weak self] in
+            guard let self else { return }
+            self.presentKanjiDecomposition(for: self.surface)
+        }
+#endif
 
         detailView.configure(surface: surface, sentence: sentence)
     }
@@ -69,6 +75,34 @@ final class WordDictionaryDetailViewController: UIViewController {
         } else {
             let nav = UINavigationController(rootViewController: kanjiVC)
             kanjiVC.navigationItem.leftBarButtonItem = UIBarButtonItem(
+                barButtonSystemItem: .close,
+                target: self,
+                action: #selector(dismissPresentedKanji)
+            )
+            present(nav, animated: true)
+        }
+    }
+
+    private func presentKanjiDecomposition(for surface: String) {
+        let trimmed = surface.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let lookup = JMDictStore.shared.lookup(forSurface: trimmed)
+        let entries = lookup.entries
+        let primary = entries.max { ($0.score ?? 0) < ($1.score ?? 0) } ?? entries.first
+
+        let target: UIViewController
+        if let primary, let word = KanjiDecompositionWord.make(from: primary) {
+            target = KanjiDecompositionPagerViewController(word: word)
+        } else {
+            target = KanjiDecompositionListViewController()
+        }
+
+        if let nav = navigationController {
+            nav.pushViewController(target, animated: true)
+        } else {
+            let nav = UINavigationController(rootViewController: target)
+            target.navigationItem.leftBarButtonItem = UIBarButtonItem(
                 barButtonSystemItem: .close,
                 target: self,
                 action: #selector(dismissPresentedKanji)

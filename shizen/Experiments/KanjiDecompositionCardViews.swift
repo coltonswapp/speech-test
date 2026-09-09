@@ -522,7 +522,7 @@ private func kanjiDecompositionInstallPreviewContainer(
 
 // MARK: - Word hero (furigana-annotated combined word, no meaning)
 
-private final class KanjiDecompositionWordHeroCard: UIView {
+final class KanjiDecompositionWordHeroCard: UIView {
     private let heroCard = KanjiDecompositionHeroCard()
     private let wordLabel = FuriganaTranscriptLabel()
     private let fixedWidth: CGFloat?
@@ -740,6 +740,10 @@ private final class KanjiDecompositionCompoundCell: UICollectionViewListCell {
     private func setup() {
         furiganaLabel.clipsToBounds = false
         furiganaLabel.numberOfLines = 1
+        // For ruby labels, we want Auto Layout alignment (center/baseline) to
+        // ignore the extra padding room used to draw furigana above the glyphs.
+        // Otherwise the whole JP block appears to "float" slightly high.
+        furiganaLabel.verticalTextInsetsAffectAlignmentRect = false
         furiganaLabel.setContentHuggingPriority(.required, for: .horizontal)
         furiganaLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
@@ -770,19 +774,17 @@ private final class KanjiDecompositionCompoundCell: UICollectionViewListCell {
 
     func configure(with entry: JMDictEntry) {
         let font = UIFont.systemFont(ofSize: KanjiDecompositionListMetrics.size(15), weight: .medium)
+        let compactInsets = JapaneseFuriganaBuilder.compactDisplayInsets(for: font)
         JapaneseFuriganaBuilder.applyScrubDisplay(
             to: furiganaLabel,
-            attributed: JapaneseFuriganaBuilder.attributedString(
+            attributed: JapaneseFuriganaBuilder.scenarioAttributedString(
                 for: entry.expression,
                 font: font,
                 textColor: .label
             ),
-            contentInsets: UIEdgeInsets(
-                top: JapaneseFuriganaBuilder.wordDetailRubyTopInset(for: font),
-                left: 0,
-                bottom: 1,
-                right: 0
-            )
+            // Add a tiny bottom inset to balance the reserved ruby-top space.
+            // Without it, the JP block's optical center sits a bit above the gloss.
+            contentInsets: UIEdgeInsets(top: compactInsets.top, left: 0, bottom: 1, right: 0)
         )
         glossLabel.text = entry.firstGloss
     }
@@ -1163,6 +1165,7 @@ final class KanjiDecompositionCombinedCardView: UIView, KanjiDecompositionBadgeL
     private let previewRow = UIStackView()
     private let wordHero = KanjiDecompositionWordHeroCard(fixedWidth: 200, heightToWidthRatio: 1.0)
     private let meaningLabel = UILabel()
+    private var meaningTapGesture: UITapGestureRecognizer?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1206,10 +1209,24 @@ final class KanjiDecompositionCombinedCardView: UIView, KanjiDecompositionBadgeL
         ])
     }
 
-    func configure(word: KanjiDecompositionWord) {
+    func installMeaningTapGesture(target: Any, action: Selector) {
+        meaningLabel.isUserInteractionEnabled = true
+        if meaningTapGesture != nil { return }
+        let tap = UITapGestureRecognizer(target: target, action: action)
+        tap.cancelsTouchesInView = false
+        meaningLabel.addGestureRecognizer(tap)
+        meaningTapGesture = tap
+    }
+
+    func applyMeaningText(_ text: String) {
+        meaningLabel.text = text
+    }
+
+    func configure(word: KanjiDecompositionWord, meaningOverride: String? = nil) {
         kanjiDecompositionPopulatePreviewRow(previewRow, word: word, heroes: &previewHeroes)
         wordHero.configure(expression: word.expression)
-        meaningLabel.text = word.entry.firstGloss
+        let trimmedOverride = meaningOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
+        meaningLabel.text = (trimmedOverride?.isEmpty == false) ? trimmedOverride : word.entry.firstGloss
     }
 
     func characterHeroViews() -> [KanjiDecompositionCharacterHeroView] {

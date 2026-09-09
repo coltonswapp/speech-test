@@ -192,7 +192,7 @@ enum DialogueContentPlaybackTiming {
     static let lineAnimationDuration: TimeInterval = 0.35
     static let interLinePause: TimeInterval = 0.28
     /// Pause after a stage direction so the scene can land before the next line.
-    static let stageLineHold: TimeInterval = 1.15
+    static let stageLineHold: TimeInterval = 1.25
     static let lastLineHold: TimeInterval = 0.8
     static let outroFadeToGray: TimeInterval = 0.5
     static let optionsGuessHold: TimeInterval = 1.8
@@ -222,13 +222,18 @@ final class DialogueContentFullConversationDirector {
     weak var delegate: DialogueContentDirectorDelegate?
 
     private let lines: [DialogueContentSpokenLine]
+    private let stageLineHold: TimeInterval
     private var index = 0
     private var lastPresentedIndex: Int?
     private var generation = 0
     private var isStopped = false
 
-    init(lines: [DialogueContentSpokenLine]) {
+    init(
+        lines: [DialogueContentSpokenLine],
+        stageLineHold: TimeInterval = DialogueContentPlaybackTiming.stageLineHold
+    ) {
         self.lines = lines
+        self.stageLineHold = stageLineHold
     }
 
     func start() {
@@ -321,7 +326,7 @@ final class DialogueContentFullConversationDirector {
         lastPresentedIndex = lineIndex
         index = lineIndex
         delegate?.directorPresentLine(lines[lineIndex], parkingPrevious: parkingPrevious)
-        wait(DialogueContentPlaybackTiming.stageLineHold) { [weak self] in
+        wait(stageLineHold) { [weak self] in
             guard let self else { return }
             let next = lineIndex + 1
             if self.lines.indices.contains(next), self.lines[next].isStageLine {

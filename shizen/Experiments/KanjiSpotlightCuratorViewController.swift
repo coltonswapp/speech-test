@@ -18,11 +18,28 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
     private var selectedInOrder: [KanjiSpotlightShowcaseItem] = []
 
     private var collectionView: UICollectionView!
-    private var dataSource: UICollectionViewDiffableDataSource<Section, KanjiSpotlightShowcaseItem>!
+    private var dataSource: UICollectionViewDiffableDataSource<Section, Row>!
     private var continueButton: UIBarButtonItem?
+
     private nonisolated enum Section: Int, Hashable, Sendable {
+        case selected
         case compounds
         case verbs
+    }
+
+    /// Distinct row IDs so the same showcase item can appear in Selected and
+    /// in the candidate lists at the same time.
+    private enum Row: Hashable {
+        case selected(KanjiSpotlightShowcaseItem)
+        case compound(KanjiSpotlightShowcaseItem)
+        case verb(KanjiSpotlightShowcaseItem)
+
+        var item: KanjiSpotlightShowcaseItem {
+            switch self {
+            case .selected(let item), .compound(let item), .verb(let item):
+                return item
+            }
+        }
     }
 
     init(subject: KanjiSpotlightSubject) {
@@ -65,27 +82,40 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
         collectionView.delegate = self
         view.addSubview(collectionView)
 
-        let cellRegistration = UICollectionView.CellRegistration<
-            UICollectionViewListCell, KanjiSpotlightShowcaseItem
-        > { [weak self] cell, _, item in
+        let cellRegistration = UICollectionView.CellRegistration<UICollectionViewListCell, Row> {
+            [weak self] cell, _, row in
             guard let self else { return }
+            let item = row.item
             var configuration = cell.defaultContentConfiguration()
-            configuration.text = "\(item.expression)  \(item.readingLine)"
-            configuration.textProperties.font = .preferredFont(forTextStyle: .body)
-            configuration.secondaryText = item.gloss
-            configuration.secondaryTextProperties.color = .secondaryLabel
-            configuration.secondaryTextProperties.numberOfLines = 2
+
+            switch row {
+            case .selected:
+                let exampleNumber = (self.selectedInOrder.firstIndex(of: item) ?? 0) + 1
+                configuration.text = "\(exampleNumber). \(item.expression)  \(item.readingLine)"
+                configuration.textProperties.font = .preferredFont(forTextStyle: .body)
+                configuration.secondaryText = item.gloss
+                configuration.secondaryTextProperties.color = .secondaryLabel
+                configuration.secondaryTextProperties.numberOfLines = 2
+                cell.accessories = [.checkmark()]
+            case .compound, .verb:
+                configuration.text = "\(item.expression)  \(item.readingLine)"
+                configuration.textProperties.font = .preferredFont(forTextStyle: .body)
+                configuration.secondaryText = item.gloss
+                configuration.secondaryTextProperties.color = .secondaryLabel
+                configuration.secondaryTextProperties.numberOfLines = 2
+                cell.accessories = self.selectedInOrder.contains(item) ? [.checkmark()] : []
+            }
+
             cell.contentConfiguration = configuration
-            cell.accessories = self.selectedInOrder.contains(item) ? [.checkmark()] : []
         }
 
-        dataSource = UICollectionViewDiffableDataSource<Section, KanjiSpotlightShowcaseItem>(
+        dataSource = UICollectionViewDiffableDataSource<Section, Row>(
             collectionView: collectionView
-        ) { collectionView, indexPath, item in
+        ) { collectionView, indexPath, row in
             collectionView.dequeueConfiguredReusableCell(
                 using: cellRegistration,
                 for: indexPath,
-                item: item
+                item: row
             )
         }
 
@@ -97,6 +127,9 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
             else { return }
             var configuration = supplementaryView.defaultContentConfiguration()
             switch section {
+            case .selected:
+                configuration.text = "Selected"
+                configuration.secondaryText = "Deck order · tap to remove"
             case .compounds:
                 configuration.text = "Compounds"
                 configuration.secondaryText = "Pick 2–3 with distinct readings"
@@ -117,6 +150,15 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
             else { return }
             var configuration = supplementaryView.defaultContentConfiguration()
             switch section {
+            case .selected:
+                if self.selectedInOrder.isEmpty {
+                    configuration.text = "Tap compounds below to build your deck."
+                } else {
+                    let compounds = self.selectedInOrder.filter { $0.kind == .compound }.count
+                    let verbs = self.selectedInOrder.filter { $0.kind == .verb }.count
+                    configuration.text =
+                        "\(self.selectedInOrder.count) selected · \(compounds) compounds · \(verbs) verbs"
+                }
             case .compounds:
                 let selected = self.selectedInOrder.filter { $0.kind == .compound }.count
                 configuration.text =
@@ -167,17 +209,16 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
     }
 
     private func applySnapshot() {
-        var snapshot = NSDiffableDataSourceSnapshot<Section, KanjiSpotlightShowcaseItem>()
-        snapshot.appendSections([.compounds, .verbs])
-        snapshot.appendItems(compoundCandidates, toSection: .compounds)
-        snapshot.appendItems(verbCandidates, toSection: .verbs)
+        var snapshot = NSDiffableDataSourceSnapshot<Section, Row>()
+        snapshot.appendSections([.selected, .compounds, .verbs])
+        snapshot.appendItems(selectedInOrder.map(Row.selected), toSection: .selected)
+        snapshot.appendItems(compoundCandidates.map(Row.compound), toSection: .compounds)
+        snapshot.appendItems(verbCandidates.map(Row.verb), toSection: .verbs)
         dataSource.apply(snapshot, animatingDifferences: false)
     }
 
     private func refreshSelectionUI() {
-        var snapshot = dataSource.snapshot()
-        snapshot.reloadSections([.compounds, .verbs])
-        dataSource.apply(snapshot, animatingDifferences: false)
+        applySnapshot()
         updateContinueEnabled()
     }
 
@@ -217,8 +258,8 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
 extension KanjiSpotlightCuratorViewController: UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: true)
-        guard let item = dataSource.itemIdentifier(for: indexPath) else { return }
-        toggleSelection(item)
+        guard let row = dataSource.itemIdentifier(for: indexPath) else { return }
+        toggleSelection(row.item)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 }

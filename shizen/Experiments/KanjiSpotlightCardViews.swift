@@ -331,7 +331,7 @@ final class KanjiSpotlightEntryCardView: UIView {
         titleLabel.font = UIFontMetrics(forTextStyle: .title2).scaledFont(
             for: .systemFont(ofSize: 24, weight: .bold)
         )
-        titleLabel.textColor = .label
+        titleLabel.textColor = .secondaryLabel
         titleLabel.textAlignment = .center
         titleLabel.numberOfLines = 1
 

@@ -107,6 +107,8 @@ final class SavedGenerationsViewController: UIViewController {
         case glassProgressVoiceOverlay
         case dialogueExperimentHarness
         case kanjiDecomposition
+        case kanjiSpotlight
+        case swiftUIShaders
         case registerLadder
         case dialogueContentRecording
 
@@ -140,6 +142,8 @@ final class SavedGenerationsViewController: UIViewController {
             case .glassProgressVoiceOverlay: return "Glass progress + voice"
             case .dialogueExperimentHarness: return "Dialogue lyrics harness"
             case .kanjiDecomposition: return "Kanji decomposition"
+            case .kanjiSpotlight: return "Kanji spotlight"
+            case .swiftUIShaders: return "SwiftUI shaders"
             case .registerLadder: return "Register ladder"
             case .dialogueContentRecording: return "Dialogue Replay"
             }
@@ -175,6 +179,8 @@ final class SavedGenerationsViewController: UIViewController {
             case .glassProgressVoiceOverlay: return "Progress chrome in glass container · toggle voice overlay"
             case .dialogueExperimentHarness: return "Scenario audio · UIMenu clip switch · alignment QA"
             case .kanjiDecomposition: return "Character-by-character compound breakdown · export cards"
+            case .kanjiSpotlight: return "One kanji · curated compounds & verbs · export cards"
+            case .swiftUIShaders: return "Kris Puckett Metal shaders · playground"
             case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
             case .dialogueContentRecording: return "TikTok stage · conversation, two-pass, or quiz"
             }
@@ -210,6 +216,8 @@ final class SavedGenerationsViewController: UIViewController {
             case .glassProgressVoiceOverlay: return "chart.bar.doc.horizontal"
             case .dialogueExperimentHarness: return "waveform.path"
             case .kanjiDecomposition: return "puzzlepiece.extension"
+            case .kanjiSpotlight: return "lightbulb"
+            case .swiftUIShaders: return "sparkles"
             case .registerLadder: return "text.badge.star"
             case .dialogueContentRecording: return "video"
             }
@@ -693,6 +701,16 @@ final class SavedGenerationsViewController: UIViewController {
         case .kanjiDecomposition:
             navigationController?.pushViewController(
                 KanjiDecompositionListViewController(),
+                animated: true
+            )
+        case .kanjiSpotlight:
+            navigationController?.pushViewController(
+                KanjiSpotlightListViewController(),
+                animated: true
+            )
+        case .swiftUIShaders:
+            navigationController?.pushViewController(
+                SwiftUIShadersPlaygroundViewController(),
                 animated: true
             )
         case .dialogueContentRecording:

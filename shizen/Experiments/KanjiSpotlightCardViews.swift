@@ -76,13 +76,14 @@ final class KanjiSpotlightKanjiCardView: UIView {
     private func setup() {
         backgroundColor = ExperimentPalette.pageBackground
 
-        titleLabel.text = "Kanji spotlight"
+        titleLabel.text = KanjiSpotlightIntroTitle.defaultTitle
         titleLabel.font = UIFontMetrics(forTextStyle: .title2).scaledFont(
             for: .systemFont(ofSize: 24, weight: .bold)
         )
         titleLabel.textColor = .label
         titleLabel.textAlignment = .center
-        titleLabel.numberOfLines = 1
+        titleLabel.numberOfLines = 2
+        titleLabel.isUserInteractionEnabled = true
 
         swipeHintLabel.text = "swipe to see compounds →"
         swipeHintLabel.font = .systemFont(ofSize: 14, weight: .medium)
@@ -180,7 +181,11 @@ final class KanjiSpotlightKanjiCardView: UIView {
         }
     }
 
-    func configure(subject: KanjiSpotlightSubject) {
+    func configure(
+        subject: KanjiSpotlightSubject,
+        introTitle: String = KanjiSpotlightIntroTitle.defaultTitle
+    ) {
+        titleLabel.text = introTitle
         guard let character = subject.character.first else { return }
         heroView.configure(character: character, meaning: subject.badgeMeaning)
 
@@ -198,8 +203,17 @@ final class KanjiSpotlightKanjiCardView: UIView {
         heroView.applyMeaning(meaning)
     }
 
+    func applyIntroTitle(_ title: String) {
+        titleLabel.text = title
+    }
+
     func badgeContains(point: CGPoint, in coordinateSpace: UIView) -> Bool {
         heroView.badgeContains(point: point, in: coordinateSpace)
+    }
+
+    func titleContains(point: CGPoint, in coordinateSpace: UIView) -> Bool {
+        let rect = titleLabel.convert(titleLabel.bounds, to: coordinateSpace).insetBy(dx: -8, dy: -8)
+        return rect.contains(point)
     }
 }
 

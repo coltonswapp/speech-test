@@ -30,12 +30,15 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
     /// Distinct row IDs so the same showcase item can appear in Selected and
     /// in the candidate lists at the same time.
     private nonisolated enum Row: Hashable, Sendable {
+        case writeInCompound
         case selected(KanjiSpotlightShowcaseItem)
         case compound(KanjiSpotlightShowcaseItem)
         case verb(KanjiSpotlightShowcaseItem)
 
-        var item: KanjiSpotlightShowcaseItem {
+        var item: KanjiSpotlightShowcaseItem? {
             switch self {
+            case .writeInCompound:
+                return nil
             case .selected(let item), .compound(let item), .verb(let item):
                 return item
             }
@@ -86,11 +89,18 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
         let cellRegistration = UICollectionView.CellRegistration<UICollectionViewListCell, Row> {
             [weak self] cell, _, row in
             guard let self else { return }
-            let item = row.item
             var configuration = cell.defaultContentConfiguration()
 
             switch row {
-            case .selected:
+            case .writeInCompound:
+                configuration.text = "Write in compound…"
+                configuration.textProperties.color = .systemBlue
+                configuration.secondaryText = "Kanji + definition · great for place names"
+                configuration.secondaryTextProperties.color = .secondaryLabel
+                configuration.image = UIImage(systemName: "plus.circle")
+                configuration.imageProperties.tintColor = .systemBlue
+                cell.accessories = []
+            case .selected(let item):
                 let exampleNumber = (self.selectedInOrder.firstIndex(of: item) ?? 0) + 1
                 configuration.text = "\(exampleNumber). \(item.expression)  \(item.readingLine)"
                 configuration.textProperties.font = .preferredFont(forTextStyle: .body)
@@ -98,7 +108,7 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
                 configuration.secondaryTextProperties.color = .secondaryLabel
                 configuration.secondaryTextProperties.numberOfLines = 2
                 cell.accessories = [.reorder(displayed: .always), .checkmark()]
-            case .compound, .verb:
+            case .compound(let item), .verb(let item):
                 configuration.text = "\(item.expression)  \(item.readingLine)"
                 configuration.textProperties.font = .preferredFont(forTextStyle: .body)
                 configuration.secondaryText = item.gloss
@@ -195,7 +205,7 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
             guard let self else { return }
             self.selectedInOrder = transaction.finalSnapshot
                 .itemIdentifiers(inSection: .selected)
-                .map(\.item)
+                .compactMap(\.item)
             self.reconfigureSelectedRows()
         }
     }
@@ -225,7 +235,7 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
         var snapshot = NSDiffableDataSourceSnapshot<Section, Row>()
         snapshot.appendSections([.selected, .compounds, .verbs])
         snapshot.appendItems(selectedInOrder.map(Row.selected), toSection: .selected)
-        snapshot.appendItems(compoundCandidates.map(Row.compound), toSection: .compounds)
+        snapshot.appendItems([.writeInCompound] + compoundCandidates.map(Row.compound), toSection: .compounds)
         snapshot.appendItems(verbCandidates.map(Row.verb), toSection: .verbs)
         dataSource.apply(snapshot, animatingDifferences: false)
 
@@ -274,6 +284,61 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
         refreshSelectionUI()
     }
 
+
+    private func presentWriteInCompound() {
+        let compoundCount = selectedInOrder.filter { $0.kind == .compound }.count
+        guard compoundCount < KanjiSpotlightCatalog.maxCompounds else {
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            return
+        }
+
+        let alert = UIAlertController(
+            title: "Write in compound",
+            message: "Enter the kanji compound and its definition. Reading is optional.",
+            preferredStyle: .alert
+        )
+        alert.addTextField { field in
+            field.placeholder = "Kanji (e.g. 東京)"
+            field.autocapitalizationType = .none
+            field.autocorrectionType = .no
+        }
+        alert.addTextField { field in
+            field.placeholder = "Definition (e.g. Tokyo)"
+            field.autocapitalizationType = .sentences
+        }
+        alert.addTextField { field in
+            field.placeholder = "Reading (optional)"
+            field.autocapitalizationType = .none
+            field.autocorrectionType = .no
+        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Add", style: .default) { [weak self] _ in
+            guard let self else { return }
+            let expression = alert.textFields?[0].text?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let gloss = alert.textFields?[1].text?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let reading = alert.textFields?[2].text?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !expression.isEmpty, !gloss.isEmpty else {
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                return
+            }
+            let item = KanjiSpotlightShowcaseItem.writeIn(
+                expression: expression,
+                gloss: gloss,
+                reading: reading,
+                kind: .compound
+            )
+            if !self.compoundCandidates.contains(item) {
+                self.compoundCandidates.insert(item, at: 0)
+            }
+            self.toggleSelection(item)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        })
+        present(alert, animated: true)
+    }
+
     @objc private func continueTapped() {
         guard !selectedInOrder.isEmpty else { return }
         let deck = KanjiSpotlightDeck(subject: subject, items: selectedInOrder)
@@ -290,9 +355,15 @@ extension KanjiSpotlightCuratorViewController: UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: true)
         guard let row = dataSource.itemIdentifier(for: indexPath) else { return }
-        toggleSelection(row.item)
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        switch row {
+        case .writeInCompound:
+            presentWriteInCompound()
+        case .selected(let item), .compound(let item), .verb(let item):
+            toggleSelection(item)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
     }
+
 
     func collectionView(
         _ collectionView: UICollectionView,

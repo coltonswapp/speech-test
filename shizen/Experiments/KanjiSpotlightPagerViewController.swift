@@ -28,6 +28,7 @@ final class KanjiSpotlightPagerViewController: UIViewController {
     private var photoSaveTotal = 0
     private var photoSaveErrors: [Error] = []
     private var badgeTapGesture: UITapGestureRecognizer?
+    private var introTitle = KanjiSpotlightIntroTitle.defaultTitle
     private var selectedExportSize: ExperimentExportSize = .story {
         didSet {
             guard selectedExportSize != oldValue else { return }
@@ -77,7 +78,7 @@ final class KanjiSpotlightPagerViewController: UIViewController {
         var result: [KanjiSpotlightCardPageViewController] = [
             KanjiSpotlightCardPageViewController {
                 let cardView = KanjiSpotlightKanjiCardView()
-                cardView.configure(subject: self.deck.subject)
+                cardView.configure(subject: self.deck.subject, introTitle: self.introTitle)
                 return cardView
             },
         ]
@@ -201,9 +202,67 @@ final class KanjiSpotlightPagerViewController: UIViewController {
               let kanjiCard = page.cardView as? KanjiSpotlightKanjiCardView
         else { return }
         let point = gesture.location(in: page.cardView)
+        if kanjiCard.titleContains(point: point, in: page.cardView) {
+            presentIntroTitlePicker()
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            return
+        }
         guard kanjiCard.badgeContains(point: point, in: page.cardView) else { return }
         presentBadgeMeaningPicker()
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+
+    private func presentIntroTitlePicker() {
+        let sheet = UIAlertController(
+            title: "Slide title",
+            message: "Shown at the top of the first slide.",
+            preferredStyle: .actionSheet
+        )
+        for preset in KanjiSpotlightIntroTitle.presets {
+            let title = preset == introTitle ? "✓ \(preset)" : preset
+            sheet.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                self?.applyIntroTitle(preset)
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Write in…", style: .default) { [weak self] _ in
+            self?.presentIntroTitleWriteIn()
+        })
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        if let pop = sheet.popoverPresentationController {
+            pop.barButtonItem = navigationItem.rightBarButtonItem
+        }
+        present(sheet, animated: true)
+    }
+
+    private func presentIntroTitleWriteIn() {
+        let alert = UIAlertController(
+            title: "Slide title",
+            message: "Write a custom title for the first slide.",
+            preferredStyle: .alert
+        )
+        alert.addTextField { [weak self] field in
+            field.text = self?.introTitle
+            field.placeholder = KanjiSpotlightIntroTitle.defaultTitle
+            field.autocapitalizationType = .words
+            field.clearButtonMode = .whileEditing
+            field.returnKeyType = .done
+        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Save", style: .default) { [weak self] _ in
+            guard let self else { return }
+            let typed = alert.textFields?.first?.text?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let title = typed.isEmpty ? KanjiSpotlightIntroTitle.defaultTitle : typed
+            self.applyIntroTitle(title)
+        })
+        present(alert, animated: true)
+    }
+
+    private func applyIntroTitle(_ title: String) {
+        introTitle = title
+        (pages.first?.cardView as? KanjiSpotlightKanjiCardView)?.applyIntroTitle(title)
+        navigationItem.rightBarButtonItem?.menu = exportMenu()
     }
 
     private func presentBadgeMeaningPicker() {
@@ -238,6 +297,13 @@ final class KanjiSpotlightPagerViewController: UIViewController {
 
     private func exportMenu() -> UIMenu {
         UIMenu(children: [
+            UIAction(
+                title: "Slide title",
+                subtitle: introTitle,
+                image: UIImage(systemName: "textformat")
+            ) { [weak self] _ in
+                self?.presentIntroTitlePicker()
+            },
             UIMenu(title: "Save to Photos", options: .displayInline, children: [
                 UIAction(title: "Current slide") { [weak self] _ in
                     self?.exportCurrentSlide()

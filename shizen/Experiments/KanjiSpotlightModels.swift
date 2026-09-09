@@ -70,7 +70,36 @@ struct KanjiSpotlightShowcaseItem: Hashable, @unchecked Sendable {
         return "\(kana) · \(romanized)"
     }
 
+    /// Freeform compound/verb for place names and other gaps in JMdict.
+    static func writeIn(
+        expression: String,
+        gloss: String,
+        reading: String = "",
+        kind: Kind = .compound
+    ) -> KanjiSpotlightShowcaseItem {
+        writeInSequenceLock.lock()
+        defer { writeInSequenceLock.unlock() }
+        writeInSequence -= 1
+        let sequence = writeInSequence
+        let entry = JMDictEntry(
+            id: Int64(sequence),
+            sequence: sequence,
+            expression: expression,
+            reading: reading,
+            primaryReading: nil,
+            glossary: gloss,
+            info: "write-in",
+            tags: nil,
+            score: nil
+        )
+        return KanjiSpotlightShowcaseItem(entry: entry, kind: kind)
+    }
+
+    private static let writeInSequenceLock = NSLock()
+    private static var writeInSequence = -1
+
     nonisolated static func == (lhs: KanjiSpotlightShowcaseItem, rhs: KanjiSpotlightShowcaseItem) -> Bool {
+
         lhs.entry.sequence == rhs.entry.sequence
             && lhs.entry.expression == rhs.entry.expression
             && lhs.kind == rhs.kind
@@ -206,4 +235,19 @@ extension KanjidicDetail {
             }
             .joined(separator: "、")
     }
+}
+
+
+/// Configurable title on the subject (first) slide.
+enum KanjiSpotlightIntroTitle {
+    static let defaultTitle = "Kanji Spotlight"
+
+    /// Preset options shown in the picker (default first).
+    static let presets: [String] = [
+        defaultTitle,
+        "Today's Kanji",
+        "Kanji of the Day",
+        "One Kanji",
+        "Reading Spotlight",
+    ]
 }

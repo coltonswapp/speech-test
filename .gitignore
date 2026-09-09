@@ -1,8 +1,9 @@
 # Swift Package Manager build output
 .build/
 
-# Xcode derived data when the project points it at the repo
-.derivedData/
+# Xcode derived data when a build points it at the repo
+# (.derivedData, .derivedData-device, .derivedData-sim, …)
+.derivedData*/
 
 # Local linked checkouts (never a submodule)
 .worktrees/

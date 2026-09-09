@@ -10,6 +10,7 @@
 		F629EE192FBBBB15006A3F68 /* TTSCore in Frameworks */ = {isa = PBXBuildFile; productRef = F6AA00022F957A880FFF002 /* TTSCore */; };
 		F65E7DFB300B104C0081F120 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F65E7DFA300B104C0081F120 /* NNKit */; };
 		F66A6EE1303657A700E973CE /* InteractionKit in Frameworks */ = {isa = PBXBuildFile; productRef = F66A6EE0303657A700E973CE /* InteractionKit */; };
+		F6SUIS01SHADERBF01 /* SwiftUIShaders in Frameworks */ = {isa = PBXBuildFile; productRef = F6SUIS01SHADERPD01 /* SwiftUIShaders */; };
 		F66A6EF0303657B000E973CE /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F66A6EEF303657B000E973CE /* GRDB */; };
 		F66A6EF2303657B200E973CE /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6C0FM022FC0A00100000002 /* FoundationModels.framework */; };
 		F6713B1630019B3000A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1530019B3000A89257 /* NNKit */; };
@@ -95,6 +96,7 @@
 				F65E7DFB300B104C0081F120 /* NNKit in Frameworks */,
 				F6B950AB2FB582D0007030C7 /* IPADic in Frameworks */,
 				F6713B1930019E0800A89257 /* NNKit in Frameworks */,
+				F6SUIS01SHADERBF01 /* SwiftUIShaders in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -192,6 +194,7 @@
 				F6713B1830019E0800A89257 /* NNKit */,
 				F6713B1B30019EC800A89257 /* NNKit */,
 				F65E7DFA300B104C0081F120 /* NNKit */,
+				F6SUIS01SHADERPD01 /* SwiftUIShaders */,
 			);
 			productName = shizen;
 			productReference = F6DE0F8F2F957A7A00FFF406 /* shizen.app */;
@@ -231,6 +234,7 @@
 				F6IK00012FINTERACT001 /* XCLocalSwiftPackageReference "InteractionKit" */,
 				F6SC00012FCONTENT001 /* XCLocalSwiftPackageReference "GrammarContentKit" */,
 				F65E7DF9300B104C0081F120 /* XCLocalSwiftPackageReference "../cs-ios-style-guide" */,
+				F6SUIS01SHADERREF01 /* XCRemoteSwiftPackageReference "SwiftUIShaders" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F6DE0F902F957A7A00FFF406 /* Products */;
@@ -597,6 +601,14 @@
 				minimumVersion = 6.0.0;
 			};
 		};
+		F6SUIS01SHADERREF01 /* XCRemoteSwiftPackageReference "SwiftUIShaders" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/krispuckett/SwiftUIShaders.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -665,6 +677,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F6SC00012FCONTENT001 /* XCLocalSwiftPackageReference "GrammarContentKit" */;
 			productName = GrammarContentKit;
+		};
+		F6SUIS01SHADERPD01 /* SwiftUIShaders */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F6SUIS01SHADERREF01 /* XCRemoteSwiftPackageReference "SwiftUIShaders" */;
+			productName = SwiftUIShaders;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

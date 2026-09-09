@@ -27,6 +27,7 @@ final class KanjiSpotlightPagerViewController: UIViewController {
     private var pendingPhotoSaves = 0
     private var photoSaveTotal = 0
     private var photoSaveErrors: [Error] = []
+    private var badgeTapGesture: UITapGestureRecognizer?
     private var selectedExportSize: ExperimentExportSize = .story {
         didSet {
             guard selectedExportSize != oldValue else { return }
@@ -64,6 +65,12 @@ final class KanjiSpotlightPagerViewController: UIViewController {
 
         installPageViewController()
         installControls()
+        installBadgeTapGesture()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        installBadgeTapGesture()
     }
 
     private func makePages() -> [KanjiSpotlightCardPageViewController] {
@@ -75,14 +82,12 @@ final class KanjiSpotlightPagerViewController: UIViewController {
             },
         ]
 
-        for item in deck.items {
+        for (index, item) in deck.items.enumerated() {
+            let exampleNumber = index + 1
             result.append(
                 KanjiSpotlightCardPageViewController {
                     let cardView = KanjiSpotlightEntryCardView()
-                    cardView.configure(
-                        item: item,
-                        subjectCharacter: self.deck.subject.character
-                    )
+                    cardView.configure(item: item, exampleNumber: exampleNumber)
                     return cardView
                 }
             )
@@ -157,6 +162,7 @@ final class KanjiSpotlightPagerViewController: UIViewController {
         pageViewController.setViewControllers([pages[target]], direction: direction, animated: true) { [weak self] finished in
             guard let self, finished else { return }
             self.currentIndex = target
+            self.installBadgeTapGesture()
         }
     }
 
@@ -166,6 +172,66 @@ final class KanjiSpotlightPagerViewController: UIViewController {
         else { return }
         currentIndex = index
         pageControl.currentPage = index
+    }
+
+    // MARK: - Badge meaning picker
+
+    private func visiblePage() -> KanjiSpotlightCardPageViewController? {
+        pageViewController.viewControllers?.first as? KanjiSpotlightCardPageViewController
+    }
+
+    private func installBadgeTapGesture() {
+        removeBadgeTapGesture()
+        guard let page = visiblePage() else { return }
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleBadgeTap(_:)))
+        tap.cancelsTouchesInView = false
+        page.cardView.addGestureRecognizer(tap)
+        badgeTapGesture = tap
+    }
+
+    private func removeBadgeTapGesture() {
+        if let badgeTapGesture {
+            badgeTapGesture.view?.removeGestureRecognizer(badgeTapGesture)
+            self.badgeTapGesture = nil
+        }
+    }
+
+    @objc private func handleBadgeTap(_ gesture: UITapGestureRecognizer) {
+        guard let page = visiblePage(),
+              let kanjiCard = page.cardView as? KanjiSpotlightKanjiCardView
+        else { return }
+        let point = gesture.location(in: page.cardView)
+        guard kanjiCard.badgeContains(point: point, in: page.cardView) else { return }
+        presentBadgeMeaningPicker()
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    private func presentBadgeMeaningPicker() {
+        let kanji = deck.subject.character
+        let meanings = deck.subject.detail.meaningList
+        guard !meanings.isEmpty else { return }
+
+        let picker = KanjiDecompositionBadgeMeaningPickerViewController(
+            kanji: kanji,
+            meanings: meanings,
+            selectedMeanings: KanjiDecompositionBadgeMeaningStore.shared.selectedMeanings(for: kanji)
+        )
+        picker.onSave = { [weak self] selected in
+            guard let self else { return }
+            KanjiDecompositionBadgeMeaningStore.shared.setSelectedMeanings(selected, for: kanji)
+            let meaning = KanjidicStore.shared.detail(forKanji: kanji)?.badgeMeaning ?? ""
+            for page in self.pages {
+                (page.cardView as? KanjiSpotlightKanjiCardView)?.applyBadgeMeaning(meaning)
+            }
+        }
+
+        let nav = UINavigationController(rootViewController: picker)
+        nav.modalPresentationStyle = .pageSheet
+        if let sheet = nav.sheetPresentationController {
+            sheet.detents = [.medium(), .large()]
+            sheet.prefersGrabberVisible = true
+        }
+        present(nav, animated: true)
     }
 
     // MARK: - Export
@@ -304,6 +370,7 @@ extension KanjiSpotlightPagerViewController: UIPageViewControllerDataSource, UIP
     ) {
         guard finished, completed, let visible = pageViewController.viewControllers?.first else { return }
         updateCurrentIndex(from: visible)
+        installBadgeTapGesture()
     }
 }
 

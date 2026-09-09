@@ -522,7 +522,7 @@ private func kanjiDecompositionInstallPreviewContainer(
 
 // MARK: - Word hero (furigana-annotated combined word, no meaning)
 
-private final class KanjiDecompositionWordHeroCard: UIView {
+final class KanjiDecompositionWordHeroCard: UIView {
     private let heroCard = KanjiDecompositionHeroCard()
     private let wordLabel = FuriganaTranscriptLabel()
     private let fixedWidth: CGFloat?

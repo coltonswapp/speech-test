@@ -2,9 +2,9 @@
 //  KanjiSpotlightCardViews.swift
 //  shizen
 //
-//  Card faces for the Kanji Spotlight pager: subject kanji + meanings, then
-//  one slide per curated compound/verb. Reuses decomposition hero chrome and
-//  ExperimentPalette so export frames match sibling kanji slideshows.
+//  Card faces for the Kanji Spotlight pager: subject kanji + readings, then
+//  one slide per curated compound/verb. Reuses decomposition hero / word-hero
+//  chrome and ExperimentPalette so export frames match sibling slideshows.
 //
 
 import UIKit
@@ -21,7 +21,11 @@ private enum KanjiSpotlightCardMetrics {
     }
 
     static let sideInset: CGFloat = 28
-    static let heroWidth: CGFloat = 118
+    /// Slightly larger than decomposition's default character hero (118).
+    static let subjectHeroWidth: CGFloat = 136
+    static let subjectGlyphSize: CGFloat = 72
+    /// Matches decomposition combined-word hero.
+    static let exampleHeroWidth: CGFloat = 200
 }
 
 private func installKanjiSpotlightWatermark(in host: UIView) {
@@ -38,83 +42,25 @@ private func installKanjiSpotlightWatermark(in host: UIView) {
     ])
 }
 
-private final class KanjiSpotlightHeroCard: UIView {
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        configure()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        configure()
-    }
-
-    private func configure() {
-        clipsToBounds = false
-        layer.cornerRadius = 10
-        layer.cornerCurve = .continuous
-        layer.masksToBounds = false
-        backgroundColor = ExperimentPalette.cardSurface
-        layer.borderWidth = ExperimentCardStroke.normalWidth
-        layer.shadowColor = UIColor.black.cgColor
-        layer.shadowRadius = 4
-        layer.shadowOffset = CGSize(width: 0, height: 1)
-        applyBorderColor()
-        applyShadowOpacity()
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: 10).cgPath
-    }
-
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        applyBorderColor()
-        applyShadowOpacity()
-        setNeedsLayout()
-    }
-
-    private func applyBorderColor() {
-        layer.borderColor = ExperimentPalette.cardBorder
-            .resolvedColor(with: traitCollection).cgColor
-    }
-
-    private func applyShadowOpacity() {
-        layer.shadowOpacity = traitCollection.userInterfaceStyle == .dark ? 0.35 : 0.08
-    }
-}
-
-// MARK: - Subject kanji slide (meanings + readings)
+// MARK: - Subject kanji slide (readings + swipe cue)
 
 final class KanjiSpotlightKanjiCardView: UIView {
-    private enum Section: Int, CaseIterable {
-        case meanings
-        case readings
-
-        var title: String {
-            switch self {
-            case .meanings: return "Meanings"
-            case .readings: return "Readings"
-            }
-        }
-    }
-
-    private let eyebrowLabel = UILabel()
+    private let titleLabel = UILabel()
     private let heroView = KanjiDecompositionCharacterHeroView(
         layoutIdentifier: .character(index: 0),
+        cardWidth: KanjiSpotlightCardMetrics.subjectHeroWidth,
+        glyphFontSize: KanjiSpotlightCardMetrics.subjectGlyphSize,
         badgePlacement: .trailingEdgeCentered
     )
+    private let swipeHintLabel = UILabel()
     private let contentStack = UIStackView()
     private var collectionView: UICollectionView!
     private var collectionHeightConstraint: NSLayoutConstraint!
 
-    private var meanings: [String] = []
     private var onReading: String?
     private var kunReading: String?
 
     private var headerRegistration: UICollectionView.SupplementaryRegistration<UICollectionViewListCell>!
-    private var meaningCellRegistration: UICollectionView.CellRegistration<UICollectionViewListCell, Int>!
     private var readingsCellRegistration: UICollectionView.CellRegistration<KanjiSpotlightReadingsCell, Void>!
 
     override init(frame: CGRect) {
@@ -130,21 +76,31 @@ final class KanjiSpotlightKanjiCardView: UIView {
     private func setup() {
         backgroundColor = ExperimentPalette.pageBackground
 
-        eyebrowLabel.text = "Kanji spotlight"
-        eyebrowLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        eyebrowLabel.textColor = .secondaryLabel
-        eyebrowLabel.textAlignment = .center
+        titleLabel.text = "Kanji spotlight"
+        titleLabel.font = UIFontMetrics(forTextStyle: .title2).scaledFont(
+            for: .systemFont(ofSize: 24, weight: .bold)
+        )
+        titleLabel.textColor = .label
+        titleLabel.textAlignment = .center
+        titleLabel.numberOfLines = 1
+
+        swipeHintLabel.text = "swipe to see compounds →"
+        swipeHintLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        swipeHintLabel.textColor = .secondaryLabel
+        swipeHintLabel.textAlignment = .center
 
         configureCollectionView()
 
         contentStack.axis = .vertical
         contentStack.alignment = .fill
-        contentStack.spacing = 10
+        contentStack.spacing = 12
         contentStack.translatesAutoresizingMaskIntoConstraints = false
-        contentStack.addArrangedSubview(eyebrowLabel)
+        contentStack.addArrangedSubview(titleLabel)
         contentStack.addArrangedSubview(heroView)
         contentStack.addArrangedSubview(collectionView)
-        contentStack.setCustomSpacing(18, after: eyebrowLabel)
+        contentStack.addArrangedSubview(swipeHintLabel)
+        contentStack.setCustomSpacing(22, after: titleLabel)
+        contentStack.setCustomSpacing(16, after: collectionView)
         addSubview(contentStack)
         installKanjiSpotlightWatermark(in: self)
 
@@ -168,10 +124,9 @@ final class KanjiSpotlightKanjiCardView: UIView {
     private func configureCollectionView() {
         headerRegistration = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(
             elementKind: UICollectionView.elementKindSectionHeader
-        ) { [weak self] supplementaryView, _, indexPath in
-            guard let self, let section = Section(rawValue: indexPath.section) else { return }
+        ) { supplementaryView, _, _ in
             var configuration = supplementaryView.defaultContentConfiguration()
-            configuration.text = section.title.uppercased()
+            configuration.text = "READINGS"
             configuration.textProperties.font = .systemFont(
                 ofSize: KanjiSpotlightCardMetrics.size(11),
                 weight: .semibold
@@ -180,28 +135,15 @@ final class KanjiSpotlightKanjiCardView: UIView {
             supplementaryView.contentConfiguration = configuration
         }
 
-        meaningCellRegistration = UICollectionView.CellRegistration<UICollectionViewListCell, Int> {
-            [weak self] cell, _, row in
-            guard let self, row < self.meanings.count else { return }
-            var configuration = cell.defaultContentConfiguration()
-            configuration.text = self.meanings[row]
-            configuration.textProperties.font = .systemFont(
-                ofSize: KanjiSpotlightCardMetrics.size(15),
-                weight: .medium
-            )
-            cell.contentConfiguration = configuration
-        }
-
         readingsCellRegistration = UICollectionView.CellRegistration<KanjiSpotlightReadingsCell, Void> {
             [weak self] cell, _, _ in
             guard let self else { return }
             cell.configure(on: self.onReading, kun: self.kunReading)
         }
 
-        let layout = UICollectionViewCompositionalLayout { [weak self] sectionIndex, layoutEnvironment in
-            guard let self, Section(rawValue: sectionIndex) != nil else { return nil }
+        let layout = UICollectionViewCompositionalLayout { _, layoutEnvironment in
             var listConfiguration = UICollectionLayoutListConfiguration(appearance: .insetGrouped)
-            listConfiguration.headerMode = self.rowCount(for: sectionIndex) > 0 ? .supplementary : .none
+            listConfiguration.headerMode = .supplementary
             listConfiguration.showsSeparators = true
             listConfiguration.backgroundColor = ExperimentPalette.pageBackground
             let section = NSCollectionLayoutSection.list(
@@ -218,14 +160,6 @@ final class KanjiSpotlightKanjiCardView: UIView {
         collectionView.isScrollEnabled = false
         collectionView.alwaysBounceVertical = false
         collectionView.dataSource = self
-    }
-
-    private func rowCount(for sectionIndex: Int) -> Int {
-        guard let section = Section(rawValue: sectionIndex) else { return 0 }
-        switch section {
-        case .meanings: return meanings.count
-        case .readings: return 1
-        }
     }
 
     private func updateCollectionHeightIfNeeded() {
@@ -250,7 +184,6 @@ final class KanjiSpotlightKanjiCardView: UIView {
         guard let character = subject.character.first else { return }
         heroView.configure(character: character, meaning: subject.badgeMeaning)
 
-        meanings = Array(subject.detail.meaningList.prefix(4))
         let readings = subject.detail.spotlightReadingLines
         onReading = readings.on
         kunReading = readings.kun
@@ -260,38 +193,32 @@ final class KanjiSpotlightKanjiCardView: UIView {
         setNeedsLayout()
         layoutIfNeeded()
     }
+
+    func applyBadgeMeaning(_ meaning: String) {
+        heroView.applyMeaning(meaning)
+    }
+
+    func badgeContains(point: CGPoint, in coordinateSpace: UIView) -> Bool {
+        heroView.badgeContains(point: point, in: coordinateSpace)
+    }
 }
 
 extension KanjiSpotlightKanjiCardView: UICollectionViewDataSource {
-    func numberOfSections(in collectionView: UICollectionView) -> Int {
-        Section.allCases.count
-    }
+    func numberOfSections(in collectionView: UICollectionView) -> Int { 1 }
 
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        rowCount(for: section)
+        1
     }
 
     func collectionView(
         _ collectionView: UICollectionView,
         cellForItemAt indexPath: IndexPath
     ) -> UICollectionViewCell {
-        guard let section = Section(rawValue: indexPath.section) else {
-            fatalError("Unexpected section")
-        }
-        switch section {
-        case .meanings:
-            return collectionView.dequeueConfiguredReusableCell(
-                using: meaningCellRegistration,
-                for: indexPath,
-                item: indexPath.item
-            )
-        case .readings:
-            return collectionView.dequeueConfiguredReusableCell(
-                using: readingsCellRegistration,
-                for: indexPath,
-                item: ()
-            )
-        }
+        collectionView.dequeueConfiguredReusableCell(
+            using: readingsCellRegistration,
+            for: indexPath,
+            item: ()
+        )
     }
 
     func collectionView(
@@ -381,10 +308,11 @@ private final class KanjiSpotlightReadingsCell: UICollectionViewListCell {
 // MARK: - Compound / verb showcase slide
 
 final class KanjiSpotlightEntryCardView: UIView {
-    private let eyebrowLabel = UILabel()
-    private let readingLabel = UILabel()
-    private let heroCard = KanjiSpotlightHeroCard()
-    private let wordLabel = FuriganaTranscriptLabel()
+    private let titleLabel = UILabel()
+    private let wordHero = KanjiDecompositionWordHeroCard(
+        fixedWidth: KanjiSpotlightCardMetrics.exampleHeroWidth,
+        heightToWidthRatio: 1.0
+    )
     private let glossLabel = UILabel()
 
     override init(frame: CGRect) {
@@ -400,24 +328,12 @@ final class KanjiSpotlightEntryCardView: UIView {
     private func setup() {
         backgroundColor = ExperimentPalette.pageBackground
 
-        eyebrowLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        eyebrowLabel.textColor = .secondaryLabel
-        eyebrowLabel.textAlignment = .center
-
-        readingLabel.font = UIFontMetrics(forTextStyle: .title3).scaledFont(
-            for: .systemFont(ofSize: 20, weight: .semibold)
+        titleLabel.font = UIFontMetrics(forTextStyle: .title2).scaledFont(
+            for: .systemFont(ofSize: 24, weight: .bold)
         )
-        readingLabel.textColor = .label
-        readingLabel.textAlignment = .center
-        readingLabel.numberOfLines = 2
-        readingLabel.adjustsFontSizeToFitWidth = true
-        readingLabel.minimumScaleFactor = 0.75
-
-        wordLabel.clipsToBounds = false
-        wordLabel.numberOfLines = 1
-        wordLabel.translatesAutoresizingMaskIntoConstraints = false
-        heroCard.translatesAutoresizingMaskIntoConstraints = false
-        heroCard.addSubview(wordLabel)
+        titleLabel.textColor = .label
+        titleLabel.textAlignment = .center
+        titleLabel.numberOfLines = 1
 
         glossLabel.font = UIFontMetrics(forTextStyle: .title2).scaledFont(
             for: .systemFont(ofSize: 22, weight: .semibold)
@@ -429,16 +345,11 @@ final class KanjiSpotlightEntryCardView: UIView {
         glossLabel.adjustsFontSizeToFitWidth = true
         glossLabel.minimumScaleFactor = 0.7
 
-        let header = UIStackView(arrangedSubviews: [eyebrowLabel, readingLabel])
-        header.axis = .vertical
-        header.alignment = .fill
-        header.spacing = 8
-
-        let contentStack = UIStackView(arrangedSubviews: [header, heroCard, glossLabel])
+        let contentStack = UIStackView(arrangedSubviews: [titleLabel, wordHero, glossLabel])
         contentStack.axis = .vertical
         contentStack.alignment = .center
-        contentStack.spacing = 22
-        contentStack.setCustomSpacing(28, after: header)
+        contentStack.spacing = 24
+        contentStack.setCustomSpacing(32, after: titleLabel)
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(contentStack)
         installKanjiSpotlightWatermark(in: self)
@@ -453,43 +364,15 @@ final class KanjiSpotlightEntryCardView: UIView {
                 equalTo: trailingAnchor,
                 constant: -KanjiSpotlightCardMetrics.sideInset
             ),
-
-            heroCard.widthAnchor.constraint(equalToConstant: 220),
-            heroCard.heightAnchor.constraint(equalTo: heroCard.widthAnchor, multiplier: 0.72),
-
-            wordLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
-            wordLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
-            wordLabel.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
-
-            header.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
+            titleLabel.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             glossLabel.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
         ])
     }
 
-    func configure(item: KanjiSpotlightShowcaseItem, subjectCharacter: String) {
-        switch item.kind {
-        case .compound:
-            eyebrowLabel.text = "Compound · \(subjectCharacter)"
-        case .verb:
-            eyebrowLabel.text = "Verb · \(subjectCharacter)"
-        }
-        readingLabel.text = item.readingLine
+    func configure(item: KanjiSpotlightShowcaseItem, exampleNumber: Int) {
+        titleLabel.text = "Example \(exampleNumber)"
         glossLabel.text = item.gloss
-
-        let font = UIFont.systemFont(ofSize: 36, weight: .bold)
-        JapaneseFuriganaBuilder.applyScrubDisplay(
-            to: wordLabel,
-            attributed: JapaneseFuriganaBuilder.attributedString(
-                for: item.expression,
-                font: font,
-                textColor: .label
-            ),
-            contentInsets: UIEdgeInsets(
-                top: JapaneseFuriganaBuilder.wordDetailRubyTopInset(for: font),
-                left: 0,
-                bottom: 2,
-                right: 0
-            )
-        )
+        // Same centered furigana word hero as Kanji Decomposition's combined reveal.
+        wordHero.configure(expression: item.expression, showFurigana: true)
     }
 }

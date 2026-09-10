@@ -117,6 +117,12 @@ function exportQuiz(quiz: QuizQuestion[] | null): QuizQuestion[] | undefined {
     choices: question.choices,
     correctChoice: question.correctChoice,
     wrongAnswerExplanation: question.wrongAnswerExplanation,
+    ...(question.sourceSpokenStart !== undefined
+      ? { sourceSpokenStart: question.sourceSpokenStart }
+      : {}),
+    ...(question.sourceSpokenEnd !== undefined
+      ? { sourceSpokenEnd: question.sourceSpokenEnd }
+      : {}),
   }));
 }
 

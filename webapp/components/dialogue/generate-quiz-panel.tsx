@@ -127,6 +127,15 @@ export function GenerateQuizPanel({
                 <span className="text-xs text-muted-foreground">
                   Correct: {question.correctChoice}
                 </span>
+                {question.sourceSpokenStart !== undefined && (
+                  <span className="text-xs text-muted-foreground">
+                    Evidence: spoken{" "}
+                    {question.sourceSpokenEnd !== undefined &&
+                    question.sourceSpokenEnd !== question.sourceSpokenStart
+                      ? `${question.sourceSpokenStart}–${question.sourceSpokenEnd}`
+                      : question.sourceSpokenStart}
+                  </span>
+                )}
               </div>
             </label>
           ))}

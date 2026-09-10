@@ -22,11 +22,13 @@ final class DialogueQuizViewController: UIViewController {
         transitionStyle: .scroll,
         navigationOrientation: .horizontal
     )
+    private let evidenceAudioPlayer = GrammarAudioPlayer()
 
     private var questionPages: [DialogueQuizQuestionPageViewController] = []
     private var currentIndex = 0
     private var pageControlBottomConstraint: NSLayoutConstraint!
     private var pageControlHeightConstraint: NSLayoutConstraint!
+    private var evidenceContext: DialogueQuizEvidenceContext?
 
     /// Host-driven top inset — same role as `DialogueExperimentViewController.nestedPagingTopContentInset`.
     private var nestedPagingTopContentInset: CGFloat = 0
@@ -37,6 +39,8 @@ final class DialogueQuizViewController: UIViewController {
     var onQuizPassed: (() -> Void)?
     /// Host should refresh nested handoff when the active question scroll view changes.
     var onHandoffScrollViewChanged: (() -> Void)?
+    /// Fired just before quiz evidence audio starts so the host can pause dialogue playback.
+    var onEvidencePlaybackWillStart: (() -> Void)?
 
     /// Vertical scroll view for the currently visible question page (nested handoff).
     var handoffScrollView: UIScrollView {
@@ -64,21 +68,39 @@ final class DialogueQuizViewController: UIViewController {
         installChrome()
     }
 
-    func configure(questions: [DialogueQuizQuestion]) {
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        if isMovingFromParent || isBeingDismissed {
+            stopEvidencePlayback()
+        }
+    }
+
+    func configure(
+        questions: [DialogueQuizQuestion],
+        evidenceContext: DialogueQuizEvidenceContext? = nil
+    ) {
         loadViewIfNeeded()
         didPassQuiz = false
         currentIndex = 0
+        self.evidenceContext = evidenceContext
+        stopEvidencePlayback()
 
         questionPages = questions.enumerated().map { index, question in
+            let sourceLines = evidenceContext?.sourceLines(for: question) ?? []
             let page = DialogueQuizQuestionPageViewController(
                 questionNumber: index + 1,
                 question: question,
                 choiceHeight: Self.choiceHeight,
-                horizontalInset: Self.questionHorizontalInset
+                horizontalInset: Self.questionHorizontalInset,
+                sourceLines: sourceLines
             )
             page.onSelectionChanged = { [weak self, weak page] in
                 guard let self, let page else { return }
                 self.handleImmediateAnswer(on: page)
+            }
+            page.onReplayEvidence = { [weak self, weak page] in
+                guard let self, let page else { return }
+                self.playEvidence(for: page.question)
             }
             return page
         }
@@ -97,6 +119,10 @@ final class DialogueQuizViewController: UIViewController {
 
         applyScrollContentInsets()
         onHandoffScrollViewChanged?()
+    }
+
+    func stopEvidencePlayback() {
+        evidenceAudioPlayer.stop()
     }
 
     private func updatePageControlVisibility(pageCount: Int) {
@@ -124,10 +150,46 @@ final class DialogueQuizViewController: UIViewController {
             ExperimentFeedbackSound.playIncorrect()
         }
 
+        // Evidence audio is independent of correct/incorrect; do not block paging/Continue.
+        playEvidence(for: page.question)
+
         if allCorrect, !didPassQuiz {
             didPassQuiz = true
             onQuizPassed?()
         }
+    }
+
+    private func playEvidence(for question: DialogueQuizQuestion) {
+        guard let evidenceContext,
+              let indices = evidenceContext.clampedSpokenIndices(for: question),
+              let first = indices.first
+        else { return }
+
+        onEvidencePlaybackWillStart?()
+        let dialogueLines = evidenceContext.spokenJapaneseTexts
+        let fallback = dialogueLines[first]
+
+        if indices.count == 1 {
+            evidenceAudioPlayer.playDialogueLine(
+                at: first,
+                publishedAudioUrl: evidenceContext.publishedAudioUrl,
+                audioKey: evidenceContext.audioKey,
+                cacheMetadata: evidenceContext.cacheMetadata,
+                dialogueLines: dialogueLines,
+                fallbackText: fallback
+            )
+            return
+        }
+
+        evidenceAudioPlayer.playDialogueSequence(
+            spokenIndices: indices,
+            publishedAudioUrl: evidenceContext.publishedAudioUrl,
+            audioKey: evidenceContext.audioKey,
+            cacheMetadata: evidenceContext.cacheMetadata,
+            dialogueLines: dialogueLines,
+            fallbackText: fallback,
+            onSpokenIndexStart: { _ in }
+        )
     }
 
     /// Same contract as `DialogueExperimentViewController.applyNestedPagingTopContentInset`.
@@ -236,6 +298,9 @@ final class DialogueQuizViewController: UIViewController {
             animated: true
         ) { [weak self] finished in
             guard let self, finished else { return }
+            if target != self.currentIndex {
+                self.stopEvidencePlayback()
+            }
             self.currentIndex = target
             self.onHandoffScrollViewChanged?()
         }
@@ -245,6 +310,9 @@ final class DialogueQuizViewController: UIViewController {
         guard let page = viewController as? DialogueQuizQuestionPageViewController,
               let index = questionPages.firstIndex(where: { $0 === page })
         else { return }
+        if index != currentIndex {
+            stopEvidencePlayback()
+        }
         currentIndex = index
         pageControl.currentPage = index
         onHandoffScrollViewChanged?()
@@ -296,6 +364,7 @@ final class DialogueQuizQuestionPageViewController: UIViewController {
     let scrollView = UIScrollView()
     private let questionView: DialogueQuizQuestionView
     private let horizontalInset: CGFloat
+    let question: DialogueQuizQuestion
 
     var hasSelection: Bool { questionView.hasSelection }
     var isSelectionCorrect: Bool { questionView.isSelectionCorrect }
@@ -303,18 +372,25 @@ final class DialogueQuizQuestionPageViewController: UIViewController {
         get { questionView.onSelectionChanged }
         set { questionView.onSelectionChanged = newValue }
     }
+    var onReplayEvidence: (() -> Void)? {
+        get { questionView.onReplayEvidence }
+        set { questionView.onReplayEvidence = newValue }
+    }
 
     init(
         questionNumber: Int,
         question: DialogueQuizQuestion,
         choiceHeight: CGFloat,
-        horizontalInset: CGFloat
+        horizontalInset: CGFloat,
+        sourceLines: [DialogueQuizSourceLine] = []
     ) {
+        self.question = question
         self.horizontalInset = horizontalInset
         questionView = DialogueQuizQuestionView(
             questionNumber: questionNumber,
             question: question,
-            choiceHeight: choiceHeight
+            choiceHeight: choiceHeight,
+            sourceLines: sourceLines
         )
         super.init(nibName: nil, bundle: nil)
     }

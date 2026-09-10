@@ -128,7 +128,8 @@
             "Kyoto"
           ],
           "correctChoice": "Tokyo",
-          "wrongAnswerExplanation": "The tourist says 東京に行きたい — they want to go to Tokyo."
+          "wrongAnswerExplanation": "The tourist says 東京に行きたい — they want to go to Tokyo.",
+          "sourceSpokenStart": 0
         },
         {
           "prompt": "What is the attendant asking at the end of the dialogue?",
@@ -139,7 +140,8 @@
             "which train to take?"
           ],
           "correctChoice": "how many people are going?",
-          "wrongAnswerExplanation": "The attendant was essentially asking if the tourist was traveling alone, or if they only needed 1 ticket."
+          "wrongAnswerExplanation": "The attendant was essentially asking if the tourist was traveling alone, or if they only needed 1 ticket.",
+          "sourceSpokenStart": 2
         }
       ]
     },

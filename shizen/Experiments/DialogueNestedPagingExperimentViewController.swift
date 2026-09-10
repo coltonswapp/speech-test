@@ -616,6 +616,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         super.viewWillDisappear(animated)
         guard hasLoadedLessonContent else { return }
         dialogueViewController.stopHostedPlaybackIfDisappearing()
+        quizViewController?.stopEvidencePlayback()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -1107,6 +1108,9 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         quiz.onHandoffScrollViewChanged = { [weak self] in
             self?.refreshHandoffCoordinatorInnerScrollViews()
         }
+        quiz.onEvidencePlaybackWillStart = { [weak self] in
+            self?.dialogueViewController.stopHostedPlaybackIfDisappearing()
+        }
 
         addChild(quiz)
         quiz.view.translatesAutoresizingMaskIntoConstraints = false
@@ -1122,11 +1126,31 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     }
 
     private func reloadQuizContent() {
-        let questions = currentScenarioItem?.quiz ?? []
-        quizViewController.configure(questions: questions)
+        let item = currentScenarioItem
+        let questions = item?.quiz ?? []
+        let evidence = item.map(Self.quizEvidenceContext(for:))
+        quizViewController.configure(questions: questions, evidenceContext: evidence)
         updateQuizCheckButtonState()
         applyQuizCheckButtonProgress(pageTransitionProgress)
         applyQuizScrollInsetsForPageTransition()
+    }
+
+    private static func quizEvidenceContext(for item: ScenarioItem) -> DialogueQuizEvidenceContext {
+        let spokenLines = (item.example.scenario?.lines ?? [])
+            .filter(\.isSpokenLine)
+            .map {
+                DialogueQuizSourceLine(
+                    speaker: $0.speaker,
+                    japanese: $0.japanese,
+                    english: $0.english
+                )
+            }
+        return DialogueQuizEvidenceContext(
+            publishedAudioUrl: item.example.publishedAudioUrl,
+            audioKey: item.example.audioKey,
+            cacheMetadata: item.example.remoteAudioCacheMetadata,
+            spokenLines: spokenLines
+        )
     }
 
     private func configureQuizCheckButton() {

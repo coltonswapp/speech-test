@@ -17,9 +17,27 @@ import {
   isInlineQuestionLine,
   isSpokenLine,
   isStageLine,
+  spokenLinesOf,
   type DialogueLine,
   type QuizQuestion,
+  type SpokenLine,
 } from "@/lib/dialogue/types";
+
+const NONE_VALUE = "__none__";
+
+function spokenLineLabel(line: SpokenLine, spokenIndex: number): string {
+  const english = line.english?.trim() ? ` — ${line.english.trim()}` : "";
+  const speaker = line.speaker?.trim() ? `${line.speaker}: ` : "";
+  return `[${spokenIndex}] ${speaker}${line.japanese}${english}`;
+}
+
+function clampSpokenEnd(
+  start: number | undefined,
+  end: number | undefined,
+): number | undefined {
+  if (start === undefined || end === undefined) return undefined;
+  return end < start ? undefined : end;
+}
 
 export function QuizEditor({
   quiz,
@@ -36,11 +54,43 @@ export function QuizEditor({
   menuTitle?: string;
 }) {
   const questions = quiz ?? [];
+  const spokenLines = spokenLinesOf(lines);
 
   function update(index: number, patch: Partial<QuizQuestion>) {
     const next = questions.slice();
     next[index] = { ...next[index], ...patch };
     onChange(next);
+  }
+
+  function setSourceSpokenStart(index: number, raw: string) {
+    if (raw === NONE_VALUE) {
+      update(index, {
+        sourceSpokenStart: undefined,
+        sourceSpokenEnd: undefined,
+      });
+      return;
+    }
+    const start = Number.parseInt(raw, 10);
+    if (!Number.isFinite(start)) return;
+    const current = questions[index];
+    update(index, {
+      sourceSpokenStart: start,
+      sourceSpokenEnd: clampSpokenEnd(start, current.sourceSpokenEnd),
+    });
+  }
+
+  function setSourceSpokenEnd(index: number, raw: string) {
+    if (raw === NONE_VALUE) {
+      update(index, { sourceSpokenEnd: undefined });
+      return;
+    }
+    const end = Number.parseInt(raw, 10);
+    if (!Number.isFinite(end)) return;
+    const start = questions[index].sourceSpokenStart;
+    if (start === undefined) return;
+    update(index, {
+      sourceSpokenEnd: end < start ? undefined : end,
+    });
   }
 
   return (
@@ -173,6 +223,87 @@ export function QuizEditor({
             }
             placeholder="Wrong answer explanation"
           />
+          <div className="flex flex-col gap-2 rounded-md border border-dashed border-border/60 bg-muted/20 p-2.5">
+            <Label className="text-xs text-muted-foreground">
+              Dialogue evidence (spoken lines)
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              After the learner answers, the app plays this spoken segment and
+              shows the Japanese line(s). Indices match TTS / spoken-only order
+              (stage and inline-question rows are skipped).
+            </p>
+            {spokenLines.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Add spoken dialogue lines to link evidence.
+              </p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">Start</Label>
+                  <Select
+                    value={
+                      question.sourceSpokenStart !== undefined
+                        ? String(question.sourceSpokenStart)
+                        : NONE_VALUE
+                    }
+                    onValueChange={(value) => {
+                      if (value) setSourceSpokenStart(index, value);
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="No link" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE_VALUE}>No link</SelectItem>
+                      {spokenLines.map((line, spokenIndex) => (
+                        <SelectItem
+                          key={spokenIndex}
+                          value={String(spokenIndex)}
+                        >
+                          {spokenLineLabel(line, spokenIndex)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">End (optional, inclusive)</Label>
+                  <Select
+                    value={
+                      question.sourceSpokenEnd !== undefined
+                        ? String(question.sourceSpokenEnd)
+                        : NONE_VALUE
+                    }
+                    onValueChange={(value) => {
+                      if (value) setSourceSpokenEnd(index, value);
+                    }}
+                    disabled={question.sourceSpokenStart === undefined}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Same as start" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE_VALUE}>Same as start</SelectItem>
+                      {spokenLines
+                        .map((line, spokenIndex) => ({ line, spokenIndex }))
+                        .filter(
+                          ({ spokenIndex }) =>
+                            spokenIndex >= (question.sourceSpokenStart ?? 0),
+                        )
+                        .map(({ line, spokenIndex }) => (
+                          <SelectItem
+                            key={spokenIndex}
+                            value={String(spokenIndex)}
+                          >
+                            {spokenLineLabel(line, spokenIndex)}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       ))}
       <Button

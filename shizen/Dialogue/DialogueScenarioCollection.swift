@@ -167,6 +167,8 @@ private struct DialogueScenarioCollectionFile: Decodable {
         let choices: [String]
         let correctChoice: String
         let wrongAnswerExplanation: String
+        let sourceSpokenStart: Int?
+        let sourceSpokenEnd: Int?
     }
 
     struct ScenarioBody: Decodable {
@@ -375,7 +377,9 @@ private extension DialogueScenarioCollection {
                     choices: $0.choices,
                     correctChoice: $0.correctChoice,
                     wrongAnswerExplanation: $0.wrongAnswerExplanation,
-                    layout: $0.layout
+                    layout: $0.layout,
+                    sourceSpokenStart: $0.sourceSpokenStart,
+                    sourceSpokenEnd: $0.sourceSpokenEnd
                 )
             }
             return Scenario(

@@ -37,13 +37,38 @@ export type StageLine = z.infer<typeof stageLineSchema>;
 
 export const quizLayoutSchema = z.enum(["grid", "list"]);
 
-export const quizQuestionSchema = z.object({
-  prompt: z.string(),
-  layout: quizLayoutSchema,
-  choices: z.array(z.string()),
-  correctChoice: z.string(),
-  wrongAnswerExplanation: z.string(),
-});
+// Spoken-only index space (same as TTS / lineSwitchSeconds): stage and
+// inline-question rows never count. `sourceSpokenEnd` is inclusive when set.
+export const quizQuestionSchema = z
+  .object({
+    prompt: z.string(),
+    layout: quizLayoutSchema,
+    choices: z.array(z.string()),
+    correctChoice: z.string(),
+    wrongAnswerExplanation: z.string(),
+    sourceSpokenStart: z.number().int().nonnegative().optional(),
+    sourceSpokenEnd: z.number().int().nonnegative().optional(),
+  })
+  .superRefine((question, ctx) => {
+    const start = question.sourceSpokenStart;
+    const end = question.sourceSpokenEnd;
+    if (end === undefined) return;
+    if (start === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "sourceSpokenEnd requires sourceSpokenStart",
+        path: ["sourceSpokenEnd"],
+      });
+      return;
+    }
+    if (end < start) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "sourceSpokenEnd must be >= sourceSpokenStart",
+        path: ["sourceSpokenEnd"],
+      });
+    }
+  });
 export type QuizQuestion = z.infer<typeof quizQuestionSchema>;
 
 // Mid-listen checkpoint: sits in `lines[]` like a stage row, skipped by TTS,

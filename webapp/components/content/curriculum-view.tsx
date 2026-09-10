@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   dialogueApi,
   scenarioSlug,
@@ -148,10 +149,35 @@ export function CurriculumView() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const activateMutation = useMutation({
+    mutationFn: ({
+      collectionId,
+      isActive,
+    }: {
+      collectionId: string;
+      isActive: boolean;
+    }) => dialogueApi.updateCollection(collectionId, { isActive }),
+    onSuccess: (_, { isActive }) => {
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["dialogue-collection"] });
+      toast.success(
+        isActive ? "Lesson is live in the app." : "Lesson hidden from the app.",
+      );
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const busy =
     reorderUnitsMutation.isPending ||
     reorderCollectionsMutation.isPending ||
     reorderScenariosMutation.isPending;
+
+  function collectionActivationPending(collectionId: string) {
+    return (
+      activateMutation.isPending &&
+      activateMutation.variables?.collectionId === collectionId
+    );
+  }
 
   const isLoading = unitsLoading || collectionsLoading;
 
@@ -409,6 +435,19 @@ export function CurriculumView() {
                                   {publishedInCollection}/{scenarios.length} audio
                                 </p>
                               </div>
+                              <CollectionActivationSwitch
+                                title={collection.title}
+                                isActive={collection.isActive}
+                                pending={collectionActivationPending(
+                                  collection.id,
+                                )}
+                                onToggle={(isActive) =>
+                                  activateMutation.mutate({
+                                    collectionId: collection.id,
+                                    isActive,
+                                  })
+                                }
+                              />
                               <div className="flex shrink-0 items-center gap-1">
                                 <Button
                                   type="button"
@@ -607,15 +646,28 @@ export function CurriculumView() {
                               )}
                             />
                           </button>
-                          <Link
-                            href={`/content/dialogues/${collection.id}`}
-                            className="min-w-0 flex-1 truncate text-sm hover:underline"
-                          >
-                            {collection.title}
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              {scenarios.length} scenarios
-                            </span>
-                          </Link>
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <Link
+                              href={`/content/dialogues/${collection.id}`}
+                              className="min-w-0 truncate text-sm hover:underline"
+                            >
+                              {collection.title}
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                {scenarios.length} scenarios
+                              </span>
+                            </Link>
+                          </div>
+                          <CollectionActivationSwitch
+                            title={collection.title}
+                            isActive={collection.isActive}
+                            pending={collectionActivationPending(collection.id)}
+                            onToggle={(isActive) =>
+                              activateMutation.mutate({
+                                collectionId: collection.id,
+                                isActive,
+                              })
+                            }
+                          />
                           <Button
                             type="button"
                             variant={editingCollection ? "secondary" : "ghost"}
@@ -703,6 +755,32 @@ export function CurriculumView() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function CollectionActivationSwitch({
+  title,
+  isActive,
+  pending,
+  onToggle,
+}: {
+  title: string;
+  isActive: boolean;
+  pending: boolean;
+  onToggle: (isActive: boolean) => void;
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-2 pr-1 text-xs text-muted-foreground">
+      <span className="hidden sm:inline">In the app</span>
+      <Switch
+        checked={isActive}
+        disabled={pending}
+        onCheckedChange={onToggle}
+        aria-label={
+          isActive ? `Hide ${title} from the app` : `Show ${title} in the app`
+        }
+      />
     </div>
   );
 }

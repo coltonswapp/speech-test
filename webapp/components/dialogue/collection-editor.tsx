@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -148,6 +149,18 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
     });
     queryClient.invalidateQueries({ queryKey: ["dialogue-collections"] });
   }
+
+  const activateMutation = useMutation({
+    mutationFn: (isActive: boolean) =>
+      dialogueApi.updateCollection(collectionId, { isActive }),
+    onSuccess: (_, isActive) => {
+      invalidate();
+      toast.success(
+        isActive ? "Lesson is live in the app." : "Lesson hidden from the app.",
+      );
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -403,6 +416,21 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
             {collection.title}
           </h1>
           <p className="text-sm text-muted-foreground">{collection.id}</p>
+          <div className="mt-3 flex items-start gap-3">
+            <Switch
+              id="lesson-in-app"
+              checked={collection.isActive}
+              onCheckedChange={(next) => activateMutation.mutate(next)}
+              disabled={activateMutation.isPending}
+            />
+            <div className="min-w-0">
+              <Label htmlFor="lesson-in-app">In the app</Label>
+              <p className="text-xs text-muted-foreground">
+                Inactive lessons stay in studio. The app will not list or fetch
+                them.
+              </p>
+            </div>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button

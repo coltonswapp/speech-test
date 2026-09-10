@@ -147,6 +147,8 @@ async function generateConversation(
     lines,
     speaker1Voice,
     speaker2Voice,
+    speaker1Name: project.speaker1Name,
+    speaker2Name: project.speaker2Name,
     model: GEMINI_TTS_DEFAULT_MODEL,
   });
 

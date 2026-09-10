@@ -34,16 +34,29 @@ export type PublicCurriculumUnitSummary = {
 export async function listPublicCurriculumUnits(): Promise<
   PublicCurriculumUnitSummary[]
 > {
-  const units = await db.query.curriculumUnit.findMany({
-    orderBy: [asc(curriculumUnit.orderIndex), asc(curriculumUnit.id)],
-  });
-  return units.map((unit) => ({
-    id: unit.id,
-    title: unit.title,
-    subtitle: unit.subtitle,
-    jlptLevel: unit.jlptLevel,
-    orderIndex: unit.orderIndex,
-  }));
+  const [units, activeCollections] = await Promise.all([
+    db.query.curriculumUnit.findMany({
+      orderBy: [asc(curriculumUnit.orderIndex), asc(curriculumUnit.id)],
+    }),
+    db.query.dialogueCollection.findMany({
+      where: eq(dialogueCollection.isActive, true),
+      columns: { unitId: true },
+    }),
+  ]);
+  const unitIdsWithActiveLessons = new Set(
+    activeCollections
+      .map((collection) => collection.unitId)
+      .filter((unitId): unitId is string => unitId != null)
+  );
+  return units
+    .filter((unit) => unitIdsWithActiveLessons.has(unit.id))
+    .map((unit) => ({
+      id: unit.id,
+      title: unit.title,
+      subtitle: unit.subtitle,
+      jlptLevel: unit.jlptLevel,
+      orderIndex: unit.orderIndex,
+    }));
 }
 
 export function toExportableScenario(
@@ -77,6 +90,7 @@ export async function listPublicDialogueCollections(): Promise<
   PublicDialogueCollectionSummary[]
 > {
   const collections = await db.query.dialogueCollection.findMany({
+    where: eq(dialogueCollection.isActive, true),
     orderBy: [asc(dialogueCollection.orderIndex), asc(dialogueCollection.id)],
   });
   const scenarios = await db.query.dialogueScenario.findMany({
@@ -106,7 +120,7 @@ export async function getPublicDialogueCollectionFile(collectionId: string) {
   const collection = await db.query.dialogueCollection.findFirst({
     where: eq(dialogueCollection.id, collectionId),
   });
-  if (!collection) return null;
+  if (!collection || !collection.isActive) return null;
 
   const scenarios = await db.query.dialogueScenario.findMany({
     where: eq(dialogueScenario.collectionId, collectionId),

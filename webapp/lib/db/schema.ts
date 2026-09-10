@@ -222,6 +222,9 @@ export const dialogueCollection = pgTable("dialogue_collection", {
   sceneImage: text("scene_image"), // optional bundled asset-catalog name (legacy / fallback)
   thumbnailUrl: text("thumbnail_url"), // public CDN URL for lesson card thumbnail
   orderIndex: integer("order_index").notNull().default(0), // position within unit (or unfiled list)
+  // App visibility. Studio always lists every collection; the public CMS
+  // only serves rows where this is true. New lessons start hidden.
+  isActive: boolean("is_active").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

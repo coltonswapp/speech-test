@@ -324,6 +324,7 @@ export const updateCollectionSchema = z.object({
   sceneImage: z.string().nullable().optional(),
   thumbnailUrl: z.string().url().nullable().optional(),
   orderIndex: z.number().int().optional(),
+  isActive: z.boolean().optional(),
   scenarioOrder: z.array(z.string()).optional(),
 });
 

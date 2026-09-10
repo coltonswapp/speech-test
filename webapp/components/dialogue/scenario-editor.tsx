@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -9,6 +10,7 @@ import {
   Trash2,
   ClipboardCheck,
   ShieldCheck,
+  ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { GrammarPointPicker } from "@/components/content/grammar-point-picker";
@@ -79,6 +81,24 @@ function writeCollapsedSections(collapsed: Set<string>) {
   } catch {
     // localStorage unavailable (private mode, etc.) — keep the in-memory state.
   }
+}
+
+function LessonBackLink({
+  collectionId,
+  title,
+}: {
+  collectionId: string;
+  title?: string | null;
+}) {
+  return (
+    <Link
+      href={`/content/dialogues/${collectionId}`}
+      className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+    >
+      <ChevronLeft className="size-4" />
+      {title?.trim() || "Lesson"}
+    </Link>
+  );
 }
 
 export function ScenarioEditor({
@@ -279,6 +299,10 @@ export function ScenarioEditor({
   if (isLoading || !draft) {
     return (
       <div className="flex flex-1 flex-col gap-4">
+        <LessonBackLink
+          collectionId={collectionId}
+          title={collectionData?.collection.title}
+        />
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-48 w-full" />
       </div>
@@ -464,6 +488,10 @@ export function ScenarioEditor({
 
   return (
     <div className="flex flex-1 flex-col gap-6">
+      <LessonBackLink
+        collectionId={collectionId}
+        title={collectionData?.collection.title}
+      />
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
@@ -767,7 +795,6 @@ export function ScenarioEditor({
               summary={`${draft.lines.length} line${draft.lines.length === 1 ? "" : "s"}`}
               collapsed={collapsedSections.has("lines")}
               onToggle={() => toggleSection("lines")}
-              className="max-w-5xl"
               bodyClassName="gap-6"
             >
               <LineEditor

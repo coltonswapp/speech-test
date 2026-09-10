@@ -9,7 +9,7 @@ export { GEMINI_TTS_VOICES, GEMINI_TTS_DEFAULT_MODEL } from "@/lib/tts/gemini-vo
 
 export type ConversationSpeaker = "speaker1" | "speaker2";
 
-const speakerLabel: Record<ConversationSpeaker, string> = {
+const DEFAULT_SPEAKER_LABEL: Record<ConversationSpeaker, string> = {
   speaker1: "Speaker 1",
   speaker2: "Speaker 2",
 };
@@ -21,11 +21,33 @@ export type ConversationDialogueLine = {
 
 export class GeminiTTSError extends Error {}
 
-function buildTranscript(lines: ConversationDialogueLine[]): string {
+/**
+ * Labels used in the Gemini transcript + multiSpeakerVoiceConfig.speaker fields.
+ * Prefer character names (Kaito/Mika) — generic "Speaker 1/2" is more prone to the
+ * known multi-speaker voice-swap quirk on the first turn.
+ */
+function resolveSpeakerLabels(params: {
+  speaker1Name?: string | null;
+  speaker2Name?: string | null;
+}): Record<ConversationSpeaker, string> {
+  const raw1 = params.speaker1Name?.trim() || "";
+  const raw2 = params.speaker2Name?.trim() || "";
+  if (raw1 && raw2 && raw1.toLowerCase() !== raw2.toLowerCase()) {
+    return { speaker1: raw1, speaker2: raw2 };
+  }
+  return { ...DEFAULT_SPEAKER_LABEL };
+}
+
+function buildTranscript(
+  lines: ConversationDialogueLine[],
+  labels: Record<ConversationSpeaker, string>
+): string {
   const body = lines
-    .map((line) => `${speakerLabel[line.speaker]}: ${line.text.trim()}`)
+    .map((line) => `${labels[line.speaker]}: ${line.text.trim()}`)
     .join("\n");
-  return `## Transcript:\n${body}`;
+  // Brief style cue helps Gemini keep voices attached to the right speaker.
+  const cue = `TTS dialogue. ${labels.speaker1} uses voice A; ${labels.speaker2} uses voice B. Keep each speaker's voice consistent for every line.\n\n`;
+  return `${cue}## Transcript:\n${body}`;
 }
 
 /** Strips a 44-byte WAV header if the response happens to be WAV-wrapped. */
@@ -40,6 +62,9 @@ export async function synthesizeGeminiConversation(params: {
   lines: ConversationDialogueLine[];
   speaker1Voice: string;
   speaker2Voice: string;
+  /** Display names used as Gemini speaker aliases (e.g. Kaito / Mika). */
+  speaker1Name?: string | null;
+  speaker2Name?: string | null;
   model?: string;
   temperature?: number;
 }): Promise<Buffer> {
@@ -54,7 +79,11 @@ export async function synthesizeGeminiConversation(params: {
   }
 
   const model = params.model ?? GEMINI_TTS_DEFAULT_MODEL;
-  const transcript = buildTranscript(trimmedLines);
+  const labels = resolveSpeakerLabels({
+    speaker1Name: params.speaker1Name,
+    speaker2Name: params.speaker2Name,
+  });
+  const transcript = buildTranscript(trimmedLines, labels);
 
   const payload = {
     contents: [
@@ -70,13 +99,13 @@ export async function synthesizeGeminiConversation(params: {
         multiSpeakerVoiceConfig: {
           speakerVoiceConfigs: [
             {
-              speaker: speakerLabel.speaker1,
+              speaker: labels.speaker1,
               voiceConfig: {
                 prebuiltVoiceConfig: { voiceName: params.speaker1Voice },
               },
             },
             {
-              speaker: speakerLabel.speaker2,
+              speaker: labels.speaker2,
               voiceConfig: {
                 prebuiltVoiceConfig: { voiceName: params.speaker2Voice },
               },

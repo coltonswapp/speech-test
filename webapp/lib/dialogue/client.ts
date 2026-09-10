@@ -55,6 +55,7 @@ export type CollectionSummary = {
   sceneImage: string | null;
   thumbnailUrl: string | null;
   orderIndex: number;
+  isActive: boolean;
   updatedAt: string;
   scenarios: ScenarioSummary[];
 };
@@ -177,6 +178,7 @@ export const dialogueApi = {
       sceneImage?: string | null;
       thumbnailUrl?: string | null;
       orderIndex?: number;
+      isActive?: boolean;
       scenarioOrder?: string[];
     },
   ) =>

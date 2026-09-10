@@ -50,6 +50,13 @@
       "when": 1784129206933,
       "tag": "0006_dialogue_scenario_thumbnail",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784129206934,
+      "tag": "0007_dialogue_collection_is_active",
+      "breakpoints": true
     }
   ]
 }

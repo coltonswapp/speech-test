@@ -94,7 +94,7 @@ function buildMapList(
 /** One-click beat between dialogue lines (physical action, handing something). */
 const PLAYHEAD_BREAK_SECONDS = 0.15;
 const PLAYHEAD_BREAK_HALF_SECONDS = 0.5;
-const PLAYBACK_RATES = [0.5, 0.75, 1] as const;
+const PLAYBACK_RATES = [0.5, 0.75, 1, 1.5] as const;
 
 /**
  * After the user scrolls the page themselves, hold off auto-following the

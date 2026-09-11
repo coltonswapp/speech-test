@@ -237,6 +237,7 @@ export function QuizEditor({
                 Add spoken dialogue lines to link evidence.
               </p>
             ) : (
+              <>
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs">Start</Label>
@@ -251,14 +252,23 @@ export function QuizEditor({
                     }}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="No link" />
+                      <SelectValue placeholder="No link">
+                        {question.sourceSpokenStart !== undefined &&
+                        spokenLines[question.sourceSpokenStart]
+                          ? spokenLineLabel(
+                              spokenLines[question.sourceSpokenStart],
+                              question.sourceSpokenStart,
+                            )
+                          : "No link"}
+                      </SelectValue>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-w-[min(100vw-2rem,36rem)]">
                       <SelectItem value={NONE_VALUE}>No link</SelectItem>
                       {spokenLines.map((line, spokenIndex) => (
                         <SelectItem
                           key={spokenIndex}
                           value={String(spokenIndex)}
+                          className="whitespace-normal text-left"
                         >
                           {spokenLineLabel(line, spokenIndex)}
                         </SelectItem>
@@ -280,9 +290,17 @@ export function QuizEditor({
                     disabled={question.sourceSpokenStart === undefined}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Same as start" />
+                      <SelectValue placeholder="Same as start">
+                        {question.sourceSpokenEnd !== undefined &&
+                        spokenLines[question.sourceSpokenEnd]
+                          ? spokenLineLabel(
+                              spokenLines[question.sourceSpokenEnd],
+                              question.sourceSpokenEnd,
+                            )
+                          : "Same as start"}
+                      </SelectValue>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-w-[min(100vw-2rem,36rem)]">
                       <SelectItem value={NONE_VALUE}>Same as start</SelectItem>
                       {spokenLines
                         .map((line, spokenIndex) => ({ line, spokenIndex }))
@@ -294,6 +312,7 @@ export function QuizEditor({
                           <SelectItem
                             key={spokenIndex}
                             value={String(spokenIndex)}
+                            className="whitespace-normal text-left"
                           >
                             {spokenLineLabel(line, spokenIndex)}
                           </SelectItem>
@@ -302,6 +321,47 @@ export function QuizEditor({
                   </Select>
                 </div>
               </div>
+              {question.sourceSpokenStart !== undefined &&
+                spokenLines[question.sourceSpokenStart] && (
+                  <div className="rounded-md border border-border/50 bg-background/60 px-2.5 py-2">
+                    <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Linked evidence preview
+                    </p>
+                    <ul className="flex flex-col gap-1.5">
+                      {spokenLines
+                        .slice(
+                          question.sourceSpokenStart,
+                          (question.sourceSpokenEnd ??
+                            question.sourceSpokenStart) + 1,
+                        )
+                        .map((line, offset) => {
+                          const spokenIndex =
+                            question.sourceSpokenStart! + offset;
+                          return (
+                            <li
+                              key={spokenIndex}
+                              className="text-sm leading-snug"
+                            >
+                              <span className="text-muted-foreground">
+                                [{spokenIndex}]{" "}
+                                {line.speaker?.trim()
+                                  ? `${line.speaker.trim()}: `
+                                  : ""}
+                              </span>
+                              <span>{line.japanese}</span>
+                              {line.english?.trim() ? (
+                                <span className="text-muted-foreground">
+                                  {" "}
+                                  — {line.english.trim()}
+                                </span>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                    </ul>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

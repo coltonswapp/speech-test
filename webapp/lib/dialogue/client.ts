@@ -32,6 +32,14 @@ export type ScenarioAudioStatus = {
   publishStale: boolean;
 };
 
+export type ScenarioReadinessSummary = {
+  audio: "published" | "draft";
+  timing: "missing" | "partial" | "done";
+  sync: "missing" | "stale" | "tokens-only" | "complete";
+  quizCount: number;
+  quizWithEvidence: number;
+};
+
 export type ScenarioSummary = {
   id: string;
   collectionId: string;
@@ -44,6 +52,7 @@ export type ScenarioSummary = {
   publishedContentHash: string | null;
   publishedAt: string | null;
   updatedAt: string;
+  readiness: ScenarioReadinessSummary;
 };
 
 export type CollectionSummary = {

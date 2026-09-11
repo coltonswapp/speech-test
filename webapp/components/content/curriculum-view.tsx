@@ -17,8 +17,14 @@ import {
   dialogueApi,
   scenarioSlug,
   type CollectionSummary,
+  type ScenarioReadinessSummary,
+  type ScenarioSummary,
   type UnitSummary,
 } from "@/lib/dialogue/client";
+import {
+  formatCurriculumUpdatedAt,
+  syncChipLabel,
+} from "@/lib/dialogue/scenario-readiness";
 import { cn } from "@/lib/utils";
 import { DialogueFormulaNotes } from "@/components/content/dialogue-formula-notes";
 
@@ -217,8 +223,8 @@ export function CurriculumView() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <p className="text-sm text-muted-foreground">
-            Scan the learner path. Expand a unit or collection to drill in; Edit
-            to reorder that section only.
+            Scan the learner path. Expand to see readiness chips; ↑↓ reorder
+            when a section is open. Edit expands and highlights that section.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -233,7 +239,7 @@ export function CurriculumView() {
             {anyExpanded ? "Collapse all" : "Expand all"}
           </Button>
           <Badge variant="outline" className="text-xs font-normal">
-            View by default
+            ↑↓ when expanded
           </Badge>
         </div>
       </div>
@@ -346,26 +352,25 @@ export function CurriculumView() {
                         size="sm"
                         className="h-7 px-2 text-xs"
                         onClick={() => toggleUnitEdit(unit.id)}
+                        title="Expand and highlight to reorder this unit"
                       >
                         {editingUnit ? "Done" : "Edit"}
                       </Button>
-                      {editingUnit ? (
-                        <ReorderButtons
-                          disabled={busy}
-                          canUp={unitIndex > 0}
-                          canDown={unitIndex < units.length - 1}
-                          onUp={() =>
-                            reorderUnitsMutation.mutate(
-                              moveItem(units, unitIndex, unitIndex - 1),
-                            )
-                          }
-                          onDown={() =>
-                            reorderUnitsMutation.mutate(
-                              moveItem(units, unitIndex, unitIndex + 1),
-                            )
-                          }
-                        />
-                      ) : null}
+                      <ReorderButtons
+                        disabled={busy}
+                        canUp={unitIndex > 0}
+                        canDown={unitIndex < units.length - 1}
+                        onUp={() =>
+                          reorderUnitsMutation.mutate(
+                            moveItem(units, unitIndex, unitIndex - 1),
+                          )
+                        }
+                        onDown={() =>
+                          reorderUnitsMutation.mutate(
+                            moveItem(units, unitIndex, unitIndex + 1),
+                          )
+                        }
+                      />
                     </div>
                   </header>
 
@@ -459,103 +464,61 @@ export function CurriculumView() {
                                   onClick={() =>
                                     toggleCollectionEdit(collection.id)
                                   }
+                                  title="Expand and highlight to reorder scenarios"
                                 >
                                   {editingCollection ? "Done" : "Edit"}
                                 </Button>
-                                {editingUnit ? (
-                                  <ReorderButtons
-                                    disabled={busy}
-                                    canUp={collectionIndex > 0}
-                                    canDown={
-                                      collectionIndex <
-                                      unitCollections.length - 1
-                                    }
-                                    onUp={() =>
-                                      reorderCollectionsMutation.mutate({
-                                        unitId: unit.id,
-                                        collectionIds: moveItem(
-                                          unitCollections,
-                                          collectionIndex,
-                                          collectionIndex - 1,
-                                        ).map((c) => c.id),
-                                      })
-                                    }
-                                    onDown={() =>
-                                      reorderCollectionsMutation.mutate({
-                                        unitId: unit.id,
-                                        collectionIds: moveItem(
-                                          unitCollections,
-                                          collectionIndex,
-                                          collectionIndex + 1,
-                                        ).map((c) => c.id),
-                                      })
-                                    }
-                                  />
-                                ) : null}
+                                <ReorderButtons
+                                  disabled={busy}
+                                  canUp={collectionIndex > 0}
+                                  canDown={
+                                    collectionIndex <
+                                    unitCollections.length - 1
+                                  }
+                                  onUp={() =>
+                                    reorderCollectionsMutation.mutate({
+                                      unitId: unit.id,
+                                      collectionIds: moveItem(
+                                        unitCollections,
+                                        collectionIndex,
+                                        collectionIndex - 1,
+                                      ).map((c) => c.id),
+                                    })
+                                  }
+                                  onDown={() =>
+                                    reorderCollectionsMutation.mutate({
+                                      unitId: unit.id,
+                                      collectionIds: moveItem(
+                                        unitCollections,
+                                        collectionIndex,
+                                        collectionIndex + 1,
+                                      ).map((c) => c.id),
+                                    })
+                                  }
+                                />
                               </div>
                             </div>
                             {collectionOpen ? (
                             <ol id={collectionPanelId} className="border-t px-2 py-1.5">
                               {scenarios.map((scenario, scenarioIndex) => (
-                                <li
+                                <CurriculumScenarioRow
                                   key={scenario.id}
-                                  className="flex items-center gap-2 rounded px-1 py-1.5 hover:bg-background/60"
-                                >
-                                  <span className="w-5 shrink-0 text-right text-[10px] text-muted-foreground">
-                                    {scenarioIndex + 1}
-                                  </span>
-                                  <Link
-                                    href={`/content/dialogues/${collection.id}/${scenarioSlug(scenario)}`}
-                                    className="min-w-0 flex-1 truncate text-xs hover:underline"
-                                  >
-                                    {scenario.menuTitle}
-                                  </Link>
-                                  {scenario.publishedAudioUrl ? (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[9px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
-                                    >
-                                      audio
-                                    </Badge>
-                                  ) : (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[9px] text-muted-foreground"
-                                    >
-                                      draft
-                                    </Badge>
-                                  )}
-                                  {editingCollection ? (
-                                    <ReorderButtons
-                                      size="xs"
-                                      disabled={busy}
-                                      canUp={scenarioIndex > 0}
-                                      canDown={
-                                        scenarioIndex < scenarios.length - 1
-                                      }
-                                      onUp={() =>
-                                        reorderScenariosMutation.mutate({
-                                          collectionId: collection.id,
-                                          scenarioIds: moveItem(
-                                            scenarios,
-                                            scenarioIndex,
-                                            scenarioIndex - 1,
-                                          ).map((s) => s.id),
-                                        })
-                                      }
-                                      onDown={() =>
-                                        reorderScenariosMutation.mutate({
-                                          collectionId: collection.id,
-                                          scenarioIds: moveItem(
-                                            scenarios,
-                                            scenarioIndex,
-                                            scenarioIndex + 1,
-                                          ).map((s) => s.id),
-                                        })
-                                      }
-                                    />
-                                  ) : null}
-                                </li>
+                                  scenario={scenario}
+                                  collectionId={collection.id}
+                                  index={scenarioIndex}
+                                  total={scenarios.length}
+                                  busy={busy}
+                                  onMove={(from, to) =>
+                                    reorderScenariosMutation.mutate({
+                                      collectionId: collection.id,
+                                      scenarioIds: moveItem(
+                                        scenarios,
+                                        from,
+                                        to,
+                                      ).map((s) => s.id),
+                                    })
+                                  }
+                                />
                               ))}
                             </ol>
                             ) : null}
@@ -599,7 +562,7 @@ export function CurriculumView() {
                       </h2>
                       <p className="text-xs text-muted-foreground">
                         Collections not assigned to a unit. Assign them in Dialogues.
-                        Edit a collection below to reorder its scenarios.
+                        Expand a collection and use ↑↓ to reorder scenarios.
                       </p>
                     </div>
                   </button>
@@ -683,65 +646,24 @@ export function CurriculumView() {
                         {collectionOpen ? (
                           <ol id={collectionPanelId} className="border-t px-2 py-1.5">
                             {scenarios.map((scenario, scenarioIndex) => (
-                              <li
+                              <CurriculumScenarioRow
                                 key={scenario.id}
-                                className="flex items-center gap-2 rounded px-1 py-1.5"
-                              >
-                                <span className="w-5 shrink-0 text-right text-[10px] text-muted-foreground">
-                                  {scenarioIndex + 1}
-                                </span>
-                                <Link
-                                  href={`/content/dialogues/${collection.id}/${scenarioSlug(scenario)}`}
-                                  className="min-w-0 flex-1 truncate text-xs hover:underline"
-                                >
-                                  {scenario.menuTitle}
-                                </Link>
-                                {scenario.publishedAudioUrl ? (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[9px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
-                                  >
-                                    audio
-                                  </Badge>
-                                ) : (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[9px] text-muted-foreground"
-                                  >
-                                    draft
-                                  </Badge>
-                                )}
-                                {editingCollection ? (
-                                <ReorderButtons
-                                  size="xs"
-                                  disabled={busy}
-                                  canUp={scenarioIndex > 0}
-                                  canDown={
-                                    scenarioIndex < scenarios.length - 1
-                                  }
-                                  onUp={() =>
-                                    reorderScenariosMutation.mutate({
-                                      collectionId: collection.id,
-                                      scenarioIds: moveItem(
-                                        scenarios,
-                                        scenarioIndex,
-                                        scenarioIndex - 1,
-                                      ).map((s) => s.id),
-                                    })
-                                  }
-                                  onDown={() =>
-                                    reorderScenariosMutation.mutate({
-                                      collectionId: collection.id,
-                                      scenarioIds: moveItem(
-                                        scenarios,
-                                        scenarioIndex,
-                                        scenarioIndex + 1,
-                                      ).map((s) => s.id),
-                                    })
-                                  }
-                                />
-                                ) : null}
-                              </li>
+                                scenario={scenario}
+                                collectionId={collection.id}
+                                index={scenarioIndex}
+                                total={scenarios.length}
+                                busy={busy}
+                                onMove={(from, to) =>
+                                  reorderScenariosMutation.mutate({
+                                    collectionId: collection.id,
+                                    scenarioIds: moveItem(
+                                      scenarios,
+                                      from,
+                                      to,
+                                    ).map((s) => s.id),
+                                  })
+                                }
+                              />
                             ))}
                           </ol>
                         ) : null}
@@ -756,6 +678,155 @@ export function CurriculumView() {
         </div>
       )}
     </div>
+  );
+}
+
+function readinessChipClass(
+  tone: "ok" | "warn" | "muted" | "draft",
+): string {
+  switch (tone) {
+    case "ok":
+      return "border-emerald-500/40 text-emerald-600 dark:text-emerald-400";
+    case "warn":
+      return "border-amber-500/50 text-amber-600 dark:text-amber-400";
+    case "draft":
+      return "text-muted-foreground";
+    case "muted":
+      return "text-muted-foreground/70";
+  }
+}
+
+function ScenarioReadinessChips({
+  readiness,
+}: {
+  readiness: ScenarioReadinessSummary;
+}) {
+  const audioTone =
+    readiness.audio === "published" ? ("ok" as const) : ("draft" as const);
+  const timingTone =
+    readiness.timing === "done"
+      ? ("ok" as const)
+      : readiness.timing === "partial"
+        ? ("warn" as const)
+        : ("muted" as const);
+  const syncTone =
+    readiness.sync === "complete"
+      ? ("ok" as const)
+      : readiness.sync === "stale"
+        ? ("warn" as const)
+        : ("muted" as const);
+  const quizTone =
+    readiness.quizCount > 0 ? ("ok" as const) : ("muted" as const);
+  const quizLabel =
+    readiness.quizCount === 0 ? "—" : `quiz ${readiness.quizCount}`;
+
+  return (
+    <div className="flex max-w-[min(100%,14rem)] flex-wrap items-center justify-end gap-1 sm:max-w-none">
+      <Badge
+        variant="outline"
+        className={cn("text-[9px]", readinessChipClass(audioTone))}
+        title={
+          readiness.audio === "published"
+            ? "Published audio"
+            : "No published audio yet"
+        }
+      >
+        {readiness.audio === "published" ? "audio" : "draft"}
+      </Badge>
+      <Badge
+        variant="outline"
+        className={cn("text-[9px]", readinessChipClass(timingTone))}
+        title={
+          readiness.timing === "done"
+            ? "Line timing complete"
+            : readiness.timing === "partial"
+              ? "Line timing partial"
+              : "Line timing missing"
+        }
+      >
+        timing
+      </Badge>
+      <Badge
+        variant="outline"
+        className={cn("text-[9px]", readinessChipClass(syncTone))}
+        title={
+          readiness.sync === "complete"
+            ? "Token karaoke complete"
+            : readiness.sync === "tokens-only"
+              ? "Tokens present, times incomplete"
+              : readiness.sync === "stale"
+                ? "Token sync stale vs current lines"
+                : "No token sync"
+        }
+      >
+        {syncChipLabel(readiness.sync)}
+      </Badge>
+      <Badge
+        variant="outline"
+        className={cn("text-[9px]", readinessChipClass(quizTone))}
+        title={
+          readiness.quizCount === 0
+            ? "No quiz"
+            : `${readiness.quizCount} quiz question${readiness.quizCount === 1 ? "" : "s"}${
+                readiness.quizWithEvidence > 0
+                  ? ` (${readiness.quizWithEvidence} with evidence links)`
+                  : ""
+              }`
+        }
+      >
+        {quizLabel}
+      </Badge>
+    </div>
+  );
+}
+
+function CurriculumScenarioRow({
+  scenario,
+  collectionId,
+  index,
+  total,
+  busy,
+  onMove,
+}: {
+  scenario: ScenarioSummary;
+  collectionId: string;
+  index: number;
+  total: number;
+  busy: boolean;
+  onMove: (from: number, to: number) => void;
+}) {
+  const updatedLabel = formatCurriculumUpdatedAt(scenario.updatedAt);
+  return (
+    <li className="flex items-start gap-2 rounded px-1 py-1.5 hover:bg-background/60 sm:items-center">
+      <span className="mt-0.5 w-5 shrink-0 text-right text-[10px] text-muted-foreground sm:mt-0">
+        {index + 1}
+      </span>
+      <Link
+        href={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
+        className="min-w-0 flex-1 truncate text-xs hover:underline"
+      >
+        {scenario.menuTitle}
+      </Link>
+      <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+        {updatedLabel ? (
+          <span
+            className="whitespace-nowrap text-[10px] text-muted-foreground"
+            title={new Date(scenario.updatedAt).toLocaleString()}
+          >
+            {updatedLabel}
+          </span>
+        ) : null}
+        <ScenarioReadinessChips readiness={scenario.readiness} />
+      </div>
+      <ReorderButtons
+        size="xs"
+        disabled={busy}
+        canUp={index > 0}
+        canDown={index < total - 1}
+        onUp={() => onMove(index, index - 1)}
+        onDown={() => onMove(index, index + 1)}
+      />
+    </li>
   );
 }
 

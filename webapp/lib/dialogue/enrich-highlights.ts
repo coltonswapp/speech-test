@@ -250,3 +250,18 @@ export function addMissingGrammarPatterns(
     contextNotes,
   };
 }
+
+/** Drop blank vocabulary rows before persisting scenario highlights. */
+export function sanitizeHighlightsForSave(
+  highlights: DialogueHighlights | null
+): DialogueHighlights | null {
+  if (!highlights) return null;
+  const vocabulary = (highlights.vocabulary ?? [])
+    .map((word) => word.trim())
+    .filter((word) => word.length > 0);
+  return {
+    vocabulary,
+    grammarPatterns: highlights.grammarPatterns ?? [],
+    contextNotes: highlights.contextNotes ?? [],
+  };
+}

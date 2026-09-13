@@ -45,6 +45,9 @@ export function HighlightsEditor({
   const contextNotes = value.contextNotes ?? [];
   const [isExtracting, setIsExtracting] = useState(false);
   const didAutoSyncGrammar = useRef(false);
+  const vocabFocusIndex = useRef<number | null>(null);
+  const vocabInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const skipVocabBlur = useRef(false);
 
   const taggedGrammarIds = useMemo(
     () => uniqueGrammarIdsFromLines(lines, grammarPointIds),
@@ -71,6 +74,42 @@ export function HighlightsEditor({
   function patch(next: Partial<DialogueHighlights>) {
     onChange({ vocabulary, grammarPatterns, contextNotes, ...next });
   }
+
+  function setVocabulary(next: string[]) {
+    patch({ vocabulary: next });
+  }
+
+  function setVocabularyAt(index: number, word: string) {
+    const next = vocabulary.slice();
+    next[index] = word;
+    setVocabulary(next);
+  }
+
+  /** Trim whitespace on blur; blank draft rows stay until Save filters them. */
+  function commitVocabularyAt(index: number) {
+    if (skipVocabBlur.current) {
+      skipVocabBlur.current = false;
+      return;
+    }
+    const current = vocabulary[index] ?? "";
+    const trimmed = current.trim();
+    if (trimmed === current) return;
+    const next = vocabulary.slice();
+    next[index] = trimmed;
+    setVocabulary(next);
+  }
+
+  function addVocabularyRow() {
+    vocabFocusIndex.current = vocabulary.length;
+    setVocabulary([...vocabulary, ""]);
+  }
+
+  useEffect(() => {
+    const index = vocabFocusIndex.current;
+    if (index === null) return;
+    vocabFocusIndex.current = null;
+    vocabInputRefs.current[index]?.focus();
+  }, [vocabulary]);
 
   function syncGrammarFromLines() {
     if (taggedGrammarIds.length === 0) {
@@ -167,17 +206,58 @@ export function HighlightsEditor({
         </Button>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <Label>Vocabulary (one per line)</Label>
-        <Textarea
-          rows={6}
-          value={vocabulary.join("\n")}
-          onChange={(e) =>
-            patch({
-              vocabulary: e.target.value.split("\n").filter((v) => v.trim()),
-            })
-          }
-        />
+      <div className="flex flex-col gap-3">
+        <Label>Vocabulary</Label>
+        {vocabulary.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No vocabulary yet. Add words manually or extract with AI.
+          </p>
+        )}
+        {vocabulary.map((word, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <Input
+              ref={(el) => {
+                vocabInputRefs.current[index] = el;
+              }}
+              value={word}
+              onChange={(e) => setVocabularyAt(index, e.target.value)}
+              onBlur={() => commitVocabularyAt(index)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                const trimmed = word.trim();
+                if (!trimmed) return;
+                skipVocabBlur.current = true;
+                const next = vocabulary.slice();
+                next[index] = trimmed;
+                next.splice(index + 1, 0, "");
+                vocabFocusIndex.current = index + 1;
+                setVocabulary(next);
+              }}
+              placeholder="単語"
+              aria-label={`Vocabulary word ${index + 1}`}
+            />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() =>
+                setVocabulary(vocabulary.filter((_, i) => i !== index))
+              }
+              aria-label="Remove vocabulary word"
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
+        ))}
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-fit gap-2"
+          onClick={() => addVocabularyRow()}
+        >
+          <Plus className="size-4" />
+          Add word
+        </Button>
       </div>
 
       <div className="flex flex-col gap-3">

@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { contentApi } from "@/lib/content/client";
 import { dialogueApi, type DialogueScenario } from "@/lib/dialogue/client";
 import { enrichDialogueHighlights } from "@/lib/dialogue/enrich-dialogue-highlights";
+import { sanitizeHighlightsForSave } from "@/lib/dialogue/enrich-highlights";
 import { scrollToId } from "@/lib/scroll-to-id";
 import { cn } from "@/lib/utils";
 import { LineEditor } from "@/components/dialogue/line-editor";
@@ -227,7 +228,7 @@ export function ScenarioEditor({
         setting: current.setting,
         thumbnailUrl: current.thumbnailUrl,
         lines: current.lines,
-        highlights: current.highlights,
+        highlights: sanitizeHighlightsForSave(current.highlights),
         quiz: current.quiz,
       });
     },

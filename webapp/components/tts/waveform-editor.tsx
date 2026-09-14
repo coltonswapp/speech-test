@@ -116,9 +116,23 @@ function getCoarsePointerServer() {
 }
 
 /**
+ * iPhone / iPad (including iPadOS that reports as MacIntel). Safari there
+ * mishandles HTMLMediaElement → Web Audio routing; desktop Mac is fine.
+ */
+function isAppleTouchDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  if (/iPad|iPhone|iPod/.test(ua)) return true;
+  return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+}
+
+/**
  * How far the audible output trails the media element's reported position:
  * the Web Audio graph's own buffering plus the hardware/Bluetooth output
  * latency. Both are estimates the browser exposes; ignore anything absurd.
+ *
+ * On Apple touch devices we never route through Web Audio (see meter setup),
+ * so this stays 0 and Mark uses the same media clock as the waveform cursor.
  */
 function playbackLatencySeconds(ctx: AudioContext | null): number {
   if (!ctx) return 0;
@@ -210,8 +224,10 @@ export function WaveformEditor({
   const rowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const playerBarRef = useRef<HTMLDivElement>(null);
   const playerSpacerRef = useRef<HTMLDivElement>(null);
-  // iOS Safari starts AudioContext suspended; createMediaElementSource routes
-  // media through it, so play is silent until we resume on a user gesture.
+  // Desktop: level meter AudioContext. createMediaElementSource routes media
+  // through it, so play is silent until we resume on a user gesture.
+  // iOS: left null — native <audio> playback avoids Web Audio tail cutoff
+  // and unreliable outputLatency that made Mark drift from what you hear.
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sectionRef = useRef<HTMLDivElement>(null);
   const sectionHeaderRef = useRef<HTMLDivElement>(null);
@@ -502,6 +518,11 @@ export function WaveformEditor({
     ws.on("dragend", () => !cancelled && setCursorWidth(1));
 
     // Level meter via an AnalyserNode tapped off wavesurfer's media element.
+    // On iOS Safari, createMediaElementSource steals the element's destination
+    // and commonly truncates the last buffers of the file; outputLatency is
+    // also often 0/wrong there, so Mark compensated against a bad estimate
+    // while the cursor still tracked the raw media clock. Keep native element
+    // playback on Apple touch — skip the meter rather than break the take.
     let rafId: number;
     let audioCtx: AudioContext | null = null;
     let analyser: AnalyserNode | null = null;
@@ -513,6 +534,14 @@ export function WaveformEditor({
       if (!media) return;
       media.setAttribute("playsinline", "true");
       media.volume = 1;
+
+      if (isAppleTouchDevice()) {
+        audioCtxRef.current = null;
+        setLatencyMs(0);
+        setLevel(0);
+        return;
+      }
+
       audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
       setLatencyMs(Math.round(playbackLatencySeconds(audioCtx) * 1000));
@@ -609,10 +638,15 @@ export function WaveformEditor({
   }, [isCutMode, duration]);
 
   /**
-   * The position the user is actually hearing right now. While playing, the
-   * media element's currentTime runs ahead of the speaker by the output
-   * latency, so a Mark tapped "on the beat" would otherwise land late. When
-   * paused/scrubbed the playhead is exactly where the user put it, so no shift.
+   * The position the user is actually hearing right now. While playing on
+   * desktop (Web Audio meter path), the media element's currentTime runs
+   * ahead of the speaker by the output latency, so a Mark tapped "on the
+   * beat" would otherwise land late. When paused/scrubbed the playhead is
+   * exactly where the user put it, so no shift.
+   *
+   * On iPhone/iPad we keep native <audio> output (no MediaElementSource), so
+   * latency is 0 here — Mark, the waveform cursor, and the audible beat
+   * share one media clock.
    */
   function heardPlayheadSeconds(): number {
     const ws = wavesurferRef.current;

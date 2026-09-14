@@ -97,12 +97,8 @@ enum JapaneseSegmentationMapping {
 
         for surface in surfaces {
             let word = surface.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !word.isEmpty else {
-                print("[JapaneseSegmentationMapping] rejected: blank surface in \(surfaces)")
-                return nil
-            }
             guard isAcceptableSurface(word) else {
-                print("[JapaneseSegmentationMapping] rejected: surface \"\(word)\" contains Latin letters")
+                print("[JapaneseSegmentationMapping] rejected: blank surface in \(surfaces)")
                 return nil
             }
             guard let range = text.range(of: word, range: searchStart..<text.endIndex) else {
@@ -127,12 +123,10 @@ enum JapaneseSegmentationMapping {
         return tokens
     }
 
+    /// Non-empty surfaces only. Latin letters/digits are allowed when they appear
+    /// verbatim in the input — `range(of:)` below rejects invented romaji.
     private static func isAcceptableSurface(_ word: String) -> Bool {
-        guard !word.isEmpty else { return false }
-        let latinLetters = word.unicodeScalars.filter { scalar in
-            (65...90).contains(scalar.value) || (97...122).contains(scalar.value)
-        }
-        return latinLetters.isEmpty
+        !word.isEmpty
     }
 
     /// Punctuation that always ends a dictionary-lookup token.

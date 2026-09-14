@@ -64,9 +64,10 @@ export function isAllPunctuationOrWhitespace(word: string): boolean {
   });
 }
 
+/** Non-empty surfaces only. Latin letters/digits are allowed when they appear
+ *  verbatim in the input — `indexOf` below rejects invented romaji. */
 function isAcceptableSurface(word: string): boolean {
-  if (!word) return false;
-  return ![...word].some((char) => /[A-Za-z]/.test(char));
+  return Boolean(word);
 }
 
 function significantChars(text: string): string {
@@ -181,7 +182,6 @@ export function validatedTokens(
 
   for (const surface of surfaces) {
     const word = surface.trim();
-    if (!word) return null;
     if (!isAcceptableSurface(word)) return null;
     const index = text.indexOf(word, searchStart);
     if (index < 0) return null;

@@ -1,13 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import {
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, ChevronUp, GripVertical } from "lucide-react";
+import type {
+  DraggableAttributes,
+  DraggableSyntheticListeners,
+} from "@dnd-kit/core";
+import { ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,15 +29,12 @@ import {
   ScenarioUpdatedLabel,
 } from "@/components/dialogue/scenario-readiness-chips";
 import { DialogueFormulaNotes } from "@/components/content/dialogue-formula-notes";
+import {
+  CurriculumDragHandle,
+  SortableItem,
+  SortableList,
+} from "@/components/content/curriculum-sortable";
 import { cn } from "@/lib/utils";
-
-function moveItem<T>(items: T[], from: number, to: number): T[] {
-  if (to < 0 || to >= items.length || from === to) return items;
-  const next = [...items];
-  const [item] = next.splice(from, 1);
-  next.splice(to, 0, item);
-  return next;
-}
 
 type EditTarget =
   | { kind: "unit"; id: string }
@@ -43,6 +44,9 @@ type EditTarget =
 const UNFILED_KEY = "unfiled";
 const unitKey = (id: string) => `unit:${id}`;
 const collectionKey = (id: string) => `collection:${id}`;
+
+type UnitsQueryData = { units: UnitSummary[] };
+type CollectionsQueryData = { collections: CollectionSummary[] };
 
 export function CurriculumView() {
   const queryClient = useQueryClient();
@@ -120,18 +124,39 @@ export function CurriculumView() {
   };
 
   const reorderUnitsMutation = useMutation({
-    mutationFn: async (ordered: UnitSummary[]) => {
+    mutationFn: async (orderedIds: string[]) => {
       await Promise.all(
-        ordered.map((unit, index) =>
-          dialogueApi.updateUnit(unit.id, { orderIndex: index }),
+        orderedIds.map((id, index) =>
+          dialogueApi.updateUnit(id, { orderIndex: index }),
         ),
       );
+    },
+    onMutate: async (orderedIds) => {
+      await queryClient.cancelQueries({ queryKey: ["curriculum-units"] });
+      const previous = queryClient.getQueryData<UnitsQueryData>([
+        "curriculum-units",
+      ]);
+      if (previous) {
+        const byId = new Map(previous.units.map((unit) => [unit.id, unit]));
+        queryClient.setQueryData<UnitsQueryData>(["curriculum-units"], {
+          units: orderedIds.flatMap((id, index) => {
+            const unit = byId.get(id);
+            return unit ? [{ ...unit, orderIndex: index }] : [];
+          }),
+        });
+      }
+      return { previous };
+    },
+    onError: (error: Error, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["curriculum-units"], context.previous);
+      }
+      toast.error(error.message);
     },
     onSuccess: () => {
       invalidate();
       toast.success("Unit order saved.");
     },
-    onError: (error: Error) => toast.error(error.message),
   });
 
   const reorderCollectionsMutation = useMutation({
@@ -144,11 +169,64 @@ export function CurriculumView() {
     }) => {
       await dialogueApi.updateUnit(unitId, { collectionOrder: collectionIds });
     },
+    onMutate: async ({ unitId, collectionIds }) => {
+      await queryClient.cancelQueries({ queryKey: ["curriculum-units"] });
+      await queryClient.cancelQueries({ queryKey: ["dialogue-collections"] });
+      const previousUnits = queryClient.getQueryData<UnitsQueryData>([
+        "curriculum-units",
+      ]);
+      const previousCollections =
+        queryClient.getQueryData<CollectionsQueryData>(["dialogue-collections"]);
+
+      if (previousUnits) {
+        queryClient.setQueryData<UnitsQueryData>(["curriculum-units"], {
+          units: previousUnits.units.map((unit) => {
+            if (unit.id !== unitId) return unit;
+            const byId = new Map(
+              unit.collections.map((collection) => [collection.id, collection]),
+            );
+            return {
+              ...unit,
+              collections: collectionIds.flatMap((id) => {
+                const collection = byId.get(id);
+                return collection ? [collection] : [];
+              }),
+            };
+          }),
+        });
+      }
+
+      if (previousCollections) {
+        queryClient.setQueryData<CollectionsQueryData>(
+          ["dialogue-collections"],
+          {
+            collections: previousCollections.collections.map((collection) => {
+              const index = collectionIds.indexOf(collection.id);
+              if (index < 0) return collection;
+              return { ...collection, orderIndex: index };
+            }),
+          },
+        );
+      }
+
+      return { previousUnits, previousCollections };
+    },
+    onError: (error: Error, _vars, context) => {
+      if (context?.previousUnits) {
+        queryClient.setQueryData(["curriculum-units"], context.previousUnits);
+      }
+      if (context?.previousCollections) {
+        queryClient.setQueryData(
+          ["dialogue-collections"],
+          context.previousCollections,
+        );
+      }
+      toast.error(error.message);
+    },
     onSuccess: () => {
       invalidate();
       toast.success("Collection order saved.");
     },
-    onError: (error: Error) => toast.error(error.message),
   });
 
   const reorderScenariosMutation = useMutation({
@@ -163,11 +241,45 @@ export function CurriculumView() {
         scenarioOrder: scenarioIds,
       });
     },
+    onMutate: async ({ collectionId, scenarioIds }) => {
+      await queryClient.cancelQueries({ queryKey: ["dialogue-collections"] });
+      const previous = queryClient.getQueryData<CollectionsQueryData>([
+        "dialogue-collections",
+      ]);
+      if (previous) {
+        queryClient.setQueryData<CollectionsQueryData>(
+          ["dialogue-collections"],
+          {
+            collections: previous.collections.map((collection) => {
+              if (collection.id !== collectionId) return collection;
+              const byId = new Map(
+                collection.scenarios.map((scenario) => [scenario.id, scenario]),
+              );
+              return {
+                ...collection,
+                scenarios: scenarioIds.flatMap((id, index) => {
+                  const scenario = byId.get(id);
+                  return scenario
+                    ? [{ ...scenario, orderIndex: index }]
+                    : [];
+                }),
+              };
+            }),
+          },
+        );
+      }
+      return { previous };
+    },
+    onError: (error: Error, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["dialogue-collections"], context.previous);
+      }
+      toast.error(error.message);
+    },
     onSuccess: () => {
       invalidate();
       toast.success("Scenario order saved.");
     },
-    onError: (error: Error) => toast.error(error.message),
   });
 
   const activateMutation = useMutation({
@@ -225,11 +337,12 @@ export function CurriculumView() {
     UNFILED_KEY,
     unfiledCollectionIds,
   );
+  const unitIds = useMemo(() => units.map((unit) => unit.id), [units]);
 
   function toggleUnitEdit(unitId: string) {
     const entering = !(editTarget?.kind === "unit" && editTarget.id === unitId);
     setEditTarget(entering ? { kind: "unit", id: unitId } : null);
-    // Reordering collections needs them on screen.
+    // Highlighting a unit needs its collections on screen.
     if (entering) setKeysExpanded([unitKey(unitId)], true);
   }
 
@@ -246,8 +359,8 @@ export function CurriculumView() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <p className="text-sm text-muted-foreground">
-            Scan the learner path. Expand to see readiness chips; ↑↓ reorder
-            when a section is open. Edit expands and highlights that section.
+            Scan the learner path. Expand a section, then drag the grip to
+            reorder. Edit expands and highlights that section.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -262,7 +375,7 @@ export function CurriculumView() {
             {anyExpanded ? "Collapse all" : "Expand all"}
           </Button>
           <Badge variant="outline" className="text-xs font-normal">
-            ↑↓ when expanded
+            Drag when expanded
           </Badge>
         </div>
       </div>
@@ -282,301 +395,232 @@ export function CurriculumView() {
       ) : (
         <div className="flex-1 overflow-y-auto rounded-lg border bg-card/30 p-3">
           <div className="flex flex-col gap-4">
-            {units.map((unit, unitIndex) => {
-              const unitCollections = (unit.collections ?? [])
-                .map((c) => collectionsById.get(c.id))
-                .filter((c): c is CollectionSummary => Boolean(c))
-                .sort(
-                  (a, b) =>
-                    a.orderIndex - b.orderIndex || a.id.localeCompare(b.id),
-                );
+            {units.length > 0 ? (
+              <SortableList
+                items={unitIds}
+                disabled={busy}
+                onReorder={(orderedIds) =>
+                  reorderUnitsMutation.mutate(orderedIds)
+                }
+                className="flex flex-col gap-4"
+              >
+                {units.map((unit) => {
+                  const unitCollections = (unit.collections ?? [])
+                    .map((c) => collectionsById.get(c.id))
+                    .filter((c): c is CollectionSummary => Boolean(c))
+                    .sort(
+                      (a, b) =>
+                        a.orderIndex - b.orderIndex ||
+                        a.id.localeCompare(b.id),
+                    );
 
-              const scenarioCount = unitCollections.reduce(
-                (sum, c) => sum + c.scenarios.length,
-                0,
-              );
-              const publishedCount = unitCollections.reduce(
-                (sum, c) =>
-                  sum +
-                  c.scenarios.filter((s) => Boolean(s.publishedAudioUrl)).length,
-                0,
-              );
+                  const scenarioCount = unitCollections.reduce(
+                    (sum, c) => sum + c.scenarios.length,
+                    0,
+                  );
+                  const publishedCount = unitCollections.reduce(
+                    (sum, c) =>
+                      sum +
+                      c.scenarios.filter((s) =>
+                        Boolean(s.publishedAudioUrl),
+                      ).length,
+                    0,
+                  );
 
-              const editingUnit =
-                editTarget?.kind === "unit" && editTarget.id === unit.id;
-              const unitOpen = isExpanded(unitKey(unit.id));
-              const unitPanelId = `curriculum-unit-${unit.id}`;
-              const unitCollectionIds = unitCollections.map((c) => c.id);
-              const unitSectionOpen = isSectionExpanded(
-                unitKey(unit.id),
-                unitCollectionIds,
-              );
+                  const editingUnit =
+                    editTarget?.kind === "unit" && editTarget.id === unit.id;
+                  const unitOpen = isExpanded(unitKey(unit.id));
+                  const unitPanelId = `curriculum-unit-${unit.id}`;
+                  const unitCollectionIds = unitCollections.map((c) => c.id);
+                  const unitSectionOpen = isSectionExpanded(
+                    unitKey(unit.id),
+                    unitCollectionIds,
+                  );
 
-              return (
-                <section
-                  key={unit.id}
-                  className={cn(
-                    "rounded-lg border bg-background/80 shadow-sm",
-                    editingUnit && "ring-1 ring-foreground/15",
-                  )}
-                >
-                  <header
-                    className={cn(
-                      "flex items-start gap-2 px-3 py-3.5",
-                      unitOpen && "border-b",
-                    )}
-                  >
-                    {editingUnit ? (
-                      <GripVertical className="mt-1 size-4 shrink-0 text-muted-foreground/50" />
-                    ) : null}
-                    <button
-                      type="button"
-                      aria-expanded={unitOpen}
-                      aria-controls={unitPanelId}
-                      onClick={() => toggleExpanded(unitKey(unit.id))}
-                      className="flex min-w-0 flex-1 items-start gap-2 rounded-md text-left touch-manipulation hover:text-foreground"
-                    >
-                      <ChevronRight
-                        className={cn(
-                          "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform",
-                          unitOpen && "rotate-90",
-                        )}
-                      />
-                      <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="truncate text-sm font-semibold">
-                          {unit.title}
-                        </h2>
-                        <Badge variant="secondary" className="text-[10px]">
-                          N{unit.jlptLevel}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {unitCollections.length} collections · {scenarioCount}{" "}
-                          scenarios
-                        </span>
-                        <Badge
-                          variant="outline"
+                  return (
+                    <SortableItem key={unit.id} id={unit.id} disabled={busy}>
+                      {({
+                        setNodeRef,
+                        style,
+                        attributes,
+                        listeners,
+                        isDragging,
+                      }) => (
+                        <section
+                          ref={setNodeRef}
+                          style={style}
                           className={cn(
-                            "text-[10px]",
-                            publishedCount === scenarioCount && scenarioCount > 0
-                              ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
-                              : "text-muted-foreground",
+                            "rounded-lg border bg-background/80 shadow-sm",
+                            editingUnit && "ring-1 ring-foreground/15",
+                            isDragging && "shadow-md ring-1 ring-foreground/20",
                           )}
                         >
-                          {publishedCount}/{scenarioCount} published audio
-                        </Badge>
-                      </div>
-                      {unit.subtitle ? (
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {unit.subtitle}
-                        </p>
-                      ) : null}
-                      </div>
-                    </button>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() =>
-                          toggleSection(unitKey(unit.id), unitCollectionIds)
-                        }
-                        title={
-                          unitSectionOpen
-                            ? "Collapse this unit and its collections"
-                            : "Expand this unit and all collections"
-                        }
-                      >
-                        {unitSectionOpen
-                          ? "Collapse section"
-                          : "Expand section"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={editingUnit ? "secondary" : "ghost"}
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => toggleUnitEdit(unit.id)}
-                        title="Expand and highlight to reorder this unit"
-                      >
-                        {editingUnit ? "Done" : "Edit"}
-                      </Button>
-                      <ReorderButtons
-                        disabled={busy}
-                        canUp={unitIndex > 0}
-                        canDown={unitIndex < units.length - 1}
-                        onUp={() =>
-                          reorderUnitsMutation.mutate(
-                            moveItem(units, unitIndex, unitIndex - 1),
-                          )
-                        }
-                        onDown={() =>
-                          reorderUnitsMutation.mutate(
-                            moveItem(units, unitIndex, unitIndex + 1),
-                          )
-                        }
-                      />
-                    </div>
-                  </header>
-
-                  {unitOpen ? (
-                  <div id={unitPanelId} className="flex flex-col gap-2 p-2 pl-6">
-                    {unitCollections.length === 0 ? (
-                      <p className="px-2 py-3 text-xs text-muted-foreground">
-                        No collections in this unit yet.
-                      </p>
-                    ) : (
-                      unitCollections.map((collection, collectionIndex) => {
-                        const scenarios = [...collection.scenarios].sort(
-                          (a, b) =>
-                            a.orderIndex - b.orderIndex ||
-                            a.id.localeCompare(b.id),
-                        );
-                        const publishedInCollection = scenarios.filter((s) =>
-                          Boolean(s.publishedAudioUrl),
-                        ).length;
-                        const editingCollection =
-                          editTarget?.kind === "collection" &&
-                          editTarget.id === collection.id;
-                        const collectionOpen = isExpanded(
-                          collectionKey(collection.id),
-                        );
-                        const collectionPanelId = `curriculum-collection-${collection.id}`;
-
-                        return (
-                          <div
-                            key={collection.id}
+                          <header
                             className={cn(
-                              "rounded-md border bg-muted/20",
-                              editingCollection && "ring-1 ring-foreground/15",
+                              "flex items-start gap-1 px-2 py-3.5 sm:gap-2 sm:px-3",
+                              unitOpen && "border-b",
                             )}
                           >
-                            <div className="flex items-center gap-1 px-1.5 py-1.5">
-                              <button
-                                type="button"
-                                aria-expanded={collectionOpen}
-                                aria-controls={collectionPanelId}
-                                aria-label={
-                                  collectionOpen
-                                    ? `Collapse ${collection.title}`
-                                    : `Expand ${collection.title}`
-                                }
-                                onClick={() =>
-                                  toggleExpanded(collectionKey(collection.id))
-                                }
-                                className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground touch-manipulation hover:bg-background/60 hover:text-foreground"
-                              >
-                                <ChevronRight
-                                  className={cn(
-                                    "size-4 transition-transform",
-                                    collectionOpen && "rotate-90",
-                                  )}
-                                />
-                              </button>
-                              <div className="min-w-0 flex-1">
-                                <Link
-                                  href={`/content/dialogues/${collection.id}`}
-                                  className="truncate text-sm font-medium hover:underline"
-                                >
-                                  {collection.title}
-                                </Link>
-                                <p className="text-[11px] text-muted-foreground">
-                                  {scenarios.length} scenarios ·{" "}
-                                  {publishedInCollection}/{scenarios.length} audio
-                                </p>
-                              </div>
-                              <CollectionActivationSwitch
-                                title={collection.title}
-                                isActive={collection.isActive}
-                                pending={collectionActivationPending(
-                                  collection.id,
+                            <CurriculumDragHandle
+                              attributes={attributes}
+                              listeners={listeners}
+                              disabled={busy}
+                              className="mt-0.5"
+                              label={`Reorder unit ${unit.title}`}
+                            />
+                            <button
+                              type="button"
+                              aria-expanded={unitOpen}
+                              aria-controls={unitPanelId}
+                              onClick={() => toggleExpanded(unitKey(unit.id))}
+                              className="flex min-w-0 flex-1 items-start gap-2 rounded-md text-left touch-manipulation hover:text-foreground"
+                            >
+                              <ChevronRight
+                                className={cn(
+                                  "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform",
+                                  unitOpen && "rotate-90",
                                 )}
-                                onToggle={(isActive) =>
-                                  activateMutation.mutate({
-                                    collectionId: collection.id,
-                                    isActive,
-                                  })
-                                }
                               />
-                              <div className="flex shrink-0 items-center gap-1">
-                                <Button
-                                  type="button"
-                                  variant={
-                                    editingCollection ? "secondary" : "ghost"
-                                  }
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  onClick={() =>
-                                    toggleCollectionEdit(collection.id)
-                                  }
-                                  title="Expand and highlight to reorder scenarios"
-                                >
-                                  {editingCollection ? "Done" : "Edit"}
-                                </Button>
-                                <ReorderButtons
-                                  disabled={busy}
-                                  canUp={collectionIndex > 0}
-                                  canDown={
-                                    collectionIndex <
-                                    unitCollections.length - 1
-                                  }
-                                  onUp={() =>
-                                    reorderCollectionsMutation.mutate({
-                                      unitId: unit.id,
-                                      collectionIds: moveItem(
-                                        unitCollections,
-                                        collectionIndex,
-                                        collectionIndex - 1,
-                                      ).map((c) => c.id),
-                                    })
-                                  }
-                                  onDown={() =>
-                                    reorderCollectionsMutation.mutate({
-                                      unitId: unit.id,
-                                      collectionIds: moveItem(
-                                        unitCollections,
-                                        collectionIndex,
-                                        collectionIndex + 1,
-                                      ).map((c) => c.id),
-                                    })
-                                  }
-                                />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h2 className="truncate text-sm font-semibold">
+                                    {unit.title}
+                                  </h2>
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[10px]"
+                                  >
+                                    N{unit.jlptLevel}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {unitCollections.length} collections ·{" "}
+                                    {scenarioCount} scenarios
+                                  </span>
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      "text-[10px]",
+                                      publishedCount === scenarioCount &&
+                                        scenarioCount > 0
+                                        ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                                        : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {publishedCount}/{scenarioCount} published
+                                    audio
+                                  </Badge>
+                                </div>
+                                {unit.subtitle ? (
+                                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                    {unit.subtitle}
+                                  </p>
+                                ) : null}
                               </div>
+                            </button>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={() =>
+                                  toggleSection(
+                                    unitKey(unit.id),
+                                    unitCollectionIds,
+                                  )
+                                }
+                                title={
+                                  unitSectionOpen
+                                    ? "Collapse this unit and its collections"
+                                    : "Expand this unit and all collections"
+                                }
+                              >
+                                {unitSectionOpen
+                                  ? "Collapse section"
+                                  : "Expand section"}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={editingUnit ? "secondary" : "ghost"}
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => toggleUnitEdit(unit.id)}
+                                title="Expand and highlight this unit"
+                              >
+                                {editingUnit ? "Done" : "Edit"}
+                              </Button>
                             </div>
-                            {collectionOpen ? (
-                            <ol id={collectionPanelId} className="border-t px-2 py-1.5">
-                              {scenarios.map((scenario, scenarioIndex) => (
-                                <CurriculumScenarioRow
-                                  key={scenario.id}
-                                  scenario={scenario}
-                                  collectionId={collection.id}
-                                  index={scenarioIndex}
-                                  total={scenarios.length}
-                                  busy={busy}
-                                  onMove={(from, to) =>
-                                    reorderScenariosMutation.mutate({
-                                      collectionId: collection.id,
-                                      scenarioIds: moveItem(
-                                        scenarios,
-                                        from,
-                                        to,
-                                      ).map((s) => s.id),
+                          </header>
+
+                          {unitOpen ? (
+                            <div
+                              id={unitPanelId}
+                              className="flex flex-col gap-2 p-2 pl-4 sm:pl-6"
+                            >
+                              {unitCollections.length === 0 ? (
+                                <p className="px-2 py-3 text-xs text-muted-foreground">
+                                  No collections in this unit yet.
+                                </p>
+                              ) : (
+                                <SortableList
+                                  items={unitCollectionIds}
+                                  disabled={busy}
+                                  onReorder={(collectionIds) =>
+                                    reorderCollectionsMutation.mutate({
+                                      unitId: unit.id,
+                                      collectionIds,
                                     })
                                   }
-                                />
-                              ))}
-                            </ol>
-                            ) : null}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                  ) : null}
-                </section>
-              );
-            })}
+                                  className="flex flex-col gap-2"
+                                >
+                                  {unitCollections.map((collection) => (
+                                    <CurriculumCollectionBlock
+                                      key={collection.id}
+                                      collection={collection}
+                                      busy={busy}
+                                      editing={
+                                        editTarget?.kind === "collection" &&
+                                        editTarget.id === collection.id
+                                      }
+                                      open={isExpanded(
+                                        collectionKey(collection.id),
+                                      )}
+                                      onToggleOpen={() =>
+                                        toggleExpanded(
+                                          collectionKey(collection.id),
+                                        )
+                                      }
+                                      onToggleEdit={() =>
+                                        toggleCollectionEdit(collection.id)
+                                      }
+                                      activationPending={collectionActivationPending(
+                                        collection.id,
+                                      )}
+                                      onToggleActive={(isActive) =>
+                                        activateMutation.mutate({
+                                          collectionId: collection.id,
+                                          isActive,
+                                        })
+                                      }
+                                      onReorderScenarios={(scenarioIds) =>
+                                        reorderScenariosMutation.mutate({
+                                          collectionId: collection.id,
+                                          scenarioIds,
+                                        })
+                                      }
+                                    />
+                                  ))}
+                                </SortableList>
+                              )}
+                            </div>
+                          ) : null}
+                        </section>
+                      )}
+                    </SortableItem>
+                  );
+                })}
+              </SortableList>
+            ) : null}
 
             {unfiled.length > 0 ? (
               <section className="rounded-lg border border-dashed bg-background/40">
@@ -603,12 +647,14 @@ export function CurriculumView() {
                       <h2 className="text-sm font-semibold text-muted-foreground">
                         Unfiled
                         <span className="ml-2 text-xs font-normal">
-                          {unfiled.length} collection{unfiled.length === 1 ? "" : "s"}
+                          {unfiled.length} collection
+                          {unfiled.length === 1 ? "" : "s"}
                         </span>
                       </h2>
                       <p className="text-xs text-muted-foreground">
-                        Collections not assigned to a unit. Assign them in Dialogues.
-                        Expand a collection and use ↑↓ to reorder scenarios.
+                        Collections not assigned to a unit. Assign them in
+                        Dialogues. Expand a collection and drag scenarios to
+                        reorder.
                       </p>
                     </div>
                   </button>
@@ -634,109 +680,46 @@ export function CurriculumView() {
                   </div>
                 </header>
                 {isExpanded(UNFILED_KEY) ? (
-                <ul id="curriculum-unfiled" className="flex flex-col gap-2 p-2">
-                  {unfiled.map((collection) => {
-                    const scenarios = [...collection.scenarios].sort(
-                      (a, b) =>
-                        a.orderIndex - b.orderIndex || a.id.localeCompare(b.id),
-                    );
-                    const editingCollection =
-                      editTarget?.kind === "collection" &&
-                      editTarget.id === collection.id;
-                    const collectionOpen = isExpanded(collectionKey(collection.id));
-                    const collectionPanelId = `curriculum-collection-${collection.id}`;
-                    return (
-                      <li
-                        key={collection.id}
-                        className={cn(
-                          "rounded-md border bg-muted/10",
-                          editingCollection && "ring-1 ring-foreground/15",
-                        )}
-                      >
-                        <div className="flex items-center gap-1 px-1.5 py-1.5">
-                          <button
-                            type="button"
-                            aria-expanded={collectionOpen}
-                            aria-controls={collectionPanelId}
-                            aria-label={
-                              collectionOpen
-                                ? `Collapse ${collection.title}`
-                                : `Expand ${collection.title}`
-                            }
-                            onClick={() =>
-                              toggleExpanded(collectionKey(collection.id))
-                            }
-                            className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground touch-manipulation hover:bg-background/60 hover:text-foreground"
-                          >
-                            <ChevronRight
-                              className={cn(
-                                "size-4 transition-transform",
-                                collectionOpen && "rotate-90",
-                              )}
-                            />
-                          </button>
-                          <div className="flex min-w-0 flex-1 items-center gap-2">
-                            <Link
-                              href={`/content/dialogues/${collection.id}`}
-                              className="min-w-0 truncate text-sm hover:underline"
-                            >
-                              {collection.title}
-                              <span className="ml-2 text-xs text-muted-foreground">
-                                {scenarios.length} scenarios
-                              </span>
-                            </Link>
-                          </div>
-                          <CollectionActivationSwitch
-                            title={collection.title}
-                            isActive={collection.isActive}
-                            pending={collectionActivationPending(collection.id)}
-                            onToggle={(isActive) =>
-                              activateMutation.mutate({
-                                collectionId: collection.id,
-                                isActive,
-                              })
-                            }
-                          />
-                          <Button
-                            type="button"
-                            variant={editingCollection ? "secondary" : "ghost"}
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() =>
-                              toggleCollectionEdit(collection.id)
-                            }
-                          >
-                            {editingCollection ? "Done" : "Edit"}
-                          </Button>
-                        </div>
-                        {collectionOpen ? (
-                          <ol id={collectionPanelId} className="border-t px-2 py-1.5">
-                            {scenarios.map((scenario, scenarioIndex) => (
-                              <CurriculumScenarioRow
-                                key={scenario.id}
-                                scenario={scenario}
-                                collectionId={collection.id}
-                                index={scenarioIndex}
-                                total={scenarios.length}
-                                busy={busy}
-                                onMove={(from, to) =>
-                                  reorderScenariosMutation.mutate({
-                                    collectionId: collection.id,
-                                    scenarioIds: moveItem(
-                                      scenarios,
-                                      from,
-                                      to,
-                                    ).map((s) => s.id),
-                                  })
-                                }
-                              />
-                            ))}
-                          </ol>
-                        ) : null}
+                  <ul
+                    id="curriculum-unfiled"
+                    className="flex flex-col gap-2 p-2"
+                  >
+                    {unfiled.map((collection) => (
+                      <li key={collection.id}>
+                        <CurriculumCollectionBlock
+                          collection={collection}
+                          busy={busy}
+                          sortable={false}
+                          editing={
+                            editTarget?.kind === "collection" &&
+                            editTarget.id === collection.id
+                          }
+                          open={isExpanded(collectionKey(collection.id))}
+                          onToggleOpen={() =>
+                            toggleExpanded(collectionKey(collection.id))
+                          }
+                          onToggleEdit={() =>
+                            toggleCollectionEdit(collection.id)
+                          }
+                          activationPending={collectionActivationPending(
+                            collection.id,
+                          )}
+                          onToggleActive={(isActive) =>
+                            activateMutation.mutate({
+                              collectionId: collection.id,
+                              isActive,
+                            })
+                          }
+                          onReorderScenarios={(scenarioIds) =>
+                            reorderScenariosMutation.mutate({
+                              collectionId: collection.id,
+                              scenarioIds,
+                            })
+                          }
+                        />
                       </li>
-                    );
-                  })}
-                </ul>
+                    ))}
+                  </ul>
                 ) : null}
               </section>
             ) : null}
@@ -747,45 +730,204 @@ export function CurriculumView() {
   );
 }
 
+function CurriculumCollectionBlock({
+  collection,
+  busy,
+  editing,
+  open,
+  onToggleOpen,
+  onToggleEdit,
+  activationPending,
+  onToggleActive,
+  onReorderScenarios,
+  sortable = true,
+}: {
+  collection: CollectionSummary;
+  busy: boolean;
+  editing: boolean;
+  open: boolean;
+  onToggleOpen: () => void;
+  onToggleEdit: () => void;
+  activationPending: boolean;
+  onToggleActive: (isActive: boolean) => void;
+  onReorderScenarios: (scenarioIds: string[]) => void;
+  /** Unfiled collections have no unit-level order API; skip collection drag. */
+  sortable?: boolean;
+}) {
+  const scenarios = useMemo(
+    () =>
+      [...collection.scenarios].sort(
+        (a, b) => a.orderIndex - b.orderIndex || a.id.localeCompare(b.id),
+      ),
+    [collection.scenarios],
+  );
+  const scenarioIds = useMemo(
+    () => scenarios.map((scenario) => scenario.id),
+    [scenarios],
+  );
+  const publishedInCollection = scenarios.filter((s) =>
+    Boolean(s.publishedAudioUrl),
+  ).length;
+  const collectionPanelId = `curriculum-collection-${collection.id}`;
+
+  const body = (
+    setNodeRef?: (node: HTMLElement | null) => void,
+    style?: CSSProperties,
+    dragHandle?: {
+      attributes: DraggableAttributes;
+      listeners: DraggableSyntheticListeners;
+    },
+    isDragging?: boolean,
+  ) => (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "rounded-md border bg-muted/20",
+        editing && "ring-1 ring-foreground/15",
+        isDragging && "bg-muted/40 shadow-sm ring-1 ring-foreground/15",
+      )}
+    >
+      <div className="flex items-center gap-1 px-1.5 py-1.5">
+        {dragHandle ? (
+          <CurriculumDragHandle
+            attributes={dragHandle.attributes}
+            listeners={dragHandle.listeners}
+            disabled={busy}
+            label={`Reorder collection ${collection.title}`}
+          />
+        ) : null}
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={collectionPanelId}
+          aria-label={
+            open
+              ? `Collapse ${collection.title}`
+              : `Expand ${collection.title}`
+          }
+          onClick={onToggleOpen}
+          className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground touch-manipulation hover:bg-background/60 hover:text-foreground"
+        >
+          <ChevronRight
+            className={cn(
+              "size-4 transition-transform",
+              open && "rotate-90",
+            )}
+          />
+        </button>
+        <div className="min-w-0 flex-1">
+          <Link
+            href={`/content/dialogues/${collection.id}`}
+            className="truncate text-sm font-medium hover:underline"
+          >
+            {collection.title}
+          </Link>
+          <p className="text-[11px] text-muted-foreground">
+            {scenarios.length} scenarios · {publishedInCollection}/
+            {scenarios.length} audio
+          </p>
+        </div>
+        <CollectionActivationSwitch
+          title={collection.title}
+          isActive={collection.isActive}
+          pending={activationPending}
+          onToggle={onToggleActive}
+        />
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            variant={editing ? "secondary" : "ghost"}
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={onToggleEdit}
+            title="Expand and highlight this collection"
+          >
+            {editing ? "Done" : "Edit"}
+          </Button>
+        </div>
+      </div>
+      {open ? (
+        <SortableList
+          items={scenarioIds}
+          disabled={busy}
+          onReorder={onReorderScenarios}
+          className="border-t px-2 py-1.5"
+        >
+          <ol id={collectionPanelId} className="flex flex-col">
+            {scenarios.map((scenario, scenarioIndex) => (
+              <CurriculumScenarioRow
+                key={scenario.id}
+                scenario={scenario}
+                collectionId={collection.id}
+                index={scenarioIndex}
+                busy={busy}
+              />
+            ))}
+          </ol>
+        </SortableList>
+      ) : null}
+    </div>
+  );
+
+  if (!sortable) {
+    return body();
+  }
+
+  return (
+    <SortableItem id={collection.id} disabled={busy}>
+      {({ setNodeRef, style, attributes, listeners, isDragging }) =>
+        body(setNodeRef, style, { attributes, listeners }, isDragging)
+      }
+    </SortableItem>
+  );
+}
+
 function CurriculumScenarioRow({
   scenario,
   collectionId,
   index,
-  total,
   busy,
-  onMove,
 }: {
   scenario: ScenarioSummary;
   collectionId: string;
   index: number;
-  total: number;
   busy: boolean;
-  onMove: (from: number, to: number) => void;
 }) {
   return (
-    <li className="flex items-start gap-2 rounded px-1 py-1.5 hover:bg-background/60 sm:items-center">
-      <span className="mt-0.5 w-5 shrink-0 text-right text-[10px] text-muted-foreground sm:mt-0">
-        {index + 1}
-      </span>
-      <Link
-        href={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
-        className="min-w-0 flex-1 truncate text-xs hover:underline"
-      >
-        {scenario.menuTitle}
-      </Link>
-      <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-        <ScenarioUpdatedLabel updatedAt={scenario.updatedAt} />
-        <ScenarioReadinessChips readiness={scenario.readiness} />
-      </div>
-      <ReorderButtons
-        size="xs"
-        disabled={busy}
-        canUp={index > 0}
-        canDown={index < total - 1}
-        onUp={() => onMove(index, index - 1)}
-        onDown={() => onMove(index, index + 1)}
-      />
-    </li>
+    <SortableItem id={scenario.id} disabled={busy}>
+      {({ setNodeRef, style, attributes, listeners, isDragging }) => (
+        <li
+          ref={setNodeRef}
+          style={style}
+          className={cn(
+            "flex items-start gap-1 rounded px-1 py-1.5 hover:bg-background/60 sm:items-center sm:gap-2",
+            isDragging && "bg-background shadow-sm ring-1 ring-foreground/10",
+          )}
+        >
+          <CurriculumDragHandle
+            attributes={attributes}
+            listeners={listeners}
+            disabled={busy}
+            className="size-8"
+            label={`Reorder scenario ${scenario.menuTitle}`}
+          />
+          <span className="mt-1.5 w-5 shrink-0 text-right text-[10px] text-muted-foreground sm:mt-0">
+            {index + 1}
+          </span>
+          <Link
+            href={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
+            className="min-w-0 flex-1 truncate text-xs hover:underline"
+          >
+            {scenario.menuTitle}
+          </Link>
+          <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <ScenarioUpdatedLabel updatedAt={scenario.updatedAt} />
+            <ScenarioReadinessChips readiness={scenario.readiness} />
+          </div>
+        </li>
+      )}
+    </SortableItem>
   );
 }
 
@@ -811,51 +953,6 @@ function CollectionActivationSwitch({
           isActive ? `Hide ${title} from the app` : `Show ${title} in the app`
         }
       />
-    </div>
-  );
-}
-
-function ReorderButtons({
-  canUp,
-  canDown,
-  onUp,
-  onDown,
-  disabled,
-  size = "sm",
-}: {
-  canUp: boolean;
-  canDown: boolean;
-  onUp: () => void;
-  onDown: () => void;
-  disabled?: boolean;
-  size?: "sm" | "xs";
-}) {
-  const buttonClass = size === "xs" ? "size-6" : "size-7";
-  const iconClass = size === "xs" ? "size-3" : "size-3.5";
-  return (
-    <div className="flex shrink-0 flex-col gap-0.5">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={buttonClass}
-        disabled={disabled || !canUp}
-        onClick={onUp}
-        aria-label="Move up"
-      >
-        <ChevronUp className={iconClass} />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={buttonClass}
-        disabled={disabled || !canDown}
-        onClick={onDown}
-        aria-label="Move down"
-      >
-        <ChevronDown className={iconClass} />
-      </Button>
     </div>
   );
 }

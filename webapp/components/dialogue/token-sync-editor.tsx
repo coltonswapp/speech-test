@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type Ref,
 } from "react";
 import { useMutation } from "@tanstack/react-query";
@@ -25,17 +26,21 @@ import {
   applyLineStartToFirstTokens,
   clearAllStamps,
   clearLineStamps,
+  clearStampsFrom,
   lineDisplayPieces,
   lineStartSecondsForTokenSync,
   mergeTokenWithNext,
   parseVariantTokenSync,
   restampToken,
+  seekSecondsBeforeToken,
   spokenLineWindows,
   tokenSyncFromSurfaces,
   tokenSyncStatus,
   unstampLastToken,
   type TokenSyncStatus,
 } from "@/lib/dialogue/token-sync";
+
+const LONG_PRESS_MS = 550;
 
 const STATUS_LABEL: Record<TokenSyncStatus, string> = {
   missing: "not started",
@@ -75,6 +80,7 @@ export function TokenSyncEditor({
   onPersist,
   onGetPlayhead,
   onPlayLine,
+  onPlayFromSeconds,
   playingLineIndex,
 }: {
   variant: Variant;
@@ -89,6 +95,8 @@ export function TokenSyncEditor({
   onPersist: (tokenSync: VariantTokenSync | null) => void;
   onGetPlayhead?: () => number;
   onPlayLine?: (lineIndex: number) => void;
+  /** Seek + play from an absolute playhead time (mid-line stamp recovery). */
+  onPlayFromSeconds?: (seconds: number) => void;
   playingLineIndex?: number | null;
 }) {
   const spokenTexts = useMemo(
@@ -112,6 +120,12 @@ export function TokenSyncEditor({
   const [selectedToken, setSelectedToken] = useState<{
     lineIndex: number;
     tokenIndex: number;
+  } | null>(null);
+  const [tokenMenu, setTokenMenu] = useState<{
+    lineIndex: number;
+    tokenIndex: number;
+    x: number;
+    y: number;
   } | null>(null);
 
   const tokenizeMutation = useMutation({
@@ -253,6 +267,36 @@ export function TokenSyncEditor({
     commitSync(next, nextUnstamped(next, lineIndex, 0) ?? { lineIndex, tokenIndex: 0 });
   }
 
+  function clearFromHere(lineIndex: number, tokenIndex: number) {
+    const current = syncRef.current;
+    if (!current || hasUnsavedRef.current) return;
+    const seekSeconds = seekSecondsBeforeToken(
+      current,
+      lineIndex,
+      tokenIndex,
+      windowsRef.current
+    );
+    const next = clearStampsFrom(
+      current,
+      lineIndex,
+      tokenIndex,
+      lineStarts()[lineIndex]
+    );
+    const selected = { lineIndex, tokenIndex };
+    if (next !== current) {
+      commitSync(next, selected);
+    } else {
+      selectedRef.current = selected;
+      setSelectedToken(selected);
+    }
+    setTokenMenu(null);
+    if (onPlayFromSeconds) {
+      onPlayFromSeconds(seekSeconds);
+    } else {
+      playLine(lineIndex);
+    }
+  }
+
   function clearAllTimes() {
     const current = syncRef.current;
     if (!current || hasUnsavedRef.current) return;
@@ -389,7 +433,7 @@ export function TokenSyncEditor({
           Tap <span className="font-medium text-foreground">Mark</span> in the
           player (or the next highlighted word) as that word starts. On a
           keyboard press <span className="font-medium text-foreground">M</span>.
-          Filled chips show their time.
+          Timed chips keep a stable layout so the next target does not jump.
         </li>
         <li>
           Tap any other untimed word to make it next. Mark always uses the live
@@ -402,10 +446,22 @@ export function TokenSyncEditor({
           <span className="font-medium text-foreground">Clear times</span>{" "}
           resets a line but keeps its first-word line mark.{" "}
           <span className="font-medium text-foreground">Clear all times</span>{" "}
-          does the same for the whole take. Drag-select text to split or merge
-          tokens.
+          does the same for the whole take. Right-click (or long-press) a word
+          to clear from there and resume audio a couple words earlier.
+          Drag-select text to split or merge tokens.
         </li>
       </ol>
+      {tokenMenu && (
+        <TokenContextMenu
+          x={tokenMenu.x}
+          y={tokenMenu.y}
+          disabled={!!hasUnsavedChanges}
+          onClearFromHere={() =>
+            clearFromHere(tokenMenu.lineIndex, tokenMenu.tokenIndex)
+          }
+          onClose={() => setTokenMenu(null)}
+        />
+      )}
       {hasUnsavedChanges && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
           Save line edits before tokenizing or timing.
@@ -500,6 +556,7 @@ export function TokenSyncEditor({
                       : null
                   }
                   onMouseUp={(container, event) => {
+                    if (event.button !== 0) return;
                     const offsets = selectionOffsetsIn(container);
                     if (offsets) {
                       applySelection(lineIndex, container);
@@ -520,6 +577,9 @@ export function TokenSyncEditor({
                     }
                     selectToken(lineIndex, tokenIndex);
                   }}
+                  onTokenMenu={(tokenIndex, x, y) => {
+                    setTokenMenu({ lineIndex, tokenIndex, x, y });
+                  }}
                   onMerge={(tokenIndex) => merge(lineIndex, tokenIndex)}
                 />
               </div>
@@ -537,6 +597,7 @@ function TokenLine({
   activeToken,
   nextTokenIndex,
   onMouseUp,
+  onTokenMenu,
   onMerge,
 }: {
   lineText: string;
@@ -544,6 +605,7 @@ function TokenLine({
   activeToken: number | null;
   nextTokenIndex: number | null;
   onMouseUp: (container: HTMLElement, event: MouseEvent<HTMLElement>) => void;
+  onTokenMenu: (tokenIndex: number, x: number, y: number) => void;
   onMerge: (tokenIndex: number) => void;
 }) {
   const pieces = lineDisplayPieces(lineText, tokens);
@@ -562,6 +624,7 @@ function TokenLine({
             tokenIndex={tokenIndex}
             isNext={nextTokenIndex === tokenIndex}
             isPlaying={activeToken === tokenIndex && token.startSeconds != null}
+            onOpenMenu={(x, y) => onTokenMenu(tokenIndex, x, y)}
           />
         ))}
       </div>
@@ -599,6 +662,7 @@ function TokenLine({
               isPlaying={
                 activeToken === range.tokenIndex && range.startSeconds != null
               }
+              onOpenMenu={(x, y) => onTokenMenu(range.tokenIndex, x, y)}
             />
             {range.tokenIndex < tokens.length - 1 && (
               <button
@@ -615,30 +679,100 @@ function TokenLine({
   );
 }
 
+/** Fixed mono width so stamped times never reflow neighboring chips. */
+const STAMP_SLOT = "0.00s";
+
 function TokenChip({
   text,
   startSeconds,
   tokenIndex,
   isNext,
   isPlaying,
+  onOpenMenu,
 }: {
   text: string;
   startSeconds: number | null;
   tokenIndex: number;
   isNext: boolean;
   isPlaying: boolean;
+  onOpenMenu: (x: number, y: number) => void;
 }) {
   const untimed = startSeconds == null;
+  const longPressRef = useRef<number | null>(null);
+  const suppressClickRef = useRef(false);
+
+  function clearLongPress() {
+    if (longPressRef.current != null) {
+      window.clearTimeout(longPressRef.current);
+      longPressRef.current = null;
+    }
+  }
+
+  function openMenuAt(clientX: number, clientY: number) {
+    onOpenMenu(clientX, clientY);
+  }
+
+  function onContextMenu(event: MouseEvent<HTMLSpanElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    openMenuAt(event.clientX, event.clientY);
+  }
+
+  function onPointerDown(event: ReactPointerEvent<HTMLSpanElement>) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    clearLongPress();
+    longPressRef.current = window.setTimeout(() => {
+      longPressRef.current = null;
+      suppressClickRef.current = true;
+      openMenuAt(event.clientX, event.clientY);
+    }, LONG_PRESS_MS);
+  }
+
+  function onPointerUp() {
+    clearLongPress();
+  }
+
+  function onPointerCancel() {
+    clearLongPress();
+  }
+
+  function onPointerMove(event: ReactPointerEvent<HTMLSpanElement>) {
+    // Cancel long-press if the finger drifts (scroll / swipe).
+    if (longPressRef.current == null) return;
+    if (Math.abs(event.movementX) + Math.abs(event.movementY) > 6) {
+      clearLongPress();
+    }
+  }
+
+  useEffect(() => () => clearLongPress(), []);
+
   return (
     <span
       data-token-index={tokenIndex}
       title={
         untimed
           ? isNext
-            ? "Tap to stamp this word at the playhead"
-            : "Tap to make this the next word to stamp"
-          : `Stamped at ${formatStamp(startSeconds)}. Stamp times the next untimed word from the playhead.`
+            ? "Tap to stamp this word at the playhead. Right-click or long-press to clear from here."
+            : "Tap to make this the next word to stamp. Right-click or long-press to clear from here."
+          : `Stamped at ${formatStamp(startSeconds)}. Right-click or long-press to clear from here.`
       }
+      onContextMenu={onContextMenu}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      onPointerMove={onPointerMove}
+      onMouseUpCapture={(event) => {
+        if (!suppressClickRef.current) return;
+        suppressClickRef.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onClickCapture={(event) => {
+        if (!suppressClickRef.current) return;
+        suppressClickRef.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
       className={cn(
         "mx-px inline-block cursor-pointer touch-manipulation whitespace-nowrap rounded-md border px-1.5 py-1 align-middle md:px-1 md:py-px",
         untimed && "border-dashed border-rose-400 bg-rose-500/15",
@@ -649,12 +783,71 @@ function TokenChip({
       )}
     >
       <span data-token-chars="">{text}</span>
-      {!untimed && (
-        <span className="ml-1 select-none font-mono text-[9px] text-muted-foreground">
-          {formatStamp(startSeconds)}
-        </span>
-      )}
+      <span
+        aria-hidden={untimed}
+        className={cn(
+          "ml-1 inline-block w-[6ch] select-none overflow-hidden font-mono text-[9px] tabular-nums text-muted-foreground",
+          untimed && "opacity-0"
+        )}
+      >
+        {untimed ? STAMP_SLOT : formatStamp(startSeconds)}
+      </span>
     </span>
+  );
+}
+
+function TokenContextMenu({
+  x,
+  y,
+  disabled,
+  onClearFromHere,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  disabled: boolean;
+  onClearFromHere: () => void;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    function onPointer(event: globalThis.PointerEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onPointer, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onPointer, true);
+    };
+  }, [onClose]);
+
+  const left = Math.min(x, typeof window !== "undefined" ? window.innerWidth - 180 : x);
+  const top = Math.min(y, typeof window !== "undefined" ? window.innerHeight - 80 : y);
+
+  return (
+    <div
+      ref={menuRef}
+      role="menu"
+      className="fixed z-50 min-w-[10rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+      style={{ left, top }}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        disabled={disabled}
+        className="flex w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
+        onClick={onClearFromHere}
+      >
+        Clear from here
+      </button>
+    </div>
   );
 }
 

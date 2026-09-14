@@ -47,9 +47,12 @@ enum GeminiJapaneseTokenizer {
     private static let instructionsText = """
     Segment Japanese text into dictionary lookup units for language learners.
     Return a JSON object with a "tokens" array in original left-to-right order.
-    Every token MUST be copied verbatim from the input — a contiguous substring using the \
-    original Japanese script (kanji, hiragana, katakana).
-    NEVER output romaji, Latin letters, English, phonetic spellings, or translations.
+    Every token MUST be copied verbatim from the input — a contiguous substring of the \
+    original text (kanji, hiragana, katakana, and any Latin letters or digits that already \
+    appear in the input such as ATM, Wi-Fi, OK).
+    NEVER invent romaji, phonetic Latin spellings, English translations, or Latin letters \
+    that are not already present in the input. Copy acronyms and Latin fragments exactly \
+    when they appear in the source.
     Tokens must appear in order and together cover the full input.
     Include every part of the sentence — do not skip particles, endings, or punctuation.
     Keep conjugated verbs together as one token when a learner would tap them as a unit \
@@ -73,7 +76,8 @@ enum GeminiJapaneseTokenizer {
     private static let retrySuffix = """
 
     CRITICAL: Copy tokens exactly from the input string. \
-    For 歩いて use 歩いて or 歩い and て in Japanese script — never arui, aruite, or te in Latin letters.
+    For 歩いて use 歩いて or 歩い and て in Japanese script — never invent arui, aruite, or te in Latin letters. \
+    Latin/digits are allowed only when copied exactly from the input (e.g. ATM).
     """
 
     static var isConfigured: Bool {

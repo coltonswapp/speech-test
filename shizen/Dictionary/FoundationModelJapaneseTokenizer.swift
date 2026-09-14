@@ -23,8 +23,10 @@ enum FoundationModelJapaneseTokenizer {
     private static let instructionsText = """
     Segment Japanese text into dictionary lookup units for language learners.
     Return tokens in original left-to-right order.
-    Every token MUST be copied verbatim from the input in Japanese script (kanji, hiragana, katakana).
-    NEVER output romaji, Latin letters, English, or phonetic transliteration.
+    Every token MUST be copied verbatim from the input (kanji, hiragana, katakana, and any \
+    Latin letters or digits that already appear in the input such as ATM, Wi-Fi, OK).
+    NEVER invent romaji, phonetic Latin spellings, English translations, or Latin letters \
+    that are not already present in the input.
     Use sentence context: keep casual verb endings with their verb \
     (e.g. 食べちゃいけない — not 食べ + ちゃ + いけない, where ちゃ could be misread as “tea”).
     Keep punctuation as separate tokens when present.

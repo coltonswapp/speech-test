@@ -17,16 +17,15 @@ import {
   dialogueApi,
   scenarioSlug,
   type CollectionSummary,
-  type ScenarioReadinessSummary,
   type ScenarioSummary,
   type UnitSummary,
 } from "@/lib/dialogue/client";
 import {
-  formatCurriculumUpdatedAt,
-  syncChipLabel,
-} from "@/lib/dialogue/scenario-readiness";
-import { cn } from "@/lib/utils";
+  ScenarioReadinessChips,
+  ScenarioUpdatedLabel,
+} from "@/components/dialogue/scenario-readiness-chips";
 import { DialogueFormulaNotes } from "@/components/content/dialogue-formula-notes";
+import { cn } from "@/lib/utils";
 
 function moveItem<T>(items: T[], from: number, to: number): T[] {
   if (to < 0 || to >= items.length || from === to) return items;
@@ -681,105 +680,6 @@ export function CurriculumView() {
   );
 }
 
-function readinessChipClass(
-  tone: "ok" | "warn" | "muted" | "draft",
-): string {
-  switch (tone) {
-    case "ok":
-      return "border-emerald-500/40 text-emerald-600 dark:text-emerald-400";
-    case "warn":
-      return "border-amber-500/50 text-amber-600 dark:text-amber-400";
-    case "draft":
-      return "text-muted-foreground";
-    case "muted":
-      return "text-muted-foreground/70";
-  }
-}
-
-function ScenarioReadinessChips({
-  readiness,
-}: {
-  readiness: ScenarioReadinessSummary;
-}) {
-  const audioTone =
-    readiness.audio === "published" ? ("ok" as const) : ("draft" as const);
-  const timingTone =
-    readiness.timing === "done"
-      ? ("ok" as const)
-      : readiness.timing === "partial"
-        ? ("warn" as const)
-        : ("muted" as const);
-  const syncTone =
-    readiness.sync === "complete"
-      ? ("ok" as const)
-      : readiness.sync === "stale"
-        ? ("warn" as const)
-        : ("muted" as const);
-  const quizTone =
-    readiness.quizCount > 0 ? ("ok" as const) : ("muted" as const);
-  const quizLabel =
-    readiness.quizCount === 0 ? "—" : `quiz ${readiness.quizCount}`;
-
-  return (
-    <div className="flex max-w-[min(100%,14rem)] flex-wrap items-center justify-end gap-1 sm:max-w-none">
-      <Badge
-        variant="outline"
-        className={cn("text-[9px]", readinessChipClass(audioTone))}
-        title={
-          readiness.audio === "published"
-            ? "Published audio"
-            : "No published audio yet"
-        }
-      >
-        {readiness.audio === "published" ? "audio" : "draft"}
-      </Badge>
-      <Badge
-        variant="outline"
-        className={cn("text-[9px]", readinessChipClass(timingTone))}
-        title={
-          readiness.timing === "done"
-            ? "Line timing complete"
-            : readiness.timing === "partial"
-              ? "Line timing partial"
-              : "Line timing missing"
-        }
-      >
-        timing
-      </Badge>
-      <Badge
-        variant="outline"
-        className={cn("text-[9px]", readinessChipClass(syncTone))}
-        title={
-          readiness.sync === "complete"
-            ? "Token karaoke complete"
-            : readiness.sync === "tokens-only"
-              ? "Tokens present, times incomplete"
-              : readiness.sync === "stale"
-                ? "Token sync stale vs current lines"
-                : "No token sync"
-        }
-      >
-        {syncChipLabel(readiness.sync)}
-      </Badge>
-      <Badge
-        variant="outline"
-        className={cn("text-[9px]", readinessChipClass(quizTone))}
-        title={
-          readiness.quizCount === 0
-            ? "No quiz"
-            : `${readiness.quizCount} quiz question${readiness.quizCount === 1 ? "" : "s"}${
-                readiness.quizWithEvidence > 0
-                  ? ` (${readiness.quizWithEvidence} with evidence links)`
-                  : ""
-              }`
-        }
-      >
-        {quizLabel}
-      </Badge>
-    </div>
-  );
-}
-
 function CurriculumScenarioRow({
   scenario,
   collectionId,
@@ -795,7 +695,6 @@ function CurriculumScenarioRow({
   busy: boolean;
   onMove: (from: number, to: number) => void;
 }) {
-  const updatedLabel = formatCurriculumUpdatedAt(scenario.updatedAt);
   return (
     <li className="flex items-start gap-2 rounded px-1 py-1.5 hover:bg-background/60 sm:items-center">
       <span className="mt-0.5 w-5 shrink-0 text-right text-[10px] text-muted-foreground sm:mt-0">
@@ -808,14 +707,7 @@ function CurriculumScenarioRow({
         {scenario.menuTitle}
       </Link>
       <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-        {updatedLabel ? (
-          <span
-            className="whitespace-nowrap text-[10px] text-muted-foreground"
-            title={new Date(scenario.updatedAt).toLocaleString()}
-          >
-            {updatedLabel}
-          </span>
-        ) : null}
+        <ScenarioUpdatedLabel updatedAt={scenario.updatedAt} />
         <ScenarioReadinessChips readiness={scenario.readiness} />
       </div>
       <ReorderButtons

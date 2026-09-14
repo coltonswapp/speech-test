@@ -39,9 +39,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  ScenarioReadinessChips,
+  ScenarioUpdatedLabel,
+} from "@/components/dialogue/scenario-readiness-chips";
+import {
   dialogueApi,
   scenarioSlug,
   type DialogueCollection,
+  type ScenarioAudioStatus,
 } from "@/lib/dialogue/client";
 import {
   buildCollectionFile,
@@ -69,6 +74,27 @@ function slugify(input: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function audioStatusTooltip(
+  status: ScenarioAudioStatus | undefined,
+  published: boolean,
+): string | undefined {
+  if (!status) return undefined;
+  if (status.published) {
+    return status.publishStale
+      ? "Published audio is stale vs current lines"
+      : "Published audio";
+  }
+  if (!status.hasSelectedTake) {
+    return published
+      ? "No published audio yet"
+      : "No selected take / no published audio";
+  }
+  if (status.stale) {
+    return "Selected take is stale vs current lines (not published)";
+  }
+  return "Selected take ready (not published)";
 }
 
 export function CollectionEditor({ collectionId }: { collectionId: string }) {
@@ -662,38 +688,16 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
                 {scenario.id}
               </span>
             </div>
-            {(() => {
-              const status = audioStatusById.get(scenario.id);
-              if (status?.published) {
-                return status.publishStale ? (
-                  <Badge
-                    variant="outline"
-                    className="border-amber-500/50 text-amber-600 dark:text-amber-400"
-                  >
-                    published · stale
-                  </Badge>
-                ) : (
-                  <Badge variant="default">published</Badge>
-                );
-              }
-              if (!status?.hasSelectedTake) {
-                return (
-                  <span className="text-xs text-muted-foreground">
-                    no audio
-                  </span>
-                );
-              }
-              return status.stale ? (
-                <Badge
-                  variant="outline"
-                  className="border-amber-500/50 text-amber-600 dark:text-amber-400"
-                >
-                  audio stale
-                </Badge>
-              ) : (
-                <Badge variant="secondary">audio ready</Badge>
-              );
-            })()}
+            <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+              <ScenarioUpdatedLabel updatedAt={scenario.updatedAt} />
+              <ScenarioReadinessChips
+                readiness={scenario.readiness}
+                audioTitle={audioStatusTooltip(
+                  audioStatusById.get(scenario.id),
+                  scenario.readiness.audio === "published",
+                )}
+              />
+            </div>
             <Button
               variant="ghost"
               size="icon-sm"

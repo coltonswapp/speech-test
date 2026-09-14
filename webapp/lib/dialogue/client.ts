@@ -107,8 +107,13 @@ export type DialogueScenario = {
   updatedAt: string;
 };
 
+/** Collection GET attaches curriculum-style readiness on each scenario. */
+export type DialogueCollectionScenario = DialogueScenario & {
+  readiness: ScenarioReadinessSummary;
+};
+
 export type DialogueCollection = Omit<CollectionSummary, "scenarios"> & {
-  scenarios: DialogueScenario[];
+  scenarios: DialogueCollectionScenario[];
 };
 
 // Scenario ids are "<collectionId>/<slug>"; routes take the pieces separately.

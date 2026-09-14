@@ -68,6 +68,22 @@ export function CurriculumView() {
     setKeysExpanded([key], !expanded.has(key));
   }
 
+  function sectionKeys(sectionKey: string, collectionIds: string[]) {
+    return [sectionKey, ...collectionIds.map(collectionKey)];
+  }
+
+  function isSectionExpanded(sectionKey: string, collectionIds: string[]) {
+    return sectionKeys(sectionKey, collectionIds).every((key) =>
+      expanded.has(key),
+    );
+  }
+
+  function toggleSection(sectionKey: string, collectionIds: string[]) {
+    const keys = sectionKeys(sectionKey, collectionIds);
+    const open = !isSectionExpanded(sectionKey, collectionIds);
+    setKeysExpanded(keys, open);
+  }
+
   const { data: unitsData, isLoading: unitsLoading } = useQuery({
     queryKey: ["curriculum-units"],
     queryFn: dialogueApi.listUnits,
@@ -201,6 +217,14 @@ export function CurriculumView() {
     return keys;
   }, [units, unfiled]);
   const anyExpanded = allKeys.some((key) => expanded.has(key));
+  const unfiledCollectionIds = useMemo(
+    () => unfiled.map((c) => c.id),
+    [unfiled],
+  );
+  const unfiledSectionOpen = isSectionExpanded(
+    UNFILED_KEY,
+    unfiledCollectionIds,
+  );
 
   function toggleUnitEdit(unitId: string) {
     const entering = !(editTarget?.kind === "unit" && editTarget.id === unitId);
@@ -282,6 +306,11 @@ export function CurriculumView() {
                 editTarget?.kind === "unit" && editTarget.id === unit.id;
               const unitOpen = isExpanded(unitKey(unit.id));
               const unitPanelId = `curriculum-unit-${unit.id}`;
+              const unitCollectionIds = unitCollections.map((c) => c.id);
+              const unitSectionOpen = isSectionExpanded(
+                unitKey(unit.id),
+                unitCollectionIds,
+              );
 
               return (
                 <section
@@ -345,6 +374,24 @@ export function CurriculumView() {
                       </div>
                     </button>
                     <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() =>
+                          toggleSection(unitKey(unit.id), unitCollectionIds)
+                        }
+                        title={
+                          unitSectionOpen
+                            ? "Collapse this unit and its collections"
+                            : "Expand this unit and all collections"
+                        }
+                      >
+                        {unitSectionOpen
+                          ? "Collapse section"
+                          : "Expand section"}
+                      </Button>
                       <Button
                         type="button"
                         variant={editingUnit ? "secondary" : "ghost"}
@@ -535,7 +582,7 @@ export function CurriculumView() {
               <section className="rounded-lg border border-dashed bg-background/40">
                 <header
                   className={cn(
-                    "px-3 py-2.5",
+                    "flex items-start gap-2 px-3 py-2.5",
                     isExpanded(UNFILED_KEY) && "border-b border-dashed",
                   )}
                 >
@@ -544,7 +591,7 @@ export function CurriculumView() {
                     aria-expanded={isExpanded(UNFILED_KEY)}
                     aria-controls="curriculum-unfiled"
                     onClick={() => toggleExpanded(UNFILED_KEY)}
-                    className="flex w-full items-start gap-2 text-left touch-manipulation"
+                    className="flex min-w-0 flex-1 items-start gap-2 text-left touch-manipulation"
                   >
                     <ChevronRight
                       className={cn(
@@ -565,6 +612,26 @@ export function CurriculumView() {
                       </p>
                     </div>
                   </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() =>
+                        toggleSection(UNFILED_KEY, unfiledCollectionIds)
+                      }
+                      title={
+                        unfiledSectionOpen
+                          ? "Collapse Unfiled and its collections"
+                          : "Expand Unfiled and all collections"
+                      }
+                    >
+                      {unfiledSectionOpen
+                        ? "Collapse section"
+                        : "Expand section"}
+                    </Button>
+                  </div>
                 </header>
                 {isExpanded(UNFILED_KEY) ? (
                 <ul id="curriculum-unfiled" className="flex flex-col gap-2 p-2">

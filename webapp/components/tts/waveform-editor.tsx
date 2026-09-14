@@ -810,6 +810,19 @@ export function WaveformEditor({
     void ws.play();
   }
 
+  /** Seek to an absolute playhead time and play (token mid-line recovery). */
+  function playFromSeconds(seconds: number) {
+    const ws = wavesurferRef.current;
+    if (!ws) return;
+    setLoopingRowIndex(null);
+    resumeAudioContext();
+    if (ws.isPlaying()) ws.pause();
+    const clamped = Math.max(0, Math.min(seconds, duration || seconds));
+    ws.setTime(clamped);
+    setCurrentTime(clamped);
+    void ws.play();
+  }
+
   useEffect(() => {
     wavesurferRef.current?.setPlaybackRate(playbackRate, true);
   }, [playbackRate]);
@@ -1655,6 +1668,7 @@ export function WaveformEditor({
                   void ws.play();
                 }
               }}
+              onPlayFromSeconds={playFromSeconds}
               playingLineIndex={loopingRowIndex}
               onPersist={persistTokenSync}
             />

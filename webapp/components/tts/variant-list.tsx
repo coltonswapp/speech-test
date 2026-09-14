@@ -1,9 +1,10 @@
 "use client";
 
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { MoreVertical } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Accordion,
   AccordionItem,
@@ -21,6 +22,7 @@ import {
 import { ttsApi } from "@/lib/tts/client";
 import { WaveformEditor } from "@/components/tts/waveform-editor";
 import type { EditableDialogueLine } from "@/components/tts/dialogue-line-editor";
+import { cn } from "@/lib/utils";
 
 export function VariantList({
   projectId,
@@ -28,6 +30,8 @@ export function VariantList({
   currentContentHash,
   selectedVariantId,
   hasUnsavedChanges,
+  headerActions,
+  emptyHint,
 }: {
   projectId: string;
   dialogueLines?: EditableDialogueLine[];
@@ -36,12 +40,19 @@ export function VariantList({
   /** When set, enables explicit take selection and badges off this id instead of isSelected. */
   selectedVariantId?: string | null;
   hasUnsavedChanges?: boolean;
+  /** Optional actions rendered in the Takes card header (e.g. Generate take). */
+  headerActions?: ReactNode;
+  /** Empty-state copy when there are no takes yet. */
+  emptyHint?: string;
 }) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["tts-variants", projectId],
     queryFn: () => ttsApi.listVariants(projectId),
   });
+
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
   const selectMutation = useMutation({
     mutationFn: (variantId: string) =>
@@ -55,15 +66,35 @@ export function VariantList({
     onError: (error) => toast.error(error.message),
   });
 
+  function invalidateAfterDelete() {
+    queryClient.invalidateQueries({ queryKey: ["tts-variants", projectId] });
+    queryClient.invalidateQueries({ queryKey: ["tts-project", projectId] });
+    queryClient.invalidateQueries({ queryKey: ["tts-projects"] });
+    queryClient.invalidateQueries({ queryKey: ["scenario-audio"] });
+  }
+
   const deleteMutation = useMutation({
     mutationFn: (variantId: string) =>
       ttsApi.deleteVariant(projectId, variantId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tts-variants", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["tts-project", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["tts-projects"] });
-      queryClient.invalidateQueries({ queryKey: ["scenario-audio"] });
+      invalidateAfterDelete();
       toast.success("Take deleted.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (variantIds: string[]) => {
+      for (const variantId of variantIds) {
+        await ttsApi.deleteVariant(projectId, variantId);
+      }
+      return variantIds.length;
+    },
+    onSuccess: (count) => {
+      invalidateAfterDelete();
+      setSelectedIds(new Set());
+      setSelectionMode(false);
+      toast.success(count === 1 ? "Take deleted." : `${count} takes deleted.`);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -107,6 +138,54 @@ export function VariantList({
 
   const variants = data?.variants ?? [];
   const selectionEnabled = selectedVariantId !== undefined;
+  const variantIdSet = useMemo(
+    () => new Set(variants.map((variant) => variant.id)),
+    [variants]
+  );
+
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set([...prev].filter((id) => variantIdSet.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [variantIdSet]);
+
+  const allSelected =
+    variants.length > 0 && variants.every((variant) => selectedIds.has(variant.id));
+
+  function toggleSelected(variantId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(variantId)) next.delete(variantId);
+      else next.add(variantId);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(new Set(variants.map((variant) => variant.id)));
+  }
+
+  function exitSelectionMode() {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }
+
+  function confirmBulkDelete() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const label =
+      ids.length === 1
+        ? "Delete 1 selected take? This cannot be undone."
+        : `Delete ${ids.length} selected takes? This cannot be undone.`;
+    if (!window.confirm(label)) return;
+    bulkDeleteMutation.mutate(ids);
+  }
 
   return (
     // overflow-visible so the waveform editor's sticky player can pin to the
@@ -115,14 +194,61 @@ export function VariantList({
     <Card className="overflow-visible">
       <CardHeader>
         <CardTitle className="text-base font-medium">Takes</CardTitle>
+        <CardAction>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {headerActions}
+            {variants.length > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (selectionMode) exitSelectionMode();
+                  else setSelectionMode(true);
+                }}
+              >
+                {selectionMode ? "Cancel" : "Select"}
+              </Button>
+            )}
+          </div>
+        </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        {selectionMode && variants.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-foreground"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+              />
+              {selectedIds.size === 0
+                ? "Select takes"
+                : `${selectedIds.size} selected`}
+            </label>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              className="ml-auto"
+              disabled={selectedIds.size === 0 || bulkDeleteMutation.isPending}
+              onClick={confirmBulkDelete}
+            >
+              {bulkDeleteMutation.isPending
+                ? "Deleting…"
+                : selectedIds.size === 0
+                  ? "Delete selected"
+                  : `Delete ${selectedIds.size} selected`}
+            </Button>
+          </div>
+        )}
         {isLoading && (
           <p className="text-sm text-muted-foreground">Loading…</p>
         )}
         {!isLoading && variants.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            No takes yet — generate one above.
+            {emptyHint ?? "No takes yet — generate one to get started."}
           </p>
         )}
         {variants.length > 0 && (
@@ -135,10 +261,30 @@ export function VariantList({
                 !!currentContentHash &&
                 !!variant.contentHash &&
                 variant.contentHash !== currentContentHash;
+              const checked = selectedIds.has(variant.id);
               return (
                 <AccordionItem key={variant.id} value={variant.id}>
                   <div className="flex min-w-0 items-center gap-1">
-                    <AccordionTrigger className="min-h-11 flex-1 touch-manipulation justify-start gap-2 py-2 md:min-h-0">
+                    {selectionMode && (
+                      <label
+                        className="flex shrink-0 cursor-pointer items-center px-1 py-2"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-foreground"
+                          checked={checked}
+                          onChange={() => toggleSelected(variant.id)}
+                          aria-label={`Select take from ${new Date(variant.createdAt).toLocaleString()}`}
+                        />
+                      </label>
+                    )}
+                    <AccordionTrigger
+                      className={cn(
+                        "min-h-11 flex-1 touch-manipulation justify-start gap-2 py-2 md:min-h-0",
+                        selectionMode && checked && "opacity-90"
+                      )}
+                    >
                       <span className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
                         <span>
                           {new Date(variant.createdAt).toLocaleString()}
@@ -167,54 +313,56 @@ export function VariantList({
                         )}
                       </span>
                     </AccordionTrigger>
-                    <div className="ml-auto flex shrink-0 items-center">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-10 shrink-0 touch-manipulation md:size-8"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreVertical className="size-4" />
-                            </Button>
-                          }
-                        />
-                        <DropdownMenuContent align="end">
-                          {!!currentContentHash &&
-                            variant.contentHash !== currentContentHash && (
+                    {!selectionMode && (
+                      <div className="ml-auto flex shrink-0 items-center">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-10 shrink-0 touch-manipulation md:size-8"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreVertical className="size-4" />
+                              </Button>
+                            }
+                          />
+                          <DropdownMenuContent align="end">
+                            {!!currentContentHash &&
+                              variant.contentHash !== currentContentHash && (
+                              <DropdownMenuItem
+                                onClick={() => ignoreMutation.mutate(variant.id)}
+                                disabled={ignoreMutation.isPending}
+                              >
+                                Ignore text changed
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
-                              onClick={() => ignoreMutation.mutate(variant.id)}
-                              disabled={ignoreMutation.isPending}
+                              onClick={() => regenerateMutation.mutate(variant)}
+                              disabled={regenerateMutation.isPending}
                             >
-                              Ignore text changed
+                              Regenerate with same settings
                             </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            onClick={() => regenerateMutation.mutate(variant)}
-                            disabled={regenerateMutation.isPending}
-                          >
-                            Regenerate with same settings
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  "Delete this take? This cannot be undone."
-                                )
-                              ) {
-                                deleteMutation.mutate(variant.id);
-                              }
-                            }}
-                            disabled={deleteMutation.isPending}
-                          >
-                            Delete take
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    "Delete this take? This cannot be undone."
+                                  )
+                                ) {
+                                  deleteMutation.mutate(variant.id);
+                                }
+                              }}
+                              disabled={deleteMutation.isPending}
+                            >
+                              Delete take
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    )}
                   </div>
                   <AccordionPanel className="overflow-visible">
                     <div className="flex flex-col gap-3">

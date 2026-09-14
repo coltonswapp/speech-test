@@ -324,6 +324,70 @@ export function clearLineStamps(
   };
 }
 
+/**
+ * Clear stamps from `tokenIndex` onward on one line. Earlier tokens on this
+ * line (and every other line) stay. If the cut includes the first word,
+ * re-seed it from the line mark — same as `clearLineStamps`.
+ */
+export function clearStampsFrom(
+  sync: VariantTokenSync,
+  lineIndex: number,
+  tokenIndex: number,
+  lineStartSeconds?: number | null
+): VariantTokenSync {
+  const line = sync.lines[lineIndex];
+  if (!line || tokenIndex < 0 || tokenIndex >= line.tokens.length) {
+    return sync;
+  }
+  const nextTokens = line.tokens.map((token, index) => {
+    if (index < tokenIndex) return token;
+    if (index === 0 && lineStartSeconds != null) {
+      return { ...token, startSeconds: lineStartSeconds };
+    }
+    return { ...token, startSeconds: null };
+  });
+  if (
+    line.tokens.every(
+      (token, index) => token.startSeconds === nextTokens[index].startSeconds
+    )
+  ) {
+    return sync;
+  }
+  return {
+    ...sync,
+    lines: sync.lines.map((row, i) =>
+      i === lineIndex ? { ...row, tokens: nextTokens } : row
+    ),
+  };
+}
+
+/**
+ * Playhead for re-entering stamp rhythm after a mid-line clear: prefer the
+ * token ~2 before the cut when at least two earlier stamps exist on the line,
+ * otherwise the line-start window.
+ */
+export function seekSecondsBeforeToken(
+  sync: VariantTokenSync,
+  lineIndex: number,
+  tokenIndex: number,
+  windows: LineWindow[] | null
+): number {
+  const line = sync.lines[lineIndex];
+  const lineStart = windows?.[lineIndex]?.start ?? (lineIndex === 0 ? 0 : null);
+  if (!line || tokenIndex <= 0) {
+    return lineStart ?? 0;
+  }
+  const earlierStamped: number[] = [];
+  for (let i = 0; i < tokenIndex; i++) {
+    const start = line.tokens[i]?.startSeconds;
+    if (start != null) earlierStamped.push(start);
+  }
+  if (earlierStamped.length >= 2) {
+    return earlierStamped[earlierStamped.length - 2]!;
+  }
+  return lineStart ?? earlierStamped[0] ?? 0;
+}
+
 export function mergeTokenWithNext(
   sync: VariantTokenSync,
   lineIndex: number,

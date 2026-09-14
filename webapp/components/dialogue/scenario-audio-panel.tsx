@@ -8,6 +8,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { dialogueApi } from "@/lib/dialogue/client";
 import { ttsApi } from "@/lib/tts/client";
 import { scenarioLinesToConversation } from "@/lib/tts/scenario-conversation";
@@ -262,20 +263,6 @@ export function ScenarioAudioPanel({
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              onClick={() => generateMutation.mutate()}
-              disabled={generateMutation.isPending}
-            >
-              {generateMutation.isPending ? "Generating…" : "Generate take"}
-            </Button>
-            {hasUnsavedChanges && (
-              <p className="text-sm text-muted-foreground">
-                Unsaved line edits will be saved before generating.
-              </p>
-            )}
-          </div>
-
             <div className="flex flex-col gap-3 rounded-md border p-4">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-medium">Publish scenario audio</h3>
@@ -347,15 +334,59 @@ export function ScenarioAudioPanel({
         </>
       )}
 
-      {project && (
+      {project ? (
         <VariantList
           projectId={project.id}
           dialogueLines={editorLines}
           currentContentHash={data.currentContentHash}
           selectedVariantId={selectedVariant}
           hasUnsavedChanges={hasUnsavedChanges}
+          headerActions={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => generateMutation.mutate()}
+                disabled={generateMutation.isPending || speakableLineCount === 0}
+              >
+                {generateMutation.isPending ? "Generating…" : "Generate take"}
+              </Button>
+              {hasUnsavedChanges && (
+                <span className="text-xs text-muted-foreground">
+                  Unsaved line edits will be saved before generating.
+                </span>
+              )}
+            </div>
+          }
+          emptyHint="No takes yet — use Generate take in this header."
         />
-      )}
+      ) : speakableLineCount > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-medium">Takes</CardTitle>
+            <CardAction>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => generateMutation.mutate()}
+                  disabled={generateMutation.isPending}
+                >
+                  {generateMutation.isPending ? "Generating…" : "Generate take"}
+                </Button>
+                {hasUnsavedChanges && (
+                  <span className="text-xs text-muted-foreground">
+                    Unsaved line edits will be saved before generating.
+                  </span>
+                )}
+              </div>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              No takes yet — use Generate take in this header.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -116,9 +116,23 @@ function getCoarsePointerServer() {
 }
 
 /**
+ * iPhone / iPad (including iPadOS that reports as MacIntel). Safari there
+ * mishandles HTMLMediaElement → Web Audio routing; desktop Mac is fine.
+ */
+function isAppleTouchDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  if (/iPad|iPhone|iPod/.test(ua)) return true;
+  return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+}
+
+/**
  * How far the audible output trails the media element's reported position:
  * the Web Audio graph's own buffering plus the hardware/Bluetooth output
  * latency. Both are estimates the browser exposes; ignore anything absurd.
+ *
+ * On Apple touch devices we never route through Web Audio (see meter setup),
+ * so this stays 0 and Mark uses the same media clock as the waveform cursor.
  */
 function playbackLatencySeconds(ctx: AudioContext | null): number {
   if (!ctx) return 0;
@@ -127,6 +141,18 @@ function playbackLatencySeconds(ctx: AudioContext | null): number {
   const total = base + output;
   return Number.isFinite(total) && total > 0 && total < 1 ? total : 0;
 }
+
+/** Prefer the live <audio> clock over WaveSurfer's cached time after seeks. */
+function mediaClockSeconds(ws: WaveSurfer | null, fallback: number): number {
+  const media = ws?.getMediaElement();
+  if (media && Number.isFinite(media.currentTime)) return media.currentTime;
+  const fromWs = ws?.getCurrentTime();
+  if (typeof fromWs === "number" && Number.isFinite(fromWs)) return fromWs;
+  return fallback;
+}
+
+/** How long we wait for iOS seeked/playing before forcing a playhead resync. */
+const SEEK_SYNC_TIMEOUT_MS = 750;
 
 type SentenceMapRow = {
   index: number;
@@ -210,9 +236,13 @@ export function WaveformEditor({
   const rowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const playerBarRef = useRef<HTMLDivElement>(null);
   const playerSpacerRef = useRef<HTMLDivElement>(null);
-  // iOS Safari starts AudioContext suspended; createMediaElementSource routes
-  // media through it, so play is silent until we resume on a user gesture.
+  // Desktop: level meter AudioContext. createMediaElementSource routes media
+  // through it, so play is silent until we resume on a user gesture.
+  // iOS: left null — native <audio> playback avoids Web Audio tail cutoff
+  // and unreliable outputLatency that made Mark drift from what you hear.
   const audioCtxRef = useRef<AudioContext | null>(null);
+  // Tear down pending seek→playhead resync when the take remounts or we seek again.
+  const seekSyncCleanupRef = useRef<(() => void) | null>(null);
   const sectionRef = useRef<HTMLDivElement>(null);
   const sectionHeaderRef = useRef<HTMLDivElement>(null);
   const variantRef = useRef(variant);
@@ -479,7 +509,13 @@ export function WaveformEditor({
     });
 
     ws.on("audioprocess", (t) => !cancelled && setCurrentTime(t));
-    ws.on("interaction", () => !cancelled && setCurrentTime(ws.getCurrentTime()));
+    ws.on("interaction", () => {
+      if (cancelled) return;
+      // Manual scrub cancels any in-flight restart resync so Mark follows the drag.
+      seekSyncCleanupRef.current?.();
+      seekSyncCleanupRef.current = null;
+      setCurrentTime(mediaClockSeconds(ws, ws.getCurrentTime()));
+    });
     ws.on("play", () => !cancelled && setIsPlaying(true));
     ws.on("pause", () => !cancelled && setIsPlaying(false));
     ws.on("finish", () => !cancelled && setIsPlaying(false));
@@ -502,6 +538,13 @@ export function WaveformEditor({
     ws.on("dragend", () => !cancelled && setCursorWidth(1));
 
     // Level meter via an AnalyserNode tapped off wavesurfer's media element.
+    // On iOS Safari, createMediaElementSource steals the element's destination
+    // and commonly truncates the last buffers of the file; outputLatency is
+    // also often 0/wrong there, so Mark compensated against a bad estimate
+    // while the cursor still tracked the raw media clock. Keep native element
+    // playback on Apple touch — skip the meter rather than break the take.
+    // Restart/replay after seek is especially bad on that path: Safari rebuffers
+    // into the Web Audio graph and audible output lags media.currentTime.
     let rafId: number;
     let audioCtx: AudioContext | null = null;
     let analyser: AnalyserNode | null = null;
@@ -513,6 +556,14 @@ export function WaveformEditor({
       if (!media) return;
       media.setAttribute("playsinline", "true");
       media.volume = 1;
+
+      if (isAppleTouchDevice()) {
+        audioCtxRef.current = null;
+        setLatencyMs(0);
+        setLevel(0);
+        return;
+      }
+
       audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
       setLatencyMs(Math.round(playbackLatencySeconds(audioCtx) * 1000));
@@ -540,6 +591,8 @@ export function WaveformEditor({
 
     return () => {
       cancelled = true;
+      seekSyncCleanupRef.current?.();
+      seekSyncCleanupRef.current = null;
       resizeObserver.disconnect();
       intersectionObserver.disconnect();
       window.removeEventListener("scroll", onScroll, true);
@@ -609,16 +662,95 @@ export function WaveformEditor({
   }, [isCutMode, duration]);
 
   /**
-   * The position the user is actually hearing right now. While playing, the
-   * media element's currentTime runs ahead of the speaker by the output
-   * latency, so a Mark tapped "on the beat" would otherwise land late. When
-   * paused/scrubbed the playhead is exactly where the user put it, so no shift.
+   * The position the user is actually hearing right now. While playing on
+   * desktop (Web Audio meter path), the media element's currentTime runs
+   * ahead of the speaker by the output latency, so a Mark tapped "on the
+   * beat" would otherwise land late. When paused/scrubbed the playhead is
+   * exactly where the user put it, so no shift.
+   *
+   * On iPhone/iPad we keep native <audio> output (no MediaElementSource), so
+   * latency is 0 here — Mark, the waveform cursor, and the audible beat
+   * share one media clock. Always sample that clock from the live element so
+   * a post-seek WaveSurfer cache can't drift from what is playing.
    */
   function heardPlayheadSeconds(): number {
     const ws = wavesurferRef.current;
-    const raw = ws?.getCurrentTime() ?? currentTime;
+    const media = ws?.getMediaElement() ?? null;
+    // During an in-flight seek, currentTime can briefly report the pre-seek
+    // position or an intermediate value. Prefer the last UI playhead until
+    // seek settles — resyncPlayheadAfterSeek will refresh it.
+    if (media?.seeking) return currentTime;
+    const raw = mediaClockSeconds(ws, currentTime);
     if (!ws?.isPlaying()) return raw;
+    if (isAppleTouchDevice()) return raw;
     return Math.max(0, raw - playbackLatencySeconds(audioCtxRef.current));
+  }
+
+  /**
+   * pause→setTime→play must stay synchronous for the iOS gesture window, but
+   * Safari often finishes the seek a tick later. Listen for seeked/playing and
+   * push React (and the Mark clock) from the live media element once it settles.
+   * Also re-sample desktop Web Audio latency once the context is running.
+   */
+  function resyncPlayheadAfterSeek(ws: WaveSurfer, expectedSeconds: number) {
+    seekSyncCleanupRef.current?.();
+    seekSyncCleanupRef.current = null;
+
+    const media = ws.getMediaElement();
+    if (!media) {
+      setCurrentTime(expectedSeconds);
+      return;
+    }
+
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      const t = mediaClockSeconds(ws, expectedSeconds);
+      setCurrentTime(t);
+      refreshPlaybackLatencyHint();
+    };
+
+    const onSeeked = () => settle();
+    const onPlaying = () => {
+      if (!media.seeking) settle();
+    };
+    const timer = window.setTimeout(settle, SEEK_SYNC_TIMEOUT_MS);
+
+    function cleanup() {
+      media.removeEventListener("seeked", onSeeked);
+      media.removeEventListener("playing", onPlaying);
+      window.clearTimeout(timer);
+      if (seekSyncCleanupRef.current === cleanup) {
+        seekSyncCleanupRef.current = null;
+      }
+    }
+
+    seekSyncCleanupRef.current = cleanup;
+    media.addEventListener("seeked", onSeeked);
+    media.addEventListener("playing", onPlaying);
+
+    // Already at the target and not seeking — nothing async to wait for.
+    if (
+      !media.seeking &&
+      Math.abs(media.currentTime - expectedSeconds) < 0.05
+    ) {
+      settle();
+    }
+  }
+
+  function refreshPlaybackLatencyHint() {
+    if (isAppleTouchDevice()) {
+      setLatencyMs(0);
+      return;
+    }
+    const ctx = audioCtxRef.current;
+    if (!ctx) {
+      setLatencyMs(0);
+      return;
+    }
+    setLatencyMs(Math.round(playbackLatencySeconds(ctx) * 1000));
   }
 
   function currentEditSample(): number {
@@ -767,9 +899,16 @@ export function WaveformEditor({
 
   function resumeAudioContext() {
     const ctx = audioCtxRef.current;
-    if (ctx && ctx.state === "suspended") {
-      void ctx.resume();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      void ctx.resume().then(() => {
+        refreshPlaybackLatencyHint();
+      });
+      return;
     }
+    // outputLatency is often only meaningful once the context is running —
+    // re-sample on every play so Mark compensation isn't stuck on a cold 0.
+    refreshPlaybackLatencyHint();
   }
 
   function playRow(row: SentenceMapRow) {
@@ -784,9 +923,12 @@ export function WaveformEditor({
     // directly on the native <audio> element in the same tick, which browsers
     // handle fine and keeps play() inside the user gesture.
     if (ws.isPlaying()) ws.pause();
-    ws.setTime(row.sampleLower / variant.sampleRate);
+    const start = row.sampleLower / variant.sampleRate;
+    ws.setTime(start);
+    setCurrentTime(start);
     setLoopingRowIndex(row.index);
     void ws.play();
+    resyncPlayheadAfterSeek(ws, start);
   }
 
   /** Main transport: clears per-row loop so full-track QC can run through the map. */
@@ -808,6 +950,7 @@ export function WaveformEditor({
     ws.setTime(0);
     setCurrentTime(0);
     void ws.play();
+    resyncPlayheadAfterSeek(ws, 0);
   }
 
   /** Seek to an absolute playhead time and play (token mid-line recovery). */
@@ -821,6 +964,7 @@ export function WaveformEditor({
     ws.setTime(clamped);
     setCurrentTime(clamped);
     void ws.play();
+    resyncPlayheadAfterSeek(ws, clamped);
   }
 
   useEffect(() => {
@@ -1662,10 +1806,13 @@ export function WaveformEditor({
                   return;
                 }
                 if (lineIndex === 0) {
+                  resumeAudioContext();
                   if (ws.isPlaying()) ws.pause();
                   ws.setTime(0);
+                  setCurrentTime(0);
                   setLoopingRowIndex(null);
                   void ws.play();
+                  resyncPlayheadAfterSeek(ws, 0);
                 }
               }}
               onPlayFromSeconds={playFromSeconds}

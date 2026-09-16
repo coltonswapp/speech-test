@@ -75,6 +75,7 @@ export function TokenSyncEditor({
   usesMarks,
   currentContentHash,
   hasUnsavedChanges,
+  playbackRate = 1,
   actionsRef,
   onAvailabilityChange,
   onPersist,
@@ -90,6 +91,8 @@ export function TokenSyncEditor({
   usesMarks: boolean;
   currentContentHash?: string;
   hasUnsavedChanges?: boolean;
+  /** Transport playback rate; tap-lookback is scaled into media time from this. */
+  playbackRate?: number;
   actionsRef?: Ref<TokenSyncActions | null>;
   onAvailabilityChange?: (state: TokenSyncAvailability) => void;
   onPersist: (tokenSync: VariantTokenSync | null) => void;
@@ -166,11 +169,13 @@ export function TokenSyncEditor({
   const selectedRef = useRef(selectedToken);
   const currentTimeRef = useRef(currentTime);
   const getPlayheadRef = useRef(onGetPlayhead);
+  const playbackRateRef = useRef(playbackRate);
   const windowsRef = useRef(windows);
   const statusRef = useRef(status);
   const hasUnsavedRef = useRef(hasUnsavedChanges);
   currentTimeRef.current = currentTime;
   getPlayheadRef.current = onGetPlayhead;
+  playbackRateRef.current = playbackRate;
   windowsRef.current = windows;
   statusRef.current = status;
   hasUnsavedRef.current = hasUnsavedChanges;
@@ -239,7 +244,8 @@ export function TokenSyncEditor({
       target.lineIndex,
       target.tokenIndex,
       clipSeconds,
-      windowsRef.current
+      windowsRef.current,
+      playbackRateRef.current
     );
     commitSync(next, nextUnstamped(next, target.lineIndex, target.tokenIndex));
   }

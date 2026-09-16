@@ -5,8 +5,10 @@ import {
   type PublishedTokenSync,
   type VariantTokenSync,
 } from "@/lib/dialogue/types";
+import { wallDelayToMediaSeconds } from "@/lib/tts/media-timing";
 
 export const TOKEN_SYNC_VERSION = 1 as const;
+/** Wall-clock tap lag assumed at 1×; convert with wallDelayToMediaSeconds at stamp time. */
 export const TOKEN_STAMP_LOOKBACK_SECONDS = 0.12;
 export const TOKEN_STAMP_MIN_GAP_SECONDS = 0.02;
 
@@ -177,13 +179,20 @@ function previousStamp(
 function proposedStampSeconds(
   clipSeconds: number,
   previous: number,
-  window: LineWindow | null
+  window: LineWindow | null,
+  playbackRate = 1
 ): number {
   const floor = Math.max(
     previous + TOKEN_STAMP_MIN_GAP_SECONDS,
     window?.start ?? 0
   );
-  const pulledBack = clipSeconds - TOKEN_STAMP_LOOKBACK_SECONDS;
+  // Tap lag is wall-clock; scale into media time so 0.5× does not pull back
+  // twice as much timeline as the user actually lagged (see wallDelayToMediaSeconds).
+  const lookback = wallDelayToMediaSeconds(
+    TOKEN_STAMP_LOOKBACK_SECONDS,
+    playbackRate
+  );
+  const pulledBack = clipSeconds - lookback;
   // Lookback models tap lag, but near a line mark it snaps every word
   // onto the same tenth. Use the live playhead in that case.
   return pulledBack > floor ? pulledBack : Math.max(clipSeconds, floor);
@@ -231,7 +240,8 @@ function replaceToken(
 export function stampNextToken(
   sync: VariantTokenSync,
   clipSeconds: number,
-  windows: LineWindow[] | null
+  windows: LineWindow[] | null,
+  playbackRate = 1
 ): VariantTokenSync {
   for (let lineIndex = 0; lineIndex < sync.lines.length; lineIndex++) {
     const line = sync.lines[lineIndex];
@@ -240,7 +250,12 @@ export function stampNextToken(
       const window = windows?.[lineIndex] ?? null;
       const previous = previousStamp(sync, lineIndex, tokenIndex, window);
       const startSeconds = clampStamp({
-        proposed: proposedStampSeconds(clipSeconds, previous, window),
+        proposed: proposedStampSeconds(
+          clipSeconds,
+          previous,
+          window,
+          playbackRate
+        ),
         previous,
         window,
       });
@@ -265,12 +280,18 @@ export function restampToken(
   lineIndex: number,
   tokenIndex: number,
   clipSeconds: number,
-  windows: LineWindow[] | null
+  windows: LineWindow[] | null,
+  playbackRate = 1
 ): VariantTokenSync {
   const window = windows?.[lineIndex] ?? null;
   const previous = previousStamp(sync, lineIndex, tokenIndex, window);
   const startSeconds = clampStamp({
-    proposed: proposedStampSeconds(clipSeconds, previous, window),
+    proposed: proposedStampSeconds(
+      clipSeconds,
+      previous,
+      window,
+      playbackRate
+    ),
     previous,
     window,
   });

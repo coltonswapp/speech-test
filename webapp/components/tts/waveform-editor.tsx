@@ -41,6 +41,7 @@ import {
 } from "@/components/dialogue/token-sync-editor";
 import type { VariantTokenSync } from "@/lib/dialogue/types";
 import { enqueueTokenSyncSave } from "@/lib/dialogue/token-sync-persist";
+import { wallDelayToMediaSeconds } from "@/lib/tts/media-timing";
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds)) return "0:00";
@@ -683,7 +684,13 @@ export function WaveformEditor({
     const raw = mediaClockSeconds(ws, currentTime);
     if (!ws?.isPlaying()) return raw;
     if (isAppleTouchDevice()) return raw;
-    return Math.max(0, raw - playbackLatencySeconds(audioCtxRef.current));
+    // baseLatency/outputLatency are wall-clock; convert to media time so 0.5×
+    // does not subtract a full wall delay from a clock that advances half as fast.
+    const latencyMedia = wallDelayToMediaSeconds(
+      playbackLatencySeconds(audioCtxRef.current),
+      playbackRateRef.current
+    );
+    return Math.max(0, raw - latencyMedia);
   }
 
   /**
@@ -1407,7 +1414,7 @@ export function WaveformEditor({
           {latencyMs >= 20 && (
             <>
               {" "}
-              Marks land ~{latencyMs}ms before the cursor to offset audio output latency.
+              Marks land ~{Math.round(latencyMs * playbackRate)}ms of media time before the cursor to offset audio output latency (wall delay × rate).
             </>
           )}
         </p>
@@ -1421,7 +1428,7 @@ export function WaveformEditor({
           {latencyMs >= 20 && (
             <>
               {" "}
-              Stamps land ~{latencyMs}ms before the cursor to offset audio output latency.
+              Stamps land ~{Math.round(latencyMs * playbackRate)}ms of media time before the cursor to offset audio output latency (wall delay × rate).
             </>
           )}
         </p>
@@ -1789,6 +1796,7 @@ export function WaveformEditor({
               usesMarks={usesMarks}
               currentContentHash={currentContentHash}
               hasUnsavedChanges={hasUnsavedChanges}
+              playbackRate={playbackRate}
               actionsRef={tokenActionsRef}
               onAvailabilityChange={setTokenActionState}
               onGetPlayhead={heardPlayheadSeconds}

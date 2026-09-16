@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   clearStampsFrom,
+  restampToken,
   seekSecondsBeforeToken,
+  TOKEN_STAMP_LOOKBACK_SECONDS,
   type LineWindow,
 } from "./token-sync";
 import type { VariantTokenSync } from "./types";
@@ -67,5 +69,33 @@ describe("seekSecondsBeforeToken", () => {
   it("falls back to line start when fewer than two earlier stamps exist", () => {
     const sync = syncWithTimes([0.1, null, 0.7]);
     assert.equal(seekSecondsBeforeToken(sync, 0, 1, windows), 0.05);
+  });
+});
+
+describe("restampToken playback-rate lookback", () => {
+  it("scales tap lookback into media time so 0.5× does not double-count wall lag", () => {
+    const sync = syncWithTimes([null, null]);
+    const atOne = restampToken(sync, 0, 0, 1.0, null, 1);
+    const atHalf = restampToken(sync, 0, 0, 1.0, null, 0.5);
+    assert.equal(atOne.lines[0].tokens[0].startSeconds, 1.0 - TOKEN_STAMP_LOOKBACK_SECONDS);
+    assert.equal(
+      atHalf.lines[0].tokens[0].startSeconds,
+      1.0 - TOKEN_STAMP_LOOKBACK_SECONDS * 0.5
+    );
+    // Same media playhead + same perceived onset: half-speed stamp is later than
+    // the over-subtracted 1× lookback would have been (invariant vs rate).
+    assert.ok(
+      (atHalf.lines[0].tokens[0].startSeconds ?? 0) >
+        (atOne.lines[0].tokens[0].startSeconds ?? 0)
+    );
+  });
+
+  it("keeps 1.5× lookback proportional so fast playback still tracks onset", () => {
+    const sync = syncWithTimes([null]);
+    const atFast = restampToken(sync, 0, 0, 2.0, null, 1.5);
+    assert.equal(
+      atFast.lines[0].tokens[0].startSeconds,
+      2.0 - TOKEN_STAMP_LOOKBACK_SECONDS * 1.5
+    );
   });
 });

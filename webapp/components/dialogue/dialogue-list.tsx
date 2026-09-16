@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -10,7 +10,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FileJson, FolderPlus, Plus } from "lucide-react";
+import { ChevronLeft, FileJson, FolderPlus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,16 +33,54 @@ import { cn } from "@/lib/utils";
 import {
   dialogueApi,
   scenarioSlug,
+  type CollectionSummary,
   type UnitSummary,
 } from "@/lib/dialogue/client";
 import { CreateCollectionDialog } from "@/components/dialogue/create-collection-dialog";
 
+export type DialogueListScope = "all" | "unit";
+
+function resolveUnitIdForActive(
+  activeId: string | undefined,
+  collections: CollectionSummary[],
+  units: UnitSummary[],
+): string | null | undefined {
+  if (!activeId) return undefined;
+  if (units.some((unit) => unit.id === activeId)) return activeId;
+
+  const byCollection = collections.find(
+    (collection) => collection.id === activeId,
+  );
+  if (byCollection) return byCollection.unitId;
+
+  const byScenario = collections.find((collection) =>
+    collection.scenarios.some((scenario) => scenario.id === activeId),
+  );
+  if (byScenario) return byScenario.unitId;
+
+  return undefined;
+}
+
+function isUnfiledCollection(
+  collection: CollectionSummary,
+  units: UnitSummary[],
+) {
+  return !units.some((unit) => unit.id === collection.unitId);
+}
+
 export function DialogueList({
   activeId,
   className,
+  /**
+   * `all` — full curriculum (Dialogues index).
+   * `unit` — only sibling lessons in the active item's unit, with a way back
+   * to Curriculum. Used on collection, scenario, and unit editor pages.
+   */
+  scope = "all",
 }: {
   activeId?: string;
   className?: string;
+  scope?: DialogueListScope;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -97,29 +135,54 @@ export function DialogueList({
   const collections = data?.collections ?? [];
   const units = unitsData?.units ?? [];
 
+  const unitScoped = scope === "unit";
+  const scopedUnitId = useMemo(() => {
+    if (!unitScoped) return undefined;
+    return resolveUnitIdForActive(activeId, collections, units);
+  }, [unitScoped, activeId, collections, units]);
+
+  const scopedUnit =
+    scopedUnitId != null
+      ? (units.find((unit) => unit.id === scopedUnitId) ?? null)
+      : null;
+
   // One group per curriculum unit (in unit order), plus an unfiled group for
-  // collections without a unit (or whose unit no longer exists).
-  const groups = [
-    ...units.map((unit) => ({
-      key: unit.id,
-      label: unit.title,
-      jlptLevel: unit.jlptLevel as number | null,
-      unit,
-      collections: collections.filter((c) => c.unitId === unit.id),
-    })),
-    {
-      key: "__unfiled__",
-      label: units.length > 0 ? "Unfiled" : null,
-      jlptLevel: null,
-      unit: null as UnitSummary | null,
-      collections: collections.filter(
-        (c) => !units.some((unit) => unit.id === c.unitId),
-      ),
-    },
-  ];
+  // collections without a unit (or whose unit no longer exists). When
+  // unit-scoped, only the active unit (or Unfiled) is kept — never flash
+  // other units while scope is still resolving.
+  const groups = useMemo(() => {
+    const allGroups = [
+      ...units.map((unit) => ({
+        key: unit.id,
+        label: unit.title,
+        jlptLevel: unit.jlptLevel as number | null,
+        unit,
+        collections: collections.filter((c) => c.unitId === unit.id),
+      })),
+      {
+        key: "__unfiled__",
+        label: units.length > 0 ? "Unfiled" : null,
+        jlptLevel: null,
+        unit: null as UnitSummary | null,
+        collections: collections.filter((c) => isUnfiledCollection(c, units)),
+      },
+    ];
+
+    if (!unitScoped) return allGroups;
+    if (scopedUnitId === undefined) return [];
+    if (scopedUnitId == null) {
+      return allGroups.filter((group) => group.key === "__unfiled__");
+    }
+    return allGroups.filter((group) => group.key === scopedUnitId);
+  }, [collections, units, unitScoped, scopedUnitId]);
+
+  const listedCollections = useMemo(
+    () => groups.flatMap((group) => group.collections),
+    [groups],
+  );
 
   const audioStatusQueries = useQueries({
-    queries: collections.map((collection) => ({
+    queries: listedCollections.map((collection) => ({
       queryKey: ["dialogue-collection-audio-status", collection.id],
       queryFn: () => dialogueApi.audioStatus(collection.id),
     })),
@@ -137,6 +200,39 @@ export function DialogueList({
         className,
       )}
     >
+      {unitScoped ? (
+        <div className="flex flex-col gap-1">
+          <Link
+            href="/content/curriculum"
+            className="inline-flex w-fit items-center gap-1 px-1 text-xs text-muted-foreground touch-manipulation hover:text-foreground"
+          >
+            <ChevronLeft className="size-3.5 shrink-0" />
+            All units
+          </Link>
+          {scopedUnit ? (
+            <div className="flex items-center justify-between gap-2 px-1">
+              <Link
+                href={`/content/dialogues/units/${scopedUnit.id}`}
+                className={cn(
+                  "truncate text-sm font-semibold transition-colors hover:underline",
+                  scopedUnit.id === activeId
+                    ? "text-foreground"
+                    : "text-foreground/90",
+                )}
+              >
+                {scopedUnit.title}
+              </Link>
+              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                N{scopedUnit.jlptLevel}
+              </span>
+            </div>
+          ) : scopedUnitId === null ? (
+            <p className="px-1 text-sm font-semibold text-muted-foreground">
+              Unfiled
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <Button
         size="sm"
@@ -156,15 +252,17 @@ export function DialogueList({
         <FileJson className="size-4" />
         {importMutation.isPending ? "Importing…" : "Import collection JSON"}
       </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        className="w-full justify-start gap-2"
-        onClick={() => setCreateUnitOpen(true)}
-      >
-        <FolderPlus className="size-4" />
-        New unit
-      </Button>
+      {!unitScoped ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full justify-start gap-2"
+          onClick={() => setCreateUnitOpen(true)}
+        >
+          <FolderPlus className="size-4" />
+          New unit
+        </Button>
+      ) : null}
       <input
         ref={importInputRef}
         type="file"
@@ -184,16 +282,19 @@ export function DialogueList({
               <Skeleton key={i} className="h-24 w-full rounded-md" />
             ))}
 
-          {!isLoading && collections.length === 0 && (
+          {!isLoading && listedCollections.length === 0 && (
             <p className="px-2 py-4 text-sm text-muted-foreground">
-              No dialogue collections yet. Create one or import a collection
-              JSON.
+              {unitScoped
+                ? "No lessons in this unit yet. Create a collection to get started."
+                : "No dialogue collections yet. Create one or import a collection JSON."}
             </p>
           )}
 
           {groups.map((group) => (
             <div key={group.key} className="flex flex-col gap-2">
-              {group.label && (
+              {/* In unit scope the unit title lives above the actions; skip the
+                  per-group heading so lessons read as a flat sibling list. */}
+              {!unitScoped && group.label ? (
                 <div className="flex items-center justify-between gap-2 px-2 pt-1">
                   {group.unit ? (
                     <Link
@@ -218,12 +319,14 @@ export function DialogueList({
                     </span>
                   )}
                 </div>
-              )}
-              {group.label && group.collections.length === 0 && (
-                <p className="px-2 text-xs text-muted-foreground">
-                  No collections yet
-                </p>
-              )}
+              ) : null}
+              {!unitScoped &&
+                group.label &&
+                group.collections.length === 0 && (
+                  <p className="px-2 text-xs text-muted-foreground">
+                    No collections yet
+                  </p>
+                )}
               {group.collections.map((collection) => (
                 <div key={collection.id} className="flex flex-col gap-1">
                   <Link
@@ -282,6 +385,10 @@ export function DialogueList({
         open={createOpen}
         onOpenChange={setCreateOpen}
         units={units}
+        defaultUnitId={
+          unitScoped && scopedUnitId != null ? scopedUnitId : ""
+        }
+        lockUnit={unitScoped && scopedUnitId != null}
       />
 
       <Dialog open={createUnitOpen} onOpenChange={setCreateUnitOpen}>

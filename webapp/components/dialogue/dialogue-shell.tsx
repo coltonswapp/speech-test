@@ -3,10 +3,18 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { PanelLeft, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DialogueList } from "@/components/dialogue/dialogue-list";
+import {
+  DialogueList,
+  type DialogueListScope,
+} from "@/components/dialogue/dialogue-list";
 
 type DialogueShellProps = {
   activeId?: string;
+  /**
+   * Forwarded to DialogueList. Use `unit` on collection / scenario editors so
+   * the sidebar only shows sibling lessons in the current unit.
+   */
+  scope?: DialogueListScope;
   /**
    * When true (scenario / collection editor routes), hide the w-80 sidebar on
    * small screens by default and offer a Lessons drawer to reopen it.
@@ -18,6 +26,7 @@ type DialogueShellProps = {
 
 export function DialogueShell({
   activeId,
+  scope = "all",
   collapseSidebarOnMobile = false,
   children,
 }: DialogueShellProps) {
@@ -41,7 +50,7 @@ export function DialogueShell({
     <div className="relative flex min-w-0 flex-1 flex-col gap-4 md:flex-row md:gap-6">
       {/* Desktop / tablet: persistent sidebar */}
       <div className="hidden md:block">
-        <DialogueList activeId={activeId} />
+        <DialogueList activeId={activeId} scope={scope} />
       </div>
 
       {/* Phone index route: full-width list (no editor competing for space) */}
@@ -49,6 +58,7 @@ export function DialogueShell({
         <div className="md:hidden">
           <DialogueList
             activeId={activeId}
+            scope={scope}
             className="w-full border-r-0 pr-0"
           />
         </div>
@@ -84,6 +94,7 @@ export function DialogueShell({
             <div className="min-h-0 flex-1 overflow-y-auto">
               <DialogueList
                 activeId={activeId}
+                scope={scope}
                 className="h-full w-full border-r-0 pr-0"
               />
             </div>

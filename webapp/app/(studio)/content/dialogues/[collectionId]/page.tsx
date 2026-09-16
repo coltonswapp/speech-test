@@ -9,7 +9,11 @@ export default async function DialogueCollectionPage({
   const { collectionId } = await params;
 
   return (
-    <DialogueShell activeId={collectionId} collapseSidebarOnMobile>
+    <DialogueShell
+      activeId={collectionId}
+      scope="unit"
+      collapseSidebarOnMobile
+    >
       <CollectionEditor collectionId={collectionId} />
     </DialogueShell>
   );

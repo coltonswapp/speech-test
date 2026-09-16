@@ -10,7 +10,7 @@ export default async function DialogueUnitPage({
 
   return (
     <div className="flex flex-1 gap-6">
-      <DialogueList activeId={unitId} />
+      <DialogueList activeId={unitId} scope="unit" />
       <UnitEditor unitId={unitId} />
     </div>
   );

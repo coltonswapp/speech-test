@@ -437,6 +437,115 @@ export function mergeTokenWithNext(
   };
 }
 
+/**
+ * Grapheme-aware end offsets into `text` (code-unit indices after each cluster).
+ * Falls back to code points when `Intl.Segmenter` is unavailable.
+ */
+export function graphemeEndOffsets(text: string): number[] {
+  if (!text) return [];
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    const ends: number[] = [];
+    let offset = 0;
+    for (const { segment } of segmenter.segment(text)) {
+      offset += segment.length;
+      ends.push(offset);
+    }
+    return ends;
+  }
+  const ends: number[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const codePoint = text.codePointAt(i);
+    if (codePoint == null) break;
+    i += String.fromCodePoint(codePoint).length;
+    ends.push(i);
+  }
+  return ends;
+}
+
+/** Midpoint split offset in code units, or null when the surface cannot split. */
+export function midpointSplitOffset(text: string): number | null {
+  const ends = graphemeEndOffsets(text);
+  if (ends.length < 2) return null;
+  return ends[Math.floor(ends.length / 2) - 1] ?? null;
+}
+
+/**
+ * Split one token into two at a code-unit offset into its surface.
+ * Left keeps the original stamp; right starts untimed. By default stamps from
+ * the new right token onward on that line are cleared (same spirit as
+ * clear-from-here) so the user can re-stamp through the corrected chips.
+ */
+export function splitTokenAt(
+  sync: VariantTokenSync,
+  lineIndex: number,
+  tokenIndex: number,
+  splitOffset: number,
+  options?: {
+    clearFromSplit?: boolean;
+    lineStartSeconds?: number | null;
+  }
+): VariantTokenSync {
+  const line = sync.lines[lineIndex];
+  if (!line || tokenIndex < 0 || tokenIndex >= line.tokens.length) {
+    return sync;
+  }
+  const original = line.tokens[tokenIndex];
+  if (
+    !Number.isInteger(splitOffset) ||
+    splitOffset <= 0 ||
+    splitOffset >= original.text.length
+  ) {
+    return sync;
+  }
+  // Require a grapheme boundary so we never cut a surrogate pair / cluster.
+  const ends = graphemeEndOffsets(original.text);
+  if (!ends.includes(splitOffset)) {
+    return sync;
+  }
+
+  const left = {
+    text: original.text.slice(0, splitOffset),
+    startSeconds: original.startSeconds,
+  };
+  const right = {
+    text: original.text.slice(splitOffset),
+    startSeconds: null as number | null,
+  };
+  if (!left.text || !right.text) return sync;
+
+  let tokens = [
+    ...line.tokens.slice(0, tokenIndex),
+    left,
+    right,
+    ...line.tokens.slice(tokenIndex + 1),
+  ];
+
+  const clearFromSplit = options?.clearFromSplit !== false;
+  if (clearFromSplit) {
+    const rightIndex = tokenIndex + 1;
+    tokens = tokens.map((token, index) => {
+      if (index < rightIndex) return token;
+      if (index === 0 && options?.lineStartSeconds != null) {
+        return { ...token, startSeconds: options.lineStartSeconds };
+      }
+      return { ...token, startSeconds: null };
+    });
+  }
+
+  if (!tokenRangesInLine(line.text, tokens)) {
+    return sync;
+  }
+
+  return {
+    ...sync,
+    lines: sync.lines.map((row, i) =>
+      i === lineIndex ? { ...row, tokens } : row
+    ),
+  };
+}
+
 export type TokenRange = {
   text: string;
   start: number;

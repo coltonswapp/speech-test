@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, type MouseEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ExternalLink, TriangleAlert } from "lucide-react";
+import { ChevronDown, ExternalLink, TriangleAlert } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { dialogueApi } from "@/lib/dialogue/client";
 import { ttsApi } from "@/lib/tts/client";
 import { scenarioLinesToConversation } from "@/lib/tts/scenario-conversation";
@@ -21,6 +27,8 @@ import { flushPendingTokenSync } from "@/lib/dialogue/token-sync-persist";
 // The scenario's audio workspace: voices, take generation, staleness, publish,
 // and the shared take list/waveform editor. The scenario's lines are the single
 // source of truth — generation always speaks the saved lines.
+
+type TakeCount = 1 | 2 | 3;
 
 export function ScenarioAudioPanel({
   collectionId,
@@ -55,6 +63,10 @@ export function ScenarioAudioPanel({
 
   const [speaker1Voice, setSpeaker1Voice] = useState("Zephyr");
   const [speaker2Voice, setSpeaker2Voice] = useState("Puck");
+  const [generateProgress, setGenerateProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!data) return;
@@ -77,7 +89,7 @@ export function ScenarioAudioPanel({
   };
 
   const generateMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (count: TakeCount) => {
       await onSaveScenario();
       const ensured = await dialogueApi.ensureScenarioAudio(
         collectionId,
@@ -87,14 +99,53 @@ export function ScenarioAudioPanel({
       if (!ensured.project) {
         throw new Error("Failed to prepare the audio track.");
       }
-      await ttsApi.generate(ensured.project.id);
-      return ensured.project.id;
+      const projectId = ensured.project.id;
+      let succeeded = 0;
+      let lastError: Error | null = null;
+      const toastId = "generate-takes";
+      for (let i = 0; i < count; i++) {
+        setGenerateProgress({ current: i + 1, total: count });
+        if (count > 1) {
+          toast.loading(`Generating ${i + 1}/${count}…`, { id: toastId });
+        }
+        try {
+          // Separate calls so Gemini can produce variety across takes.
+          await ttsApi.generate(projectId);
+          succeeded += 1;
+        } catch (error) {
+          lastError =
+            error instanceof Error ? error : new Error(String(error));
+          break;
+        }
+      }
+      return { projectId, succeeded, total: count, lastError, toastId };
     },
-    onSuccess: (projectId) => {
+    onSuccess: ({ projectId, succeeded, total, lastError, toastId }) => {
       invalidateAudioQueries(projectId);
-      toast.success("New take generated.");
+      setGenerateProgress(null);
+      if (succeeded === 0) {
+        toast.error(lastError?.message ?? "Failed to generate take.", {
+          id: toastId,
+        });
+        return;
+      }
+      if (lastError) {
+        toast.warning(
+          `Generated ${succeeded} of ${total} takes. ${lastError.message}`,
+          { id: toastId }
+        );
+        return;
+      }
+      if (total === 1) {
+        toast.success("New take generated.", { id: toastId });
+        return;
+      }
+      toast.success(`Generated ${succeeded} takes.`, { id: toastId });
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error) => {
+      setGenerateProgress(null);
+      toast.error(error.message, { id: "generate-takes" });
+    },
   });
 
   const publishMutation = useMutation({
@@ -194,6 +245,12 @@ export function ScenarioAudioPanel({
 
   const speaker1Label = conversation.speaker1Name ?? "Speaker 1";
   const speaker2Label = conversation.speaker2Name ?? "Speaker 2";
+  const generateBusy = generateMutation.isPending;
+  const generateLabel = generateBusy
+    ? generateProgress && generateProgress.total > 1
+      ? `Generating ${generateProgress.current}/${generateProgress.total}…`
+      : "Generating…"
+    : "Generate take";
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-6">
@@ -255,10 +312,10 @@ export function ScenarioAudioPanel({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => generateMutation.mutate()}
-                disabled={generateMutation.isPending}
+                onClick={() => generateMutation.mutate(1)}
+                disabled={generateBusy}
               >
-                {generateMutation.isPending ? "Regenerating…" : "Regenerate"}
+                {generateBusy ? "Regenerating…" : "Regenerate"}
               </Button>
             </div>
           )}
@@ -343,13 +400,11 @@ export function ScenarioAudioPanel({
           hasUnsavedChanges={hasUnsavedChanges}
           headerActions={
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                onClick={() => generateMutation.mutate()}
-                disabled={generateMutation.isPending || speakableLineCount === 0}
-              >
-                {generateMutation.isPending ? "Generating…" : "Generate take"}
-              </Button>
+              <GenerateTakeControl
+                label={generateLabel}
+                disabled={generateBusy || speakableLineCount === 0}
+                onGenerate={(count) => generateMutation.mutate(count)}
+              />
               {hasUnsavedChanges && (
                 <span className="text-xs text-muted-foreground">
                   Unsaved line edits will be saved before generating.
@@ -365,13 +420,11 @@ export function ScenarioAudioPanel({
             <CardTitle className="text-base font-medium">Takes</CardTitle>
             <CardAction>
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => generateMutation.mutate()}
-                  disabled={generateMutation.isPending}
-                >
-                  {generateMutation.isPending ? "Generating…" : "Generate take"}
-                </Button>
+                <GenerateTakeControl
+                  label={generateLabel}
+                  disabled={generateBusy}
+                  onGenerate={(count) => generateMutation.mutate(count)}
+                />
                 {hasUnsavedChanges && (
                   <span className="text-xs text-muted-foreground">
                     Unsaved line edits will be saved before generating.
@@ -387,6 +440,145 @@ export function ScenarioAudioPanel({
           </CardContent>
         </Card>
       ) : null}
+    </div>
+  );
+}
+
+function GenerateTakeControl({
+  label,
+  disabled,
+  onGenerate,
+}: {
+  label: string;
+  disabled: boolean;
+  onGenerate: (count: TakeCount) => void;
+}) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+
+  function onContextMenu(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (disabled) return;
+    setMenu({ x: event.clientX, y: event.clientY });
+  }
+
+  return (
+    <>
+      <div className="inline-flex items-stretch">
+        <Button
+          size="sm"
+          className="rounded-r-none"
+          onClick={() => onGenerate(1)}
+          onContextMenu={onContextMenu}
+          disabled={disabled}
+          title="Left-click: 1 take. Right-click: choose 1–3 takes."
+        >
+          {label}
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={disabled}
+            render={
+              <Button
+                size="sm"
+                className="rounded-l-none border-l border-primary-foreground/20 px-1.5"
+                aria-label="Generate multiple takes"
+                disabled={disabled}
+              >
+                <ChevronDown className="size-3.5" />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="min-w-44">
+            <DropdownMenuItem onClick={() => onGenerate(1)}>
+              Generate 1 take
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onGenerate(2)}>
+              Generate 2 takes
+              <span className="ml-auto text-xs text-muted-foreground">variety</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onGenerate(3)}>
+              Generate 3 takes
+              <span className="ml-auto text-xs text-muted-foreground">variety</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {menu && (
+        <GenerateTakeContextMenu
+          x={menu.x}
+          y={menu.y}
+          onChoose={(count) => {
+            setMenu(null);
+            onGenerate(count);
+          }}
+          onClose={() => setMenu(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function GenerateTakeContextMenu({
+  x,
+  y,
+  onChoose,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  onChoose: (count: TakeCount) => void;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    function onPointer(event: PointerEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onPointer, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onPointer, true);
+    };
+  }, [onClose]);
+
+  const left = Math.min(x, typeof window !== "undefined" ? window.innerWidth - 200 : x);
+  const top = Math.min(y, typeof window !== "undefined" ? window.innerHeight - 120 : y);
+
+  return (
+    <div
+      ref={menuRef}
+      role="menu"
+      className="fixed z-50 min-w-[11rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+      style={{ left, top }}
+    >
+      {(
+        [
+          { count: 1 as const, label: "Generate 1 take" },
+          { count: 2 as const, label: "Generate 2 takes", hint: "variety" },
+          { count: 3 as const, label: "Generate 3 takes", hint: "variety" },
+        ] as const
+      ).map((item) => (
+        <button
+          key={item.count}
+          type="button"
+          role="menuitem"
+          className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+          onClick={() => onChoose(item.count)}
+        >
+          {item.label}
+          {"hint" in item && item.hint ? (
+            <span className="ml-auto text-xs text-muted-foreground">{item.hint}</span>
+          ) : null}
+        </button>
+      ))}
     </div>
   );
 }

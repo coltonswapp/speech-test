@@ -359,8 +359,9 @@ export function CurriculumView() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <p className="text-sm text-muted-foreground">
-            Scan the learner path. Expand a section, then drag the grip to
-            reorder. Edit expands and highlights that section.
+            Scan the learner path. Open a unit or collection title to edit it.
+            Expand a section, then drag the grip to reorder. Reorder expands
+            and highlights that section.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -472,51 +473,59 @@ export function CurriculumView() {
                               type="button"
                               aria-expanded={unitOpen}
                               aria-controls={unitPanelId}
+                              aria-label={
+                                unitOpen
+                                  ? `Collapse ${unit.title}`
+                                  : `Expand ${unit.title}`
+                              }
                               onClick={() => toggleExpanded(unitKey(unit.id))}
-                              className="flex min-w-0 flex-1 items-start gap-2 rounded-md text-left touch-manipulation hover:text-foreground"
+                              className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground touch-manipulation hover:bg-background/60 hover:text-foreground"
                             >
                               <ChevronRight
                                 className={cn(
-                                  "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform",
+                                  "size-4 transition-transform",
                                   unitOpen && "rotate-90",
                                 )}
                               />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <h2 className="truncate text-sm font-semibold">
-                                    {unit.title}
-                                  </h2>
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-[10px]"
-                                  >
-                                    N{unit.jlptLevel}
-                                  </Badge>
-                                  <span className="text-xs text-muted-foreground">
-                                    {unitCollections.length} collections ·{" "}
-                                    {scenarioCount} scenarios
-                                  </span>
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      "text-[10px]",
-                                      publishedCount === scenarioCount &&
-                                        scenarioCount > 0
-                                        ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
-                                        : "text-muted-foreground",
-                                    )}
-                                  >
-                                    {publishedCount}/{scenarioCount} published
-                                    audio
-                                  </Badge>
-                                </div>
-                                {unit.subtitle ? (
-                                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                    {unit.subtitle}
-                                  </p>
-                                ) : null}
-                              </div>
                             </button>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Link
+                                  href={`/content/dialogues/units/${unit.id}`}
+                                  className="truncate text-sm font-semibold hover:underline"
+                                >
+                                  {unit.title}
+                                </Link>
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px]"
+                                >
+                                  N{unit.jlptLevel}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {unitCollections.length} collections ·{" "}
+                                  {scenarioCount} scenarios
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[10px]",
+                                    publishedCount === scenarioCount &&
+                                      scenarioCount > 0
+                                      ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                                      : "text-muted-foreground",
+                                  )}
+                                >
+                                  {publishedCount}/{scenarioCount} published
+                                  audio
+                                </Badge>
+                              </div>
+                              {unit.subtitle ? (
+                                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                  {unit.subtitle}
+                                </p>
+                              ) : null}
+                            </div>
                             <div className="flex shrink-0 items-center gap-1">
                               <Button
                                 type="button"
@@ -545,9 +554,9 @@ export function CurriculumView() {
                                 size="sm"
                                 className="h-7 px-2 text-xs"
                                 onClick={() => toggleUnitEdit(unit.id)}
-                                title="Expand and highlight this unit"
+                                title="Expand and highlight this unit for drag reorder"
                               >
-                                {editingUnit ? "Done" : "Edit"}
+                                {editingUnit ? "Done" : "Reorder"}
                               </Button>
                             </div>
                           </header>

@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode, SyntheticEvent } from "react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import type { ScenarioReadinessSummary } from "@/lib/dialogue/client";
 import {
@@ -7,6 +9,17 @@ import {
   syncChipLabel,
 } from "@/lib/dialogue/scenario-readiness";
 import { cn } from "@/lib/utils";
+
+/** Scenario editor section ids used by `?tab=` deep links. */
+export type ReadinessChipTab = "audio" | "quiz";
+
+const CHIP_TAB: Record<"audio" | "timing" | "sync" | "quiz", ReadinessChipTab> =
+  {
+    audio: "audio",
+    timing: "audio",
+    sync: "audio",
+    quiz: "quiz",
+  };
 
 function readinessChipClass(
   tone: "ok" | "warn" | "muted" | "draft",
@@ -23,13 +36,66 @@ function readinessChipClass(
   }
 }
 
+function stopChipNavigation(event: SyntheticEvent) {
+  // Chips sit inside expandable / sortable rows; don't toggle or drag.
+  event.stopPropagation();
+}
+
+function ReadinessChip({
+  hrefBase,
+  tab,
+  tone,
+  title,
+  children,
+}: {
+  hrefBase?: string;
+  tab: ReadinessChipTab;
+  tone: "ok" | "warn" | "muted" | "draft";
+  title: string;
+  children: ReactNode;
+}) {
+  const className = cn("text-[9px]", readinessChipClass(tone));
+
+  if (!hrefBase) {
+    return (
+      <Badge variant="outline" className={className} title={title}>
+        {children}
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge
+      variant="outline"
+      className={className}
+      title={title}
+      render={
+        <Link
+          href={`${hrefBase}?tab=${tab}`}
+          onClick={stopChipNavigation}
+          onPointerDown={stopChipNavigation}
+        />
+      }
+    >
+      {children}
+    </Badge>
+  );
+}
+
 export function ScenarioReadinessChips({
   readiness,
   audioTitle,
+  hrefBase,
 }: {
   readiness: ScenarioReadinessSummary;
   /** Optional override for the audio chip tooltip (e.g. publish-stale detail). */
   audioTitle?: string;
+  /**
+   * Scenario editor path without query, e.g.
+   * `/content/dialogues/{collectionId}/{scenarioSlug}`.
+   * When set, chips link to `?tab=` sections in the editor.
+   */
+  hrefBase?: string;
 }) {
   const audioTone =
     readiness.audio === "published" ? ("ok" as const) : ("draft" as const);
@@ -52,9 +118,10 @@ export function ScenarioReadinessChips({
 
   return (
     <div className="flex max-w-[min(100%,14rem)] flex-wrap items-center justify-end gap-1 sm:max-w-none">
-      <Badge
-        variant="outline"
-        className={cn("text-[9px]", readinessChipClass(audioTone))}
+      <ReadinessChip
+        hrefBase={hrefBase}
+        tab={CHIP_TAB.audio}
+        tone={audioTone}
         title={
           audioTitle ??
           (readiness.audio === "published"
@@ -63,10 +130,11 @@ export function ScenarioReadinessChips({
         }
       >
         {readiness.audio === "published" ? "audio" : "draft"}
-      </Badge>
-      <Badge
-        variant="outline"
-        className={cn("text-[9px]", readinessChipClass(timingTone))}
+      </ReadinessChip>
+      <ReadinessChip
+        hrefBase={hrefBase}
+        tab={CHIP_TAB.timing}
+        tone={timingTone}
         title={
           readiness.timing === "done"
             ? "Line timing complete"
@@ -76,10 +144,11 @@ export function ScenarioReadinessChips({
         }
       >
         timing
-      </Badge>
-      <Badge
-        variant="outline"
-        className={cn("text-[9px]", readinessChipClass(syncTone))}
+      </ReadinessChip>
+      <ReadinessChip
+        hrefBase={hrefBase}
+        tab={CHIP_TAB.sync}
+        tone={syncTone}
         title={
           readiness.sync === "complete"
             ? "Token karaoke complete"
@@ -91,10 +160,11 @@ export function ScenarioReadinessChips({
         }
       >
         {syncChipLabel(readiness.sync)}
-      </Badge>
-      <Badge
-        variant="outline"
-        className={cn("text-[9px]", readinessChipClass(quizTone))}
+      </ReadinessChip>
+      <ReadinessChip
+        hrefBase={hrefBase}
+        tab={CHIP_TAB.quiz}
+        tone={quizTone}
         title={
           readiness.quizCount === 0
             ? "No quiz"
@@ -106,7 +176,7 @@ export function ScenarioReadinessChips({
         }
       >
         {quizLabel}
-      </Badge>
+      </ReadinessChip>
     </div>
   );
 }

@@ -692,6 +692,7 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
               <ScenarioUpdatedLabel updatedAt={scenario.updatedAt} />
               <ScenarioReadinessChips
                 readiness={scenario.readiness}
+                hrefBase={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
                 audioTitle={audioStatusTooltip(
                   audioStatusById.get(scenario.id),
                   scenario.readiness.audio === "published",

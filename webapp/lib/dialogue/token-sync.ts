@@ -8,7 +8,11 @@ import {
 import { wallDelayToMediaSeconds } from "@/lib/tts/media-timing";
 
 export const TOKEN_SYNC_VERSION = 1 as const;
-/** Wall-clock tap lag assumed at 1×; convert with wallDelayToMediaSeconds at stamp time. */
+/**
+ * Wall-clock tap lag assumed at 1×; convert with wallDelayToMediaSeconds at stamp time.
+ * Applied only on karaoke token stamps (after `stampMediaTimeNow` / heard playhead).
+ * Line-switch Marks intentionally skip this — fewer, more deliberate taps.
+ */
 export const TOKEN_STAMP_LOOKBACK_SECONDS = 0.12;
 export const TOKEN_STAMP_MIN_GAP_SECONDS = 0.02;
 
@@ -188,6 +192,8 @@ function proposedStampSeconds(
   );
   // Tap lag is wall-clock; scale into media time so 0.5× does not pull back
   // twice as much timeline as the user actually lagged (see wallDelayToMediaSeconds).
+  // Heard playhead (latency) is already applied upstream via stampMediaTimeNow —
+  // lookback here is only the human reaction offset, not a second latency pass.
   const lookback = wallDelayToMediaSeconds(
     TOKEN_STAMP_LOOKBACK_SECONDS,
     playbackRate

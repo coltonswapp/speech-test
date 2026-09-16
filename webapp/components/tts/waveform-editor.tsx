@@ -41,7 +41,7 @@ import {
 } from "@/components/dialogue/token-sync-editor";
 import type { VariantTokenSync } from "@/lib/dialogue/types";
 import { enqueueTokenSyncSave } from "@/lib/dialogue/token-sync-persist";
-import { wallDelayToMediaSeconds } from "@/lib/tts/media-timing";
+import { stampMediaTimeNow } from "@/lib/tts/media-timing";
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds)) return "0:00";
@@ -154,6 +154,10 @@ function mediaClockSeconds(ws: WaveSurfer | null, fallback: number): number {
 
 /** How long we wait for iOS seeked/playing before forcing a playhead resync. */
 const SEEK_SYNC_TIMEOUT_MS = 750;
+/** Finger/mouse travel before a mark press becomes a drag (vs select). */
+const MARK_DRAG_THRESHOLD_PX = 5;
+/** Long-press on a mark opens the delete menu (matches token chip menus). */
+const MARK_LONG_PRESS_MS = 550;
 
 type SentenceMapRow = {
   index: number;
@@ -258,6 +262,23 @@ export function WaveformEditor({
   const [level, setLevel] = useState(0);
   const [loopingRowIndex, setLoopingRowIndex] = useState<number | null>(null);
   const [dragging, setDragging] = useState<{ index: number } | null>(null);
+  /** Which line-switch mark is selected for Delete / context menu. */
+  const [selectedMarkIndex, setSelectedMarkIndex] = useState<number | null>(
+    null
+  );
+  const [markMenu, setMarkMenu] = useState<{
+    index: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const markPointerRef = useRef<{
+    index: number;
+    startX: number;
+    startY: number;
+    dragged: boolean;
+    openedMenu: boolean;
+    longPressTimer: number | null;
+  } | null>(null);
   const [playerBarHeight, setPlayerBarHeight] = useState(0);
   const [sectionHeaderHeight, setSectionHeaderHeight] = useState(0);
   const [timingMode, setTimingMode] = useState<"lines" | "tokens">("lines");
@@ -663,16 +684,13 @@ export function WaveformEditor({
   }, [isCutMode, duration]);
 
   /**
-   * The position the user is actually hearing right now. While playing on
-   * desktop (Web Audio meter path), the media element's currentTime runs
-   * ahead of the speaker by the output latency, so a Mark tapped "on the
-   * beat" would otherwise land late. When paused/scrubbed the playhead is
-   * exactly where the user put it, so no shift.
+   * The position the user is actually hearing right now — shared stamp clock
+   * for line-switch Mark and karaoke token stamp (`onGetPlayhead`).
    *
-   * On iPhone/iPad we keep native <audio> output (no MediaElementSource), so
-   * latency is 0 here — Mark, the waveform cursor, and the audible beat
-   * share one media clock. Always sample that clock from the live element so
-   * a post-seek WaveSurfer cache can't drift from what is playing.
+   * Samples the live media element (not a stale WaveSurfer cache after seek).
+   * Desktop Web Audio path subtracts rate-scaled output latency via
+   * `stampMediaTimeNow`; Apple-touch native `<audio>` passes latency 0.
+   * Token stamps additionally apply `TOKEN_STAMP_LOOKBACK_SECONDS` downstream.
    */
   function heardPlayheadSeconds(): number {
     const ws = wavesurferRef.current;
@@ -682,15 +700,16 @@ export function WaveformEditor({
     // seek settles — resyncPlayheadAfterSeek will refresh it.
     if (media?.seeking) return currentTime;
     const raw = mediaClockSeconds(ws, currentTime);
-    if (!ws?.isPlaying()) return raw;
-    if (isAppleTouchDevice()) return raw;
-    // baseLatency/outputLatency are wall-clock; convert to media time so 0.5×
-    // does not subtract a full wall delay from a clock that advances half as fast.
-    const latencyMedia = wallDelayToMediaSeconds(
-      playbackLatencySeconds(audioCtxRef.current),
-      playbackRateRef.current
-    );
-    return Math.max(0, raw - latencyMedia);
+    return stampMediaTimeNow({
+      mediaCurrentTime: raw,
+      isPlaying: Boolean(ws?.isPlaying()),
+      playbackRate: playbackRateRef.current,
+      // Native Apple-touch path never routes through Web Audio — keep latency 0
+      // so Mark matches the waveform cursor and audible beat.
+      wallLatencySeconds: isAppleTouchDevice()
+        ? 0
+        : playbackLatencySeconds(audioCtxRef.current),
+    });
   }
 
   /**
@@ -778,6 +797,13 @@ export function WaveformEditor({
     setMarks([...marks, sample].sort((a, b) => a - b));
   }
 
+  function removeLineSwitchMarkAt(index: number) {
+    if (index < 0 || index >= marks.length) return;
+    setMarks(marks.filter((_, i) => i !== index));
+    setSelectedMarkIndex(null);
+    setMarkMenu(null);
+  }
+
   function removeLineSwitchMarkNearestPlayhead() {
     if (marks.length === 0) return;
     const sample = currentEditSample();
@@ -790,12 +816,27 @@ export function WaveformEditor({
         nearestIndex = i;
       }
     });
-    setMarks(marks.filter((_, i) => i !== nearestIndex));
+    removeLineSwitchMarkAt(nearestIndex);
   }
 
   function clearLineSwitchMarks() {
     if (marks.length === 0) return;
+    setSelectedMarkIndex(null);
+    setMarkMenu(null);
     setMarks([]);
+  }
+
+  function openMarkMenu(index: number, x: number, y: number) {
+    setSelectedMarkIndex(index);
+    setMarkMenu({ index, x, y });
+  }
+
+  function clearMarkPointerSession() {
+    const session = markPointerRef.current;
+    if (session?.longPressTimer != null) {
+      window.clearTimeout(session.longPressTimer);
+    }
+    markPointerRef.current = null;
   }
 
   const insertSilenceMutation = useMutation({
@@ -894,15 +935,40 @@ export function WaveformEditor({
         }
         e.preventDefault();
         markAtPlayhead();
+      } else if (
+        (e.key === "Backspace" || e.key === "Delete") &&
+        timingModeRef.current === "lines" &&
+        selectedMarkIndex != null
+      ) {
+        e.preventDefault();
+        removeLineSwitchMarkAt(selectedMarkIndex);
       } else if (e.key === "Backspace" && timingModeRef.current === "tokens") {
         e.preventDefault();
         tokenActionsRef.current?.undo();
+      } else if (e.key === "Escape") {
+        if (markMenu) {
+          e.preventDefault();
+          setMarkMenu(null);
+          return;
+        }
+        if (selectedMarkIndex != null) {
+          e.preventDefault();
+          setSelectedMarkIndex(null);
+        }
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTime, duration, marks]);
+  }, [currentTime, duration, marks, selectedMarkIndex, markMenu]);
+
+  // Drop stale mark selection when the mark list shrinks past the index.
+  useEffect(() => {
+    if (selectedMarkIndex != null && selectedMarkIndex >= marks.length) {
+      setSelectedMarkIndex(null);
+      setMarkMenu(null);
+    }
+  }, [marks.length, selectedMarkIndex]);
 
   function resumeAudioContext() {
     const ctx = audioCtxRef.current;
@@ -1007,50 +1073,87 @@ export function WaveformEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loopingRowIndex]);
 
-  // Drag handling for green line-switch marker triangles.
+  // Drag / select / long-press handling for green line-switch marker triangles.
   useEffect(() => {
-    if (!dragging) return;
-    const strip = stripRef.current;
-    if (!strip || duration === 0) return;
-
     function onMove(e: PointerEvent) {
-      if (!strip || !dragging) return;
+      const session = markPointerRef.current;
+      const strip = stripRef.current;
+      if (!session || !strip || duration === 0) return;
+
+      const dx = e.clientX - session.startX;
+      const dy = e.clientY - session.startY;
+      if (
+        !session.dragged &&
+        Math.hypot(dx, dy) >= MARK_DRAG_THRESHOLD_PX
+      ) {
+        session.dragged = true;
+        if (session.longPressTimer != null) {
+          window.clearTimeout(session.longPressTimer);
+          session.longPressTimer = null;
+        }
+        setMarkMenu(null);
+        setDragging({ index: session.index });
+      }
+
+      if (!session.dragged) return;
+
       const rect = strip.getBoundingClientRect();
       const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
       const sample = Math.round(ratio * totalSamples);
       const left = `${(sample / totalSamples) * 100}%`;
       const el = strip.querySelector<HTMLElement>(
-        `[data-mark="${dragging.index}"]`
+        `[data-mark="${session.index}"]`
       );
       if (el) el.style.left = left;
       const guideRoot = containerRef.current?.parentElement;
       const guide = guideRoot?.querySelector<HTMLElement>(
-        `[data-mark-guide="${dragging.index}"]`
+        `[data-mark-guide="${session.index}"]`
       );
       if (guide) guide.style.left = left;
       strip.dataset.pendingSample = String(sample);
     }
 
     function onUp() {
-      const pending = strip?.dataset.pendingSample;
-      if (pending != null && dragging) {
-        const sample = Number(pending);
-        const next = [...marks];
-        next[dragging.index] = sample;
-        setMarks(next.sort((a, b) => a - b));
+      const session = markPointerRef.current;
+      const strip = stripRef.current;
+      if (!session) return;
+
+      if (session.longPressTimer != null) {
+        window.clearTimeout(session.longPressTimer);
+        session.longPressTimer = null;
       }
-      if (strip) delete strip.dataset.pendingSample;
-      setDragging(null);
+
+      if (session.dragged) {
+        const pending = strip?.dataset.pendingSample;
+        if (pending != null) {
+          const sample = Number(pending);
+          const next = [...marks];
+          next[session.index] = sample;
+          setMarks(next.sort((a, b) => a - b));
+        }
+        if (strip) delete strip.dataset.pendingSample;
+        setDragging(null);
+        // Index may have changed after sort — clear selection.
+        setSelectedMarkIndex(null);
+      } else if (!session.openedMenu) {
+        // Tap without drag: select this mark (toggle if already selected).
+        setSelectedMarkIndex((prev) =>
+          prev === session.index ? null : session.index
+        );
+      }
+      markPointerRef.current = null;
     }
 
     window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp, { once: true });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dragging, duration]);
+  }, [duration, marks, dragging, totalSamples]);
 
   const saveTrimMutation = useMutation({
     mutationFn: () => {
@@ -1247,7 +1350,7 @@ export function WaveformEditor({
                 key={`mark-guide-${i}`}
                 data-mark-guide={i}
                 className={`absolute top-0 bottom-0 -translate-x-1/2 ${
-                  dragging?.index === i
+                  dragging?.index === i || selectedMarkIndex === i
                     ? "w-0.5 bg-emerald-500/55"
                     : "w-px bg-emerald-500/35"
                 }`}
@@ -1263,23 +1366,88 @@ export function WaveformEditor({
           ref={stripRef}
           className="relative h-4 w-full overflow-visible rounded-sm bg-muted/50"
         >
-          {marks.map((sample, i) => (
-            <div
-              key={`mark-${i}`}
-              data-mark={i}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                setDragging({ index: i });
-              }}
-              className="absolute top-0 z-10 h-full w-5 -translate-x-1/2 touch-manipulation cursor-ew-resize sm:w-3"
-              style={{ left: `${(sample / totalSamples) * 100}%` }}
-              title={`Line switch at ${(sample / variant.sampleRate).toFixed(2)}s`}
-            >
-              <div className="mx-auto h-0 w-0 border-x-4 border-t-4 border-x-transparent border-t-emerald-500" />
-            </div>
-          ))}
+          {marks.map((sample, i) => {
+            const selected = selectedMarkIndex === i;
+            const isDragging = dragging?.index === i;
+            return (
+              <div
+                key={`mark-${i}`}
+                data-mark={i}
+                role="button"
+                tabIndex={0}
+                aria-label={`Line switch ${i + 1} at ${(sample / variant.sampleRate).toFixed(2)}s. Tap to select, drag to move, long-press to delete.`}
+                aria-pressed={selected}
+                onPointerDown={(e) => {
+                  if (e.pointerType === "mouse" && e.button !== 0) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  clearMarkPointerSession();
+                  const session = {
+                    index: i,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    dragged: false,
+                    openedMenu: false,
+                    longPressTimer: window.setTimeout(() => {
+                      const current = markPointerRef.current;
+                      if (!current || current.index !== i || current.dragged) {
+                        return;
+                      }
+                      current.longPressTimer = null;
+                      current.openedMenu = true;
+                      openMarkMenu(i, e.clientX, e.clientY);
+                    }, MARK_LONG_PRESS_MS),
+                  };
+                  markPointerRef.current = session;
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  clearMarkPointerSession();
+                  openMarkMenu(i, e.clientX, e.clientY);
+                }}
+                className={cn(
+                  "absolute top-0 z-10 h-full w-6 -translate-x-1/2 touch-manipulation cursor-ew-resize sm:w-3",
+                  selected && "z-20"
+                )}
+                style={{ left: `${(sample / totalSamples) * 100}%` }}
+                title={`Line switch ${i + 1} · ${(sample / variant.sampleRate).toFixed(2)}s — drag to move, right-click/long-press to delete`}
+              >
+                <div
+                  className={cn(
+                    "mx-auto h-0 w-0 border-x-[5px] border-t-[6px] border-x-transparent sm:border-x-4 sm:border-t-4",
+                    selected || isDragging
+                      ? "border-t-emerald-400"
+                      : "border-t-emerald-500",
+                    selected && "drop-shadow-[0_0_3px_rgba(52,211,153,0.9)]"
+                  )}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
+
+      {isConversation &&
+        timingMode === "lines" &&
+        selectedMarkIndex != null &&
+        marks[selectedMarkIndex] != null && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground">
+              Mark {selectedMarkIndex + 1} selected (
+              {(marks[selectedMarkIndex] / variant.sampleRate).toFixed(2)}s)
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-9 touch-manipulation px-2 text-destructive hover:text-destructive md:min-h-7"
+              onClick={() => removeLineSwitchMarkAt(selectedMarkIndex)}
+              title="Delete this line-switch mark (Delete)"
+            >
+              Delete mark
+            </Button>
+          </div>
+        )}
 
       {isConversation && timingMode === "lines" && activeRow && (
         <button
@@ -1410,7 +1578,9 @@ export function WaveformEditor({
           Play, then tap <span className="font-medium text-foreground">Mark</span>{" "}
           (or the active line) the moment the next line starts —{" "}
           <span className="font-medium text-foreground">Undo mark</span> removes the nearest.
-          Keyboard: Space play/pause, M mark. Drag green triangles to fine-tune.
+          Select a green triangle (or long-press / right-click) to delete a specific mark.
+          Keyboard: Space play/pause, M mark, Delete/Backspace removes the selected mark.
+          Drag green triangles to fine-tune.
           {latencyMs >= 20 && (
             <>
               {" "}
@@ -1591,6 +1761,8 @@ export function WaveformEditor({
                   setIsTrimMode(false);
                   setIsCutMode(false);
                   setDragging(null);
+                  setSelectedMarkIndex(null);
+                  setMarkMenu(null);
                   setTimingMode(value);
                 }
               }}
@@ -1855,6 +2027,76 @@ export function WaveformEditor({
           </Button>
         ))}
       </div>
+
+      {markMenu && (
+        <LineMarkContextMenu
+          x={markMenu.x}
+          y={markMenu.y}
+          markLabel={`Mark ${markMenu.index + 1}`}
+          onDelete={() => removeLineSwitchMarkAt(markMenu.index)}
+          onClose={() => setMarkMenu(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function LineMarkContextMenu({
+  x,
+  y,
+  markLabel,
+  onDelete,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  markLabel: string;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    function onPointer(event: PointerEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onPointer, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onPointer, true);
+    };
+  }, [onClose]);
+
+  const left = Math.min(
+    x,
+    typeof window !== "undefined" ? window.innerWidth - 200 : x
+  );
+  const top = Math.min(
+    y,
+    typeof window !== "undefined" ? window.innerHeight - 100 : y
+  );
+
+  return (
+    <div
+      ref={menuRef}
+      role="menu"
+      className="fixed z-50 min-w-[10rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+      style={{ left, top }}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        className="flex w-full rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-accent"
+        onClick={onDelete}
+      >
+        Delete {markLabel}
+      </button>
     </div>
   );
 }

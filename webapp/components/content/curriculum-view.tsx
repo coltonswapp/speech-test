@@ -932,7 +932,10 @@ function CurriculumScenarioRow({
           </Link>
           <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
             <ScenarioUpdatedLabel updatedAt={scenario.updatedAt} />
-            <ScenarioReadinessChips readiness={scenario.readiness} />
+            <ScenarioReadinessChips
+              readiness={scenario.readiness}
+              hrefBase={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
+            />
           </div>
         </li>
       )}

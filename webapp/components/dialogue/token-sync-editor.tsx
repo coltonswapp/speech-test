@@ -30,7 +30,9 @@ import {
   lineDisplayPieces,
   lineStartSecondsForTokenSync,
   mergeTokenWithNext,
+  midpointSplitOffset,
   parseVariantTokenSync,
+  splitTokenAt,
   restampToken,
   seekSecondsBeforeToken,
   spokenLineWindows,
@@ -303,6 +305,22 @@ export function TokenSyncEditor({
     }
   }
 
+  function splitToken(lineIndex: number, tokenIndex: number, offset: number) {
+    const current = syncRef.current;
+    if (!current || hasUnsavedRef.current) return;
+    const next = splitTokenAt(current, lineIndex, tokenIndex, offset, {
+      clearFromSplit: true,
+      lineStartSeconds: lineStarts()[lineIndex],
+    });
+    if (next === current) {
+      toast.error("Could not split that token.");
+      return;
+    }
+    // Select the new right half (untimed) so stamp flow continues from the cut.
+    commitSync(next, { lineIndex, tokenIndex: tokenIndex + 1 });
+    setTokenMenu(null);
+  }
+
   function clearAllTimes() {
     const current = syncRef.current;
     if (!current || hasUnsavedRef.current) return;
@@ -453,17 +471,25 @@ export function TokenSyncEditor({
           resets a line but keeps its first-word line mark.{" "}
           <span className="font-medium text-foreground">Clear all times</span>{" "}
           does the same for the whole take. Right-click (or long-press) a word
-          to clear from there and resume audio a couple words earlier.
+          to clear from there and resume audio a couple words earlier, or to
+          split a glued token in half / at a chosen character.
           Drag-select text to split or merge tokens.
         </li>
       </ol>
-      {tokenMenu && (
+      {tokenMenu && sync && (
         <TokenContextMenu
           x={tokenMenu.x}
           y={tokenMenu.y}
           disabled={!!hasUnsavedChanges}
+          tokenText={
+            sync.lines[tokenMenu.lineIndex]?.tokens[tokenMenu.tokenIndex]
+              ?.text ?? ""
+          }
           onClearFromHere={() =>
             clearFromHere(tokenMenu.lineIndex, tokenMenu.tokenIndex)
+          }
+          onSplitAt={(offset) =>
+            splitToken(tokenMenu.lineIndex, tokenMenu.tokenIndex, offset)
           }
           onClose={() => setTokenMenu(null)}
         />
@@ -806,20 +832,33 @@ function TokenContextMenu({
   x,
   y,
   disabled,
+  tokenText,
   onClearFromHere,
+  onSplitAt,
   onClose,
 }: {
   x: number;
   y: number;
   disabled: boolean;
+  tokenText: string;
   onClearFromHere: () => void;
+  onSplitAt: (offset: number) => void;
   onClose: () => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [mode, setMode] = useState<"menu" | "split">("menu");
+  const canSplit = graphemeSplitOffsets(tokenText).length > 0;
+  const halfOffset = midpointSplitOffset(tokenText);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        if (mode === "split") {
+          setMode("menu");
+          return;
+        }
+        onClose();
+      }
     }
     function onPointer(event: globalThis.PointerEvent) {
       if (!menuRef.current?.contains(event.target as Node)) {
@@ -832,30 +871,116 @@ function TokenContextMenu({
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerdown", onPointer, true);
     };
-  }, [onClose]);
+  }, [onClose, mode]);
 
-  const left = Math.min(x, typeof window !== "undefined" ? window.innerWidth - 180 : x);
-  const top = Math.min(y, typeof window !== "undefined" ? window.innerHeight - 80 : y);
+  const left = Math.min(
+    x,
+    typeof window !== "undefined" ? window.innerWidth - 220 : x
+  );
+  const top = Math.min(
+    y,
+    typeof window !== "undefined" ? window.innerHeight - 160 : y
+  );
 
   return (
     <div
       ref={menuRef}
       role="menu"
-      className="fixed z-50 min-w-[10rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+      className="fixed z-50 min-w-[11rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
       style={{ left, top }}
     >
-      <button
-        type="button"
-        role="menuitem"
-        disabled={disabled}
-        className="flex w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
-        onClick={onClearFromHere}
-      >
-        Clear from here
-      </button>
+      {mode === "menu" ? (
+        <>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={disabled}
+            className="flex w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
+            onClick={onClearFromHere}
+          >
+            Clear from here
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={disabled || halfOffset == null}
+            className="flex w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
+            onClick={() => {
+              if (halfOffset == null) return;
+              onSplitAt(halfOffset);
+            }}
+          >
+            Split in half
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={disabled || !canSplit}
+            className="flex w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
+            onClick={() => setMode("split")}
+          >
+            Split…
+          </button>
+        </>
+      ) : (
+        <div className="flex flex-col gap-1.5 px-1 py-1">
+          <p className="text-[11px] text-muted-foreground">
+            Tap between characters to split
+          </p>
+          <div className="flex flex-wrap items-center gap-0.5 font-mono text-sm">
+            {[...tokenText].map((char, index) => {
+              const offset = [...tokenText].slice(0, index + 1).join("").length;
+              const isLast = index === [...tokenText].length - 1;
+              return (
+                <span key={`${offset}-${char}`} className="inline-flex items-center">
+                  <span className="rounded px-0.5">{char}</span>
+                  {!isLast && (
+                    <button
+                      type="button"
+                      title={`Split after “${tokenText.slice(0, offset)}”`}
+                      className="mx-px h-5 w-2 rounded-sm bg-border/80 hover:bg-primary hover:text-primary-foreground"
+                      onClick={() => onSplitAt(offset)}
+                    />
+                  )}
+                </span>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            className="self-start rounded-sm px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            onClick={() => setMode("menu")}
+          >
+            Back
+          </button>
+        </div>
+      )}
     </div>
   );
 }
+
+function graphemeSplitOffsets(text: string): number[] {
+  const ends: number[] = [];
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    let offset = 0;
+    const clusters = [...segmenter.segment(text)].map((part) => part.segment);
+    for (let i = 0; i < clusters.length - 1; i++) {
+      offset += clusters[i]!.length;
+      ends.push(offset);
+    }
+    return ends;
+  }
+  let i = 0;
+  while (i < text.length) {
+    const codePoint = text.codePointAt(i);
+    if (codePoint == null) break;
+    i += String.fromCodePoint(codePoint).length;
+    if (i < text.length) ends.push(i);
+  }
+  return ends;
+}
+
 
 function stampTargetFrom(
   sync: VariantTokenSync,

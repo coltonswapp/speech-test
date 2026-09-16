@@ -196,7 +196,7 @@ export function ScenarioAudioPanel({
   const speaker2Label = conversation.speaker2Name ?? "Speaker 2";
 
   return (
-    <div className="flex max-w-5xl flex-col gap-6">
+    <div className="flex w-full min-w-0 flex-col gap-6">
       {speakableLineCount === 0 ? (
         <p className="text-sm text-muted-foreground">
           Add dialogue lines with a speaker and Japanese text first — audio is

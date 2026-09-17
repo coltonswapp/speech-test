@@ -166,5 +166,8 @@ extension OnboardingListeningQuizViewController: UICollectionViewDataSource, UIC
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         selectedTitle = config.options[indexPath.item].title
         setCTAEnabled(true)
+        if let cell = collectionView.cellForItem(at: indexPath) {
+            explodeEmoji(from: cell)
+        }
     }
 }

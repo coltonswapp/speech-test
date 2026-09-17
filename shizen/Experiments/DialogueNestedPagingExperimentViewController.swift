@@ -19,6 +19,8 @@ private final class NestedVerticalScrollHandoffCoordinator: NSObject, UIScrollVi
     private let boundaryEpsilon: CGFloat
     private let pageCommitThreshold: CGFloat
     private let velocityThreshold: CGFloat
+    /// How much inner overflow maps onto the outer pager. `1` is 1:1; lower is more resistance.
+    private let pageTransitionResistance: CGFloat
     private var isTransferringOffset = false
     private var lastSnappedPage = 0
     private var lastTrackedOffsetY: [ObjectIdentifier: CGFloat] = [:]
@@ -34,14 +36,16 @@ private final class NestedVerticalScrollHandoffCoordinator: NSObject, UIScrollVi
         outerScrollView: UIScrollView,
         innerScrollViews: [UIScrollView],
         boundaryEpsilon: CGFloat = 0.5,
-        pageCommitThreshold: CGFloat = 0.42,
-        velocityThreshold: CGFloat = 0.85
+        pageCommitThreshold: CGFloat = 0.52,
+        velocityThreshold: CGFloat = 1.15,
+        pageTransitionResistance: CGFloat = 0.52
     ) {
         self.outerScrollView = outerScrollView
         self.innerScrollViews = innerScrollViews
         self.boundaryEpsilon = boundaryEpsilon
         self.pageCommitThreshold = pageCommitThreshold
         self.velocityThreshold = velocityThreshold
+        self.pageTransitionResistance = pageTransitionResistance
         super.init()
         innerScrollViews.forEach { $0.delegate = self }
         pageChangeHaptic.prepare()
@@ -164,16 +168,10 @@ private final class NestedVerticalScrollHandoffCoordinator: NSObject, UIScrollVi
         if let anchor = activePageTransitionAnchor(pageOrigin: pageOrigin) {
             switch anchor {
             case .fromBottom:
-                outerScrollView.contentOffset.y = min(
-                    max(outerScrollView.contentOffset.y + delta, pageOrigin),
-                    outerMaxY
-                )
+                applyResistedOuterDelta(delta, minY: pageOrigin, maxY: outerMaxY)
                 innerScrollView.contentOffset.y = bounds.maxY
             case .fromTop:
-                outerScrollView.contentOffset.y = max(
-                    min(outerScrollView.contentOffset.y + delta, pageOrigin),
-                    outerMinY
-                )
+                applyResistedOuterDelta(delta, minY: outerMinY, maxY: pageOrigin)
                 innerScrollView.contentOffset.y = bounds.minY
             }
             return
@@ -183,21 +181,29 @@ private final class NestedVerticalScrollHandoffCoordinator: NSObject, UIScrollVi
             guard pageIndex < maxPageIndex else { return }
 
             let overflow = innerOffsetY - bounds.maxY
-            outerScrollView.contentOffset.y = min(outerScrollView.contentOffset.y + overflow, outerMaxY)
+            applyResistedOuterDelta(overflow, minY: outerMinY, maxY: outerMaxY)
             innerScrollView.contentOffset.y = bounds.maxY
         } else if innerOffsetY < bounds.minY - boundaryEpsilon {
             guard pageIndex > 0 else { return }
 
             let overflow = innerOffsetY - bounds.minY
-            outerScrollView.contentOffset.y = max(outerScrollView.contentOffset.y + overflow, outerMinY)
+            applyResistedOuterDelta(overflow, minY: outerMinY, maxY: outerMaxY)
             innerScrollView.contentOffset.y = bounds.minY
         } else if innerOffsetY >= bounds.maxY - boundaryEpsilon, delta > 0, pageIndex < maxPageIndex {
-            outerScrollView.contentOffset.y = min(outerScrollView.contentOffset.y + delta, outerMaxY)
+            applyResistedOuterDelta(delta, minY: outerMinY, maxY: outerMaxY)
             innerScrollView.contentOffset.y = bounds.maxY
         } else if innerOffsetY <= bounds.minY + boundaryEpsilon, delta < 0, pageIndex > 0 {
-            outerScrollView.contentOffset.y = max(outerScrollView.contentOffset.y + delta, outerMinY)
+            applyResistedOuterDelta(delta, minY: outerMinY, maxY: outerMaxY)
             innerScrollView.contentOffset.y = bounds.minY
         }
+    }
+
+    private func applyResistedOuterDelta(_ delta: CGFloat, minY: CGFloat, maxY: CGFloat) {
+        guard let outerScrollView else { return }
+        outerScrollView.contentOffset.y = min(
+            max(outerScrollView.contentOffset.y + delta * pageTransitionResistance, minY),
+            maxY
+        )
     }
 
     /// While the outer pager sits between snapped pages, keep the inner scroll pinned at the
@@ -385,15 +391,18 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
 
     private static let boundaryEpsilon: CGFloat = 0.5
     /// Fraction of a page the outer pager must travel (without a strong flick) before committing.
-    private static let pageCommitThreshold: CGFloat = 0.42
+    private static let pageCommitThreshold: CGFloat = 0.52
     /// Vertical flick speed that commits a neighboring page even below `pageCommitThreshold`.
-    private static let pageVelocityThreshold: CGFloat = 0.85
+    private static let pageVelocityThreshold: CGFloat = 1.15
+    /// Inner overflow → outer pager mapping. Lower values make section seams feel stickier.
+    private static let pageTransitionResistance: CGFloat = 0.52
     private static let pageNavigationControlHeight: CGFloat = 52
     private static let pageNavigationSymbolPointSize: CGFloat = 22
     private static let highlightsSecondPageTopInsetExtra: CGFloat = 56
     private static let quizCheckButtonHorizontalInset: CGFloat = 20
     private static let quizCheckButtonBottomInset: CGFloat = 8
     private static let quizCheckButtonHeight: CGFloat = 50
+    private static let quizNextGlyphPointSize: CGFloat = 22
     /// Mirrors `DialogueExperimentViewController.nestedPagingTransportSlideDistance`; play exits +X, check uses −X.
     private static let quizCheckSlideDistance: CGFloat = 140
     private static let contentRevealSlideDistance: CGFloat = 18
@@ -405,7 +414,11 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private let highlightsPageView = UIView()
     private var dialogueViewController: DialogueExperimentViewController!
     private var quizViewController: DialogueQuizViewController!
-    private let quizCheckButton = UIButton(type: .system)
+    private let quizNextButton = UIButton(type: .system)
+    private let quizNextGlyphView = UIImageView()
+    private let quizPlayButton = UIButton(type: .system)
+    private let quizPlayGlyphView = UIImageView()
+    private let quizContinueButton = UIButton(type: .system)
     private let highlightsScrollView = UIScrollView()
     private let highlightsContentView = DialogueLearningHighlightsContentView()
     /// One chevron per seam where two pager pages meet (max two for three pages).
@@ -459,7 +472,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
 
     /// Bottom chrome host for quiz / highlights — mirrors ProgressiveStep's
     /// `buttonContainer` / dialogue's `transportBarContainer`. Must contain
-    /// glass controls (Check + bottom-rail chevrons) so the soft edge effect
+    /// glass controls (next-question + bottom-rail chevrons) so the soft edge effect
     /// has descendants to shape against; an empty container does nothing.
     private let bottomScrollEdgeContainer: UIView = {
         let view = UIView()
@@ -479,6 +492,10 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private let usesLegacyCatalog: Bool
     private var selectedScenarioID: String
     private var prefersNextIncompleteScenario: Bool
+    private var sessionMode: DialogueLessonSessionMode
+    private var hasFinishedListeningThisVisit = false
+    private var hasFinishedQuizThisVisit = false
+    private var committedTally: DialogueCompletionTally?
     /// How the dialogue transcript renders (full text, Japanese only, live meters).
     private var transcriptDisplayMode: DialogueTranscriptDisplayMode = .full
     private var appliedTopContentInset: CGFloat = -1
@@ -488,13 +505,39 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private var didSettleQuizScrollAtTop = false
     private var lastKnownViewSize: CGSize = .zero
     private var hasLoadedLessonContent = false
+    private var quizPlayButtonRevealed = false
+    private var isAnimatingQuizPlayButton = false
+    private var quizContinueButtonRevealed = false
+    private var isAnimatingQuizContinueButton = false
 
-    private var hasQuizPage: Bool {
+    private var authoredHasQuiz: Bool {
         !(currentScenarioItem?.quiz.isEmpty ?? true)
     }
 
+    private var isQuizUnlocked: Bool {
+        authoredHasQuiz && sessionMode != .viewLesson && hasFinishedListeningThisVisit
+    }
+
+    private var isHighlightsUnlocked: Bool {
+        switch sessionMode {
+        case .viewLesson:
+            return true
+        case .retakeQuiz:
+            return hasFinishedQuizThisVisit
+        case .attempt:
+            return authoredHasQuiz ? hasFinishedQuizThisVisit : hasFinishedListeningThisVisit
+        }
+    }
+
+    private var hasQuizPage: Bool {
+        isQuizUnlocked
+    }
+
     private var pageCount: Int {
-        hasQuizPage ? 3 : 2
+        var count = 1
+        if hasQuizPage { count += 1 }
+        if isHighlightsUnlocked { count += 1 }
+        return count
     }
 
     private var highlightsPageIndex: Int {
@@ -526,7 +569,9 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         if hasQuizPage {
             scrollViews.append(quizViewController.handoffScrollView)
         }
-        scrollViews.append(highlightsScrollView)
+        if isHighlightsUnlocked {
+            scrollViews.append(highlightsScrollView)
+        }
         return scrollViews
     }
 
@@ -546,11 +591,16 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     }
 
     /// Drive the controller from a standalone collection (preferred when already in hand).
-    init(collection: DialogueScenarioCollection, initialScenarioID: String? = nil) {
+    init(
+        collection: DialogueScenarioCollection,
+        initialScenarioID: String? = nil,
+        sessionMode: DialogueLessonSessionMode = .attempt
+    ) {
         self.collection = collection
         self.pendingCollectionID = nil
         self.usesLegacyCatalog = false
         self.prefersNextIncompleteScenario = false
+        self.sessionMode = sessionMode
         if let initialScenarioID,
            collection.scenarios.contains(where: { $0.id == initialScenarioID }) {
             self.selectedScenarioID = initialScenarioID
@@ -558,20 +608,24 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             self.selectedScenarioID = collection.scenarios.first?.id ?? ""
         }
         super.init(nibName: nil, bundle: nil)
+        applySessionUnlocksForCurrentMode()
     }
 
     /// Push immediately with a collection id; shows loading while the catalog resolves.
     init(
         collectionID: String,
         initialScenarioID: String? = nil,
-        prefersNextIncompleteScenario: Bool = false
+        prefersNextIncompleteScenario: Bool = false,
+        sessionMode: DialogueLessonSessionMode = .attempt
     ) {
         self.collection = DialogueScenarioCollectionCatalog.readyCollection(id: collectionID)
         self.pendingCollectionID = collectionID
         self.usesLegacyCatalog = false
         self.prefersNextIncompleteScenario = prefersNextIncompleteScenario
+        self.sessionMode = sessionMode
         self.selectedScenarioID = initialScenarioID ?? self.collection?.scenarios.first?.id ?? ""
         super.init(nibName: nil, bundle: nil)
+        applySessionUnlocksForCurrentMode()
     }
 
     /// Legacy entry point: drive from the grammar-point–derived catalog.
@@ -580,8 +634,10 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         self.pendingCollectionID = nil
         self.usesLegacyCatalog = true
         self.prefersNextIncompleteScenario = false
+        self.sessionMode = .attempt
         self.selectedScenarioID = DialogueExperimentFixture.audioKey
         super.init(nibName: nil, bundle: nil)
+        applySessionUnlocksForCurrentMode()
     }
 
     required init?(coder: NSCoder) {
@@ -589,8 +645,10 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         self.pendingCollectionID = nil
         self.usesLegacyCatalog = true
         self.prefersNextIncompleteScenario = false
+        self.sessionMode = .attempt
         self.selectedScenarioID = DialogueExperimentFixture.audioKey
         super.init(coder: coder)
+        applySessionUnlocksForCurrentMode()
     }
 
     override func viewDidLoad() {
@@ -725,7 +783,9 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             view.alpha = 0
         }
         // Page chrome alphas are restored after the reveal via applyPageTransitionProgress.
-        quizCheckButton.alpha = 0
+        quizNextButton.alpha = 0
+        quizPlayButton.alpha = 0
+        quizContinueButton.alpha = 0
         firstSeamChevron.alpha = 0
         secondSeamChevron.alpha = 0
     }
@@ -747,7 +807,12 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             self.applyScrollLayoutIfNeeded(force: true)
             self.updateScrollEdgeInteractionsForActivePage()
             self.applyPageTransitionProgress(self.currentPageTransitionProgress())
-            self.dialogueViewController.applyNestedPagingTransportProgress(0)
+            if self.sessionMode == .retakeQuiz, self.hasQuizPage {
+                self.handoffCoordinator?.snapToPage(1)
+                self.dialogueViewController.applyNestedPagingTransportProgress(1)
+            } else {
+                self.dialogueViewController.applyNestedPagingTransportProgress(0)
+            }
             self.bringPageChromeToFront()
         }
     }
@@ -760,11 +825,11 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         configureOuterPager()
         configureDialoguePage()
         configureQuizPage()
-        configureQuizCheckButton()
+        configureQuizNextButton()
         configureHighlightsPage()
         reloadQuizContent()
         reloadHighlightsContent()
-        updateQuizPageVisibility()
+        updateUnlockedPagesVisibility()
         configurePageChevrons()
         installHandoffCoordinator()
         configureScrollEdgeEffects()
@@ -861,8 +926,8 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     /// interaction.edge = .bottom
     /// buttonContainer.addInteraction(interaction)
     /// ```
-    /// Container height comes from its glass control descendants (Check), same as
-    /// the transport bar sizing itself from its buttons.
+    /// Container height comes from its glass control descendants (next button),
+    /// same as the transport bar sizing itself from its buttons.
     private func installBottomScrollEdgeContainer() {
         view.addSubview(bottomScrollEdgeContainer)
         bottomScrollEdgeContainer.addInteraction(bottomScrollEdgeInteraction)
@@ -970,14 +1035,24 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         ) { [weak self] _ in
             self?.toggleTokenSyncHighlight()
         }
+        var children: [UIMenuElement] = [
+            scenariosSection,
+            settingsSection,
+            tokenSyncAction,
+            makeTokenSyncHighlightStyleMenu(),
+        ]
+        if sessionMode == .viewLesson, authoredHasQuiz {
+            let retake = UIAction(
+                title: "Retake quiz",
+                image: UIImage(systemName: "arrow.counterclockwise")
+            ) { [weak self] _ in
+                self?.startRetake()
+            }
+            children.append(retake)
+        }
         return UIMenu(
             title: collection?.title ?? "Scenarios",
-            children: [
-                scenariosSection,
-                settingsSection,
-                tokenSyncAction,
-                makeTokenSyncHighlightStyleMenu(),
-            ]
+            children: children
         )
     }
 
@@ -1022,23 +1097,33 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private func selectScenario(id: String) {
         guard id != selectedScenarioID else { return }
         selectedScenarioID = id
+        sessionMode = resolvedSessionMode(preferred: sessionMode, scenarioID: id)
+        applySessionUnlocksForCurrentMode()
         guard let item = currentScenarioItem else { return }
         title = item.menuTitle
         navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
         embedDialogue(for: item)
         reloadQuizContent()
         reloadHighlightsContent()
-        updateQuizPageVisibility()
+        updateUnlockedPagesVisibility()
         didSettleQuizScrollAtTop = false
         didSettleHighlightsScrollAtTop = false
         refreshHandoffCoordinatorInnerScrollViews()
-        clampOuterScrollToValidPageIfNeeded()
+        view.layoutIfNeeded()
+        if sessionMode == .retakeQuiz, hasQuizPage {
+            handoffCoordinator?.snapToPage(1)
+        } else {
+            clampOuterScrollToValidPageIfNeeded()
+        }
     }
 
     private func embedDialogue(for item: ScenarioItem) {
         if let existing = dialogueViewController {
             existing.stopHostedPlaybackIfDisappearing()
-            existing.recordsCompletionOnPlaybackFinish = item.quiz.isEmpty
+            existing.recordsCompletionOnPlaybackFinish = shouldRecordCompletionOnPlaybackFinish(for: item)
+            existing.onPlaybackFinished = { [weak self] in
+                self?.handleDialoguePlaybackFinished()
+            }
             existing.tokenSyncSettingDidChange = { [weak self] in
                 self?.navigationItem.rightBarButtonItem?.menu = self?.makeDialogueMenu()
             }
@@ -1069,7 +1154,10 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         dialogue.sceneImageName = collection?.sceneImageName
         dialogue.sceneImageURL = item.thumbnailURL
         dialogue.transcriptDisplayMode = transcriptDisplayMode
-        dialogue.recordsCompletionOnPlaybackFinish = item.quiz.isEmpty
+        dialogue.recordsCompletionOnPlaybackFinish = shouldRecordCompletionOnPlaybackFinish(for: item)
+        dialogue.onPlaybackFinished = { [weak self] in
+            self?.handleDialoguePlaybackFinished()
+        }
         dialogue.tokenSyncSettingDidChange = { [weak self] in
             self?.navigationItem.rightBarButtonItem?.menu = self?.makeDialogueMenu()
         }
@@ -1102,14 +1190,17 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         quizPageView.isHidden = true
 
         let quiz = DialogueQuizViewController()
-        quiz.onQuizPassed = { [weak self] in
-            self?.recordQuizCompletion()
+        quiz.onQuizFinished = { [weak self] _ in
+            self?.handleQuizFinished()
         }
         quiz.onHandoffScrollViewChanged = { [weak self] in
             self?.refreshHandoffCoordinatorInnerScrollViews()
         }
         quiz.onEvidencePlaybackWillStart = { [weak self] in
             self?.dialogueViewController.stopHostedPlaybackIfDisappearing()
+        }
+        quiz.onNavigationChromeNeedsUpdate = { [weak self] in
+            self?.updateQuizNextButtonState()
         }
 
         addChild(quiz)
@@ -1126,98 +1217,329 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     }
 
     private func reloadQuizContent() {
+        resetQuizPlayButtonReveal()
+        resetQuizContinueButtonReveal()
         let item = currentScenarioItem
-        let questions = item?.quiz ?? []
+        let questions = DialogueQuizSampler.questions(
+            from: item?.quiz ?? [],
+            sample: sessionMode == .retakeQuiz
+        )
         let evidence = item.map(Self.quizEvidenceContext(for:))
         quizViewController.configure(questions: questions, evidenceContext: evidence)
-        updateQuizCheckButtonState()
-        applyQuizCheckButtonProgress(pageTransitionProgress)
+        updateQuizNextButtonState()
+        applyQuizNextButtonProgress(pageTransitionProgress)
         applyQuizScrollInsetsForPageTransition()
     }
 
     private static func quizEvidenceContext(for item: ScenarioItem) -> DialogueQuizEvidenceContext {
+        var speakerSides: [String: DialogueSpeakerSide] = [:]
+        var nextSide: DialogueSpeakerSide = .leading
         let spokenLines = (item.example.scenario?.lines ?? [])
             .filter(\.isSpokenLine)
-            .map {
-                DialogueQuizSourceLine(
-                    speaker: $0.speaker,
-                    japanese: $0.japanese,
-                    english: $0.english
+            .enumerated()
+            .map { index, line in
+                let speakerSide = DialogueBubbleLayout.assignSpeakerSide(
+                    for: line.speaker,
+                    sides: &speakerSides,
+                    nextSide: &nextSide
+                )
+                return DialogueQuizSourceLine(
+                    speaker: line.speaker,
+                    japanese: line.japanese,
+                    english: line.english,
+                    spokenIndex: index,
+                    speakerSide: speakerSide
                 )
             }
         return DialogueQuizEvidenceContext(
             publishedAudioUrl: item.example.publishedAudioUrl,
             audioKey: item.example.audioKey,
             cacheMetadata: item.example.remoteAudioCacheMetadata,
-            spokenLines: spokenLines
+            spokenLines: spokenLines,
+            tokenSync: DialogueTokenSync.validated(
+                item.example.tokenSync,
+                spokenTexts: spokenLines.map(\.japanese),
+                publishedContentHash: item.example.publishedContentHash
+            )
         )
     }
 
-    private func configureQuizCheckButton() {
-        var config = UIButton.Configuration.glass()
-        config.cornerStyle = .capsule
-        config.title = "Check"
-        config.baseForegroundColor = UIColor.systemYellow
-        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
-            var outgoing = incoming
-            outgoing.font = .systemFont(ofSize: 17, weight: .semibold)
-            return outgoing
-        }
-        config.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 20, bottom: 12, trailing: 20)
-        quizCheckButton.configuration = config
-        quizCheckButton.translatesAutoresizingMaskIntoConstraints = false
-        quizCheckButton.accessibilityLabel = "Check answers"
-        quizCheckButton.alpha = 0
-        quizCheckButton.isEnabled = false
-        quizCheckButton.isUserInteractionEnabled = false
-        quizCheckButton.addAction(UIAction { [weak self] _ in
-            self?.quizCheckTapped()
+    private func configureQuizNextButton() {
+        configureQuizTransportButton(
+            quizPlayButton,
+            glyphView: quizPlayGlyphView,
+            symbolName: "play.fill",
+            accessibilityLabel: "Play dialogue line"
+        )
+        quizPlayButton.addAction(UIAction { [weak self] _ in
+            self?.quizViewController.toggleCurrentEvidencePlayback()
         }, for: .primaryActionTriggered)
 
-        // Glass control must be a descendant of the edge-effect container
-        // (Apple: labels / images / glass views / controls shape the effect).
-        bottomScrollEdgeContainer.addSubview(quizCheckButton)
+        configureQuizTransportButton(
+            quizNextButton,
+            glyphView: quizNextGlyphView,
+            symbolName: "arrow.right",
+            accessibilityLabel: "Next question"
+        )
+        quizNextButton.addAction(UIAction { [weak self] _ in
+            self?.quizViewController.goToNextQuestion()
+        }, for: .primaryActionTriggered)
+
+        configureQuizContinueButton()
+
+        bottomScrollEdgeContainer.addSubview(quizPlayButton)
+        bottomScrollEdgeContainer.addSubview(quizNextButton)
+        bottomScrollEdgeContainer.addSubview(quizContinueButton)
 
         NSLayoutConstraint.activate([
-            // Same intrinsic sizing as dialogue's transport bar controls:
-            // top padding + control + bottom padding against the safe area.
-            quizCheckButton.topAnchor.constraint(
+            quizPlayButton.leadingAnchor.constraint(
+                equalTo: bottomScrollEdgeContainer.leadingAnchor,
+                constant: Self.quizCheckButtonHorizontalInset
+            ),
+            quizPlayButton.topAnchor.constraint(
                 equalTo: bottomScrollEdgeContainer.topAnchor,
                 constant: 8
             ),
-            quizCheckButton.trailingAnchor.constraint(
-                equalTo: bottomScrollEdgeContainer.trailingAnchor,
-                constant: -Self.quizCheckButtonHorizontalInset
-            ),
-            quizCheckButton.bottomAnchor.constraint(
+            quizPlayButton.bottomAnchor.constraint(
                 equalTo: bottomScrollEdgeContainer.safeAreaLayoutGuide.bottomAnchor,
                 constant: -Self.quizCheckButtonBottomInset
             ),
-            quizCheckButton.heightAnchor.constraint(equalToConstant: Self.quizCheckButtonHeight),
+            quizPlayButton.widthAnchor.constraint(equalToConstant: Self.quizCheckButtonHeight),
+            quizPlayButton.heightAnchor.constraint(equalToConstant: Self.quizCheckButtonHeight),
+
+            quizNextButton.topAnchor.constraint(equalTo: quizPlayButton.topAnchor),
+            quizNextButton.bottomAnchor.constraint(equalTo: quizPlayButton.bottomAnchor),
+            quizNextButton.trailingAnchor.constraint(
+                equalTo: bottomScrollEdgeContainer.trailingAnchor,
+                constant: -Self.quizCheckButtonHorizontalInset
+            ),
+            quizNextButton.widthAnchor.constraint(equalToConstant: Self.quizCheckButtonHeight),
+            quizNextButton.heightAnchor.constraint(equalToConstant: Self.quizCheckButtonHeight),
+
+            quizContinueButton.topAnchor.constraint(equalTo: quizPlayButton.topAnchor),
+            quizContinueButton.bottomAnchor.constraint(equalTo: quizPlayButton.bottomAnchor),
+            quizContinueButton.trailingAnchor.constraint(
+                equalTo: bottomScrollEdgeContainer.trailingAnchor,
+                constant: -Self.quizCheckButtonHorizontalInset
+            ),
+            quizContinueButton.leadingAnchor.constraint(
+                greaterThanOrEqualTo: quizPlayButton.trailingAnchor,
+                constant: 12
+            ),
         ])
     }
 
-    private func quizCheckTapped() {
-        // Quiz grades immediately on selection; Check chrome is unused.
+    private func configureQuizContinueButton() {
+        var config = UIButton.Configuration.glass()
+        config.cornerStyle = .capsule
+        config.title = "Continue"
+        config.baseForegroundColor = .systemYellow
+        config.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 18, bottom: 12, trailing: 18)
+        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+            var outgoing = incoming
+            outgoing.font = .systemFont(ofSize: 17, weight: .semibold)
+            outgoing.foregroundColor = .systemYellow
+            return outgoing
+        }
+        quizContinueButton.configuration = config
+        quizContinueButton.translatesAutoresizingMaskIntoConstraints = false
+        quizContinueButton.setContentHuggingPriority(.required, for: .horizontal)
+        quizContinueButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        quizContinueButton.accessibilityLabel = "Continue"
+        quizContinueButton.alpha = 0
+        quizContinueButton.addAction(UIAction { [weak self] _ in
+            self?.presentQuizCompletion()
+        }, for: .primaryActionTriggered)
     }
 
-    /// Quiz-backed scenarios complete through comprehension, not playback:
-    /// answering every question correctly is what marks the scenario done.
-    private func recordQuizCompletion() {
-        guard let item = currentScenarioItem else { return }
-        DialogueProgressStore.shared.markCompleted(scenarioID: item.id)
-        GrammarMasteryStore.shared.recordEncounter(
-            grammarIDs: item.grammarPointIDs,
-            scenarioID: item.id
+    private func configureQuizTransportButton(
+        _ button: UIButton,
+        glyphView: UIImageView,
+        symbolName: String,
+        accessibilityLabel: String
+    ) {
+        var config = UIButton.Configuration.glass()
+        config.cornerStyle = .capsule
+        button.configuration = config
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.accessibilityLabel = accessibilityLabel
+
+        let symbolConfig = UIImage.SymbolConfiguration(
+            pointSize: Self.quizNextGlyphPointSize,
+            weight: .semibold
+        )
+        glyphView.image = UIImage(systemName: symbolName, withConfiguration: symbolConfig)?
+            .withRenderingMode(.alwaysTemplate)
+        glyphView.tintColor = .systemYellow
+        glyphView.preferredSymbolConfiguration = symbolConfig
+        glyphView.contentMode = .scaleAspectFit
+        glyphView.isUserInteractionEnabled = false
+        glyphView.translatesAutoresizingMaskIntoConstraints = false
+        button.addSubview(glyphView)
+
+        let glyphDimension = Self.quizNextGlyphPointSize + 4
+        NSLayoutConstraint.activate([
+            glyphView.centerXAnchor.constraint(equalTo: button.centerXAnchor),
+            glyphView.centerYAnchor.constraint(equalTo: button.centerYAnchor),
+            glyphView.widthAnchor.constraint(equalToConstant: glyphDimension),
+            glyphView.heightAnchor.constraint(equalToConstant: glyphDimension),
+        ])
+    }
+
+    private func shouldRecordCompletionOnPlaybackFinish(for item: ScenarioItem) -> Bool {
+        sessionMode == .attempt && item.quiz.isEmpty
+    }
+
+    private func applySessionUnlocksForCurrentMode() {
+        committedTally = nil
+        switch sessionMode {
+        case .attempt:
+            hasFinishedListeningThisVisit = false
+            hasFinishedQuizThisVisit = false
+        case .viewLesson:
+            hasFinishedListeningThisVisit = true
+            hasFinishedQuizThisVisit = true
+        case .retakeQuiz:
+            hasFinishedListeningThisVisit = true
+            hasFinishedQuizThisVisit = false
+        }
+    }
+
+    private func resolvedSessionMode(
+        preferred: DialogueLessonSessionMode,
+        scenarioID: String
+    ) -> DialogueLessonSessionMode {
+        let completed = DialogueProgressStore.shared.isCompleted(scenarioID: scenarioID)
+        let hasQuiz = scenarioItems.first(where: { $0.id == scenarioID })?.quiz.isEmpty == false
+        switch preferred {
+        case .viewLesson:
+            return completed ? .viewLesson : .attempt
+        case .retakeQuiz:
+            if completed && hasQuiz { return .retakeQuiz }
+            return completed ? .viewLesson : .attempt
+        case .attempt:
+            return .attempt
+        }
+    }
+
+    private func awardsImmersedListenThisVisit() -> Bool {
+        sessionMode != .retakeQuiz || dialogueViewController.didStartPlaybackThisAttempt
+    }
+
+    private func makeCurrentTally() -> DialogueCompletionTally {
+        DialogueCompletionTally(
+            score: quizViewController.currentScore,
+            englishPeekedCount: dialogueViewController.englishPeekedCount,
+            awardsImmersedListen: awardsImmersedListenThisVisit()
         )
     }
 
-    private func updateQuizCheckButtonState() {
-        quizCheckButton.isEnabled = false
+    private func persistCommittedTallyIfNeeded() {
+        guard committedTally == nil, let item = currentScenarioItem else { return }
+        let tally = makeCurrentTally()
+        committedTally = tally
+        let isRetake = sessionMode == .retakeQuiz
+        DialogueProgressStore.shared.markCompleted(
+            scenarioID: item.id,
+            starCount: tally.starCount,
+            points: tally.total,
+            countsTowardDaily: !isRetake
+        )
+        if !isRetake {
+            GrammarMasteryStore.shared.recordEncounter(
+                grammarIDs: item.grammarPointIDs,
+                scenarioID: item.id
+            )
+        }
     }
 
-    private func updateQuizPageVisibility() {
+    private func handleDialoguePlaybackFinished() {
+        guard !hasFinishedListeningThisVisit else { return }
+        hasFinishedListeningThisVisit = true
+        updateUnlockedPagesVisibility()
+        view.layoutIfNeeded()
+        refreshHandoffCoordinatorInnerScrollViews()
+        applyPageTransitionProgress(currentPageTransitionProgress())
+    }
+
+    private func handleQuizFinished() {
+        hasFinishedQuizThisVisit = true
+        updateUnlockedPagesVisibility()
+        view.layoutIfNeeded()
+        refreshHandoffCoordinatorInnerScrollViews()
+        applyPageTransitionProgress(currentPageTransitionProgress())
+    }
+
+    private func startRetake() {
+        guard authoredHasQuiz else { return }
+        sessionMode = .retakeQuiz
+        applySessionUnlocksForCurrentMode()
+        dialogueViewController.resetAttemptListeningState()
+        reloadQuizContent()
+        updateUnlockedPagesVisibility()
+        refreshHandoffCoordinatorInnerScrollViews()
+        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
+        view.layoutIfNeeded()
+        handoffCoordinator?.snapToPage(1)
+    }
+
+    private func enterViewLesson(snapToHighlights: Bool) {
+        sessionMode = .viewLesson
+        hasFinishedListeningThisVisit = true
+        hasFinishedQuizThisVisit = true
+        dialogueViewController?.recordsCompletionOnPlaybackFinish = false
+        updateUnlockedPagesVisibility()
+        refreshHandoffCoordinatorInnerScrollViews()
+        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
+        view.layoutIfNeeded()
+        if snapToHighlights, isHighlightsUnlocked {
+            handoffCoordinator?.snapToPage(highlightsPageIndex)
+        } else {
+            clampOuterScrollToValidPageIfNeeded()
+        }
+    }
+
+    private func presentQuizCompletion() {
+        guard presentedViewController == nil,
+              let item = currentScenarioItem,
+              quizViewController.hasFinishedAllQuestions
+        else { return }
+
+        quizViewController.stopEvidencePlayback()
+        persistCommittedTallyIfNeeded()
+        let tally = committedTally ?? makeCurrentTally()
+        let sheet = DialogueQuizCompletionViewController(
+            tally: tally,
+            highlights: item.highlights
+        )
+        sheet.onExploreHighlights = { [weak self] in
+            self?.dismiss(animated: true) {
+                self?.enterViewLesson(snapToHighlights: true)
+            }
+        }
+        sheet.onSheetDismissed = { [weak self] in
+            guard let self, self.sessionMode != .viewLesson else { return }
+            self.enterViewLesson(snapToHighlights: false)
+        }
+
+        sheet.modalPresentationStyle = .pageSheet
+        if let presentation = sheet.sheetPresentationController {
+            presentation.prefersGrabberVisible = true
+            presentation.prefersEdgeAttachedInCompactHeight = true
+            presentation.widthFollowsPreferredContentSizeWhenEdgeAttached = true
+            presentation.prefersScrollingExpandsWhenScrolledToEdge = false
+            presentation.delegate = self
+        }
+        present(sheet, animated: true)
+    }
+
+    private func updateQuizNextButtonState() {
+        applyQuizNextButtonProgress(pageTransitionProgress)
+    }
+
+    private func updateUnlockedPagesVisibility() {
         quizPageView.isHidden = !hasQuizPage
+        highlightsPageView.isHidden = !isHighlightsUnlocked
     }
 
     private func refreshHandoffCoordinatorInnerScrollViews() {
@@ -1238,6 +1560,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private func configureHighlightsPage() {
         highlightsPageView.backgroundColor = ExperimentPalette.pageBackground
         highlightsPageView.clipsToBounds = true
+        highlightsPageView.isHidden = true
 
         highlightsScrollView.translatesAutoresizingMaskIntoConstraints = false
         highlightsScrollView.backgroundColor = .clear
@@ -1333,16 +1656,6 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         quizViewController.applyNestedPagingBottomContentInset(
             quizBottomContentInset(for: pageTransitionProgress)
         )
-        // Keep the page control parked above the Check band even after grading
-        // removes Check clearance from the scroll inset.
-        quizViewController.applyPageControlBottomInset(quizPageControlBottomInset())
-    }
-
-    private func quizPageControlBottomInset() -> CGFloat {
-        let base = appliedBottomContentInset >= 0
-            ? appliedBottomContentInset
-            : view.safeAreaInsets.bottom + 16
-        return base + Self.quizCheckButtonHeight + 16
     }
 
     private func quizTopContentInset(for outerPageOffset: CGFloat) -> CGFloat {
@@ -1365,25 +1678,164 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         let base = appliedBottomContentInset >= 0
             ? appliedBottomContentInset
             : view.safeAreaInsets.bottom + 16
-        // Immediate-answer quiz: no Check button band.
-        return base
+        return base + Self.quizCheckButtonHeight
     }
 
-    /// Visibility and slide progress for the quiz check button (page index 1 when a quiz exists).
-    private func quizCheckButtonVisibility(for outerPageOffset: CGFloat) -> (alpha: CGFloat, slideProgress: CGFloat) {
+    /// Fades the quiz next button in on the quiz page, matching Play's slot.
+    private func quizNextButtonVisibility(for outerPageOffset: CGFloat) -> CGFloat {
+        guard hasQuizPage else { return 0 }
         if outerPageOffset <= 1 {
-            let t = min(max(outerPageOffset, 0), 1)
-            return (t, 1 - t)
+            return min(max(outerPageOffset, 0), 1)
         }
-        let t = min(max(outerPageOffset - 1, 0), 1)
-        return (1 - t, t)
+        return 1 - min(max(outerPageOffset - 1, 0), 1)
     }
 
-    private func applyQuizCheckButtonProgress(_ outerPageOffset: CGFloat) {
-        // Immediate-answer quiz: keep Check chrome hidden.
-        quizCheckButton.alpha = 0
-        quizCheckButton.isUserInteractionEnabled = false
-        quizCheckButton.isEnabled = false
+    private func applyQuizNextButtonProgress(_ outerPageOffset: CGFloat) {
+        let pageAlpha = quizNextButtonVisibility(for: outerPageOffset)
+
+        let canPlay = quizViewController?.canPlayCurrentEvidence == true
+        applyQuizPlayButtonVisibility(canPlay: canPlay, pageAlpha: pageAlpha)
+        updateQuizPlayGlyph(isPlaying: quizViewController?.isPlayingCurrentEvidence == true)
+
+        let showContinue = quizViewController?.hasFinishedAllQuestions == true
+            && quizViewController?.hasNextQuestion == false
+        applyQuizContinueButtonVisibility(showContinue: showContinue, pageAlpha: pageAlpha)
+
+        let hasNext = quizViewController?.hasNextQuestion == true
+        let canAdvance = quizViewController?.canAdvanceToNextQuestion == true
+        let nextAlpha = showContinue ? 0 : (hasNext ? pageAlpha * (canAdvance ? 1 : 0.38) : 0)
+        quizNextButton.alpha = nextAlpha
+        quizNextButton.isEnabled = canAdvance && !showContinue
+        quizNextButton.isUserInteractionEnabled = canAdvance && !showContinue && pageAlpha > 0.55
+    }
+
+    private func applyQuizContinueButtonVisibility(showContinue: Bool, pageAlpha: CGFloat) {
+        quizContinueButton.isEnabled = showContinue
+        quizContinueButton.isUserInteractionEnabled = showContinue && pageAlpha > 0.55
+
+        if showContinue {
+            if quizContinueButtonRevealed {
+                if !isAnimatingQuizContinueButton {
+                    quizContinueButton.alpha = pageAlpha
+                    quizContinueButton.transform = .identity
+                }
+                return
+            }
+            quizContinueButtonRevealed = true
+            animateQuizContinueButtonIn(pageAlpha: pageAlpha)
+            return
+        }
+
+        resetQuizContinueButtonReveal()
+    }
+
+    private func animateQuizContinueButtonIn(pageAlpha: CGFloat) {
+        quizContinueButton.layer.removeAllAnimations()
+        quizContinueButton.transform = CGAffineTransform(translationX: 0, y: 10)
+            .scaledBy(x: 0.78, y: 0.78)
+        quizContinueButton.alpha = 0
+        isAnimatingQuizContinueButton = true
+        UIView.animate(
+            withDuration: 0.32,
+            delay: 0.04,
+            usingSpringWithDamping: 0.78,
+            initialSpringVelocity: 0.7,
+            options: [.allowUserInteraction, .beginFromCurrentState]
+        ) {
+            self.quizContinueButton.transform = .identity
+            self.quizContinueButton.alpha = pageAlpha
+        } completion: { [weak self] _ in
+            guard let self else { return }
+            self.isAnimatingQuizContinueButton = false
+            if self.quizContinueButtonRevealed {
+                self.quizContinueButton.alpha = self.quizNextButtonVisibility(
+                    for: self.pageTransitionProgress
+                )
+            }
+        }
+    }
+
+    private func resetQuizContinueButtonReveal() {
+        quizContinueButtonRevealed = false
+        isAnimatingQuizContinueButton = false
+        quizContinueButton.layer.removeAllAnimations()
+        quizContinueButton.transform = .identity
+        quizContinueButton.alpha = 0
+        quizContinueButton.isEnabled = false
+        quizContinueButton.isUserInteractionEnabled = false
+    }
+
+    private func applyQuizPlayButtonVisibility(canPlay: Bool, pageAlpha: CGFloat) {
+        quizPlayButton.isEnabled = canPlay
+        quizPlayButton.isUserInteractionEnabled = canPlay && pageAlpha > 0.55
+
+        if canPlay {
+            if quizPlayButtonRevealed {
+                if !isAnimatingQuizPlayButton {
+                    quizPlayButton.alpha = pageAlpha
+                    quizPlayButton.transform = .identity
+                }
+                return
+            }
+            quizPlayButtonRevealed = true
+            animateQuizPlayButtonIn(pageAlpha: pageAlpha)
+            return
+        }
+
+        resetQuizPlayButtonReveal()
+    }
+
+    private func animateQuizPlayButtonIn(pageAlpha: CGFloat) {
+        quizPlayButton.layer.removeAllAnimations()
+        quizPlayButton.transform = CGAffineTransform(translationX: 0, y: 10)
+            .scaledBy(x: 0.78, y: 0.78)
+        quizPlayButton.alpha = 0
+        isAnimatingQuizPlayButton = true
+        UIView.animate(
+            withDuration: 0.32,
+            delay: 0.04,
+            usingSpringWithDamping: 0.78,
+            initialSpringVelocity: 0.7,
+            options: [.allowUserInteraction, .beginFromCurrentState]
+        ) {
+            self.quizPlayButton.transform = .identity
+            self.quizPlayButton.alpha = pageAlpha
+        } completion: { [weak self] _ in
+            guard let self else { return }
+            self.isAnimatingQuizPlayButton = false
+            if self.quizPlayButtonRevealed {
+                self.quizPlayButton.alpha = self.quizNextButtonVisibility(
+                    for: self.pageTransitionProgress
+                )
+            }
+        }
+    }
+
+    private func resetQuizPlayButtonReveal() {
+        quizPlayButtonRevealed = false
+        isAnimatingQuizPlayButton = false
+        quizPlayButton.layer.removeAllAnimations()
+        quizPlayButton.transform = .identity
+        quizPlayButton.alpha = 0
+        quizPlayButton.isEnabled = false
+        quizPlayButton.isUserInteractionEnabled = false
+    }
+
+    private func updateQuizPlayGlyph(isPlaying: Bool) {
+        let symbolName = isPlaying ? "pause.fill" : "play.fill"
+        let symbolConfig = UIImage.SymbolConfiguration(
+            pointSize: Self.quizNextGlyphPointSize,
+            weight: .semibold
+        )
+        let image = UIImage(systemName: symbolName, withConfiguration: symbolConfig)?
+            .withRenderingMode(.alwaysTemplate)
+        quizPlayGlyphView.preferredSymbolConfiguration = symbolConfig
+        if let image {
+            quizPlayGlyphView.setSymbolImage(image, contentTransition: .replace)
+        } else {
+            quizPlayGlyphView.image = image
+        }
+        quizPlayButton.accessibilityLabel = isPlaying ? "Pause dialogue line" : "Play dialogue line"
     }
 
     private func applyHighlightsScrollInsetsForPageTransition() {
@@ -1428,7 +1880,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
 
         applyQuizScrollInsetsForPageTransition()
         applyHighlightsScrollInsetsForPageTransition()
-        applyQuizCheckButtonProgress(progress)
+        applyQuizNextButtonProgress(progress)
         dialogueViewController.applyNestedPagingTransportProgress(activePageIndex == 0 ? 0 : 1)
 
         let settledOnQuiz = hasQuizPage && activePageIndex == 1
@@ -1716,7 +2168,8 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             innerScrollViews: innerScrollViewsForCurrentScenario(),
             boundaryEpsilon: Self.boundaryEpsilon,
             pageCommitThreshold: Self.pageCommitThreshold,
-            velocityThreshold: Self.pageVelocityThreshold
+            velocityThreshold: Self.pageVelocityThreshold,
+            pageTransitionResistance: Self.pageTransitionResistance
         )
         coordinator.onPageTransitionProgressChanged = { [weak self] progress in
             self?.applyPageTransitionProgress(progress)
@@ -1736,5 +2189,12 @@ extension DialogueNestedPagingExperimentViewController: UIScrollViewDelegate {
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         guard hasLoadedLessonContent, scrollView === outerScrollView else { return }
         applyPageTransitionProgress(currentPageTransitionProgress())
+    }
+}
+
+extension DialogueNestedPagingExperimentViewController: UISheetPresentationControllerDelegate {
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        guard committedTally != nil, sessionMode != .viewLesson else { return }
+        enterViewLesson(snapToHighlights: false)
     }
 }

@@ -108,6 +108,9 @@ extension OnboardingSurveyViewController: UICollectionViewDataSource, UICollecti
             selectedTitles = [title]
         }
         setCTAEnabled(!selectedTitles.isEmpty)
+        if let cell = collectionView.cellForItem(at: indexPath) {
+            explodeEmoji(from: cell)
+        }
     }
 
     func collectionView(_ collectionView: UICollectionView, didDeselectItemAt indexPath: IndexPath) {

@@ -52,6 +52,16 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   private let selectionCornerRadius: CGFloat = 6
   private let selectionColor = UIColor.systemBlue
 
+  /// Playback karaoke wash. Independent of `selectedTokenIndex` / definition fill.
+  private var karaokeRange: NSRange?
+  private var karaokeFullHeight = false
+  private var karaokeHighlightColor = UIColor.systemYellow.withAlphaComponent(0.45)
+  /// Compact marker as a fraction of point size; sits on the baseline
+  /// and overlaps the lower part of the glyphs (matches dialogue karaoke).
+  private static let karaokeHighlightHeightFactor: CGFloat = 0.34
+  private static let karaokeHighlightBelowBaselineFactor: CGFloat = 0.08
+  private static let karaokeHighlightCornerRadius: CGFloat = 2
+
   private var tokens: [ScrubToken] = []
   /// Parallel to `tokens`: merged adjacent surfaces when the pair is an exact dictionary match.
   private var tokenLookupSurfaces: [String] = []
@@ -202,6 +212,40 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     return layout
   }
 
+  /// Visible string karaoke ranges should be mapped onto (ruby is attributes only).
+  public var displayedString: String {
+    visibleAttributedText?.string ?? attributedText?.string ?? fullText
+  }
+
+  /// Yellow (or host-tinted) playback marker behind a character range.
+  /// Does not change `selectedTokenIndex`, callouts, or tap/pan selection.
+  public func setKaraokeHighlight(
+    range: NSRange?,
+    fullHeight: Bool,
+    highlightColor: UIColor
+  ) {
+    let length = (visibleAttributedText ?? attributedText)?.length ?? (fullText as NSString).length
+    var clamped: NSRange?
+    if let range,
+       range.location >= 0,
+       range.length > 0,
+       NSMaxRange(range) <= length {
+      clamped = range
+    }
+    let rangeChanged = !NSEqualRanges(
+      karaokeRange ?? NSRange(location: NSNotFound, length: 0),
+      clamped ?? NSRange(location: NSNotFound, length: 0)
+    )
+    let styleChanged = karaokeFullHeight != fullHeight
+    let fillChanged = karaokeHighlightColor != highlightColor
+    karaokeRange = clamped
+    karaokeFullHeight = fullHeight
+    karaokeHighlightColor = highlightColor
+    if rangeChanged || styleChanged || fillChanged {
+      setNeedsDisplay()
+    }
+  }
+
   /// Rounded blue fill + light text; only used while a definition tip is active (parent drives this).
   public func setDefinitionSelectionHighlight(tokenIndex: Int?) {
     let font: UIFont
@@ -280,6 +324,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       tokenLookupSurfaces = tokens.map(\.text)
     }
     selectedTokenIndex = nil
+    karaokeRange = nil
     let edge = textContainerEdgeOutset
     let rubyTop = showsFurigana ? Self.rubyOverlayTopInset(for: lyricFont) : 0
     let rubySide = showsFurigana ? Self.rubyOverlaySideInset(for: lyricFont) : 0
@@ -478,6 +523,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       super.draw(rect)
       return
     }
+    drawKaraokeHighlight(in: rect)
     if tokenSelectionAppearance == .definitionTip, let sel = selectedTokenIndex {
       let highlight = contiguousIndicesWithSameLookup(as: sel)
       let source = visibleAttributedText ?? full
@@ -548,6 +594,48 @@ public final class LyricsInsetUnderlineTextView: UITextView {
         activeLineWidth: max(1.5, scrubActiveUnderlineWidth),
         activeColor: scrubActiveUnderlineColor
       )
+    }
+  }
+
+  private func drawKaraokeHighlight(in rect: CGRect) {
+    guard let range = karaokeRange, range.length > 0 else { return }
+    let fragments = lineFragmentViewRectsForCharacterRange(range, baseTextOnly: showsFurigana)
+    guard !fragments.isEmpty else { return }
+
+    let source: NSAttributedString? = visibleAttributedText ?? attributedText
+    let font: UIFont
+    if let source, range.location < source.length,
+      let tokenFont = source.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont
+    {
+      font = tokenFont
+    } else if let source {
+      font = Self.fontForAttributes(from: source)
+    } else {
+      font = UIFont.preferredFont(forTextStyle: .title1)
+    }
+
+    karaokeHighlightColor.setFill()
+    for fragment in fragments {
+      guard fragment.width > 0.5, fragment.height > 0.5, fragment.intersects(rect) else { continue }
+      let highlight: CGRect
+      if karaokeFullHeight {
+        highlight = fragment
+      } else {
+        let baselineY = fragment.minY + font.ascender
+        let height = max(5, font.pointSize * Self.karaokeHighlightHeightFactor)
+        let belowBaseline = font.pointSize * Self.karaokeHighlightBelowBaselineFactor
+        highlight = CGRect(
+          x: fragment.minX,
+          y: baselineY - height + belowBaseline,
+          width: fragment.width,
+          height: height
+        )
+      }
+      let radius = min(
+        Self.karaokeHighlightCornerRadius,
+        min(highlight.width, highlight.height) / 2
+      )
+      UIBezierPath(roundedRect: highlight, cornerRadius: radius).fill()
     }
   }
 

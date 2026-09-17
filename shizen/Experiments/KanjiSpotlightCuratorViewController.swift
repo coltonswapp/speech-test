@@ -206,7 +206,11 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
             self.selectedInOrder = transaction.finalSnapshot
                 .itemIdentifiers(inSection: .selected)
                 .compactMap(\.item)
-            self.reconfigureSelectedRows()
+            // `didReorder` runs underneath the reorder snapshot apply. Applying
+            // again here deadlocks; wait until that apply finishes.
+            DispatchQueue.main.async { [weak self] in
+                self?.reconfigureSelectedRows()
+            }
         }
     }
 
@@ -237,17 +241,13 @@ final class KanjiSpotlightCuratorViewController: UIViewController {
         snapshot.appendItems(selectedInOrder.map(Row.selected), toSection: .selected)
         snapshot.appendItems([.writeInCompound] + compoundCandidates.map(Row.compound), toSection: .compounds)
         snapshot.appendItems(verbCandidates.map(Row.verb), toSection: .verbs)
-        dataSource.apply(snapshot, animatingDifferences: false)
-
         // Candidate row IDs do not change when selection does, so mark them
-        // (and Selected, for the 1./2. prefixes) for reconfiguration.
-        var visible = dataSource.snapshot()
-        let stale = visible.itemIdentifiers(inSection: .selected)
-            + visible.itemIdentifiers(inSection: .compounds)
-            + visible.itemIdentifiers(inSection: .verbs)
-        guard !stale.isEmpty else { return }
-        visible.reconfigureItems(stale)
-        dataSource.apply(visible, animatingDifferences: false)
+        // (and Selected, for the 1./2. prefixes) in this same apply.
+        let stale = snapshot.itemIdentifiers
+        if !stale.isEmpty {
+            snapshot.reconfigureItems(stale)
+        }
+        dataSource.apply(snapshot, animatingDifferences: false)
     }
 
     private func reconfigureSelectedRows() {

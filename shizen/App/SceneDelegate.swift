@@ -5,6 +5,7 @@
 //  Created by Colton Swapp on 4/19/26.
 //
 
+import NNKit
 import UIKit
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
@@ -22,6 +23,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let root = UINavigationController(rootViewController: MainViewController())
         window?.rootViewController = root
         window?.makeKeyAndVisible()
+        ExplosionManager.prepare(windowScene: windowScene)
+        ExplosionManager.emojis = ExperimentSettings.explosionEmojis
         DialogueScenarioCollectionCatalog.prefetchConfiguredCollections()
     }
 

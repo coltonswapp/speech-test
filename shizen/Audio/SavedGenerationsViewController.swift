@@ -86,6 +86,7 @@ final class SavedGenerationsViewController: UIViewController {
         case kanaProgressGrid
         case lessonWaterfallGrid
         case languageProgressSnake
+        case languageProgressSnakeLeft
         case hiraganaChart
         case katakanaChart
         case flashcards
@@ -121,6 +122,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .kanaProgressGrid: return "Kana progress grid"
             case .lessonWaterfallGrid: return "Lesson waterfall grid"
             case .languageProgressSnake: return "Lesson path (sine)"
+            case .languageProgressSnakeLeft: return "Lesson path (sine left)"
             case .hiraganaChart: return "Hiragana chart"
             case .katakanaChart: return "Katakana chart"
             case .flashcards: return "Flashcards"
@@ -158,6 +160,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .kanaProgressGrid: return "Hiragana & katakana heatmaps · 92 squares · size slider"
             case .lessonWaterfallGrid: return "Testing watefall grid style lesson screen"
             case .languageProgressSnake: return "Glass stepping stones · sine-wave path · live tuner"
+            case .languageProgressSnakeLeft: return "Stones in the left 40% · titles on the right · card covers on select"
             case .hiraganaChart: return "Manual-layout gojūon reference"
             case .katakanaChart: return "Manual-layout gojūon reference"
             case .flashcards: return "Swipe right · know it / left · review"
@@ -195,6 +198,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .kanaProgressGrid: return "square.grid.3x3.fill"
             case .lessonWaterfallGrid: return "rectangle.grid.2x2.fill"
             case .languageProgressSnake: return "point.3.connected.trianglepath.dotted"
+            case .languageProgressSnakeLeft: return "text.alignleft"
             case .hiraganaChart: return "textformat.characters"
             case .katakanaChart: return "textformat.characters.dottedunderline"
             case .flashcards: return "rectangle.stack"
@@ -624,8 +628,15 @@ final class SavedGenerationsViewController: UIViewController {
                 animated: true
             )
         case .languageProgressSnake:
-            let snake = LanguageProgressSnakeExperimentViewController()
-            navigationController?.pushViewController(snake, animated: true)
+            navigationController?.pushViewController(
+                LanguageProgressSnakeExperimentViewController(style: .sine),
+                animated: true
+            )
+        case .languageProgressSnakeLeft:
+            navigationController?.pushViewController(
+                LanguageProgressSnakeExperimentViewController(style: .sineLeftAligned),
+                animated: true
+            )
         case .hiraganaChart:
             let chart = HiraganaChartViewController()
             navigationController?.pushViewController(chart, animated: true)

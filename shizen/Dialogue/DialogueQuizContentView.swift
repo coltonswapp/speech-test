@@ -11,7 +11,7 @@ import UIKit
 
 final class DialogueQuizContentView: UIView {
 
-    private static let choiceHeight: CGFloat = 45
+    private static let choiceHeight: CGFloat = 54
 
     private let contentStack = UIStackView()
     private var questionViews: [DialogueQuizQuestionView] = []
@@ -52,7 +52,8 @@ final class DialogueQuizContentView: UIView {
             let questionView = DialogueQuizQuestionView(
                 questionNumber: index + 1,
                 question: question,
-                choiceHeight: Self.choiceHeight
+                choiceHeight: Self.choiceHeight,
+                questionCount: questions.count
             )
             questionView.onSelectionChanged = { [weak self, weak questionView] in
                 guard let self, let questionView else { return }
@@ -68,17 +69,8 @@ final class DialogueQuizContentView: UIView {
 
         if questionView.isSelectionCorrect {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-            if allCorrect {
-                ExperimentFeedbackSound.playSuccess(
-                    for: .kanaSpelling,
-                    spellingSyllableCount: questionViews.count
-                )
-            } else {
-                ExperimentFeedbackSound.playSuccess(for: .kanaSpelling)
-            }
         } else {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
-            ExperimentFeedbackSound.playIncorrect()
         }
 
         onSelectionChanged?()

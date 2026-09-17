@@ -242,7 +242,7 @@ struct DialogueBubbleUnderglowConfiguration {
     var heightRatio: CGFloat = 0.12
     var widthRatio: CGFloat = 1.0
     var horizontalInset: CGFloat = 0
-    var offsetX: CGFloat = -2.86
+    var offsetX: CGFloat = 0
     var offsetY: CGFloat = -5.88
     var opacity: CGFloat = 0.39
     var cornerRadius: CGFloat = 36

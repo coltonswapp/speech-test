@@ -227,6 +227,7 @@ export function ScenarioEditor({
         grammarPointIds: current.grammarPointIds,
         setting: current.setting,
         thumbnailUrl: current.thumbnailUrl,
+        thumbnailSmallUrl: current.thumbnailSmallUrl,
         lines: current.lines,
         highlights: sanitizeHighlightsForSave(current.highlights),
         quiz: current.quiz,
@@ -254,7 +255,13 @@ export function ScenarioEditor({
   // edits are preserved.
   function applyThumbnailFromServer(scenario: DialogueScenario) {
     setDraft((prev) =>
-      prev ? { ...prev, thumbnailUrl: scenario.thumbnailUrl } : prev,
+      prev
+        ? {
+            ...prev,
+            thumbnailUrl: scenario.thumbnailUrl,
+            thumbnailSmallUrl: scenario.thumbnailSmallUrl,
+          }
+        : prev,
     );
     queryClient.invalidateQueries({
       queryKey: ["dialogue-scenario", collectionId, scenarioSlug],

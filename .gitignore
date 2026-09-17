@@ -35,8 +35,9 @@ shizen-chinese/cedict.sqlite
 cedict_ts.u8
 cedict_ts.u8.gz
 
-# Webapp build artifacts
-webapp/node_modules/
+# Webapp / JS install artifacts
+node_modules/
+.pnpm-store/
 webapp/.next/
 
 # Local API keys (copy Secrets.plist.example → Secrets.plist)

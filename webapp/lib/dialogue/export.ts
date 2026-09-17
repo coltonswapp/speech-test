@@ -19,6 +19,7 @@ export type ExportableCollection = {
   subtitle: string | null;
   sceneImage: string | null;
   thumbnailUrl: string | null;
+  thumbnailSmallUrl: string | null;
 };
 
 export type ExportableScenario = {
@@ -38,6 +39,7 @@ export type ExportableScenario = {
   grammarPointIds: string[];
   setting: string | null;
   thumbnailUrl: string | null;
+  thumbnailSmallUrl: string | null;
   lines: unknown;
   highlights: unknown;
   quiz: unknown;
@@ -155,6 +157,7 @@ export function buildScenarioFile(scenario: ExportableScenario): ScenarioFile {
     grammarPointIDs:
       scenario.grammarPointIds.length > 0 ? scenario.grammarPointIds : undefined,
     thumbnailUrl: scenario.thumbnailUrl ?? undefined,
+    thumbnailSmallUrl: scenario.thumbnailSmallUrl ?? undefined,
     quiz: exportQuiz(scenario.quiz as QuizQuestion[] | null),
     tokenSync: exportTokenSync(scenario.tokenSync),
   };
@@ -170,6 +173,7 @@ export function buildCollectionFile(
     subtitle: collection.subtitle ?? undefined,
     sceneImage: collection.sceneImage ?? undefined,
     thumbnailUrl: collection.thumbnailUrl ?? undefined,
+    thumbnailSmallUrl: collection.thumbnailSmallUrl ?? undefined,
     scenarios: scenarios
       .slice()
       .sort((a, b) => a.orderIndex - b.orderIndex)

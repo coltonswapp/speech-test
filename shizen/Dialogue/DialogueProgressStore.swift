@@ -5,32 +5,77 @@
 
 import Foundation
 
+protocol LessonProgressProviding: AnyObject {
+    var completedScenarioIDs: Set<String> { get }
+    func completedCountToday() -> Int
+}
+
 struct DialogueDailyProgress: Codable, Equatable {
     var completedScenarioIDs: Set<String> = []
+}
+
+struct DialogueScenarioAttempt: Codable, Equatable {
+    var starCount: Int
+    var points: Int
 }
 
 struct DialogueProgressSnapshot: Codable, Equatable {
     var completedScenarioIDs: Set<String>
     var dailyProgress: [String: DialogueDailyProgress]
+    /// Scored completions, keyed by scenario ID. Older files may only have star arrays.
+    var scenarioAttempts: [String: [DialogueScenarioAttempt]]
 
     init(
         completedScenarioIDs: Set<String> = [],
-        dailyProgress: [String: DialogueDailyProgress] = [:]
+        dailyProgress: [String: DialogueDailyProgress] = [:],
+        scenarioAttempts: [String: [DialogueScenarioAttempt]] = [:]
     ) {
         self.completedScenarioIDs = completedScenarioIDs
         self.dailyProgress = dailyProgress
+        self.scenarioAttempts = scenarioAttempts
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case completedScenarioIDs
+        case dailyProgress
+        case scenarioAttempts
+        case scenarioStarCounts
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         completedScenarioIDs = try container.decodeIfPresent(Set<String>.self, forKey: .completedScenarioIDs) ?? []
         dailyProgress = try container.decodeIfPresent([String: DialogueDailyProgress].self, forKey: .dailyProgress) ?? [:]
+        if let attempts = try container.decodeIfPresent(
+            [String: [DialogueScenarioAttempt]].self,
+            forKey: .scenarioAttempts
+        ) {
+            scenarioAttempts = attempts
+        } else if let starCounts = try container.decodeIfPresent(
+            [String: [Int]].self,
+            forKey: .scenarioStarCounts
+        ) {
+            scenarioAttempts = starCounts.mapValues { counts in
+                counts.map { DialogueScenarioAttempt(starCount: $0, points: 0) }
+            }
+        } else {
+            scenarioAttempts = [:]
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(completedScenarioIDs, forKey: .completedScenarioIDs)
+        try container.encode(dailyProgress, forKey: .dailyProgress)
+        try container.encode(scenarioAttempts, forKey: .scenarioAttempts)
     }
 }
 
-final class DialogueProgressStore {
+final class DialogueProgressStore: LessonProgressProviding {
 
     static let shared = DialogueProgressStore()
+
+    static let didChange = Notification.Name("DialogueProgressStore.didChange")
 
     static let scenariosPerDay = DialogueProgressSquareStyle.scenariosPerDay
 
@@ -83,19 +128,62 @@ final class DialogueProgressStore {
         snapshot.dailyProgress[dateKey]?.completedScenarioIDs.count ?? 0
     }
 
-    func completedCountToday(date: Date = Date()) -> Int {
+    func completedCountToday() -> Int {
+        completedCountToday(date: Date())
+    }
+
+    func completedCountToday(date: Date) -> Int {
         completedCount(for: Self.dateKey(for: date, calendar: calendar))
     }
 
-    func markCompleted(scenarioID: String, date: Date = Date()) {
+    func attempts(scenarioID: String) -> [DialogueScenarioAttempt] {
+        snapshot.scenarioAttempts[scenarioID] ?? []
+    }
+
+    func bestStarCount(scenarioID: String) -> Int? {
+        attempts(scenarioID: scenarioID).map(\.starCount).max()
+    }
+
+    func lastAttempt(scenarioID: String) -> DialogueScenarioAttempt? {
+        attempts(scenarioID: scenarioID).last
+    }
+
+    func lastPoints(scenarioID: String) -> Int? {
+        lastAttempt(scenarioID: scenarioID)?.points
+    }
+
+    /// Stars to render on the picker: best recorded run, or 1 for legacy completions.
+    func displayedStarCount(scenarioID: String) -> Int {
+        if let best = bestStarCount(scenarioID: scenarioID) { return best }
+        return isCompleted(scenarioID: scenarioID) ? 1 : 0
+    }
+
+    func markCompleted(
+        scenarioID: String,
+        starCount: Int? = nil,
+        points: Int? = nil,
+        date: Date = Date(),
+        countsTowardDaily: Bool = true
+    ) {
         snapshot.completedScenarioIDs.insert(scenarioID)
 
-        let key = Self.dateKey(for: date, calendar: calendar)
-        var daily = snapshot.dailyProgress[key] ?? DialogueDailyProgress()
-        daily.completedScenarioIDs.insert(scenarioID)
-        snapshot.dailyProgress[key] = daily
+        if countsTowardDaily {
+            let key = Self.dateKey(for: date, calendar: calendar)
+            var daily = snapshot.dailyProgress[key] ?? DialogueDailyProgress()
+            daily.completedScenarioIDs.insert(scenarioID)
+            snapshot.dailyProgress[key] = daily
+        }
+
+        if let starCount {
+            let attempt = DialogueScenarioAttempt(
+                starCount: min(max(starCount, 0), DialogueScoreRules.maxStars),
+                points: max(points ?? 0, 0)
+            )
+            snapshot.scenarioAttempts[scenarioID, default: []].append(attempt)
+        }
 
         persist()
+        NotificationCenter.default.post(name: Self.didChange, object: self)
     }
 
     func currentStreak(
@@ -125,6 +213,7 @@ final class DialogueProgressStore {
     func resetAll() {
         snapshot = DialogueProgressSnapshot()
         persist()
+        NotificationCenter.default.post(name: Self.didChange, object: self)
     }
 
     static func dateKey(for date: Date, calendar: Calendar = .current) -> String {

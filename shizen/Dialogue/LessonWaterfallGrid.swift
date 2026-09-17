@@ -7,7 +7,6 @@
 //  render their thumbnail in grayscale.
 //
 
-import CoreImage
 import UIKit
 
 // MARK: - Lesson model
@@ -301,51 +300,48 @@ final class LessonWaterfallCardCell: UICollectionViewCell {
         thumbnailImageView.accessibilityIdentifier = nil
     }
 
-    func configure(with lesson: WaterfallLesson) {
+    func configure(with lesson: WaterfallLesson, loadsRemoteImage: Bool = true) {
         titleLabel.text = lesson.title
         titleLabel.textColor = lesson.isLocked ? .secondaryLabel : .label
         subtitleLabel.text = "\(lesson.conversationCount) conversations"
         lockBadge.isHidden = !lesson.isLocked
 
-        let applyImage: (UIImage?) -> Void = { [weak self] source in
-            guard let self else { return }
-            if lesson.isLocked, let source {
-                self.thumbnailImageView.image = Self.grayscaleImage(from: source) ?? source
-            } else {
-                self.thumbnailImageView.image = source
-            }
-        }
+        let pixelSize = max(bounds.width, 180) * UIScreen.main.scale
+        let variant: LessonThumbnailLoader.Variant = lesson.isLocked ? .grayscale : .color
 
         thumbnailImageView.image = nil
         if let remoteURL = lesson.thumbnailURL {
-            let token = remoteURL.absoluteString
+            let token = "\(remoteURL.absoluteString)|\(variant.rawValue)"
             thumbnailImageView.accessibilityIdentifier = token
-            if let cached = LessonThumbnailLoader.cachedImage(for: remoteURL) {
-                applyImage(cached)
-            } else {
-                LessonThumbnailLoader.load(url: remoteURL) { [weak self] image in
+            if let cached = LessonThumbnailLoader.cachedImage(
+                for: remoteURL,
+                targetPixelSize: pixelSize,
+                variant: variant
+            ) {
+                thumbnailImageView.image = cached
+            } else if loadsRemoteImage {
+                LessonThumbnailLoader.load(
+                    url: remoteURL,
+                    targetPixelSize: pixelSize,
+                    variant: variant
+                ) { [weak self] image in
                     guard let self,
                           self.thumbnailImageView.accessibilityIdentifier == token else { return }
-                    applyImage(image ?? UIImage(named: lesson.thumbnailName))
+                    self.thumbnailImageView.image = image
+                        ?? LessonThumbnailLoader.bundledImage(
+                            named: lesson.thumbnailName,
+                            targetPixelSize: pixelSize,
+                            variant: variant
+                        )
                 }
             }
         } else {
-            applyImage(UIImage(named: lesson.thumbnailName))
+            thumbnailImageView.image = LessonThumbnailLoader.bundledImage(
+                named: lesson.thumbnailName,
+                targetPixelSize: pixelSize,
+                variant: variant
+            )
         }
-    }
-
-    private static let ciContext = CIContext()
-
-    private static func grayscaleImage(from image: UIImage) -> UIImage? {
-        guard let ciImage = CIImage(image: image) else { return nil }
-        guard let filter = CIFilter(name: "CIColorControls") else { return nil }
-        filter.setValue(ciImage, forKey: kCIInputImageKey)
-        filter.setValue(0.0, forKey: kCIInputSaturationKey)
-        guard
-            let output = filter.outputImage,
-            let cgImage = ciContext.createCGImage(output, from: ciImage.extent)
-        else { return nil }
-        return UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
     }
 
     override func preferredLayoutAttributesFitting(
@@ -435,7 +431,7 @@ final class LessonWaterfallGridController: NSObject {
 
         let lesson = lessons[indexPath.item]
         let cell = LessonWaterfallCardCell(frame: CGRect(x: 0, y: 0, width: columnWidth, height: 0))
-        cell.configure(with: lesson)
+        cell.configure(with: lesson, loadsRemoteImage: false)
 
         let attributes = UICollectionViewLayoutAttributes(forCellWith: indexPath)
         attributes.size = CGSize(width: columnWidth, height: 0)
@@ -482,36 +478,3 @@ extension LessonWaterfallGridController: LessonWaterfallLayoutDelegate {
     }
 }
 
-// MARK: - Remote thumbnail loader
-
-enum LessonThumbnailLoader {
-    private static let cache = NSCache<NSString, UIImage>()
-    private static let session = URLSession.shared
-
-    static func cachedImage(for url: URL) -> UIImage? {
-        cache.object(forKey: url.absoluteString as NSString)
-    }
-
-    static func load(url: URL, completion: @escaping (UIImage?) -> Void) {
-        let key = url.absoluteString as NSString
-        if let cached = cache.object(forKey: key) {
-            completion(cached)
-            return
-        }
-        session.dataTask(with: url) { data, response, _ in
-            let image: UIImage?
-            if let data,
-               let http = response as? HTTPURLResponse,
-               (200 ... 299).contains(http.statusCode),
-               let decoded = UIImage(data: data) {
-                cache.setObject(decoded, forKey: key)
-                image = decoded
-            } else {
-                image = nil
-            }
-            DispatchQueue.main.async {
-                completion(image)
-            }
-        }.resume()
-    }
-}

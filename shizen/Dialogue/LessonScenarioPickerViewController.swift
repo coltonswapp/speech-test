@@ -3,7 +3,7 @@
 //  shizen
 //
 //  Intermediate screen between the lesson grid and the dialogue player:
-//  shows every scenario in a lesson with its completion state so the user
+//  shows every scenario in a lesson with its best star grade so the user
 //  picks exactly which conversation to tackle next.
 //
 
@@ -21,7 +21,7 @@ final class LessonScenarioPickerViewController: UIViewController {
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
     private let loadingCoordinator = DialogueLessonLoadingCoordinator()
-    private var scenarioRows: [LessonScenarioRowControl] = []
+    private var scenarioRows: [LessonScenarioRowContainer] = []
 
     private static let horizontalInset: CGFloat = 16
 
@@ -111,9 +111,9 @@ final class LessonScenarioPickerViewController: UIViewController {
         self.collection = collection
         title = collection.title
 
-        for row in scenarioRows {
-            contentStack.removeArrangedSubview(row)
-            row.removeFromSuperview()
+        for view in contentStack.arrangedSubviews {
+            contentStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
         }
         scenarioRows = []
 
@@ -129,14 +129,17 @@ final class LessonScenarioPickerViewController: UIViewController {
         contentStack.setCustomSpacing(16, after: headerWrap)
 
         for (index, scenario) in collection.scenarios.enumerated() {
-            let row = LessonScenarioRowControl(
+            let row = LessonScenarioRowContainer(
                 index: index + 1,
                 title: scenario.menuTitle,
                 subtitle: scenario.menuSubtitle
             )
-            row.addAction(UIAction { [weak self] _ in
+            row.onOpen = { [weak self] in
                 self?.openScenario(id: scenario.id)
-            }, for: .touchUpInside)
+            }
+            row.onRetake = { [weak self] in
+                self?.openScenario(id: scenario.id, sessionMode: .retakeQuiz)
+            }
             contentStack.addArrangedSubview(row)
             scenarioRows.append(row)
         }
@@ -148,7 +151,13 @@ final class LessonScenarioPickerViewController: UIViewController {
         guard let collection else { return }
         let store = DialogueProgressStore.shared
         for (row, scenario) in zip(scenarioRows, collection.scenarios) {
-            row.setCompleted(store.isCompleted(scenarioID: scenario.id))
+            let completed = store.isCompleted(scenarioID: scenario.id)
+            row.setProgress(
+                completed: completed,
+                starCount: store.displayedStarCount(scenarioID: scenario.id),
+                lastPoints: store.lastPoints(scenarioID: scenario.id),
+                showsRetake: completed && !scenario.quiz.isEmpty
+            )
         }
     }
 
@@ -164,15 +173,18 @@ final class LessonScenarioPickerViewController: UIViewController {
         present(alert, animated: true)
     }
 
-    private func openScenario(id: String) {
+    private func openScenario(id: String, sessionMode: DialogueLessonSessionMode? = nil) {
         guard let collection else { return }
         if let onOpenScenario {
             onOpenScenario(collection, id)
             return
         }
+        let completed = DialogueProgressStore.shared.isCompleted(scenarioID: id)
+        let mode = sessionMode ?? (completed ? .viewLesson : .attempt)
         let dialogue = DialogueNestedPagingExperimentViewController(
             collection: collection,
-            initialScenarioID: id
+            initialScenarioID: id,
+            sessionMode: mode
         )
         navigationController?.pushViewController(dialogue, animated: true)
     }
@@ -180,18 +192,84 @@ final class LessonScenarioPickerViewController: UIViewController {
 
 // MARK: - Scenario row
 
-/// Card-style row: number badge (or completion checkmark), title/subtitle, chevron.
+/// Card plus an optional sibling Retake control so the two taps never nest.
+private final class LessonScenarioRowContainer: UIView {
+
+    var onOpen: (() -> Void)?
+    var onRetake: (() -> Void)?
+
+    private let row: LessonScenarioRowControl
+    private let retakeButton = UIButton(type: .system)
+
+    init(index: Int, title: String, subtitle: String?) {
+        row = LessonScenarioRowControl(index: index, title: title, subtitle: subtitle)
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        row.addAction(UIAction { [weak self] _ in
+            self?.onOpen?()
+        }, for: .touchUpInside)
+
+        var retakeConfig = UIButton.Configuration.gray()
+        retakeConfig.cornerStyle = .capsule
+        retakeConfig.title = "Retake"
+        retakeConfig.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+            var outgoing = incoming
+            outgoing.font = .systemFont(ofSize: 13, weight: .semibold)
+            return outgoing
+        }
+        retakeConfig.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
+        retakeButton.configuration = retakeConfig
+        retakeButton.accessibilityLabel = "Retake quiz"
+        retakeButton.translatesAutoresizingMaskIntoConstraints = false
+        retakeButton.setContentHuggingPriority(.required, for: .horizontal)
+        retakeButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        retakeButton.addAction(UIAction { [weak self] _ in
+            self?.onRetake?()
+        }, for: .touchUpInside)
+        retakeButton.isHidden = true
+
+        let stack = UIStackView(arrangedSubviews: [row, retakeButton])
+        stack.axis = .horizontal
+        stack.alignment = .center
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            retakeButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 36),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setProgress(completed: Bool, starCount: Int, lastPoints: Int?, showsRetake: Bool) {
+        row.setProgress(completed: completed, starCount: starCount, lastPoints: lastPoints)
+        retakeButton.isHidden = !showsRetake
+    }
+}
+
+/// Card-style row: number badge, title/subtitle, best stars, last score, and chevron.
 private final class LessonScenarioRowControl: UIControl {
 
     private static let badgeDiameter: CGFloat = 34
 
+    private let titleText: String
     private let badgeContainer = UIView()
     private let badgeLabel = UILabel()
-    private let checkmarkView = UIImageView()
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
+    private let starsView = DialogueScenarioStarsView()
+    private let scoreLabel = UILabel()
 
     init(index: Int, title: String, subtitle: String?) {
+        titleText = title
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
@@ -213,14 +291,6 @@ private final class LessonScenarioRowControl: UIControl {
         badgeLabel.translatesAutoresizingMaskIntoConstraints = false
         badgeContainer.addSubview(badgeLabel)
 
-        checkmarkView.image = UIImage(systemName: "checkmark.circle.fill")
-        checkmarkView.tintColor = .systemGreen
-        checkmarkView.contentMode = .scaleAspectFit
-        checkmarkView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 26, weight: .medium)
-        checkmarkView.isHidden = true
-        checkmarkView.translatesAutoresizingMaskIntoConstraints = false
-        badgeContainer.addSubview(checkmarkView)
-
         titleLabel.text = title
         titleLabel.font = .preferredFont(forTextStyle: .headline)
         titleLabel.textColor = .label
@@ -238,6 +308,22 @@ private final class LessonScenarioRowControl: UIControl {
         textStack.isUserInteractionEnabled = false
         textStack.translatesAutoresizingMaskIntoConstraints = false
 
+        starsView.setContentHuggingPriority(.required, for: .horizontal)
+        starsView.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        scoreLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        scoreLabel.textColor = .secondaryLabel
+        scoreLabel.textAlignment = .right
+        scoreLabel.isHidden = true
+        scoreLabel.setContentHuggingPriority(.required, for: .horizontal)
+        scoreLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        let gradeStack = UIStackView(arrangedSubviews: [starsView, scoreLabel])
+        gradeStack.axis = .vertical
+        gradeStack.alignment = .trailing
+        gradeStack.spacing = 2
+        gradeStack.isUserInteractionEnabled = false
+
         let chevron = UIImageView(image: UIImage(systemName: "chevron.right"))
         chevron.tintColor = .tertiaryLabel
         chevron.contentMode = .scaleAspectFit
@@ -245,7 +331,15 @@ private final class LessonScenarioRowControl: UIControl {
         chevron.setContentHuggingPriority(.required, for: .horizontal)
         chevron.translatesAutoresizingMaskIntoConstraints = false
 
-        let rowStack = UIStackView(arrangedSubviews: [badgeContainer, textStack, chevron])
+        let trailingStack = UIStackView(arrangedSubviews: [gradeStack, chevron])
+        trailingStack.axis = .horizontal
+        trailingStack.alignment = .center
+        trailingStack.spacing = 8
+        trailingStack.isUserInteractionEnabled = false
+        trailingStack.setContentHuggingPriority(.required, for: .horizontal)
+        trailingStack.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        let rowStack = UIStackView(arrangedSubviews: [badgeContainer, textStack, trailingStack])
         rowStack.axis = .horizontal
         rowStack.alignment = .center
         rowStack.spacing = 14
@@ -258,8 +352,6 @@ private final class LessonScenarioRowControl: UIControl {
             badgeContainer.heightAnchor.constraint(equalToConstant: Self.badgeDiameter),
             badgeLabel.centerXAnchor.constraint(equalTo: badgeContainer.centerXAnchor),
             badgeLabel.centerYAnchor.constraint(equalTo: badgeContainer.centerYAnchor),
-            checkmarkView.centerXAnchor.constraint(equalTo: badgeContainer.centerXAnchor),
-            checkmarkView.centerYAnchor.constraint(equalTo: badgeContainer.centerYAnchor),
 
             rowStack.topAnchor.constraint(equalTo: topAnchor, constant: 16),
             rowStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
@@ -272,10 +364,28 @@ private final class LessonScenarioRowControl: UIControl {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func setCompleted(_ completed: Bool) {
-        checkmarkView.isHidden = !completed
-        badgeLabel.isHidden = completed
-        badgeContainer.backgroundColor = completed ? .clear : ExperimentPalette.pageBackground
+    func setProgress(completed: Bool, starCount: Int, lastPoints: Int?) {
+        badgeLabel.isHidden = false
+        badgeContainer.backgroundColor = ExperimentPalette.pageBackground
+        starsView.configure(earned: starCount, maximum: DialogueScoreRules.maxStars)
+        if let lastPoints {
+            scoreLabel.text = "\(lastPoints)"
+            scoreLabel.isHidden = false
+        } else {
+            scoreLabel.isHidden = true
+        }
+
+        var label = titleText
+        if completed {
+            label += ", View lesson"
+        }
+        if completed || starCount > 0 {
+            label += ", \(starCount) of \(DialogueScoreRules.maxStars) stars"
+        }
+        if let lastPoints {
+            label += ", \(lastPoints) points"
+        }
+        accessibilityLabel = label
     }
 
     override var isHighlighted: Bool {
@@ -300,6 +410,57 @@ private final class LessonScenarioRowControl: UIControl {
         super.traitCollectionDidChange(previousTraitCollection)
         if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
             layer.borderColor = ExperimentPalette.cardBorder.cgColor
+        }
+    }
+}
+
+/// Compact best-run grade used on scenario picker rows.
+private final class DialogueScenarioStarsView: UIView {
+
+    private static let pointSize: CGFloat = 15
+    private static let spacing: CGFloat = 2
+    private static let fillColor = UIColor(red: 253 / 255, green: 200 / 255, blue: 1 / 255, alpha: 1)
+    private static let emptyColor = UIColor.tertiaryLabel
+
+    private let stack = UIStackView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        translatesAutoresizingMaskIntoConstraints = false
+        isUserInteractionEnabled = false
+        isAccessibilityElement = false
+
+        stack.axis = .horizontal
+        stack.alignment = .center
+        stack.spacing = Self.spacing
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(earned: Int, maximum: Int) {
+        stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        let symbolConfig = UIImage.SymbolConfiguration(pointSize: Self.pointSize, weight: .semibold)
+        let clampedEarned = min(max(earned, 0), maximum)
+        for index in 0..<maximum {
+            let imageView = UIImageView(
+                image: UIImage(systemName: "star.fill", withConfiguration: symbolConfig)
+            )
+            imageView.tintColor = index < clampedEarned ? Self.fillColor : Self.emptyColor
+            imageView.contentMode = .scaleAspectFit
+            imageView.setContentHuggingPriority(.required, for: .horizontal)
+            imageView.setContentCompressionResistancePriority(.required, for: .horizontal)
+            stack.addArrangedSubview(imageView)
         }
     }
 }

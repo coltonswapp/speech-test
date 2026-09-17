@@ -3,8 +3,7 @@
 //  shizen
 //
 //  Fetches dialogue lessons from the CMS and displays them grouped by
-//  curriculum unit, each section using the same waterfall card grid as
-//  DialogueHomeViewController.
+//  curriculum unit, each section using the waterfall card grid.
 //
 
 import UIKit

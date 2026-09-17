@@ -5,19 +5,19 @@
 //  One-question-per-page comprehension quiz for the nested dialogue pager.
 //
 
+import NNKit
 import UIKit
 
 // MARK: - DialogueQuizViewController
 
 final class DialogueQuizViewController: UIViewController {
 
-    private static let choiceHeight: CGFloat = 45
-    private static let pageControlHeight: CGFloat = 26
-    private static let pageControlTopSpacing: CGFloat = 8
+    private static let choiceHeight: CGFloat = 54
     private static let questionHorizontalInset: CGFloat = 20
-    private static let scrollBottomContentInsetExtra: CGFloat = 24
+    /// Must be at least the follow-along bottom buffer so a last evidence line
+    /// can scroll clear of the play button, matching dialogue playback.
+    private static let scrollBottomContentInsetExtra: CGFloat = 100
 
-    private let pageControl = UIPageControl()
     private let pageViewController = UIPageViewController(
         transitionStyle: .scroll,
         navigationOrientation: .horizontal
@@ -26,21 +26,55 @@ final class DialogueQuizViewController: UIViewController {
 
     private var questionPages: [DialogueQuizQuestionPageViewController] = []
     private var currentIndex = 0
-    private var pageControlBottomConstraint: NSLayoutConstraint!
-    private var pageControlHeightConstraint: NSLayoutConstraint!
     private var evidenceContext: DialogueQuizEvidenceContext?
 
     /// Host-driven top inset — same role as `DialogueExperimentViewController.nestedPagingTopContentInset`.
     private var nestedPagingTopContentInset: CGFloat = 0
     private var nestedPagingBottomContentInset: CGFloat = 0
 
-    private var didPassQuiz = false
+    private var didFinishQuiz = false
     /// Fired once when every question has been answered correctly.
     var onQuizPassed: (() -> Void)?
+    /// Fired once when every question has a selection, with the running score.
+    var onQuizFinished: ((DialogueQuizScore) -> Void)?
     /// Host should refresh nested handoff when the active question scroll view changes.
     var onHandoffScrollViewChanged: (() -> Void)?
     /// Fired just before quiz evidence audio starts so the host can pause dialogue playback.
     var onEvidencePlaybackWillStart: (() -> Void)?
+    /// Host should refresh the shared next-question transport control.
+    var onNavigationChromeNeedsUpdate: (() -> Void)?
+
+    var hasNextQuestion: Bool {
+        currentIndex + 1 < questionPages.count
+    }
+
+    var hasFinishedAllQuestions: Bool { didFinishQuiz }
+
+    var currentScore: DialogueQuizScore {
+        DialogueQuizScore(
+            correctCount: questionPages.filter(\.isSelectionCorrect).count,
+            questionCount: questionPages.count
+        )
+    }
+
+    var canAdvanceToNextQuestion: Bool {
+        hasNextQuestion
+            && questionPages.indices.contains(currentIndex)
+            && questionPages[currentIndex].hasSelection
+    }
+
+    var currentQuestionHasEvidence: Bool {
+        guard questionPages.indices.contains(currentIndex) else { return false }
+        return !(evidenceContext?.sourceLines(for: questionPages[currentIndex].question).isEmpty ?? true)
+    }
+
+    var canPlayCurrentEvidence: Bool {
+        currentQuestionHasEvidence
+            && questionPages.indices.contains(currentIndex)
+            && questionPages[currentIndex].hasSelection
+    }
+
+    private(set) var isPlayingCurrentEvidence = false
 
     /// Vertical scroll view for the currently visible question page (nested handoff).
     var handoffScrollView: UIScrollView {
@@ -65,7 +99,11 @@ final class DialogueQuizViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = ExperimentPalette.pageBackground
         installPageViewController()
-        installChrome()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        coordinateEvidenceSwipes()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -80,7 +118,7 @@ final class DialogueQuizViewController: UIViewController {
         evidenceContext: DialogueQuizEvidenceContext? = nil
     ) {
         loadViewIfNeeded()
-        didPassQuiz = false
+        didFinishQuiz = false
         currentIndex = 0
         self.evidenceContext = evidenceContext
         stopEvidencePlayback()
@@ -89,6 +127,7 @@ final class DialogueQuizViewController: UIViewController {
             let sourceLines = evidenceContext?.sourceLines(for: question) ?? []
             let page = DialogueQuizQuestionPageViewController(
                 questionNumber: index + 1,
+                questionCount: questions.count,
                 question: question,
                 choiceHeight: Self.choiceHeight,
                 horizontalInset: Self.questionHorizontalInset,
@@ -98,16 +137,15 @@ final class DialogueQuizViewController: UIViewController {
                 guard let self, let page else { return }
                 self.handleImmediateAnswer(on: page)
             }
-            page.onReplayEvidence = { [weak self, weak page] in
+            page.onRevealContentDidChange = { [weak self, weak page] in
                 guard let self, let page else { return }
-                self.playEvidence(for: page.question)
+                self.handleRevealContentDidChange(on: page)
+            }
+            page.onFocusEvidenceLine = { [weak self] line in
+                self?.presentSentenceFocus(for: line)
             }
             return page
         }
-
-        pageControl.numberOfPages = questions.count
-        pageControl.currentPage = 0
-        updatePageControlVisibility(pageCount: questions.count)
 
         if let first = questionPages.first {
             pageViewController.setViewControllers([first], direction: .forward, animated: false)
@@ -118,18 +156,41 @@ final class DialogueQuizViewController: UIViewController {
         }
 
         applyScrollContentInsets()
+        onNavigationChromeNeedsUpdate?()
         onHandoffScrollViewChanged?()
+        coordinateEvidenceSwipes()
     }
 
     func stopEvidencePlayback() {
         evidenceAudioPlayer.stop()
+        clearPlaybackEmphasis()
+        setPlayingCurrentEvidence(false)
     }
 
-    private func updatePageControlVisibility(pageCount: Int) {
-        let showsControl = pageCount > 1
-        pageControl.isHidden = !showsControl
-        pageControlHeightConstraint.constant = showsControl ? Self.pageControlHeight : 0
-        applyScrollContentInsets()
+    func toggleCurrentEvidencePlayback() {
+        if isPlayingCurrentEvidence {
+            stopEvidencePlayback()
+        } else {
+            playCurrentEvidence()
+        }
+    }
+
+    func playCurrentEvidence() {
+        guard questionPages.indices.contains(currentIndex) else { return }
+        playEvidence(for: questionPages[currentIndex].question, on: questionPages[currentIndex])
+    }
+
+    private func setPlayingCurrentEvidence(_ playing: Bool) {
+        guard isPlayingCurrentEvidence != playing else { return }
+        isPlayingCurrentEvidence = playing
+        onNavigationChromeNeedsUpdate?()
+    }
+
+    private func clearPlaybackEmphasis() {
+        for page in questionPages {
+            page.setPlayingSpokenIndex(nil)
+            page.applyEvidenceKaraoke(tokenSync: nil, time: 0)
+        }
     }
 
     private func handleImmediateAnswer(on page: DialogueQuizQuestionPageViewController) {
@@ -137,29 +198,109 @@ final class DialogueQuizViewController: UIViewController {
 
         if page.isSelectionCorrect {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-            if allCorrect {
-                ExperimentFeedbackSound.playSuccess(
-                    for: .kanaSpelling,
-                    spellingSyllableCount: questionPages.count
-                )
-            } else {
-                ExperimentFeedbackSound.playSuccess(for: .kanaSpelling)
+            if let point = page.selectedChoiceExplosionPoint() {
+                ExplosionManager.trigger(.small, at: point)
             }
         } else {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
-            ExperimentFeedbackSound.playIncorrect()
         }
 
-        // Evidence audio is independent of correct/incorrect; do not block paging/Continue.
-        playEvidence(for: page.question)
+        let allAnswered = !questionPages.isEmpty && questionPages.allSatisfy(\.hasSelection)
+        let justFinished = allAnswered && !didFinishQuiz
+        if justFinished {
+            didFinishQuiz = true
+        }
 
-        if allCorrect, !didPassQuiz {
-            didPassQuiz = true
-            onQuizPassed?()
+        coordinateEvidenceSwipes()
+        onNavigationChromeNeedsUpdate?()
+        onHandoffScrollViewChanged?()
+        if !page.isSelectionCorrect {
+            page.scrollRevealedEvidenceIntoViewIfNeeded()
+        }
+
+        if justFinished {
+            if allCorrect {
+                onQuizPassed?()
+            }
+            onQuizFinished?(currentScore)
         }
     }
 
-    private func playEvidence(for question: DialogueQuizQuestion) {
+    private func handleRevealContentDidChange(on page: DialogueQuizQuestionPageViewController) {
+        coordinateEvidenceSwipes()
+        onHandoffScrollViewChanged?()
+        page.scrollRevealedEvidenceIntoViewIfNeeded()
+    }
+
+    private var pagingScrollView: UIScrollView? {
+        pageViewController.view.subviews.first { $0 is UIScrollView } as? UIScrollView
+    }
+
+    private func coordinateEvidenceSwipes() {
+        let paging = pagingScrollView
+        for page in questionPages {
+            page.attachEvidenceSwipeCoordination(
+                pagingScrollView: paging,
+                from: self
+            )
+        }
+    }
+
+    private func presentSentenceFocus(for line: DialogueQuizSourceLine) {
+        stopEvidencePlayback()
+        onEvidencePlaybackWillStart?()
+
+        let dialogueLineAudio: DialogueLineAudioReference?
+        if let evidenceContext,
+           evidenceContext.spokenLines.indices.contains(line.spokenIndex),
+           (evidenceContext.publishedAudioUrl?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            || evidenceContext.audioKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) {
+            dialogueLineAudio = DialogueLineAudioReference(
+                publishedAudioUrl: evidenceContext.publishedAudioUrl,
+                audioKey: evidenceContext.audioKey ?? "",
+                cacheMetadata: evidenceContext.cacheMetadata,
+                lineIndex: line.spokenIndex,
+                dialogueLines: evidenceContext.spokenJapaneseTexts
+            )
+        } else {
+            dialogueLineAudio = nil
+        }
+
+        let nuanceLines = (evidenceContext?.spokenLines ?? []).map {
+            DialogueNuanceContext.Line(
+                speaker: $0.speaker,
+                japanese: $0.japanese,
+                english: $0.english
+            )
+        }
+        let dialogueContext = DialogueNuanceContext.around(
+            lines: nuanceLines,
+            focusedIndex: line.spokenIndex
+        ) ?? .isolated(
+            japanese: line.japanese,
+            english: line.english,
+            speaker: line.speaker
+        )
+
+        let tokens = evidenceContext?.tokenSync?.japaneseTokens(
+            lineIndex: line.spokenIndex,
+            in: line.japanese
+        )
+        let scrub = SentenceScrubExperimentViewController(
+            sentence: line.japanese,
+            englishTranslation: line.english,
+            dialogueLineAudio: dialogueLineAudio,
+            dialogueContext: dialogueContext,
+            tokens: tokens,
+            tokenSync: evidenceContext?.tokenSync
+        )
+        navigationController?.pushViewController(scrub, animated: true)
+    }
+
+    private func playEvidence(
+        for question: DialogueQuizQuestion,
+        on page: DialogueQuizQuestionPageViewController
+    ) {
         guard let evidenceContext,
               let indices = evidenceContext.clampedSpokenIndices(for: question),
               let first = indices.first
@@ -168,15 +309,31 @@ final class DialogueQuizViewController: UIViewController {
         onEvidencePlaybackWillStart?()
         let dialogueLines = evidenceContext.spokenJapaneseTexts
         let fallback = dialogueLines[first]
+        let tokenSync = evidenceContext.tokenSync
+        let highlight: (Int?) -> Void = { [weak page] spokenIndex in
+            page?.setPlayingSpokenIndex(spokenIndex)
+        }
+        let applyKaraoke: (TimeInterval) -> Void = { [weak page] time in
+            page?.applyEvidenceKaraoke(tokenSync: tokenSync, time: time)
+        }
+        let finished = { [weak self, weak page] in
+            highlight(nil)
+            page?.applyEvidenceKaraoke(tokenSync: nil, time: 0)
+            self?.setPlayingCurrentEvidence(false)
+        }
+        setPlayingCurrentEvidence(true)
 
         if indices.count == 1 {
+            highlight(first)
             evidenceAudioPlayer.playDialogueLine(
                 at: first,
                 publishedAudioUrl: evidenceContext.publishedAudioUrl,
                 audioKey: evidenceContext.audioKey,
                 cacheMetadata: evidenceContext.cacheMetadata,
                 dialogueLines: dialogueLines,
-                fallbackText: fallback
+                fallbackText: fallback,
+                onTime: applyKaraoke,
+                onFinished: finished
             )
             return
         }
@@ -188,7 +345,9 @@ final class DialogueQuizViewController: UIViewController {
             cacheMetadata: evidenceContext.cacheMetadata,
             dialogueLines: dialogueLines,
             fallbackText: fallback,
-            onSpokenIndexStart: { _ in }
+            onSpokenIndexStart: { highlight($0) },
+            onTime: applyKaraoke,
+            onFinished: finished
         )
     }
 
@@ -201,27 +360,15 @@ final class DialogueQuizViewController: UIViewController {
         applyScrollContentInsets()
     }
 
-    /// Bottom clearance for scroll content (page control / home indicator).
-    /// Does not move the page control — that uses `applyPageControlBottomInset`.
+    /// Bottom clearance for scroll content (host transport chrome / home indicator).
     func applyNestedPagingBottomContentInset(_ inset: CGFloat) {
         nestedPagingBottomContentInset = inset
         applyScrollContentInsets()
     }
 
-    /// Stable bottom offset for the page control (home-indicator clearance).
-    func applyPageControlBottomInset(_ inset: CGFloat) {
-        loadViewIfNeeded()
-        guard abs(pageControlBottomConstraint.constant + inset) > 0.5 else { return }
-        pageControlBottomConstraint.constant = -inset
-    }
-
     private func applyScrollContentInsets() {
-        let pageControlBand = pageControl.isHidden
-            ? 0
-            : Self.pageControlHeight + Self.pageControlTopSpacing
         let topInset = nestedPagingTopContentInset
         let bottomInset = nestedPagingBottomContentInset
-            + pageControlBand
             + Self.scrollBottomContentInsetExtra
         let inset = UIEdgeInsets(top: topInset, left: 0, bottom: bottomInset, right: 0)
         let indicatorInsets = UIEdgeInsets(top: topInset, left: 0, bottom: bottomInset, right: 0)
@@ -263,35 +410,19 @@ final class DialogueQuizViewController: UIViewController {
         ])
     }
 
-    private func installChrome() {
-        pageControl.translatesAutoresizingMaskIntoConstraints = false
-        pageControl.currentPageIndicatorTintColor = .label
-        pageControl.pageIndicatorTintColor = UIColor.secondaryLabel.withAlphaComponent(0.35)
-        pageControl.hidesForSinglePage = true
-        pageControl.addAction(UIAction { [weak self] _ in
-            self?.pageControlChanged()
-        }, for: .valueChanged)
-        view.addSubview(pageControl)
-
-        pageControlBottomConstraint = pageControl.bottomAnchor.constraint(
-            equalTo: view.bottomAnchor,
-            constant: 0
-        )
-        pageControlHeightConstraint = pageControl.heightAnchor.constraint(equalToConstant: 0)
-
-        NSLayoutConstraint.activate([
-            pageControlBottomConstraint,
-            pageControl.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            pageControl.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 20),
-            pageControl.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -20),
-            pageControlHeightConstraint,
-        ])
+    func goToNextQuestion() {
+        let target = currentIndex + 1
+        guard questionPages.indices.contains(target),
+              questionPages[currentIndex].hasSelection
+        else { return }
+        showQuestion(at: target, direction: .forward)
     }
 
-    private func pageControlChanged() {
-        let target = pageControl.currentPage
+    private func showQuestion(
+        at target: Int,
+        direction: UIPageViewController.NavigationDirection
+    ) {
         guard questionPages.indices.contains(target), target != currentIndex else { return }
-        let direction: UIPageViewController.NavigationDirection = target > currentIndex ? .forward : .reverse
         pageViewController.setViewControllers(
             [questionPages[target]],
             direction: direction,
@@ -302,7 +433,9 @@ final class DialogueQuizViewController: UIViewController {
                 self.stopEvidencePlayback()
             }
             self.currentIndex = target
+            self.onNavigationChromeNeedsUpdate?()
             self.onHandoffScrollViewChanged?()
+            self.coordinateEvidenceSwipes()
         }
     }
 
@@ -314,8 +447,9 @@ final class DialogueQuizViewController: UIViewController {
             stopEvidencePlayback()
         }
         currentIndex = index
-        pageControl.currentPage = index
+        onNavigationChromeNeedsUpdate?()
         onHandoffScrollViewChanged?()
+        coordinateEvidenceSwipes()
     }
 }
 
@@ -339,7 +473,8 @@ extension DialogueQuizViewController: UIPageViewControllerDataSource, UIPageView
     ) -> UIViewController? {
         guard let page = viewController as? DialogueQuizQuestionPageViewController,
               let index = questionPages.firstIndex(where: { $0 === page }),
-              index + 1 < questionPages.count
+              index + 1 < questionPages.count,
+              page.hasSelection
         else { return nil }
         return questionPages[index + 1]
     }
@@ -361,6 +496,12 @@ extension DialogueQuizViewController: UIPageViewControllerDataSource, UIPageView
 
 final class DialogueQuizQuestionPageViewController: UIViewController {
 
+    /// Extra space kept above the playing line when follow-along scrolling.
+    private static let followAlongTopBuffer: CGFloat = 56
+    /// Extra space kept below the English (or bubble) so it clears the play
+    /// button and its edge-effect blur — same value as dialogue playback.
+    private static let followAlongBottomBuffer: CGFloat = 100
+
     let scrollView = UIScrollView()
     private let questionView: DialogueQuizQuestionView
     private let horizontalInset: CGFloat
@@ -368,17 +509,29 @@ final class DialogueQuizQuestionPageViewController: UIViewController {
 
     var hasSelection: Bool { questionView.hasSelection }
     var isSelectionCorrect: Bool { questionView.isSelectionCorrect }
+
+    func selectedChoiceExplosionPoint() -> CGPoint? {
+        guard let choice = questionView.selectedChoiceView, let window = choice.window else {
+            return nil
+        }
+        return choice.convert(CGPoint(x: choice.bounds.midX, y: choice.bounds.midY), to: window)
+    }
     var onSelectionChanged: (() -> Void)? {
         get { questionView.onSelectionChanged }
         set { questionView.onSelectionChanged = newValue }
     }
-    var onReplayEvidence: (() -> Void)? {
-        get { questionView.onReplayEvidence }
-        set { questionView.onReplayEvidence = newValue }
+    var onRevealContentDidChange: (() -> Void)? {
+        get { questionView.onRevealContentDidChange }
+        set { questionView.onRevealContentDidChange = newValue }
+    }
+    var onFocusEvidenceLine: ((DialogueQuizSourceLine) -> Void)? {
+        get { questionView.onFocusEvidenceLine }
+        set { questionView.onFocusEvidenceLine = newValue }
     }
 
     init(
         questionNumber: Int,
+        questionCount: Int,
         question: DialogueQuizQuestion,
         choiceHeight: CGFloat,
         horizontalInset: CGFloat,
@@ -390,6 +543,7 @@ final class DialogueQuizQuestionPageViewController: UIViewController {
             questionNumber: questionNumber,
             question: question,
             choiceHeight: choiceHeight,
+            questionCount: questionCount,
             sourceLines: sourceLines
         )
         super.init(nibName: nil, bundle: nil)
@@ -447,9 +601,124 @@ final class DialogueQuizQuestionPageViewController: UIViewController {
                 constant: -horizontalInset * 2
             ),
         ])
+
+        questionView.hostScrollView = scrollView
+    }
+
+    func scrollRevealedEvidenceIntoViewIfNeeded() {
+        view.layoutIfNeeded()
+        scrollView.layoutIfNeeded()
+        guard questionView.revealedEvidenceScrollTarget != nil else { return }
+
+        var rect = CGRect.null
+        questionView.withSettledEvidenceLayout {
+            guard let label = questionView.revealedEvidenceScrollTarget else { return }
+            rect = label.convert(label.bounds, to: scrollView).insetBy(dx: 0, dy: -16)
+            if let peek = questionView.revealedEvidencePeekTarget {
+                let peekRect = peek.convert(peek.bounds, to: scrollView)
+                let visibleHeight = min(peekRect.height, 140)
+                rect = rect.union(
+                    CGRect(x: peekRect.minX, y: peekRect.minY, width: peekRect.width, height: visibleHeight)
+                )
+            }
+        }
+
+        guard !rect.isNull else { return }
+        let visible = scrollView.bounds.inset(by: scrollView.adjustedContentInset)
+        guard !visible.contains(rect) else { return }
+        scrollView.scrollRectToVisible(rect, animated: true)
+    }
+
+    func attachEvidenceSwipeCoordination(
+        pagingScrollView: UIScrollView?,
+        from viewController: UIViewController?
+    ) {
+        questionView.hostScrollView = scrollView
+        questionView.configureEvidenceSwipeDeferral(
+            pagingScrollView: pagingScrollView,
+            from: viewController
+        )
     }
 
     func revealResult() {
         questionView.revealResult()
+    }
+
+    func setPlayingSpokenIndex(_ spokenIndex: Int?) {
+        questionView.setPlayingSpokenIndex(spokenIndex)
+        if let spokenIndex, questionView.evidenceLineCount > 1 {
+            scrollPlayingEvidenceLineIntoView(spokenIndex: spokenIndex)
+        }
+    }
+
+    /// Follow-along: keep the playing evidence line — through its English —
+    /// above the play button, same contract as dialogue `scrollLineIntoView`.
+    private func scrollPlayingEvidenceLineIntoView(spokenIndex: Int) {
+        view.layoutIfNeeded()
+        scrollView.layoutIfNeeded()
+        guard !scrollView.isTracking, !scrollView.isDecelerating else { return }
+
+        var rowFrame = CGRect.null
+        questionView.withSettledEvidenceLayout {
+            guard let row = questionView.evidenceLineView(forSpokenIndex: spokenIndex),
+                  !row.isHidden,
+                  row.bounds.height > 0
+            else { return }
+            rowFrame = row.convert(row.bounds, to: scrollView)
+        }
+        guard !rowFrame.isNull else { return }
+
+        let inset = scrollView.adjustedContentInset
+        let currentY = scrollView.contentOffset.y
+        let visibleBottom = currentY + scrollView.bounds.height
+            - inset.bottom - Self.followAlongBottomBuffer
+        let visibleTop = currentY + Self.followAlongTopBuffer
+
+        let targetY: CGFloat
+        if rowFrame.maxY > visibleBottom {
+            targetY = rowFrame.maxY - scrollView.bounds.height
+                + inset.bottom + Self.followAlongBottomBuffer
+        } else if rowFrame.minY < visibleTop {
+            targetY = rowFrame.minY - Self.followAlongTopBuffer
+        } else {
+            return
+        }
+
+        guard let endY = scrollView.clampedContentOffsetY(targetY, allowNoScroll: true),
+              abs(endY - currentY) >= 1
+        else { return }
+
+        UIView.animate(
+            withDuration: DialogueBubbleLayout.emphasisDuration,
+            delay: 0,
+            options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState]
+        ) {
+            self.scrollView.setClampedContentOffsetY(endY, allowsScrollCallback: false)
+        }
+    }
+
+    func applyEvidenceKaraoke(tokenSync: DialogueTokenSync?, time: TimeInterval) {
+        questionView.applyEvidenceKaraoke(tokenSync: tokenSync, time: time)
+    }
+}
+
+private extension UIScrollView {
+    func clampedContentOffsetY(_ y: CGFloat, allowNoScroll: Bool) -> CGFloat? {
+        let inset = adjustedContentInset
+        let minY = -inset.top
+        let maxY = max(minY, contentSize.height - bounds.height + inset.bottom)
+        if maxY <= minY {
+            if allowNoScroll { return nil }
+            return minY
+        }
+        return min(max(y, minY), maxY)
+    }
+
+    func setClampedContentOffsetY(_ y: CGFloat, allowsScrollCallback: Bool) {
+        let previousDelegate = delegate
+        if !allowsScrollCallback { delegate = nil }
+        let clampedY = clampedContentOffsetY(y, allowNoScroll: false) ?? y
+        contentOffset = CGPoint(x: 0, y: clampedY)
+        if !allowsScrollCallback { delegate = previousDelegate }
     }
 }

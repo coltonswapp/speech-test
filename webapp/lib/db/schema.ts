@@ -221,6 +221,7 @@ export const dialogueCollection = pgTable("dialogue_collection", {
   premise: text("premise"),
   sceneImage: text("scene_image"), // optional bundled asset-catalog name (legacy / fallback)
   thumbnailUrl: text("thumbnail_url"), // public CDN URL for lesson card thumbnail
+  thumbnailSmallUrl: text("thumbnail_small_url"), // 512px WebP for path/grid stones
   orderIndex: integer("order_index").notNull().default(0), // position within unit (or unfiled list)
   // App visibility. Studio always lists every collection; the public CMS
   // only serves rows where this is true. New lessons start hidden.
@@ -253,6 +254,7 @@ export const dialogueScenario = pgTable("dialogue_scenario", {
   // thumbnail_url (the common case); set only for scenarios that deserve
   // their own art.
   thumbnailUrl: text("thumbnail_url"),
+  thumbnailSmallUrl: text("thumbnail_small_url"),
   lines: jsonb("lines").notNull().default([]),
   highlights: jsonb("highlights"),
   quiz: jsonb("quiz"),

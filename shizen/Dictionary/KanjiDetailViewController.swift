@@ -139,6 +139,7 @@ private final class KanjiCompoundListCell: UICollectionViewListCell {
     private func setup() {
         furiganaLabel.clipsToBounds = false
         furiganaLabel.numberOfLines = 1
+        furiganaLabel.verticalTextInsetsAffectAlignmentRect = false
 
         glossLabel.font = .preferredFont(forTextStyle: .subheadline)
         glossLabel.textColor = .secondaryLabel
@@ -153,8 +154,8 @@ private final class KanjiCompoundListCell: UICollectionViewListCell {
         contentView.addSubview(stack)
 
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
-            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
+            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -6),
             stack.leadingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.trailingAnchor),
         ])

@@ -83,12 +83,19 @@ final class KanjiSpotlightPagerViewController: UIViewController {
             },
         ]
 
+        let exampleCount = deck.items.count
+        let spotlightCharacter = deck.subject.character
         for (index, item) in deck.items.enumerated() {
             let exampleNumber = index + 1
             result.append(
                 KanjiSpotlightCardPageViewController {
                     let cardView = KanjiSpotlightEntryCardView()
-                    cardView.configure(item: item, exampleNumber: exampleNumber)
+                    cardView.configure(
+                        item: item,
+                        exampleNumber: exampleNumber,
+                        exampleCount: exampleCount,
+                        spotlightCharacter: spotlightCharacter
+                    )
                     return cardView
                 }
             )
@@ -304,6 +311,13 @@ final class KanjiSpotlightPagerViewController: UIViewController {
             ) { [weak self] _ in
                 self?.presentIntroTitlePicker()
             },
+            UIAction(
+                title: "Highlight color",
+                subtitle: ExperimentSettings.kanjiSpotlightHighlightColor.title,
+                image: UIImage(systemName: "paintpalette")
+            ) { [weak self] _ in
+                self?.presentHighlightColors()
+            },
             UIMenu(title: "Save to Photos", options: .displayInline, children: [
                 UIAction(title: "Current slide") { [weak self] _ in
                     self?.exportCurrentSlide()
@@ -319,6 +333,37 @@ final class KanjiSpotlightPagerViewController: UIViewController {
                 self?.presentHashtagPicker()
             },
         ])
+    }
+
+    private func presentHighlightColors() {
+        let previewExpression: String
+        if currentIndex > 0, deck.items.indices.contains(currentIndex - 1) {
+            previewExpression = deck.items[currentIndex - 1].expression
+        } else {
+            previewExpression = deck.items.first?.expression ?? deck.subject.character
+        }
+        let picker = KanjiSpotlightHighlightColorPickerViewController(
+            previewExpression: previewExpression,
+            previewHighlight: deck.subject.character
+        )
+        picker.onChange = { [weak self] in
+            self?.navigationItem.rightBarButtonItem?.menu = self?.exportMenu()
+            self?.refreshExampleHighlights()
+        }
+        let nav = UINavigationController(rootViewController: picker)
+        nav.modalPresentationStyle = .pageSheet
+        if let sheet = nav.sheetPresentationController {
+            sheet.detents = [.medium(), .large()]
+            sheet.prefersGrabberVisible = true
+        }
+        present(nav, animated: true)
+    }
+
+    private func refreshExampleHighlights() {
+        let color = ExperimentSettings.kanjiSpotlightHighlightColor
+        for page in pages {
+            (page.cardView as? KanjiSpotlightEntryCardView)?.applyHighlightColor(color)
+        }
     }
 
     private func presentHashtagPicker() {

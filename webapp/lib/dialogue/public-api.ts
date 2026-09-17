@@ -18,6 +18,7 @@ export type PublicDialogueCollectionSummary = {
   subtitle: string | null;
   sceneImage: string | null;
   thumbnailUrl: string | null;
+  thumbnailSmallUrl: string | null;
   orderIndex: number;
   updatedAt: string;
   scenarioCount: number;
@@ -79,6 +80,7 @@ export function toExportableScenario(
     grammarPointIds: scenario.grammarPointIds,
     setting: scenario.setting,
     thumbnailUrl: scenario.thumbnailUrl,
+    thumbnailSmallUrl: scenario.thumbnailSmallUrl,
     lines: scenario.lines,
     highlights: scenario.highlights,
     quiz: scenario.quiz,
@@ -110,6 +112,7 @@ export async function listPublicDialogueCollections(): Promise<
     subtitle: collection.subtitle,
     sceneImage: collection.sceneImage,
     thumbnailUrl: collection.thumbnailUrl,
+    thumbnailSmallUrl: collection.thumbnailSmallUrl,
     orderIndex: collection.orderIndex,
     updatedAt: collection.updatedAt.toISOString(),
     scenarioCount: countByCollection.get(collection.id) ?? 0,
@@ -133,6 +136,7 @@ export async function getPublicDialogueCollectionFile(collectionId: string) {
     subtitle: collection.subtitle,
     sceneImage: collection.sceneImage,
     thumbnailUrl: collection.thumbnailUrl,
+    thumbnailSmallUrl: collection.thumbnailSmallUrl,
   };
 
   return buildCollectionFile(

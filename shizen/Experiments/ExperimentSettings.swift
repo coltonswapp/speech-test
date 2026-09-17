@@ -148,6 +148,18 @@ enum ExperimentSettings {
     private static let dialogueHighlightTrailingColorKey = "ExperimentDialogueHighlightTrailingColor"
     private static let dialogueMessageLeadingColorKey = "ExperimentDialogueMessageLeadingColor"
     private static let dialogueMessageTrailingColorKey = "ExperimentDialogueMessageTrailingColor"
+    private static let kanjiSpotlightHighlightColorKey = "ExperimentKanjiSpotlightHighlightColor"
+    private static let explosionEmojisKey = "ExperimentExplosionEmojis"
+
+    /// Palette shown in the explosion playground. Selected subset is persisted.
+    static let explosionEmojiChoices = [
+        "🎌", "🍱", "🍣", "🍙", "🍘", "🍥", "🍡", "🍜",
+        "🍶", "🍵", "🥢", "⛩️", "🎎", "🎏", "🎐", "🧧",
+        "👘", "🥋", "🀄", "⛄", "🍢", "🐉", "🐟", "🌸",
+        "💮", "🗻", "🦊", "🐱", "⭐", "✨", "🎉", "🔥",
+        "💯", "✅", "🎯", "💫", "🌟", "💪", "🫶", "🤩",
+        "🌲", "🍀", "⚡",
+    ]
 
     /// Success chimes, selection clicks, and incorrect feedback in experiment flows.
     static var soundsEnabled: Bool {
@@ -321,5 +333,33 @@ enum ExperimentSettings {
     static func applyDialogueMessageColorPreset(_ preset: DialogueMessageColorPreset) {
         dialogueMessageLeadingColor = preset.leading
         dialogueMessageTrailingColor = preset.trailing
+    }
+
+    /// Wash behind the subject kanji on Kanji Spotlight example slides.
+    static var kanjiSpotlightHighlightColor: DialogueBubbleUnderglowColor {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: kanjiSpotlightHighlightColorKey),
+                  let value = DialogueBubbleUnderglowColor(storageKey: raw)
+            else { return .yellow }
+            return value
+        }
+        set { UserDefaults.standard.set(newValue.storageKey, forKey: kanjiSpotlightHighlightColorKey) }
+    }
+
+    /// Emojis currently in the NNKit explosion pool.
+    static var explosionEmojis: [String] {
+        get {
+            let stored = UserDefaults.standard.stringArray(forKey: explosionEmojisKey) ?? []
+            let allowed = stored.filter { explosionEmojiChoices.contains($0) }
+            if !allowed.isEmpty { return allowed }
+            return Array(explosionEmojiChoices.prefix(8))
+        }
+        set {
+            let allowed = newValue.filter { explosionEmojiChoices.contains($0) }
+            UserDefaults.standard.set(
+                allowed.isEmpty ? Array(explosionEmojiChoices.prefix(8)) : allowed,
+                forKey: explosionEmojisKey
+            )
+        }
     }
 }

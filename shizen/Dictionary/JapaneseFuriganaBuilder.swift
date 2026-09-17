@@ -185,9 +185,9 @@ final class FuriganaTranscriptLabel: UILabel {
         )
     }
 
-    /// Ruby sits above glyphs, but UILabel counts it as extra advance. Hug the
-    /// longest wrapped line — not `preferredMaxLayoutWidth` — so a hanging
-    /// punctuation wrap does not leave a trailing gap in the bubble.
+    /// Ruby sits above glyphs, but UILabel counts it as extra advance and
+    /// trailing `lineSpacing`. Hug the longest wrapped line and the stacked
+    /// base-line height so a wrap-then-shrink pass does not leave a gap.
     override var intrinsicContentSize: CGSize {
         var size = super.intrinsicContentSize
         guard size.width != UIView.noIntrinsicMetric else { return size }
@@ -197,7 +197,9 @@ final class FuriganaTranscriptLabel: UILabel {
         } else {
             limit = CGFloat.greatestFiniteMagnitude
         }
-        size.width = fittedBaseTextWidth(limitingWidth: limit)
+        let fitted = fittedBaseTextSize(limitingWidth: limit)
+        size.width = fitted.width
+        size.height = fitted.height
         return size
     }
 
@@ -209,17 +211,31 @@ final class FuriganaTranscriptLabel: UILabel {
         } else {
             limit = CGFloat.greatestFiniteMagnitude
         }
-        fitted.width = fittedBaseTextWidth(limitingWidth: limit)
+        let base = fittedBaseTextSize(limitingWidth: limit)
+        fitted.width = base.width
+        fitted.height = base.height
         return fitted
     }
 
-    private func fittedBaseTextWidth(limitingWidth: CGFloat) -> CGFloat {
-        guard let attributedText, attributedText.length > 0 else { return 1 }
-        let base = JapaneseFuriganaBuilder.usedBaseTextWidth(
+    private func fittedBaseTextSize(limitingWidth: CGFloat) -> CGSize {
+        guard let attributedText, attributedText.length > 0 else {
+            return CGSize(width: 1, height: textInsets.top + textInsets.bottom)
+        }
+        let wrapped = JapaneseFuriganaBuilder.usedBaseTextLayout(
             for: attributedText,
             limitingWidth: limitingWidth
         )
-        return max(1, ceil(base) + textInsets.left + textInsets.right)
+        // Height at the hugged width, not the column cap — otherwise a
+        // wrap-at-max that then shrinks to one line keeps two-line space.
+        let heightLimit = max(1, min(limitingWidth, wrapped.width))
+        let stacked = JapaneseFuriganaBuilder.usedBaseTextLayout(
+            for: attributedText,
+            limitingWidth: heightLimit
+        )
+        return CGSize(
+            width: max(1, ceil(wrapped.width) + textInsets.left + textInsets.right),
+            height: max(1, ceil(stacked.height) + textInsets.top + textInsets.bottom)
+        )
     }
 
     override func drawText(in rect: CGRect) {
@@ -480,12 +496,28 @@ final class FuriganaTranscriptLabel: UILabel {
 
     override func textRect(forBounds bounds: CGRect, limitedToNumberOfLines numberOfLines: Int) -> CGRect {
         let insetBounds = bounds.inset(by: textInsets)
-        var rect = super.textRect(forBounds: insetBounds, limitedToNumberOfLines: numberOfLines)
-        rect.origin.x -= textInsets.left
-        rect.origin.y -= textInsets.top
-        rect.size.width += textInsets.left + textInsets.right
-        rect.size.height += textInsets.top + textInsets.bottom
-        return rect
+        guard let attributedText, attributedText.length > 0 else {
+            var rect = super.textRect(forBounds: insetBounds, limitedToNumberOfLines: numberOfLines)
+            rect.origin.x -= textInsets.left
+            rect.origin.y -= textInsets.top
+            rect.size.width += textInsets.left + textInsets.right
+            rect.size.height += textInsets.top + textInsets.bottom
+            return rect
+        }
+        let limit = insetBounds.width > 0 ? insetBounds.width : CGFloat.greatestFiniteMagnitude
+        let layout = JapaneseFuriganaBuilder.usedBaseTextLayout(
+            for: attributedText,
+            limitingWidth: limit
+        )
+        let usedWidth = insetBounds.width > 0
+            ? min(layout.width, insetBounds.width)
+            : layout.width
+        return CGRect(
+            x: bounds.minX,
+            y: bounds.minY,
+            width: usedWidth + textInsets.left + textInsets.right,
+            height: layout.height + textInsets.top + textInsets.bottom
+        )
     }
 
     /// Extra drawing width so line-start/end ruby is not clipped.
@@ -535,10 +567,17 @@ enum JapaneseFuriganaBuilder {
     }
 
     private static func paragraphStyleForFurigana(font: UIFont) -> NSParagraphStyle {
+        wrappingFuriganaParagraphStyle(font: font)
+    }
+
+    /// Line height and spacing that leave room for ruby when Japanese wraps.
+    /// Compact scenario style is single-line and will clip readings on line 2.
+    static func wrappingFuriganaParagraphStyle(font: UIFont) -> NSParagraphStyle {
         let rubyReserve = font.pointSize * rubySizeFactor
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.minimumLineHeight = font.lineHeight + rubyReserve * 0.8
         paragraphStyle.lineSpacing = max(8, rubyReserve * 0.52)
+        paragraphStyle.lineBreakMode = .byWordWrapping
         return paragraphStyle
     }
 
@@ -573,7 +612,18 @@ enum JapaneseFuriganaBuilder {
         for attributed: NSAttributedString,
         limitingWidth: CGFloat = .greatestFiniteMagnitude
     ) -> CGFloat {
-        guard attributed.length > 0 else { return 0 }
+        usedBaseTextLayout(for: attributed, limitingWidth: limitingWidth).width
+    }
+
+    /// Base-glyph layout after wrapping. Height counts `lineSpacing` only
+    /// *between* lines — UILabel otherwise keeps a trailing gap on one line.
+    static func usedBaseTextLayout(
+        for attributed: NSAttributedString,
+        limitingWidth: CGFloat = .greatestFiniteMagnitude
+    ) -> (width: CGFloat, height: CGFloat, lineCount: Int) {
+        guard attributed.length > 0 else {
+            return (0, 0, 0)
+        }
         let measured = FuriganaTranscriptLabel.attributedStringByRemovingRuby(attributed)
 
         let cap: CGFloat
@@ -596,22 +646,42 @@ enum JapaneseFuriganaBuilder {
         )
         let lines = CTFrameGetLines(frame)
         let count = CFArrayGetCount(lines)
-        guard count > 0 else { return 0 }
+        guard count > 0 else { return (0, 0, 0) }
+
+        let paragraph = measured.length > 0
+            ? measured.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+            : nil
+        let lineSpacing = paragraph?.lineSpacing ?? 0
+        let minimumLineHeight = paragraph?.minimumLineHeight ?? 0
 
         var longest: CGFloat = 0
+        var stackedHeight: CGFloat = 0
+        var visibleLines = 0
         for index in 0..<count {
             let line = unsafeBitCast(CFArrayGetValueAtIndex(lines, index), to: CTLine.self)
-            let typographic = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+            guard CTLineGetGlyphCount(line) > 0 else { continue }
+
+            var ascent: CGFloat = 0
+            var descent: CGFloat = 0
+            var leading: CGFloat = 0
+            let typographic = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
             let ink = CTLineGetBoundsWithOptions(line, [.useGlyphPathBounds])
             let inkWidth = ink.maxX - min(ink.minX, 0)
             longest = max(longest, typographic, inkWidth)
+
+            let lineHeight = max(ascent + descent + max(0, leading), minimumLineHeight)
+            if visibleLines > 0 {
+                stackedHeight += lineSpacing
+            }
+            stackedHeight += lineHeight
+            visibleLines += 1
         }
-        return longest
+        return (longest, stackedHeight, visibleLines)
     }
 
     private static func dialogueBubbleParagraphStyle(font: UIFont, hasFurigana: Bool) -> NSParagraphStyle {
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineBreakMode = .byCharWrapping
+        paragraphStyle.lineBreakMode = .byWordWrapping
         paragraphStyle.minimumLineHeight = font.lineHeight
         if hasFurigana {
             // Gap between wrapped lines only — ruby on line 2+ sits in this
@@ -803,7 +873,7 @@ enum JapaneseFuriganaBuilder {
             )
         )
 
-        let result = NSAttributedString(attributedString: base)
+        let result = DialogueContentLineWrap.preparingForLayout(base)
         cache.setObject(result, forKey: cacheKey)
         return result
     }
@@ -854,19 +924,50 @@ enum JapaneseFuriganaBuilder {
             )
         )
 
-        let result = NSAttributedString(attributedString: base)
+        let result = DialogueContentLineWrap.preparingForLayout(base)
         cache.setObject(result, forKey: cacheKey)
         return result
     }
 
     static func scenarioAttributedString(for text: String, font: UIFont, textColor: UIColor) -> NSAttributedString {
+        attributedString(
+            for: text,
+            font: font,
+            textColor: textColor,
+            cachePrefix: "scenario",
+            paragraphStyle: compactParagraphStyleForFurigana(font: font)
+        )
+    }
+
+    /// Like `scenarioAttributedString`, but with line height for wrapped ruby.
+    static func wrappingScenarioAttributedString(
+        for text: String,
+        font: UIFont,
+        textColor: UIColor
+    ) -> NSAttributedString {
+        attributedString(
+            for: text,
+            font: font,
+            textColor: textColor,
+            cachePrefix: "wrappingScenario",
+            paragraphStyle: wrappingFuriganaParagraphStyle(font: font)
+        )
+    }
+
+    private static func attributedString(
+        for text: String,
+        font: UIFont,
+        textColor: UIColor,
+        cachePrefix: String,
+        paragraphStyle: NSParagraphStyle
+    ) -> NSAttributedString {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: textColor])
         }
 
         let cacheKey =
-            "scenario|\(trimmed)|\(font.fontName)|\(font.pointSize)|\(textColor.cgColor.hashValue)|\(rubyLayoutRevision)" as NSString
+            "\(cachePrefix)|\(trimmed)|\(font.fontName)|\(font.pointSize)|\(textColor.cgColor.hashValue)|\(rubyLayoutRevision)" as NSString
         if let cached = cache.object(forKey: cacheKey) {
             return cached
         }
@@ -882,7 +983,7 @@ enum JapaneseFuriganaBuilder {
             to: base,
             text: trimmed,
             font: font,
-            paragraphStyle: compactParagraphStyleForFurigana(font: font)
+            paragraphStyle: paragraphStyle
         )
 
         let result = NSAttributedString(attributedString: base)
@@ -1035,6 +1136,7 @@ enum JapaneseFuriganaBuilder {
             attributed: attributed,
             contentInsets: dialogueBubbleDisplayInsets(for: font, text: text)
         )
+        DialogueContentLineWrap.applyOrphanGlue(to: label)
     }
 
     /// Insets for compact furigana rows (example lists, scenario dialogue).

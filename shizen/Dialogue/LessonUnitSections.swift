@@ -3,8 +3,7 @@
 //  shizen
 //
 //  Groups a CMS dialogue lesson index into per-curriculum-unit sections for
-//  waterfall grid rendering. Shared by the Dialogue home tab and the CMS
-//  lessons screen.
+//  the Dialogue home path and the CMS lessons waterfall grid.
 //
 
 import Foundation
@@ -63,8 +62,114 @@ enum LessonUnitSectionBuilder {
             title: summary.title,
             conversationCount: summary.scenarioCount,
             thumbnailName: summary.sceneImage ?? summary.id,
-            thumbnailURL: summary.thumbnailUrl.flatMap(URL.init(string:)),
+            thumbnailURL: (summary.thumbnailSmallUrl ?? summary.thumbnailUrl).flatMap(URL.init(string:)),
             isLocked: false
         )
+    }
+
+    static func pathUnits(from index: CMSDialogueLessonIndex) -> [PathUnit] {
+        pathUnits(from: index, completedScenarioIDs: [])
+    }
+
+    static func pathUnits(
+        from index: CMSDialogueLessonIndex,
+        progress: LessonProgressProviding
+    ) -> [PathUnit] {
+        pathUnits(from: index, completedScenarioIDs: progress.completedScenarioIDs)
+    }
+
+    static func pathUnits(
+        from index: CMSDialogueLessonIndex,
+        completedScenarioIDs: Set<String>
+    ) -> [PathUnit] {
+        let playable = CMSDialogueLessonIndex(
+            units: index.units,
+            lessons: index.lessons.filter { $0.scenarioCount > 0 }
+        )
+        var assignedCurrent = false
+        return sections(from: playable).enumerated().map { index, section in
+            PathUnit(
+                eyebrow: pathEyebrow(for: section, index: index),
+                title: section.title ?? "Lessons",
+                glowColor: index % 2 == 0 ? .yellow : .blue,
+                lessons: section.lessons.map { lesson in
+                    pathLesson(from: lesson, completedScenarioIDs: completedScenarioIDs, assignedCurrent: &assignedCurrent)
+                }
+            )
+        }
+    }
+
+    static func pathUnits(from sections: [LessonUnitSection]) -> [PathUnit] {
+        sections.enumerated().map { index, section in
+            PathUnit(
+                eyebrow: pathEyebrow(for: section, index: index),
+                title: section.title ?? "Lessons",
+                glowColor: index % 2 == 0 ? .yellow : .blue,
+                lessons: section.lessons.map(pathLesson)
+            )
+        }
+    }
+
+    private static func pathLesson(from lesson: WaterfallLesson) -> PathLesson {
+        PathLesson(
+            id: lesson.id,
+            title: lesson.title,
+            symbolName: pathSymbolName(for: lesson),
+            thumbnailName: lesson.thumbnailName,
+            thumbnailURL: lesson.thumbnailURL,
+            state: lesson.isLocked ? .locked : .current,
+            partCount: lesson.conversationCount
+        )
+    }
+
+    private static func pathLesson(
+        from lesson: WaterfallLesson,
+        completedScenarioIDs: Set<String>,
+        assignedCurrent: inout Bool
+    ) -> PathLesson {
+        let prefix = "\(lesson.id)/"
+        let completedParts = min(
+            lesson.conversationCount,
+            completedScenarioIDs.lazy.filter { $0.hasPrefix(prefix) }.count
+        )
+        let state: PathLesson.State
+        if completedParts >= lesson.conversationCount {
+            state = .completed
+        } else if !assignedCurrent {
+            state = .current
+            assignedCurrent = true
+        } else {
+            state = .locked
+        }
+        return PathLesson(
+            id: lesson.id,
+            title: lesson.title,
+            symbolName: pathSymbolName(for: lesson),
+            thumbnailName: lesson.thumbnailName,
+            thumbnailURL: lesson.thumbnailURL,
+            state: state,
+            completedParts: completedParts,
+            partCount: lesson.conversationCount
+        )
+    }
+
+    private static func pathEyebrow(for section: LessonUnitSection, index: Int) -> String {
+        if let subtitle = section.subtitle, !subtitle.isEmpty {
+            return subtitle.uppercased()
+        }
+        if section.title != nil {
+            return "UNIT \(index + 1)"
+        }
+        return "LESSONS"
+    }
+
+    private static func pathSymbolName(for lesson: WaterfallLesson) -> String {
+        switch lesson.thumbnailName {
+        case "train-station": return "tram.fill"
+        case "at-the-library": return "book.fill"
+        case "at-the-convenient-store": return "basket.fill"
+        case "asking-directions": return "map.fill"
+        default: return "text.bubble.fill"
+        }
     }
 }

@@ -1,3 +1,4 @@
+import NNKit
 import UIKit
 
 final class OnboardingSliderViewController: OnboardingViewController {
@@ -45,8 +46,10 @@ final class OnboardingSliderViewController: OnboardingViewController {
 
         slider = OnboardingDetentSliderView(detentCount: max(config.levels.count, 2))
         slider.onIndexChanged = { [weak self] index in
-            self?.applyLevel(at: index)
-            self?.persistCurrentLevel()
+            guard let self else { return }
+            self.applyLevel(at: index)
+            self.persistCurrentLevel()
+            self.explodeForSliderDetent(index)
         }
 
         view.addSubview(levelBubble)
@@ -93,5 +96,19 @@ final class OnboardingSliderViewController: OnboardingViewController {
         guard config.levels.indices.contains(selectedIndex) else { return }
         let level = config.levels[selectedIndex]
         coordinator?.updateSliderLevel(level.value ?? level.title)
+    }
+
+    private func explodeForSliderDetent(_ index: Int) {
+        guard let point = slider.knobCenterInWindow() else { return }
+        ExplosionManager.trigger(Self.explosionPreset(forDetent: index, count: config.levels.count), at: point)
+    }
+
+    /// First detent is tiny; later detents step up through small → medium → large.
+    private static func explosionPreset(forDetent index: Int, count: Int) -> ExplosionPreset {
+        let presets: [ExplosionPreset] = [.tiny, .small, .medium, .large]
+        guard count > 1 else { return presets[0] }
+        let t = Double(min(max(index, 0), count - 1)) / Double(count - 1)
+        let mapped = Int((t * Double(presets.count - 1)).rounded())
+        return presets[min(max(mapped, 0), presets.count - 1)]
     }
 }

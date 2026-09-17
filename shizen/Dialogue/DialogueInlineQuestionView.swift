@@ -3,8 +3,9 @@
 //  shizen
 //
 //  Mid-listen checkpoint laid out in the transcript like a quiz question.
-//  Continue returns to the dialogue and collapses this row; tapping the
-//  Quick Check chip expands it again.
+//  Upcoming checks sit as a Quick Check chip; they expand when playback
+//  reaches them. Continue collapses the row again; tapping the chip
+//  expands it to review.
 //
 
 import UIKit
@@ -24,7 +25,7 @@ final class DialogueInlineQuestionView: UIView {
     private let headerContainer = UIView()
     private let stack = UIStackView()
     private var didContinue = false
-    private var isExpanded = true
+    private var isExpanded = false
 
     init(question: DialogueInlineQuestion) {
         questionView = DialogueQuizQuestionView(
@@ -43,12 +44,16 @@ final class DialogueInlineQuestionView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// Arms Continue for this hold. If the learner already answered, reveal
-    /// the button so they can return to the dialogue.
+    /// Arms Continue for this hold and expands the chip into the question.
+    /// If the learner already answered, reveal the button so they can return
+    /// to the dialogue.
     func prepareForHold() {
         didContinue = false
-        isExpanded = true
-        applyPresentationImmediately()
+        if isExpanded {
+            applyPresentationImmediately()
+        } else {
+            setExpanded(true, animated: true)
+        }
         guard hasSelection else { return }
         handleAnswered()
     }
@@ -87,7 +92,7 @@ final class DialogueInlineQuestionView: UIView {
     private func configureHeaderButton() {
         var config = UIButton.Configuration.plain()
         config.title = "Quick Check"
-        config.image = UIImage(systemName: "chevron.right")
+        config.image = nil
         config.imagePlacement = .trailing
         config.imagePadding = 8
         config.cornerStyle = .capsule
@@ -119,7 +124,7 @@ final class DialogueInlineQuestionView: UIView {
         headerButton.layer.shadowOffset = CGSize(width: 0, height: 1)
         headerButton.addTarget(self, action: #selector(headerTapped), for: .touchUpInside)
         headerButton.accessibilityLabel = "Quick Check"
-        headerButton.accessibilityHint = "Shows the question"
+        headerButton.accessibilityTraits = .staticText
         headerButton.setContentHuggingPriority(.required, for: .vertical)
         headerButton.setContentCompressionResistancePriority(.required, for: .vertical)
 
@@ -276,13 +281,13 @@ final class DialogueInlineQuestionView: UIView {
     private func applyPresentationImmediately() {
         let reviewing = didContinue
 
-        headerContainer.isHidden = !reviewing
+        headerContainer.isHidden = false
         headerButton.alpha = 1
         headerButton.transform = .identity
         questionView.isHidden = !isExpanded
         questionView.alpha = 1
         questionView.transform = .identity
-        questionView.showsQuestionEyebrow = !reviewing
+        questionView.showsQuestionEyebrow = false
         continueButton.isHidden = !(isExpanded && hasSelection && !reviewing)
         continueButton.alpha = 1
         continueButton.transform = .identity
@@ -292,22 +297,32 @@ final class DialogueInlineQuestionView: UIView {
     }
 
     private func applyContainerPresentation() {
-        let reviewing = didContinue
-        let collapsed = reviewing && !isExpanded
+        let collapsed = !isExpanded
 
-        questionView.showsQuestionEyebrow = !reviewing
-        headerButton.imageView?.transform = isExpanded
-            ? CGAffineTransform(rotationAngle: .pi / 2)
-            : .identity
-        headerButton.accessibilityHint = isExpanded ? "Hides the question" : "Shows the question"
+        questionView.showsQuestionEyebrow = false
+        applyHeaderChrome()
 
         stack.alignment = .fill
         stack.spacing = collapsed ? 0 : 18
         stack.layoutMargins = collapsed
             ? UIEdgeInsets(top: 2, left: 4, bottom: 2, right: 4)
-            : UIEdgeInsets(top: reviewing ? 10 : 20, left: 16, bottom: 18, right: 16)
+            : UIEdgeInsets(top: 10, left: 16, bottom: 18, right: 16)
 
         backgroundColor = collapsed ? .clear : ExperimentPalette.pageBackground
         layer.cornerRadius = collapsed ? 0 : 18
+    }
+
+    private func applyHeaderChrome() {
+        var config = headerButton.configuration ?? .plain()
+        config.image = didContinue ? UIImage(systemName: "chevron.right") : nil
+        headerButton.configuration = config
+        headerButton.isUserInteractionEnabled = didContinue
+        headerButton.accessibilityTraits = didContinue ? .button : .staticText
+        headerButton.accessibilityHint = didContinue
+            ? (isExpanded ? "Hides the question" : "Shows the question")
+            : nil
+        headerButton.imageView?.transform = (didContinue && isExpanded)
+            ? CGAffineTransform(rotationAngle: .pi / 2)
+            : .identity
     }
 }

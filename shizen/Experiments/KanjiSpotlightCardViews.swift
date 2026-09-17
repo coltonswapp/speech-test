@@ -28,7 +28,15 @@ private enum KanjiSpotlightCardMetrics {
     static let exampleHeroWidth: CGFloat = 200
 }
 
-private func installKanjiSpotlightWatermark(in host: UIView) {
+private enum KanjiSpotlightWatermarkPlacement {
+    case top
+    case bottom
+}
+
+private func installKanjiSpotlightWatermark(
+    in host: UIView,
+    placement: KanjiSpotlightWatermarkPlacement
+) {
     let label = UILabel()
     label.text = "shizenapp.com"
     label.font = .systemFont(ofSize: 11, weight: .medium)
@@ -36,10 +44,16 @@ private func installKanjiSpotlightWatermark(in host: UIView) {
     label.textAlignment = .center
     label.translatesAutoresizingMaskIntoConstraints = false
     host.addSubview(label)
-    NSLayoutConstraint.activate([
+    var constraints = [
         label.centerXAnchor.constraint(equalTo: host.centerXAnchor),
-        label.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -14),
-    ])
+    ]
+    switch placement {
+    case .top:
+        constraints.append(label.topAnchor.constraint(equalTo: host.topAnchor, constant: 16))
+    case .bottom:
+        constraints.append(label.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -14))
+    }
+    NSLayoutConstraint.activate(constraints)
 }
 
 // MARK: - Subject kanji slide (readings + swipe cue)
@@ -103,7 +117,7 @@ final class KanjiSpotlightKanjiCardView: UIView {
         contentStack.setCustomSpacing(22, after: titleLabel)
         contentStack.setCustomSpacing(16, after: collectionView)
         addSubview(contentStack)
-        installKanjiSpotlightWatermark(in: self)
+        installKanjiSpotlightWatermark(in: self, placement: .top)
 
         collectionHeightConstraint = collectionView.heightAnchor.constraint(equalToConstant: 1)
         collectionHeightConstraint.isActive = true
@@ -112,8 +126,8 @@ final class KanjiSpotlightKanjiCardView: UIView {
             contentStack.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -8),
             contentStack.leadingAnchor.constraint(equalTo: leadingAnchor),
             contentStack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            contentStack.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: 16),
-            contentStack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -36),
+            contentStack.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: 40),
+            contentStack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -16),
         ])
     }
 
@@ -328,6 +342,7 @@ final class KanjiSpotlightEntryCardView: UIView {
         heightToWidthRatio: 1.0
     )
     private let glossLabel = UILabel()
+    private var spotlightCharacter = ""
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -366,7 +381,7 @@ final class KanjiSpotlightEntryCardView: UIView {
         contentStack.setCustomSpacing(32, after: titleLabel)
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(contentStack)
-        installKanjiSpotlightWatermark(in: self)
+        installKanjiSpotlightWatermark(in: self, placement: .bottom)
 
         NSLayoutConstraint.activate([
             contentStack.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -12),
@@ -383,10 +398,25 @@ final class KanjiSpotlightEntryCardView: UIView {
         ])
     }
 
-    func configure(item: KanjiSpotlightShowcaseItem, exampleNumber: Int) {
-        titleLabel.text = "Example \(exampleNumber)"
+    func configure(
+        item: KanjiSpotlightShowcaseItem,
+        exampleNumber: Int,
+        exampleCount: Int,
+        spotlightCharacter: String
+    ) {
+        self.spotlightCharacter = spotlightCharacter
+        titleLabel.text = "Example \(exampleNumber)/\(exampleCount)"
         glossLabel.text = item.gloss
         // Same centered furigana word hero as Kanji Decomposition's combined reveal.
-        wordHero.configure(expression: item.expression, showFurigana: true)
+        wordHero.configure(
+            expression: item.expression,
+            showFurigana: true,
+            highlightedSubstring: spotlightCharacter,
+            highlightColor: ExperimentSettings.kanjiSpotlightHighlightColor.tokenHighlightUIColor
+        )
+    }
+
+    func applyHighlightColor(_ color: DialogueBubbleUnderglowColor) {
+        wordHero.highlightSubstring(spotlightCharacter, color: color.tokenHighlightUIColor)
     }
 }

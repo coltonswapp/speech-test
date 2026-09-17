@@ -604,7 +604,12 @@ final class KanjiDecompositionWordHeroCard: UIView {
         NSLayoutConstraint.activate(constraints)
     }
 
-    func configure(expression: String, showFurigana: Bool = true) {
+    func configure(
+        expression: String,
+        showFurigana: Bool = true,
+        highlightedSubstring: String? = nil,
+        highlightColor: UIColor? = nil
+    ) {
         let font = UIFontMetrics(forTextStyle: .largeTitle)
             .scaledFont(for: .systemFont(ofSize: 44, weight: .bold))
         if showFurigana {
@@ -629,6 +634,31 @@ final class KanjiDecompositionWordHeroCard: UIView {
             wordLabel.text = expression
             wordLabel.textColor = .label
         }
+        if let highlightedSubstring, let highlightColor {
+            highlightSubstring(highlightedSubstring, color: highlightColor)
+        }
+    }
+
+    /// Full-height wash behind the first match of `substring` in the word.
+    func highlightSubstring(_ substring: String, color: UIColor) {
+        let needle = substring.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return }
+        let haystack: NSString
+        if let attributed = wordLabel.attributedText, attributed.length > 0 {
+            haystack = attributed.string as NSString
+        } else if let text = wordLabel.text, !text.isEmpty {
+            haystack = text as NSString
+        } else {
+            return
+        }
+        let range = haystack.range(of: needle)
+        guard range.location != NSNotFound else { return }
+        wordLabel.setTokenHighlightPreservingLayout(
+            foregroundColor: .label,
+            highlightedRange: range,
+            fullHeight: true,
+            highlightColor: color
+        )
     }
 }
 

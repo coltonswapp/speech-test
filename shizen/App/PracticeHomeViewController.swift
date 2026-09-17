@@ -2,8 +2,7 @@
 //  PracticeHomeViewController.swift
 //  shizen
 //
-//  Practice tab: daily frequency card (mirrors Daily Dialogue) + live
-//  vocabulary folders. Tapping a stack opens its word list.
+//  Practice tab: Daily Dialogue habit card + live vocabulary folders.
 //
 
 import UIKit
@@ -14,8 +13,9 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
 
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
-    private let dailyPracticeCard = DailyPracticeCardView()
+    private let dailyDialogueCard = DailyDialogueCardView()
     private let decksStack = UIStackView()
+    private let progressStore = DialogueProgressStore.shared
 
     private static let horizontalInset: CGFloat = 16
 
@@ -24,7 +24,7 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
         navigationItem.largeTitleDisplayMode = .never
         view.backgroundColor = ExperimentPalette.pageBackground
         configureScrollView()
-        configureDailyPracticeSection()
+        configureDailyDialogueSection()
         configureStacksSection()
         layoutViews()
         refreshPracticeContent()
@@ -33,6 +33,12 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
             self,
             selector: #selector(refreshPracticeContent),
             name: SavedVocabularyStore.didChangeNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(refreshDailyDialogueCard),
+            name: DialogueProgressStore.didChange,
             object: nil
         )
 
@@ -47,6 +53,7 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        progressStore.reload()
         refreshPracticeContent()
     }
 
@@ -62,12 +69,12 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
         scrollView.addSubview(contentStack)
     }
 
-    private func configureDailyPracticeSection() {
-        dailyPracticeCard.translatesAutoresizingMaskIntoConstraints = false
-        dailyPracticeCard.onStartTapped = { [weak self] in
-            self?.openFolder(id: SavedVocabularyStore.inboxID)
+    private func configureDailyDialogueSection() {
+        dailyDialogueCard.translatesAutoresizingMaskIntoConstraints = false
+        dailyDialogueCard.onStartTapped = { [weak self] in
+            self?.startTodaysDialogue()
         }
-        contentStack.addArrangedSubview(dailyPracticeCard)
+        contentStack.addArrangedSubview(dailyDialogueCard)
     }
 
     private func configureStacksSection() {
@@ -123,7 +130,7 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
         let stack = UIStackView(arrangedSubviews: arrangedSubviews)
         stack.axis = .vertical
         stack.spacing = 4
-        // Match the leading edge of content inside the Daily Practice card (18pt inset).
+        // Match the leading edge of content inside the Daily Dialogue card (18pt inset).
         stack.isLayoutMarginsRelativeArrangement = true
         stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 0)
         return stack
@@ -132,16 +139,18 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
     // MARK: - Data
 
     @objc private func refreshPracticeContent() {
-        refreshDailyPracticeCard()
+        refreshDailyDialogueCard()
         reloadDeckCards()
     }
 
-    private func refreshDailyPracticeCard() {
+    @objc private func refreshDailyDialogueCard() {
         let dayKeys = DialogueProgressGridSupport.recentDayKeys()
-        dailyPracticeCard.configure(
+        dailyDialogueCard.configure(
             dayKeys: dayKeys,
-            completedCounts: Self.placeholderPracticeCounts(for: dayKeys),
-            savedWordCount: SavedVocabularyStore.shared.items(inFolderID: SavedVocabularyStore.inboxID).count
+            completedCounts: DialogueProgressGridSupport.completedCounts(
+                for: dayKeys,
+                progressStore: progressStore
+            )
         )
     }
 
@@ -172,15 +181,15 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
         )
     }
 
-    /// Stable fake session counts so the frequency grid looks lived-in.
-    private static func placeholderPracticeCounts(for dayKeys: [String]) -> [String: Int] {
-        let pattern = [0, 1, 0, 2, 3, 0, 4, 1, 2, 0, 5, 1, 0, 3, 2, 4, 0, 1, 3, 5, 2]
-        return Dictionary(uniqueKeysWithValues: dayKeys.enumerated().map { index, key in
-            (key, pattern[index % pattern.count])
-        })
-    }
-
     // MARK: - Navigation
+
+    private func startTodaysDialogue() {
+        let dialogue = DialogueNestedPagingExperimentViewController(
+            collectionID: DialogueScenarioCollectionCatalog.trainStationID,
+            prefersNextIncompleteScenario: true
+        )
+        navigationController?.pushViewController(dialogue, animated: true)
+    }
 
     private func openFolder(id: String) {
         navigationController?.pushViewController(
@@ -198,152 +207,6 @@ private struct PracticeDeckPreview {
     let subtitle: String
     let sampleJapanese: String
     let accentLabel: String
-}
-
-// MARK: - Daily Practice card
-
-/// Mirrors `DailyDialogueCardView`: title/subtitle, contribution-style frequency
-/// grid, and a Start button that opens saved vocabulary.
-private final class DailyPracticeCardView: UIView {
-
-    var onStartTapped: (() -> Void)?
-
-    private let cardView = UIView()
-    private let titleLabel = UILabel()
-    private let subtitleLabel = UILabel()
-    private let gridView = DialogueProgressGridView()
-    private let startButton = UIButton(type: .system)
-
-    private static let squareSide: CGFloat = 18
-    private static let squareSpacing: CGFloat = 4
-    private static let columns = 7
-    private static var gridSize: CGSize {
-        let rows = Int(ceil(Double(DialogueProgressGridLayout.dayCount) / Double(columns)))
-        let width = CGFloat(columns) * squareSide + CGFloat(columns - 1) * squareSpacing
-        let height = CGFloat(rows) * squareSide + CGFloat(rows - 1) * squareSpacing
-        return CGSize(width: width, height: height)
-    }
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        configure()
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    private func configure() {
-        cardView.translatesAutoresizingMaskIntoConstraints = false
-        cardView.backgroundColor = ExperimentPalette.cardSurface
-        cardView.layer.cornerRadius = 22
-        cardView.layer.cornerCurve = .continuous
-        cardView.layer.borderWidth = ExperimentCardStroke.normalWidth
-        cardView.layer.borderColor = ExperimentPalette.cardBorder.cgColor
-
-        titleLabel.text = "Daily Practice"
-        titleLabel.font = .systemFont(ofSize: 18, weight: .bold)
-        titleLabel.textColor = .label
-        titleLabel.numberOfLines = 0
-
-        subtitleLabel.text = "Save words from sentence scrub, then start here."
-        subtitleLabel.font = .preferredFont(forTextStyle: .subheadline)
-        subtitleLabel.textColor = .secondaryLabel
-        subtitleLabel.numberOfLines = 0
-
-        let textColumn = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
-        textColumn.axis = .vertical
-        textColumn.spacing = 6
-        textColumn.translatesAutoresizingMaskIntoConstraints = false
-
-        let gridWidth = Self.gridSize.width
-        let gridHeight = Self.gridSize.height
-        gridView.translatesAutoresizingMaskIntoConstraints = false
-        gridView.layoutWidth = gridWidth
-        gridView.layoutMetrics = DialogueProgressGridLayout.Metrics(
-            columnCount: Self.columns,
-            spacing: Self.squareSpacing,
-            squareSide: Self.squareSide,
-            gridWidth: gridWidth,
-            gridHeight: gridHeight
-        )
-
-        var buttonConfig = UIButton.Configuration.filled()
-        buttonConfig.title = "Start"
-        buttonConfig.baseBackgroundColor = Colors.brandYellow
-        buttonConfig.baseForegroundColor = Colors.textYellow
-        buttonConfig.cornerStyle = .capsule
-        buttonConfig.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
-            var outgoing = incoming
-            outgoing.font = .systemFont(ofSize: 15, weight: .bold)
-            return outgoing
-        }
-        startButton.configuration = buttonConfig
-        startButton.translatesAutoresizingMaskIntoConstraints = false
-        startButton.addTarget(self, action: #selector(handleStartTapped), for: .touchUpInside)
-
-        let gridColumn = UIStackView(arrangedSubviews: [gridView, startButton])
-        gridColumn.axis = .vertical
-        gridColumn.spacing = 12
-        gridColumn.alignment = .fill
-        gridColumn.translatesAutoresizingMaskIntoConstraints = false
-
-        let rowStack = UIStackView(arrangedSubviews: [textColumn, gridColumn])
-        rowStack.axis = .horizontal
-        rowStack.alignment = .top
-        rowStack.spacing = 12
-        rowStack.translatesAutoresizingMaskIntoConstraints = false
-
-        addSubview(cardView)
-        cardView.addSubview(rowStack)
-
-        textColumn.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        textColumn.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        gridColumn.setContentHuggingPriority(.required, for: .horizontal)
-        gridColumn.setContentCompressionResistancePriority(.required, for: .horizontal)
-
-        NSLayoutConstraint.activate([
-            cardView.topAnchor.constraint(equalTo: topAnchor),
-            cardView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            cardView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            cardView.bottomAnchor.constraint(equalTo: bottomAnchor),
-
-            rowStack.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 18),
-            rowStack.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 18),
-            rowStack.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -18),
-            rowStack.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -18),
-
-            gridView.widthAnchor.constraint(equalToConstant: gridWidth),
-            gridView.heightAnchor.constraint(equalToConstant: gridHeight),
-            startButton.heightAnchor.constraint(equalToConstant: 36),
-        ])
-    }
-
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
-            cardView.layer.borderColor = ExperimentPalette.cardBorder.cgColor
-        }
-    }
-
-    @objc private func handleStartTapped() {
-        onStartTapped?()
-    }
-
-    func configure(dayKeys: [String], completedCounts: [String: Int], savedWordCount: Int) {
-        gridView.dayKeys = dayKeys
-        gridView.completedCounts = completedCounts
-        if savedWordCount == 0 {
-            subtitleLabel.text = "Save words from sentence scrub, then start here."
-            startButton.configuration?.title = "Review"
-        } else if savedWordCount == 1 {
-            subtitleLabel.text = "1 saved word in your inbox."
-            startButton.configuration?.title = "Start"
-        } else {
-            subtitleLabel.text = "\(savedWordCount) saved words in your inbox."
-            startButton.configuration?.title = "Start"
-        }
-    }
 }
 
 // MARK: - Deck preview card

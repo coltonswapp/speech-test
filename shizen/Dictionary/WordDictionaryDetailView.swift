@@ -109,6 +109,7 @@ final class WordDictionaryDetailView: UIView {
     }
 
     deinit {
+        saveButtonHideTask?.cancel()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -766,7 +767,7 @@ final class WordDictionaryDetailView: UIView {
         saveButtonHideTask?.cancel()
         saveButtonHideTask = nil
         isShowingSaveConfirmation = false
-        saveVocabularyButton.alpha = 1
+        resetSaveButtonVisuals()
         saveVocabularyButton.isUserInteractionEnabled = true
         saveVocabularyButton.isHidden = surface.isEmpty || isSaved
         Self.applyGlyph(
@@ -782,7 +783,7 @@ final class WordDictionaryDetailView: UIView {
     private func showSaveConfirmationThenHide() {
         saveButtonHideTask?.cancel()
         isShowingSaveConfirmation = true
-        saveVocabularyButton.alpha = 1
+        resetSaveButtonVisuals()
         saveVocabularyButton.isHidden = false
         saveVocabularyButton.isUserInteractionEnabled = false
         Self.applyGlyph(
@@ -793,19 +794,62 @@ final class WordDictionaryDetailView: UIView {
         )
         saveVocabularyButton.accessibilityLabel = "Saved word"
         saveVocabularyButton.accessibilityHint = "Adds this word to a folder"
+        saveVocabularyGlyphView.addSymbolEffect(.bounce, options: .nonRepeating)
 
         saveButtonHideTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 850_000_000)
+            try? await Task.sleep(nanoseconds: 780_000_000)
             guard let self, !Task.isCancelled, self.isShowingSaveConfirmation else { return }
-            self.isShowingSaveConfirmation = false
-            self.saveVocabularyButton.isHidden = true
-            self.saveVocabularyButton.alpha = 1
-            self.saveVocabularyButton.isUserInteractionEnabled = true
-            Self.applyGlyph(
-                self.saveVocabularyGlyphView,
-                symbolName: "folder.badge.plus",
-                tintColor: Self.audioGlyphColor,
-                glyphPointSize: 20
+
+            await self.animateSaveButtonChange(duration: 0.3, options: [.curveEaseIn, .beginFromCurrentState]) {
+                self.saveVocabularyButton.transform = CGAffineTransform(scaleX: 0.35, y: 0.35)
+                self.saveVocabularyButton.alpha = 0
+            }
+            guard !Task.isCancelled, self.isShowingSaveConfirmation else { return }
+
+            await self.animateSaveButtonChange(duration: 0.26, options: [.curveEaseInOut, .beginFromCurrentState]) {
+                self.saveVocabularyButton.isHidden = true
+                self.wordHeaderStack.layoutIfNeeded()
+            }
+            guard self.isShowingSaveConfirmation else { return }
+            self.finishSaveConfirmationHide()
+        }
+    }
+
+    private func finishSaveConfirmationHide() {
+        isShowingSaveConfirmation = false
+        saveButtonHideTask = nil
+        resetSaveButtonVisuals()
+        saveVocabularyButton.isUserInteractionEnabled = true
+        Self.applyGlyph(
+            saveVocabularyGlyphView,
+            symbolName: "folder.badge.plus",
+            tintColor: Self.audioGlyphColor,
+            glyphPointSize: 20
+        )
+    }
+
+    private func resetSaveButtonVisuals() {
+        saveVocabularyButton.layer.removeAllAnimations()
+        saveVocabularyGlyphView.layer.removeAllAnimations()
+        saveVocabularyButton.transform = .identity
+        saveVocabularyGlyphView.transform = .identity
+        saveVocabularyButton.alpha = 1
+        saveVocabularyGlyphView.alpha = 1
+    }
+
+    @MainActor
+    private func animateSaveButtonChange(
+        duration: TimeInterval,
+        options: UIView.AnimationOptions,
+        animations: @escaping () -> Void
+    ) async {
+        await withCheckedContinuation { continuation in
+            UIView.animate(
+                withDuration: duration,
+                delay: 0,
+                options: options,
+                animations: animations,
+                completion: { _ in continuation.resume() }
             )
         }
     }

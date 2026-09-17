@@ -1,7 +1,6 @@
 import UIKit
 
 /// Glass track + large pan-able knob with snapping detents.
-/// Visual and haptic language follows NestNote's `HorizontalSliderView`.
 final class OnboardingDetentSliderView: UIVisualEffectView {
 
     private static let height: CGFloat = 72
@@ -26,14 +25,7 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
     private var gestureStartOffset: CGFloat = 0
     private var offset: CGFloat = 0
 
-    private var lastHapticProgress: Float = 0
-    private var currentProgress: Float = 0
-    private let hapticInterval: Float = 1.0
-    private let hapticIntensity: CGFloat = 0.8
-
-    private let dragHaptic = UIImpactFeedbackGenerator(style: .light)
-    private let detentHaptic = UISelectionFeedbackGenerator()
-    private let snapHaptic = UIImpactFeedbackGenerator(style: .soft)
+    private let detentHaptic = UIImpactFeedbackGenerator(style: .rigid)
 
     init(detentCount: Int, selectedIndex: Int = 0) {
         let glassEffect = UIGlassEffect(style: .regular)
@@ -52,9 +44,7 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         guard window != nil else { return }
-        dragHaptic.prepare()
         detentHaptic.prepare()
-        snapHaptic.prepare()
     }
 
     override func layoutSubviews() {
@@ -65,6 +55,14 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
             offset = offset(for: selectedIndex)
             knobLeadingConstraint.constant = offset
         }
+    }
+
+    func knobCenterInWindow() -> CGPoint? {
+        guard let window else { return nil }
+        return knobContainer.convert(
+            CGPoint(x: knobContainer.bounds.midX, y: knobContainer.bounds.midY),
+            to: window
+        )
     }
 
     func setSelectedIndex(_ index: Int, animated: Bool) {
@@ -192,8 +190,6 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
         switch gesture.state {
         case .began:
             gestureStartOffset = offset
-            resetHapticProgress()
-            dragHaptic.prepare()
             detentHaptic.prepare()
 
         case .changed:
@@ -203,36 +199,19 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
             knobLeadingConstraint.constant = offset
             layoutIfNeeded()
 
-            let span = range.upperBound - range.lowerBound
-            currentProgress = span > 0 ? Float((offset - range.lowerBound) / span * 100) : 0
-            checkForDragHaptic()
-
             let nearest = nearestIndex(for: offset)
             if nearest != selectedIndex {
                 selectedIndex = nearest
-                detentHaptic.selectionChanged()
+                detentHaptic.impactOccurred(intensity: 0.85)
+                detentHaptic.prepare()
                 onIndexChanged?(nearest)
             }
 
         case .ended, .cancelled, .failed:
-            resetHapticProgress()
-            snapHaptic.impactOccurred()
             setSelectedIndex(nearestIndex(for: offset), animated: true)
 
         default:
             break
         }
-    }
-
-    private func checkForDragHaptic() {
-        let progressDifference = abs(currentProgress - lastHapticProgress)
-        guard progressDifference >= hapticInterval else { return }
-        dragHaptic.impactOccurred(intensity: hapticIntensity)
-        lastHapticProgress = currentProgress
-    }
-
-    private func resetHapticProgress() {
-        lastHapticProgress = 0
-        currentProgress = 0
     }
 }

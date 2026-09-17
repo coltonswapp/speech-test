@@ -1,3 +1,4 @@
+import NNKit
 import UIKit
 
 class OnboardingViewController: UIViewController {
@@ -116,5 +117,11 @@ class OnboardingViewController: UIViewController {
 
     @objc func ctaTapped() {
         coordinator?.next()
+    }
+
+    func explodeEmoji(from view: UIView, preset: ExplosionPreset = .small) {
+        guard let window = view.window else { return }
+        let point = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: window)
+        ExplosionManager.trigger(preset, at: point)
     }
 }

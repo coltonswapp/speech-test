@@ -158,25 +158,35 @@ final class RealtimePCMPlayer {
 
     private init() {}
 
-    func play(_ clip: RealtimeAudioClip) {
-        guard !clip.pcmData.isEmpty else { return }
+    func play(_ clip: RealtimeAudioClip, onFinished: (() -> Void)? = nil) {
+        guard !clip.pcmData.isEmpty else {
+            onFinished?()
+            return
+        }
         let work = { [self] in
             do {
                 try activateSessionForPlayback()
                 try ensureEngineConfigured(sampleRate: clip.sampleRate)
-                guard let buffer = makeFloatBuffer(from: clip) else { return }
+                guard let buffer = makeFloatBuffer(from: clip) else {
+                    onFinished?()
+                    return
+                }
 
                 if playerNode.isPlaying {
                     playerNode.stop()
                 }
                 playerNode.reset()
-                playerNode.scheduleBuffer(buffer, at: nil, options: .interrupts) { }
+                playerNode.scheduleBuffer(buffer, at: nil, options: .interrupts) {
+                    guard let onFinished else { return }
+                    DispatchQueue.main.async(execute: onFinished)
+                }
                 if !engine.isRunning {
                     try engine.start()
                 }
                 playerNode.play()
             } catch {
                 // Playback is best-effort for transcript replay.
+                onFinished?()
             }
         }
         if Thread.isMainThread {

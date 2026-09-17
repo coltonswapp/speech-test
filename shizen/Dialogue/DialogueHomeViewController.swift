@@ -2,61 +2,30 @@
 //  DialogueHomeViewController.swift
 //  shizen
 //
-//  Dialogue tab: Daily Dialogue consistency card (GitHub-contribution style,
-//  21-day rolling window) followed by a waterfall grid of lesson cards.
+//  Dialogue tab: left-aligned lesson sine path. Daily Dialogue lives on Practice.
 //
 
 import UIKit
 
 final class DialogueHomeViewController: UIViewController, MainTabScrollable {
 
-    var mainTabScrollViews: [UIScrollView] { [scrollView] }
+    var mainTabScrollViews: [UIScrollView] { [lessonPathController.pathScrollView] }
 
-    private let progressStore: DialogueProgressStore
-    private let scrollView = UIScrollView()
-    private let contentStack = UIStackView()
-    private let dailyDialogueCard = DailyDialogueCardView()
-    /// Holds the "Lessons" header plus one (header + grid) block per unit.
-    private let lessonSectionsStack = UIStackView()
-    private var sectionGridControllers: [LessonWaterfallGridController] = []
+    private let progressStore: LessonProgressProviding
+    private let lessonPathController: LanguageProgressSnakeExperimentViewController
+    private var latestIndex: CMSDialogueLessonIndex?
+    private var progressObserver: NSObjectProtocol?
+    private var didScrollToRealCurriculum = false
+    private var pendingAnimatedScrollToCurrent = false
 
-    private static let horizontalInset: CGFloat = 16
-
-    /// Hard-coded home grid until full lesson sets are served from the CDN.
-    /// Includes locked placeholders so the waterfall still feels populated.
-    private static let curatedLessons: [WaterfallLesson] = [
-        WaterfallLesson(
-            id: "train-station",
-            title: "At the Train Station",
-            conversationCount: 5,
-            thumbnailName: "train-station",
-            isLocked: false
-        ),
-        WaterfallLesson(
-            id: nil,
-            title: "At the Library",
-            conversationCount: 5,
-            thumbnailName: "at-the-library",
-            isLocked: false
-        ),
-        WaterfallLesson(
-            id: nil,
-            title: "At the Convenient Store",
-            conversationCount: 5,
-            thumbnailName: "at-the-convenient-store",
-            isLocked: true
-        ),
-        WaterfallLesson(
-            id: nil,
-            title: "Asking Directions",
-            conversationCount: 5,
-            thumbnailName: "asking-directions",
-            isLocked: true
-        ),
-    ]
-
-    init(progressStore: DialogueProgressStore = .shared) {
+    init(progressStore: LessonProgressProviding = DialogueProgressStore.shared) {
         self.progressStore = progressStore
+        self.lessonPathController = LanguageProgressSnakeExperimentViewController(
+            units: PathUnit.sampleCurriculum,
+            showsTuningControls: false,
+            managesContentInsets: false,
+            style: .sineLeftAligned
+        )
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -68,106 +37,57 @@ final class DialogueHomeViewController: UIViewController, MainTabScrollable {
         super.viewDidLoad()
         navigationItem.largeTitleDisplayMode = .never
         view.backgroundColor = ExperimentPalette.pageBackground
-        configureScrollView()
-        configureDailyDialogueSection()
-        configureLessonsSection()
-        layoutViews()
-        refreshDailyDialogueCard()
+        configureLessonPath()
+        observeProgressChanges()
+        if let cached = ContentCMSClient.cachedDialogueLessonIndex(), !cached.lessons.isEmpty {
+            latestIndex = cached
+            rebuildPathUnits()
+        }
         fetchCMSLessons()
+        if !ContentCMSClient.isConfigured {
+            lessonPathController.scrollToCurrentLesson(animated: false)
+        }
+    }
 
-        if #available(iOS 26.0, *) {
-            scrollView.topEdgeEffect.style = .soft
+    deinit {
+        if let progressObserver {
+            NotificationCenter.default.removeObserver(progressObserver)
         }
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        progressStore.reload()
-        refreshDailyDialogueCard()
+        if let store = progressStore as? DialogueProgressStore {
+            store.reload()
+        }
+        rebuildPathUnits()
     }
 
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        for controller in sectionGridControllers {
-            controller.refreshContentHeightIfNeeded()
-        }
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard pendingAnimatedScrollToCurrent else { return }
+        pendingAnimatedScrollToCurrent = false
+        lessonPathController.scrollToCurrentLesson(animated: true)
     }
 
     // MARK: - Layout
 
-    private func configureScrollView() {
-        scrollView.alwaysBounceVertical = true
-        scrollView.backgroundColor = ExperimentPalette.pageBackground
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        contentStack.axis = .vertical
-        contentStack.spacing = 24
-        contentStack.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.addSubview(contentStack)
-    }
-
-    private func configureDailyDialogueSection() {
-        dailyDialogueCard.translatesAutoresizingMaskIntoConstraints = false
-        dailyDialogueCard.onStartTapped = { [weak self] in
-            self?.startTodaysDialogue()
+    private func configureLessonPath() {
+        lessonPathController.onStartLesson = { [weak self] lesson in
+            self?.openLesson(lesson)
         }
-        contentStack.addArrangedSubview(dailyDialogueCard)
-    }
 
-    private func configureLessonsSection() {
-        lessonSectionsStack.axis = .vertical
-        lessonSectionsStack.spacing = 12
-        lessonSectionsStack.translatesAutoresizingMaskIntoConstraints = false
-        contentStack.addArrangedSubview(lessonSectionsStack)
-
-        // Curated fallback shows immediately; CMS units replace it when fetched.
-        renderLessonSections([
-            LessonUnitSection(title: nil, subtitle: nil, lessons: Self.curatedLessons)
+        addChild(lessonPathController)
+        let pathView = lessonPathController.view!
+        pathView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(pathView)
+        NSLayoutConstraint.activate([
+            pathView.topAnchor.constraint(equalTo: view.topAnchor),
+            pathView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            pathView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            pathView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
-    }
-
-    /// Rebuilds the lessons area: top-level "Lessons" header, then one
-    /// sub-header + waterfall grid per curriculum unit.
-    private func renderLessonSections(_ sections: [LessonUnitSection]) {
-        for view in lessonSectionsStack.arrangedSubviews {
-            lessonSectionsStack.removeArrangedSubview(view)
-            view.removeFromSuperview()
-        }
-        sectionGridControllers = []
-
-        let header = makeSectionHeader(
-            title: "Lessons",
-            subtitle: "Curated dialogue, vocab, grammar"
-        )
-        lessonSectionsStack.addArrangedSubview(header)
-
-        for section in sections {
-            if let title = section.title {
-                if let previous = lessonSectionsStack.arrangedSubviews.last {
-                    lessonSectionsStack.setCustomSpacing(20, after: previous)
-                }
-                let unitHeader = makeSectionHeader(title: title, subtitle: section.subtitle)
-                lessonSectionsStack.addArrangedSubview(unitHeader)
-            }
-
-            let gridController = LessonWaterfallGridController()
-            let collectionView = gridController.collectionView
-            collectionView.translatesAutoresizingMaskIntoConstraints = false
-            collectionView.isScrollEnabled = false
-            collectionView.clipsToBounds = false
-
-            let heightConstraint = collectionView.heightAnchor.constraint(equalToConstant: 1)
-            heightConstraint.isActive = true
-            gridController.onContentHeightChanged = { height in
-                heightConstraint.constant = height
-            }
-            gridController.onSelect = { [weak self] _, lesson in
-                self?.openLesson(lesson)
-            }
-
-            lessonSectionsStack.addArrangedSubview(collectionView)
-            sectionGridControllers.append(gridController)
-            gridController.setLessons(section.lessons)
-        }
+        lessonPathController.didMove(toParent: self)
     }
 
     private func fetchCMSLessons() {
@@ -178,78 +98,41 @@ final class DialogueHomeViewController: UIViewController, MainTabScrollable {
                       case .success(let index) = result,
                       !index.lessons.isEmpty
                 else { return }
-                self.renderLessonSections(LessonUnitSectionBuilder.sections(from: index))
+                self.latestIndex = index
+                self.rebuildPathUnits()
             }
         }
     }
 
-    private func layoutViews() {
-        view.addSubview(scrollView)
-        let inset = Self.horizontalInset
-        NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-
-            contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 16),
-            contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -24),
-            contentStack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: inset),
-            contentStack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -inset),
-            contentStack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor, constant: -inset * 2),
-        ])
-    }
-
-    private func makeSectionHeader(title: String, subtitle: String?) -> UIStackView {
-        let titleLabel = UILabel()
-        titleLabel.text = title
-        titleLabel.font = .systemFont(ofSize: 20, weight: .bold)
-        titleLabel.textColor = .label
-
-        var arrangedSubviews: [UIView] = [titleLabel]
-        if let subtitle, !subtitle.isEmpty {
-            let subtitleLabel = UILabel()
-            subtitleLabel.text = subtitle
-            subtitleLabel.font = .preferredFont(forTextStyle: .subheadline)
-            subtitleLabel.textColor = .secondaryLabel
-            subtitleLabel.numberOfLines = 0
-            arrangedSubviews.append(subtitleLabel)
-        }
-
-        let stack = UIStackView(arrangedSubviews: arrangedSubviews)
-        stack.axis = .vertical
-        stack.spacing = 4
-        // Match the leading edge of content inside the Daily Dialogue card (18pt inset).
-        stack.isLayoutMarginsRelativeArrangement = true
-        stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 0)
-        return stack
-    }
-
     // MARK: - Data
 
-    private func refreshDailyDialogueCard() {
-        let dayKeys = DialogueProgressGridSupport.recentDayKeys()
-        dailyDialogueCard.configure(
-            dayKeys: dayKeys,
-            completedCounts: DialogueProgressGridSupport.completedCounts(
-                for: dayKeys,
-                progressStore: progressStore
-            )
-        )
+    private func rebuildPathUnits() {
+        guard let latestIndex else { return }
+        let units = LessonUnitSectionBuilder.pathUnits(from: latestIndex, progress: progressStore)
+        let nextTarget = PathUnit.initialIndexPath(in: units)
+        if didScrollToRealCurriculum, nextTarget != lessonPathController.lastScrollTarget {
+            pendingAnimatedScrollToCurrent = true
+        }
+        lessonPathController.setUnits(units)
+        guard !didScrollToRealCurriculum else { return }
+        didScrollToRealCurriculum = true
+        lessonPathController.scrollToCurrentLesson(animated: false)
+    }
+
+    private func observeProgressChanges() {
+        progressObserver = NotificationCenter.default.addObserver(
+            forName: DialogueProgressStore.didChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.rebuildPathUnits()
+        }
     }
 
     // MARK: - Navigation
 
-    private func startTodaysDialogue() {
-        let dialogue = DialogueNestedPagingExperimentViewController(
-            collectionID: DialogueScenarioCollectionCatalog.trainStationID,
-            prefersNextIncompleteScenario: true
-        )
-        navigationController?.pushViewController(dialogue, animated: true)
-    }
-
-    private func openLesson(_ lesson: WaterfallLesson) {
-        if lesson.isLocked { return }
+    private func openLesson(_ lesson: PathLesson) {
+        if lesson.state == .locked { return }
         let id: String
         if let lessonID = lesson.id {
             id = lessonID
@@ -269,7 +152,7 @@ final class DialogueHomeViewController: UIViewController, MainTabScrollable {
 /// grid, and a Start button that launches today's scenario. Built from two
 /// vertical stacks (text column, grid column) inside a horizontal stack, plus
 /// the button below — plain UIStackView layout, no custom width math.
-private final class DailyDialogueCardView: UIView {
+final class DailyDialogueCardView: UIView {
 
     var onStartTapped: (() -> Void)?
 
@@ -403,5 +286,118 @@ private final class DailyDialogueCardView: UIView {
     func configure(dayKeys: [String], completedCounts: [String: Int]) {
         gridView.dayKeys = dayKeys
         gridView.completedCounts = completedCounts
+    }
+}
+
+// MARK: - Daily Dialogue compact strip
+
+private final class DailyDialogueCompactStripView: UIView {
+
+    var onStartTapped: (() -> Void)?
+    var onBodyTapped: (() -> Void)?
+
+    private let cardView = UIView()
+    private let titleLabel = UILabel()
+    private let countLabel = UILabel()
+    private let startButton = UIButton(type: .system)
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        configure()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func configure() {
+        cardView.translatesAutoresizingMaskIntoConstraints = false
+        cardView.backgroundColor = ExperimentPalette.cardSurface
+        cardView.layer.cornerRadius = 16
+        cardView.layer.cornerCurve = .continuous
+        cardView.layer.borderWidth = ExperimentCardStroke.normalWidth
+        cardView.layer.borderColor = ExperimentPalette.cardBorder.cgColor
+
+        titleLabel.text = "Daily Dialogue"
+        titleLabel.font = .systemFont(ofSize: 16, weight: .bold)
+        titleLabel.textColor = .label
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        countLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        countLabel.textColor = .secondaryLabel
+        countLabel.setContentHuggingPriority(.required, for: .horizontal)
+
+        var buttonConfig = UIButton.Configuration.filled()
+        buttonConfig.title = "Start"
+        buttonConfig.baseBackgroundColor = Colors.brandYellow
+        buttonConfig.baseForegroundColor = Colors.textYellow
+        buttonConfig.cornerStyle = .capsule
+        buttonConfig.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12)
+        buttonConfig.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+            var outgoing = incoming
+            outgoing.font = .systemFont(ofSize: 13, weight: .bold)
+            return outgoing
+        }
+        startButton.configuration = buttonConfig
+        startButton.setContentHuggingPriority(.required, for: .horizontal)
+        startButton.addTarget(self, action: #selector(handleStartTapped), for: .touchUpInside)
+
+        let trailing = UIStackView(arrangedSubviews: [countLabel, startButton])
+        trailing.axis = .horizontal
+        trailing.alignment = .center
+        trailing.spacing = 10
+
+        let row = UIStackView(arrangedSubviews: [titleLabel, trailing])
+        row.axis = .horizontal
+        row.alignment = .center
+        row.spacing = 12
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(cardView)
+        cardView.addSubview(row)
+        let bodyTap = UITapGestureRecognizer(target: self, action: #selector(handleBodyTapped))
+        bodyTap.cancelsTouchesInView = false
+        bodyTap.delegate = self
+        addGestureRecognizer(bodyTap)
+
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 48),
+
+            cardView.topAnchor.constraint(equalTo: topAnchor),
+            cardView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            cardView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            cardView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            row.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 14),
+            row.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -10),
+            row.centerYAnchor.constraint(equalTo: cardView.centerYAnchor),
+            startButton.heightAnchor.constraint(equalToConstant: 28),
+        ])
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+            cardView.layer.borderColor = ExperimentPalette.cardBorder.cgColor
+        }
+    }
+
+    func configure(completedToday: Int, scenariosPerDay: Int) {
+        countLabel.text = "\(completedToday)/\(scenariosPerDay) today"
+    }
+
+    @objc private func handleStartTapped() {
+        onStartTapped?()
+    }
+
+    @objc private func handleBodyTapped() {
+        onBodyTapped?()
+    }
+}
+
+extension DailyDialogueCompactStripView: UIGestureRecognizerDelegate {
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard let view = touch.view else { return true }
+        return !view.isDescendant(of: startButton)
     }
 }

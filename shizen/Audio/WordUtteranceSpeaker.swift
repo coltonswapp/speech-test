@@ -12,16 +12,18 @@ import AVFoundation
 /// Activates ``AVAudioSession`` for playback with ``.mixWithOthers`` so background audio
 /// (podcasts, music) keeps playing. When a tutor capture session is already active
 /// (``.playAndRecord``), only reactivates that session so the mic stays live.
-final class WordUtteranceSpeaker: NSObject {
+final class WordUtteranceSpeaker: NSObject, AVSpeechSynthesizerDelegate {
 
     /// Created on first speak — AVSpeechSynthesizer init blocks on a speech-service
     /// XPC handshake, which stalls push transitions on screens that construct
     /// speakers eagerly (sentence scrub builds three of them via nested views).
     private var loadedSynthesizer: AVSpeechSynthesizer?
+    private var finishHandler: (() -> Void)?
 
     private var synthesizer: AVSpeechSynthesizer {
         if let loadedSynthesizer { return loadedSynthesizer }
         let created = AVSpeechSynthesizer()
+        created.delegate = self
         loadedSynthesizer = created
         return created
     }
@@ -91,14 +93,23 @@ final class WordUtteranceSpeaker: NSObject {
         loadedSynthesizer.stopSpeaking(at: .immediate)
     }
 
-    func speak(_ text: String, languageIdentifier: String = "ja-JP") {
+    func speak(
+        _ text: String,
+        languageIdentifier: String = "ja-JP",
+        onFinished: (() -> Void)? = nil
+    ) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else {
+            onFinished?()
+            return
+        }
 
         performOnMain { [weak self] in
             guard let self else { return }
 
+            finishHandler = nil
             stopImmediately()
+            finishHandler = onFinished
 
             do {
                 try PlaybackAudioSession.activateForPlayback()
@@ -116,7 +127,17 @@ final class WordUtteranceSpeaker: NSObject {
 
     func stop() {
         performOnMain { [weak self] in
+            self?.finishHandler = nil
             self?.stopImmediately()
+        }
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        performOnMain { [weak self] in
+            guard let self else { return }
+            let handler = self.finishHandler
+            self.finishHandler = nil
+            handler?()
         }
     }
 }

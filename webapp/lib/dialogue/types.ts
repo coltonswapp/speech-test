@@ -270,6 +270,7 @@ export const scenarioFileSchema = z.object({
   grammarPointIDs: z.array(z.string()).optional(),
   // Per-scenario CDN thumbnail; absent → the app uses the collection's.
   thumbnailUrl: z.string().url().optional(),
+  thumbnailSmallUrl: z.string().url().optional(),
   scenario: scenarioBodySchema,
   highlights: highlightsSchema.optional(),
   quiz: z.array(quizQuestionSchema).optional(),
@@ -283,6 +284,7 @@ export const collectionFileSchema = z.object({
   subtitle: z.string().optional(),
   sceneImage: z.string().optional(),
   thumbnailUrl: z.string().url().optional(),
+  thumbnailSmallUrl: z.string().url().optional(),
   scenarios: z.array(scenarioFileSchema),
 });
 export type CollectionFile = z.output<typeof collectionFileSchema>;
@@ -348,6 +350,7 @@ export const updateCollectionSchema = z.object({
   castVoices: castVoicesSchema.optional(),
   sceneImage: z.string().nullable().optional(),
   thumbnailUrl: z.string().url().nullable().optional(),
+  thumbnailSmallUrl: z.string().url().nullable().optional(),
   orderIndex: z.number().int().optional(),
   isActive: z.boolean().optional(),
   scenarioOrder: z.array(z.string()).optional(),
@@ -364,6 +367,7 @@ export const updateScenarioSchema = z.object({
   grammarPointIds: z.array(z.string()).optional(),
   setting: z.string().nullable().optional(),
   thumbnailUrl: z.string().url().nullable().optional(),
+  thumbnailSmallUrl: z.string().url().nullable().optional(),
   lines: z.array(dialogueLineSchema).optional(),
   highlights: highlightsSchema.nullable().optional(),
   quiz: z.array(quizQuestionSchema).nullable().optional(),

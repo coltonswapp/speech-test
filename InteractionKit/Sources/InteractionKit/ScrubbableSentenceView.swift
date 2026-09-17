@@ -337,6 +337,20 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         applyTokenIndex(nil, fromUser: false)
     }
 
+    /// Playback karaoke wash on the sentence line. Does not change scrub
+    /// selection, callout, or `onSelectionChanged`.
+    public func setKaraokeHighlight(
+        range: NSRange?,
+        fullHeight: Bool,
+        highlightColor: UIColor
+    ) {
+        sentenceTextView.setKaraokeHighlight(
+            range: range,
+            fullHeight: fullHeight,
+            highlightColor: highlightColor
+        )
+    }
+
     // MARK: - Interaction
 
     @objc private func handlePan(_ g: UIPanGestureRecognizer) {

@@ -15,6 +15,7 @@ struct CMSDialogueLessonSummary: Hashable, Sendable {
     let subtitle: String?
     let sceneImage: String?
     let thumbnailUrl: String?
+    let thumbnailSmallUrl: String?
     let orderIndex: Int
     let updatedAt: String?
     let scenarioCount: Int
@@ -86,24 +87,9 @@ enum ContentCMSClient {
                 return
             }
             do {
-                let decoded = try JSONDecoder().decode(LessonListPayload.self, from: data)
-                let lessons = decoded.collections
-                    .map { $0.asSummary }
-                    .sorted {
-                        if $0.orderIndex != $1.orderIndex {
-                            return $0.orderIndex < $1.orderIndex
-                        }
-                        return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
-                    }
-                let units = (decoded.units ?? [])
-                    .map { $0.asUnit }
-                    .sorted {
-                        if $0.orderIndex != $1.orderIndex {
-                            return $0.orderIndex < $1.orderIndex
-                        }
-                        return $0.id < $1.id
-                    }
-                completion(.success(CMSDialogueLessonIndex(units: units, lessons: lessons)))
+                let index = try parseLessonIndex(data)
+                writeCachedLessonIndex(data)
+                completion(.success(index))
             } catch {
                 completion(.failure(error))
             }
@@ -155,6 +141,32 @@ enum ContentCMSClient {
         }.resume()
     }
 
+    static func cachedDialogueLessonIndex() -> CMSDialogueLessonIndex? {
+        guard let data = readCachedLessonIndexData() else { return nil }
+        return try? parseLessonIndex(data)
+    }
+
+    private static func parseLessonIndex(_ data: Data) throws -> CMSDialogueLessonIndex {
+        let decoded = try JSONDecoder().decode(LessonListPayload.self, from: data)
+        let lessons = decoded.collections
+            .map { $0.asSummary }
+            .sorted {
+                if $0.orderIndex != $1.orderIndex {
+                    return $0.orderIndex < $1.orderIndex
+                }
+                return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            }
+        let units = (decoded.units ?? [])
+            .map { $0.asUnit }
+            .sorted {
+                if $0.orderIndex != $1.orderIndex {
+                    return $0.orderIndex < $1.orderIndex
+                }
+                return $0.id < $1.id
+            }
+        return CMSDialogueLessonIndex(units: units, lessons: lessons)
+    }
+
     private static func cacheDirectory() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ContentCache/dialogues", isDirectory: true)
@@ -166,10 +178,21 @@ enum ContentCMSClient {
     }
 
     private static func writeCachedCollectionData(_ data: Data, id: String) {
+        writeCachedData(data, fileName: "\(id).json")
+    }
+
+    private static func readCachedLessonIndexData() -> Data? {
+        try? Data(contentsOf: cacheDirectory().appendingPathComponent("index.json"))
+    }
+
+    private static func writeCachedLessonIndex(_ data: Data) {
+        writeCachedData(data, fileName: "index.json")
+    }
+
+    private static func writeCachedData(_ data: Data, fileName: String) {
         let directory = cacheDirectory()
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let url = directory.appendingPathComponent("\(id).json")
-        try? data.write(to: url, options: .atomic)
+        try? data.write(to: directory.appendingPathComponent(fileName), options: .atomic)
     }
 
     private struct LessonListPayload: Decodable {
@@ -203,6 +226,7 @@ enum ContentCMSClient {
         let subtitle: String?
         let sceneImage: String?
         let thumbnailUrl: String?
+        let thumbnailSmallUrl: String?
         let orderIndex: Int
         let updatedAt: String?
         let scenarioCount: Int
@@ -215,6 +239,7 @@ enum ContentCMSClient {
                 subtitle: subtitle,
                 sceneImage: sceneImage,
                 thumbnailUrl: thumbnailUrl,
+                thumbnailSmallUrl: thumbnailSmallUrl,
                 orderIndex: orderIndex,
                 updatedAt: updatedAt,
                 scenarioCount: scenarioCount

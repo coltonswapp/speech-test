@@ -73,9 +73,41 @@ final class KanaChoiceButton: UIControl {
         case listRow
     }
 
+    struct Chrome {
+        var cornerRadius: CGFloat
+        var normalBorderWidth: CGFloat
+        var emphasisBorderWidth: CGFloat
+        var contentInsets: UIEdgeInsets
+
+        static func standard(for layout: Layout) -> Chrome {
+            switch layout {
+            case .gridTile:
+                return Chrome(
+                    cornerRadius: ExperimentCardStroke.choiceCornerRadius,
+                    normalBorderWidth: ExperimentCardStroke.normalWidth,
+                    emphasisBorderWidth: ExperimentCardStroke.emphasisWidth,
+                    contentInsets: UIEdgeInsets(top: 0, left: 8, bottom: 0, right: 8)
+                )
+            case .listRow:
+                return Chrome(
+                    cornerRadius: ExperimentCardStroke.choiceCornerRadius,
+                    normalBorderWidth: ExperimentCardStroke.normalWidth,
+                    emphasisBorderWidth: ExperimentCardStroke.emphasisWidth,
+                    contentInsets: UIEdgeInsets(
+                        top: listRowVerticalPadding,
+                        left: listRowHorizontalPadding,
+                        bottom: listRowVerticalPadding,
+                        right: listRowHorizontalPadding
+                    )
+                )
+            }
+        }
+    }
+
     let value: String
     private let labelStyle: KanaChoiceButtonLabelStyle
     private let layout: Layout
+    private let chrome: Chrome
     private let customHeight: CGFloat?
     private let choiceLabel = UILabel()
     private var isChosen = false
@@ -97,11 +129,13 @@ final class KanaChoiceButton: UIControl {
         value: String,
         labelStyle: KanaChoiceButtonLabelStyle,
         layout: Layout = .gridTile,
-        preferredHeight: CGFloat? = nil
+        preferredHeight: CGFloat? = nil,
+        chrome: Chrome? = nil
     ) {
         self.value = value
         self.labelStyle = labelStyle
         self.layout = layout
+        self.chrome = chrome ?? .standard(for: layout)
         self.customHeight = preferredHeight
         super.init(frame: .zero)
         configure()
@@ -175,22 +209,22 @@ final class KanaChoiceButton: UIControl {
             switch state {
             case .normal:
                 self.backgroundColor = ExperimentPalette.cardSurface
-                self.layer.borderWidth = ExperimentCardStroke.normalWidth
+                self.layer.borderWidth = self.chrome.normalBorderWidth
                 self.layer.borderColor = ExperimentPalette.cardBorder
                     .resolvedColor(with: self.traitCollection).cgColor
             case .selected:
                 self.backgroundColor = ExperimentPalette.highlightFill
-                self.layer.borderWidth = ExperimentCardStroke.emphasisWidth
+                self.layer.borderWidth = self.chrome.emphasisBorderWidth
                 self.layer.borderColor = ExperimentPalette.highlightBorder
                     .resolvedColor(with: self.traitCollection).cgColor
             case .success:
                 self.backgroundColor = ExperimentPalette.successFill
-                self.layer.borderWidth = ExperimentCardStroke.emphasisWidth
+                self.layer.borderWidth = self.chrome.emphasisBorderWidth
                 self.layer.borderColor = ExperimentPalette.successBorder
                     .resolvedColor(with: self.traitCollection).cgColor
             case .incorrect:
                 self.backgroundColor = ExperimentPalette.errorFill
-                self.layer.borderWidth = ExperimentCardStroke.emphasisWidth
+                self.layer.borderWidth = self.chrome.emphasisBorderWidth
                 self.layer.borderColor = ExperimentPalette.errorBorder
                     .resolvedColor(with: self.traitCollection).cgColor
             }
@@ -207,7 +241,7 @@ final class KanaChoiceButton: UIControl {
     private func configure() {
         translatesAutoresizingMaskIntoConstraints = false
         clipsToBounds = false
-        layer.cornerRadius = ExperimentCardStroke.choiceCornerRadius
+        layer.cornerRadius = chrome.cornerRadius
         layer.cornerCurve = .continuous
         applyBorderState(.normal, animated: false)
 
@@ -221,6 +255,7 @@ final class KanaChoiceButton: UIControl {
         choiceLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(choiceLabel)
 
+        let insets = chrome.contentInsets
         switch layout {
         case .gridTile:
             let height = customHeight ?? Self.preferredHeight
@@ -228,8 +263,14 @@ final class KanaChoiceButton: UIControl {
                 heightAnchor.constraint(equalToConstant: height),
                 choiceLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
                 choiceLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-                choiceLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 8),
-                choiceLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
+                choiceLabel.leadingAnchor.constraint(
+                    greaterThanOrEqualTo: leadingAnchor,
+                    constant: insets.left
+                ),
+                choiceLabel.trailingAnchor.constraint(
+                    lessThanOrEqualTo: trailingAnchor,
+                    constant: -insets.right
+                ),
             ])
         case .listRow:
             let minHeight = customHeight ?? Self.listRowMinimumHeight
@@ -237,16 +278,16 @@ final class KanaChoiceButton: UIControl {
                 NSLayoutConstraint.activate([
                     heightAnchor.constraint(equalToConstant: customHeight),
                     choiceLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-                    choiceLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.listRowHorizontalPadding),
-                    choiceLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.listRowHorizontalPadding),
+                    choiceLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: insets.left),
+                    choiceLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -insets.right),
                 ])
             } else {
                 NSLayoutConstraint.activate([
                     heightAnchor.constraint(greaterThanOrEqualToConstant: minHeight),
-                    choiceLabel.topAnchor.constraint(equalTo: topAnchor, constant: Self.listRowVerticalPadding),
-                    choiceLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.listRowVerticalPadding),
-                    choiceLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.listRowHorizontalPadding),
-                    choiceLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.listRowHorizontalPadding),
+                    choiceLabel.topAnchor.constraint(equalTo: topAnchor, constant: insets.top),
+                    choiceLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -insets.bottom),
+                    choiceLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: insets.left),
+                    choiceLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -insets.right),
                 ])
             }
         }
@@ -310,7 +351,7 @@ final class KanaChoiceButton: UIControl {
             UIView.animate(withDuration: 0.075, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
                 self.transform = CGAffineTransform(scaleX: 0.97, y: 0.97)
                 self.backgroundColor = pressedFill
-                self.layer.borderWidth = ExperimentCardStroke.normalWidth
+                self.layer.borderWidth = self.chrome.normalBorderWidth
                 self.layer.borderColor = ExperimentPalette.cardBorder
                     .resolvedColor(with: self.traitCollection).cgColor
             }

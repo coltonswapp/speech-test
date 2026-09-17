@@ -6,6 +6,10 @@
 //  wave in a UICollectionView (custom layout + cell reuse). A compact tuner
 //  sheet live-adjusts spacing, frequency, and amplitude.
 //
+//  `.sineLeftAligned` keeps that wave in the left 40% of the screen, with
+//  lesson titles pinned to each stone's trailing edge. The lesson card covers
+//  those titles on select.
+//
 
 import InteractionKit
 import UIKit
@@ -16,25 +20,53 @@ private struct LessonPathConfiguration: Equatable {
     var amplitude: CGFloat
     var nodeSize: CGFloat
     var phase: CGFloat
+    var corridorFraction: CGFloat
+    var usesTitleColumn: Bool
+    var titleColumnGap: CGFloat
+    var titleFontSize: CGFloat
+    var subtitleFontSize: CGFloat
+    var cardVerticalOffset: CGFloat
 
     static let `default` = LessonPathConfiguration(
         spacing: 33,
         frequency: 0.89,
         amplitude: 1.00,
         nodeSize: 120,
-        phase: 0
+        phase: 0,
+        corridorFraction: 1,
+        usesTitleColumn: false,
+        titleColumnGap: 8,
+        titleFontSize: 17,
+        subtitleFontSize: 13,
+        cardVerticalOffset: 0
+    )
+
+    static let leftAligned = LessonPathConfiguration(
+        spacing: 66,
+        frequency: 1.60,
+        amplitude: 1.00,
+        nodeSize: 90,
+        phase: -0.23,
+        corridorFraction: 0.40,
+        usesTitleColumn: true,
+        titleColumnGap: 20,
+        titleFontSize: 17,
+        subtitleFontSize: 13,
+        cardVerticalOffset: 0
     )
 
     static let haloInset: CGFloat = 14
     static let haloBorderWidth: CGFloat = 9
     static let unitSeparatorHeight: CGFloat = 64
-    static let headerHeight: CGFloat = 86
+    static let unitTrailingSpacing: CGFloat = 64
+    static let headerHeight: CGFloat = 72
     static let headerSpacing: CGFloat = 28
     static let lockedScale: CGFloat = 0.84
     static let lessonPartCount = 5
     static let stoneZPosition: CGFloat = 1
-    static let tipZPosition: CGFloat = 8
+    static let tipZPosition: CGFloat = 20
     static let headerZPosition: CGFloat = 30
+    static let titleColumnTrailingInset: CGFloat = 20
 
     static var burnedYellow: UIColor {
         PrimaryButton.appearance(for: .yellow).titleColor
@@ -44,12 +76,37 @@ private struct LessonPathConfiguration: Equatable {
     fileprivate var bottomInset: CGFloat { 48 }
     fileprivate var horizontalInset: CGFloat { 22 }
 
+    func corridorWidth(for width: CGFloat) -> CGFloat {
+        width * corridorFraction
+    }
+
+    func titleLeadingInset() -> CGFloat {
+        Self.haloInset + titleColumnGap
+    }
+
+    func titleColumnMaxX(width: CGFloat) -> CGFloat {
+        width - Self.titleColumnTrailingInset
+    }
+
+    func stoneSlotSize() -> CGFloat {
+        nodeSize + Self.haloInset * 2
+    }
+
     func maxSwing(width: CGFloat) -> CGFloat {
-        max(0, width / 2 - horizontalInset - nodeSize / 2)
+        max(0, (rightLimit(width: width) - leftLimit()) / 2)
     }
 
     func xCenter(for index: CGFloat, width: CGFloat) -> CGFloat {
-        width / 2 + maxSwing(width: width) * amplitude * sin(index * frequency + phase)
+        leftLimit() + maxSwing(width: width) * (1 + amplitude * sin(index * frequency + phase))
+    }
+
+    private func leftLimit() -> CGFloat {
+        horizontalInset + nodeSize / 2
+    }
+
+    private func rightLimit(width: CGFloat) -> CGFloat {
+        let trailing = usesTitleColumn ? titleColumnGap : horizontalInset
+        return corridorWidth(for: width) - trailing - nodeSize / 2
     }
 
     /// Center-to-center Y step. Peaks have little X travel, so this grows there
@@ -74,6 +131,11 @@ private enum PathTuningSliderSpec: CaseIterable {
     case amplitude
     case nodeSize
     case phase
+    case corridor
+    case titleColumnGap
+    case titleFontSize
+    case subtitleFontSize
+    case cardVerticalOffset
 
     var title: String {
         switch self {
@@ -82,6 +144,11 @@ private enum PathTuningSliderSpec: CaseIterable {
         case .amplitude: return "Amplitude"
         case .nodeSize: return "Stone size"
         case .phase: return "Phase"
+        case .corridor: return "Path width"
+        case .titleColumnGap: return "Title padding"
+        case .titleFontSize: return "Title size"
+        case .subtitleFontSize: return "Subtitle size"
+        case .cardVerticalOffset: return "Card vertical offset"
         }
     }
 
@@ -92,33 +159,107 @@ private enum PathTuningSliderSpec: CaseIterable {
         case .amplitude: return 0 ... 1
         case .nodeSize: return 52 ... 160
         case .phase: return -Float.pi ... Float.pi
+        case .corridor: return 0.30 ... 1
+        case .titleColumnGap: return 0 ... 56
+        case .titleFontSize: return 12 ... 28
+        case .subtitleFontSize: return 10 ... 20
+        case .cardVerticalOffset: return -80 ... 80
         }
     }
 
     var step: Float {
         switch self {
-        case .spacing, .nodeSize: return 1
-        case .frequency, .amplitude, .phase: return 0.01
+        case .spacing, .nodeSize, .titleColumnGap, .titleFontSize, .subtitleFontSize, .cardVerticalOffset:
+            return 1
+        case .frequency, .amplitude, .phase, .corridor:
+            return 0.01
         }
+    }
+
+    var isTitleColumnOnly: Bool {
+        switch self {
+        case .titleColumnGap, .titleFontSize, .subtitleFontSize, .cardVerticalOffset:
+            return true
+        default:
+            return false
+        }
+    }
+
+    static func specs(for configuration: LessonPathConfiguration) -> [PathTuningSliderSpec] {
+        allCases.filter { !$0.isTitleColumnOnly || configuration.usesTitleColumn }
     }
 }
 
 // MARK: - Experiment
 
+private final class LessonPathCollectionView: UICollectionView {
+    var onDidLayout: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onDidLayout?()
+    }
+}
+
 final class LanguageProgressSnakeExperimentViewController: UIViewController {
 
-    private var configuration = LessonPathConfiguration.default
-    private let units = PathUnit.sampleCurriculum
-    private var selectedIndexPath = PathUnit.initialCurrentIndexPath
+    enum Style {
+        case sine
+        case sineLeftAligned
+    }
+
+    var onStartLesson: ((PathLesson) -> Void)?
+    var pathScrollView: UIScrollView {
+        loadViewIfNeeded()
+        return collectionView
+    }
+
+    private var configuration: LessonPathConfiguration
+    private let baselineConfiguration: LessonPathConfiguration
+    private var units: [PathUnit]
+    private var selectedIndexPath: IndexPath
     private var isLessonTipPresented = false
     private var visibleUnitIndex = 0
     private var tipPlacedBelow: Bool?
     private var isAnimatingTipPlacement = false
+    private let showsTuningControls: Bool
+    private let managesContentInsets: Bool
 
     private let lessonTipView = LessonTitleTipView()
     private let sineLayout = LessonSinePathLayout()
     private var collectionView: UICollectionView!
     private weak var tuningSheet: LessonPathTuningSheetViewController?
+    private var headerBannerView: UIView?
+    private var compactHeaderBannerView: UIView?
+    private var pendingScroll: (indexPath: IndexPath, animated: Bool)?
+    private var userDidScroll = false
+    private(set) var lastScrollTarget: IndexPath?
+
+    init(
+        units: [PathUnit] = PathUnit.sampleCurriculum,
+        showsTuningControls: Bool = true,
+        managesContentInsets: Bool = true,
+        style: Style = .sine
+    ) {
+        let configuration: LessonPathConfiguration
+        switch style {
+        case .sine:
+            configuration = .default
+        case .sineLeftAligned:
+            configuration = .leftAligned
+        }
+        self.configuration = configuration
+        self.baselineConfiguration = configuration
+        self.units = units
+        self.selectedIndexPath = PathUnit.initialIndexPath(in: units)
+        self.showsTuningControls = showsTuningControls
+        self.managesContentInsets = managesContentInsets
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -126,13 +267,24 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
         navigationItem.largeTitleDisplayMode = .never
         view.backgroundColor = ExperimentPalette.pageBackground
 
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            image: UIImage(systemName: "slider.horizontal.3"),
-            primaryAction: UIAction { [weak self] _ in
-                self?.presentTuningSheet()
+        if showsTuningControls {
+            if configuration.usesTitleColumn {
+                navigationItem.rightBarButtonItem = UIBarButtonItem(
+                    title: "Tune",
+                    primaryAction: UIAction { [weak self] _ in
+                        self?.presentTuningSheet()
+                    }
+                )
+            } else {
+                navigationItem.rightBarButtonItem = UIBarButtonItem(
+                    image: UIImage(systemName: "slider.horizontal.3"),
+                    primaryAction: UIAction { [weak self] _ in
+                        self?.presentTuningSheet()
+                    }
+                )
+                navigationItem.rightBarButtonItem?.accessibilityLabel = "Tune path"
             }
-        )
-        navigationItem.rightBarButtonItem?.accessibilityLabel = "Tune path"
+        }
 
         configureCollectionView()
 
@@ -152,7 +304,14 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
             forDecorationViewOfKind: UnitDividerDecorationView.kind
         )
 
-        collectionView = UICollectionView(frame: .zero, collectionViewLayout: sineLayout)
+        let pathCollectionView = LessonPathCollectionView(frame: .zero, collectionViewLayout: sineLayout)
+        pathCollectionView.onDidLayout = { [weak self] in
+            self?.performPendingScrollIfPossible()
+            if self?.lessonTipView.isHidden == false {
+                self?.restackLessonTip()
+            }
+        }
+        collectionView = pathCollectionView
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         collectionView.backgroundColor = ExperimentPalette.pageBackground
         collectionView.alwaysBounceVertical = true
@@ -171,12 +330,22 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
             self?.dismissLessonTip()
         }
         lessonTipView.onStart = { [weak self] in
+            guard let self else { return }
+            let lesson = self.lesson(at: self.selectedIndexPath)
+            guard lesson.state != .locked else { return }
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            self?.dismissLessonTip()
+            self.dismissLessonTip()
+            self.onStartLesson?(lesson)
         }
 
         view.addSubview(collectionView)
         collectionView.addSubview(lessonTipView)
+        if let headerBannerView {
+            collectionView.insertSubview(headerBannerView, belowSubview: lessonTipView)
+        }
+        if let compactHeaderBannerView {
+            collectionView.insertSubview(compactHeaderBannerView, belowSubview: lessonTipView)
+        }
 
         let dismissTipTap = UITapGestureRecognizer(target: self, action: #selector(handleDismissTipTap(_:)))
         dismissTipTap.cancelsTouchesInView = false
@@ -193,13 +362,182 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        let topInset = view.safeAreaInsets.top + 12
+        updateHeaderBannerLayout()
         let bottomInset = view.safeAreaInsets.bottom
-        guard collectionView.contentInset.top != topInset
-            || collectionView.contentInset.bottom != bottomInset
+        if managesContentInsets {
+            let topInset = view.safeAreaInsets.top + 12
+            guard collectionView.contentInset.top != topInset
+                || collectionView.contentInset.bottom != bottomInset
+            else { return }
+            collectionView.contentInset = UIEdgeInsets(top: topInset, left: 0, bottom: bottomInset, right: 0)
+            collectionView.verticalScrollIndicatorInsets = collectionView.contentInset
+        } else if collectionView.contentInset.bottom != bottomInset {
+            var inset = collectionView.contentInset
+            inset.bottom = bottomInset
+            collectionView.contentInset = inset
+            collectionView.verticalScrollIndicatorInsets.bottom = bottomInset
+        }
+    }
+
+    func setUnits(_ units: [PathUnit]) {
+        guard units != self.units else { return }
+        self.units = units
+        selectedIndexPath = PathUnit.initialIndexPath(in: units)
+        dismissLessonTip()
+        prefetchLessonThumbnails()
+        guard isViewLoaded else { return }
+        sineLayout.unitLengths = units.map(\.lessons.count)
+        sineLayout.lockedFlags = units.flatMap { $0.lessons.map { $0.state == .locked } }
+        collectionView.reloadData()
+        sineLayout.invalidateLayout()
+    }
+
+    private func prefetchLessonThumbnails() {
+        let current = PathUnit.initialIndexPath(in: units)
+        let currentGlobal = globalLessonIndex(current)
+        let pixelSize = configuration.nodeSize * UIScreen.main.scale
+        let urls = units.enumerated().flatMap { section, unit -> [(Int, URL)] in
+            unit.lessons.enumerated().compactMap { item, lesson in
+                guard let url = lesson.thumbnailURL else { return nil }
+                let index = globalLessonIndex(IndexPath(item: item, section: section))
+                return (index, url)
+            }
+        }
+        .sorted { abs($0.0 - currentGlobal) < abs($1.0 - currentGlobal) }
+        .map(\.1)
+        LessonThumbnailLoader.prefetch(urls, targetPixelSize: pixelSize)
+    }
+
+    private func globalLessonIndex(_ indexPath: IndexPath) -> Int {
+        units.prefix(indexPath.section).reduce(0) { $0 + $1.lessons.count } + indexPath.item
+    }
+
+    func scrollToCurrentLesson(animated: Bool) {
+        userDidScroll = false
+        let target = PathUnit.initialIndexPath(in: units)
+        lastScrollTarget = target
+        pendingScroll = (target, animated)
+        performPendingScrollIfPossible()
+    }
+
+    private func performPendingScrollIfPossible() {
+        guard let pending = pendingScroll else { return }
+        guard !userDidScroll else {
+            pendingScroll = nil
+            return
+        }
+        guard collectionView.bounds.width > 0 else { return }
+        if !managesContentInsets {
+            guard collectionView.contentInset.top > 0 else { return }
+        }
+        if headerBannerView != nil {
+            guard sineLayout.bannerHeight > 0 else { return }
+        }
+        guard collectionView.contentSize.height > 0,
+              let stone = sineLayout.layoutAttributesForItem(at: pending.indexPath)
         else { return }
-        collectionView.contentInset = UIEdgeInsets(top: topInset, left: 0, bottom: bottomInset, right: 0)
-        collectionView.verticalScrollIndicatorInsets = collectionView.contentInset
+
+        pendingScroll = nil
+        let insetTop = collectionView.contentInset.top
+        let insetBottom = collectionView.contentInset.bottom
+        let visibleH = collectionView.bounds.height - insetTop - insetBottom
+        let offsetY = stone.frame.midY - insetTop - 0.4 * visibleH
+        let minOffset = -insetTop
+        let maxOffset = max(minOffset, collectionView.contentSize.height - collectionView.bounds.height + insetBottom)
+        collectionView.setContentOffset(
+            CGPoint(x: 0, y: min(max(offsetY, minOffset), maxOffset)),
+            animated: pending.animated
+        )
+    }
+
+    func setHeaderBanner(_ view: UIView?) {
+        headerBannerView?.removeFromSuperview()
+        headerBannerView = view
+        guard let view, isViewLoaded else { return }
+        collectionView.insertSubview(view, belowSubview: lessonTipView)
+        updateHeaderBannerLayout()
+    }
+
+    func setCompactHeaderBanner(_ view: UIView?) {
+        compactHeaderBannerView?.removeFromSuperview()
+        compactHeaderBannerView = view
+        guard let view, isViewLoaded else { return }
+        collectionView.insertSubview(view, belowSubview: lessonTipView)
+        updateHeaderBannerLayout()
+    }
+
+    private func updateHeaderBannerLayout() {
+        var shouldInvalidate = false
+        if let headerBannerView, collectionView.bounds.width > 0 {
+            let inset: CGFloat = 16
+            let width = max(0, collectionView.bounds.width - inset * 2)
+            let height = headerBannerView.systemLayoutSizeFitting(
+                CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
+                withHorizontalFittingPriority: .required,
+                verticalFittingPriority: .fittingSizeLevel
+            ).height
+            headerBannerView.layer.zPosition = 20
+            headerBannerView.frame = CGRect(x: inset, y: 16, width: width, height: height)
+            let bannerHeight = 16 + height + 24
+            let cardBottomY = 16 + height
+            if abs(sineLayout.bannerHeight - bannerHeight) >= 0.5 {
+                sineLayout.bannerHeight = bannerHeight
+                shouldInvalidate = true
+            }
+            if abs(sineLayout.bannerCardBottomY - cardBottomY) >= 0.5 {
+                sineLayout.bannerCardBottomY = cardBottomY
+                shouldInvalidate = true
+            }
+        } else if sineLayout.bannerHeight != 0 || sineLayout.bannerCardBottomY != 0 {
+            sineLayout.bannerHeight = 0
+            sineLayout.bannerCardBottomY = 0
+            shouldInvalidate = true
+        }
+        if updateCompactStripLayout() {
+            shouldInvalidate = true
+        }
+        if shouldInvalidate {
+            sineLayout.invalidateLayout()
+        }
+    }
+
+    @discardableResult
+    private func updateCompactStripLayout() -> Bool {
+        guard let compactHeaderBannerView, collectionView.bounds.width > 0 else {
+            compactHeaderBannerView?.isHidden = true
+            compactHeaderBannerView?.accessibilityElementsHidden = true
+            guard sineLayout.compactStripHeight != 0 else { return false }
+            sineLayout.compactStripHeight = 0
+            return true
+        }
+
+        let inset: CGFloat = 16
+        let width = max(0, collectionView.bounds.width - inset * 2)
+        let stripH = compactHeaderBannerView.systemLayoutSizeFitting(
+            CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        ).height
+        var didChangeHeight = false
+        if abs(sineLayout.compactStripHeight - stripH) >= 0.5 {
+            sineLayout.compactStripHeight = stripH
+            didChangeHeight = true
+        }
+
+        let pinY = collectionView.contentOffset.y + collectionView.contentInset.top
+        let progress = sineLayout.compactStripProgress(pinY: pinY)
+        compactHeaderBannerView.layer.zPosition = 40
+        compactHeaderBannerView.frame = CGRect(
+            x: inset,
+            y: pinY - stripH + progress * stripH,
+            width: width,
+            height: stripH
+        )
+        compactHeaderBannerView.alpha = progress
+        let hidden = progress <= 0
+        compactHeaderBannerView.isHidden = hidden
+        compactHeaderBannerView.accessibilityElementsHidden = hidden
+        return didChangeHeight
     }
 
     private func applyConfiguration(_ configuration: LessonPathConfiguration) {
@@ -207,6 +545,7 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
         sineLayout.configuration = configuration
         sineLayout.lockedFlags = units.flatMap { $0.lessons.map { $0.state == .locked } }
         sineLayout.invalidateLayout()
+        collectionView.layoutIfNeeded()
         reconfigureVisibleStones()
         if isLessonTipPresented {
             updateLessonTipPosition()
@@ -217,13 +556,49 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
         units[indexPath.section].lessons[indexPath.item]
     }
 
+    private func titleColumn(for indexPath: IndexPath, selected: Bool) -> LessonStoneTitleColumn? {
+        guard configuration.usesTitleColumn, collectionView.bounds.width > 0 else { return nil }
+        return LessonStoneTitleColumn(
+            title: lesson(at: indexPath).title,
+            subtitle: "Unit \(indexPath.section + 1) • Lesson \(indexPath.item + 1)",
+            padding: configuration.titleLeadingInset(),
+            trailingMaxX: configuration.titleColumnMaxX(width: collectionView.bounds.width),
+            covered: selected,
+            titleFontSize: configuration.titleFontSize,
+            subtitleFontSize: configuration.subtitleFontSize
+        )
+    }
+
+    private func stoneFrame(from cellFrame: CGRect) -> CGRect {
+        CGRect(
+            origin: cellFrame.origin,
+            size: CGSize(width: configuration.stoneSlotSize(), height: cellFrame.height)
+        )
+    }
+
+    private func visualStoneFrame(from cellFrame: CGRect, at indexPath: IndexPath) -> CGRect {
+        let slot = stoneFrame(from: cellFrame)
+        let visualSize = LessonStoneCell.visualSize(for: lesson(at: indexPath), nodeSize: configuration.nodeSize)
+        let origin = (slot.width - visualSize) / 2
+        return CGRect(
+            x: slot.minX + origin,
+            y: slot.minY + origin,
+            width: visualSize,
+            height: visualSize
+        )
+    }
+
     private func reconfigureVisibleStones() {
         for indexPath in collectionView.indexPathsForVisibleItems {
             guard let cell = collectionView.cellForItem(at: indexPath) as? LessonStoneCell else { continue }
             cell.apply(
                 lesson: lesson(at: indexPath),
                 selected: isLessonTipPresented && indexPath == selectedIndexPath,
-                nodeSize: configuration.nodeSize
+                nodeSize: configuration.nodeSize,
+                titleColumn: titleColumn(
+                    for: indexPath,
+                    selected: isLessonTipPresented && indexPath == selectedIndexPath
+                )
             )
         }
     }
@@ -258,7 +633,8 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
         lessonTipView.apply(
             title: lesson.title,
             subtitle: "Unit \(indexPath.section + 1) • Lesson \(indexPath.item + 1)",
-            hasProgress: lesson.completedParts > 0
+            hasProgress: lesson.completedParts > 0,
+            isLocked: lesson.state == .locked
         )
         isLessonTipPresented = true
         tipPlacedBelow = nil
@@ -283,9 +659,17 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
 
     private func updateLessonTipPosition() {
         guard isLessonTipPresented, !isAnimatingTipPlacement else { return }
-        let stoneFrame = collectionView.cellForItem(at: selectedIndexPath)?.frame
+        let cellFrame = collectionView.cellForItem(at: selectedIndexPath)?.frame
             ?? sineLayout.layoutAttributesForItem(at: selectedIndexPath)?.frame
-        guard let stoneFrame else { return }
+        guard let cellFrame else { return }
+        let stoneFrame = self.stoneFrame(from: cellFrame)
+
+        if configuration.usesTitleColumn {
+            updateTitleColumnLessonCardPosition(
+                stoneFrame: visualStoneFrame(from: cellFrame, at: selectedIndexPath)
+            )
+            return
+        }
 
         let cardWidth = min(268, collectionView.bounds.width - 48)
         let tipSize = lessonTipView.systemLayoutSizeFitting(
@@ -343,6 +727,25 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
         restackLessonTip()
     }
 
+    private func updateTitleColumnLessonCardPosition(stoneFrame: CGRect) {
+        let width = collectionView.bounds.width
+        let cardX = stoneFrame.maxX + configuration.titleLeadingInset()
+        let cardWidth = max(0, configuration.titleColumnMaxX(width: width) - cardX)
+        lessonTipView.setArrowEdge(.none)
+        let tipSize = lessonTipView.systemLayoutSizeFitting(
+            CGSize(width: cardWidth, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        )
+        let originY = stoneFrame.midY - tipSize.height / 2 + configuration.cardVerticalOffset
+        lessonTipView.frame = CGRect(
+            origin: CGPoint(x: cardX, y: originY),
+            size: CGSize(width: cardWidth, height: tipSize.height)
+        )
+        lessonTipView.layoutIfNeeded()
+        restackLessonTip()
+    }
+
     private func restackLessonTip() {
         lessonTipView.layer.zPosition = LessonPathConfiguration.tipZPosition
         for subview in collectionView.subviews {
@@ -350,9 +753,16 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
                 subview.layer.zPosition = LessonPathConfiguration.headerZPosition
             }
         }
+        if let header = collectionView.subviews.first(where: { $0 is PathUnitHeaderView }) {
+            collectionView.insertSubview(lessonTipView, belowSubview: header)
+        }
+        if let compactHeaderBannerView {
+            compactHeaderBannerView.layer.zPosition = 40
+            collectionView.bringSubviewToFront(compactHeaderBannerView)
+        }
     }
 
-    private func presentTuningSheet() {
+    private func presentTuningSheet(animated: Bool = true) {
         if let tuningSheet, tuningSheet.presentingViewController != nil {
             return
         }
@@ -363,15 +773,17 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
         }
         sheet.onReset = { [weak self] in
             guard let self else { return }
-            self.applyConfiguration(.default)
-            self.tuningSheet?.sync(configuration: .default)
+            self.applyConfiguration(self.baselineConfiguration)
+            self.tuningSheet?.sync(configuration: self.baselineConfiguration)
         }
         tuningSheet = sheet
 
         sheet.modalPresentationStyle = .pageSheet
         if let presentation = sheet.sheetPresentationController {
+            let specCount = CGFloat(PathTuningSliderSpec.specs(for: configuration).count)
+            let detentHeight = min(640, 80 + specCount * 62)
             let detent = UISheetPresentationController.Detent.custom(identifier: .init("pathTune")) { _ in
-                420
+                detentHeight
             }
             presentation.detents = [detent]
             presentation.largestUndimmedDetentIdentifier = detent.identifier
@@ -379,7 +791,7 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
             presentation.prefersScrollingExpandsWhenScrolledToEdge = false
             presentation.preferredCornerRadius = 28
         }
-        present(sheet, animated: true)
+        present(sheet, animated: animated)
     }
 }
 
@@ -405,7 +817,8 @@ extension LanguageProgressSnakeExperimentViewController: UICollectionViewDataSou
         cell.apply(
             lesson: lesson(at: indexPath),
             selected: isLessonTipPresented && indexPath == selectedIndexPath,
-            nodeSize: configuration.nodeSize
+            nodeSize: configuration.nodeSize,
+            titleColumn: titleColumn(for: indexPath, selected: isLessonTipPresented && indexPath == selectedIndexPath)
         )
         return cell
     }
@@ -429,7 +842,13 @@ extension LanguageProgressSnakeExperimentViewController: UICollectionViewDataSou
         selectLesson(at: indexPath)
     }
 
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        userDidScroll = true
+        pendingScroll = nil
+    }
+
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        updateCompactStripLayout()
         updateVisibleUnitFromScroll()
         if !lessonTipView.isHidden {
             updateLessonTipPosition()
@@ -456,42 +875,65 @@ extension LanguageProgressSnakeExperimentViewController: UICollectionViewDataSou
 
 // MARK: - Model
 
-private struct PathLesson {
-    enum State {
+struct PathLesson: Equatable {
+    enum State: Equatable {
         case completed
         case current
         case locked
     }
 
+    let id: String?
     let title: String
     let symbolName: String
     let thumbnailName: String?
+    let thumbnailURL: URL?
     let state: State
     let completedParts: Int
+    let partCount: Int
 
     init(
+        id: String? = nil,
         title: String,
         symbolName: String,
         thumbnailName: String?,
+        thumbnailURL: URL? = nil,
         state: State,
-        completedParts: Int = 0
+        completedParts: Int = 0,
+        partCount: Int = LessonPathConfiguration.lessonPartCount
     ) {
+        self.id = id
         self.title = title
         self.symbolName = symbolName
         self.thumbnailName = thumbnailName
+        self.thumbnailURL = thumbnailURL
         self.state = state
         self.completedParts = completedParts
+        self.partCount = max(1, partCount)
     }
 }
 
-private struct PathUnit {
+struct PathUnit: Equatable {
     let eyebrow: String
     let title: String
     let glowColor: DialogueBubbleUnderglowColor
     let lessons: [PathLesson]
 
     static var initialCurrentIndexPath: IndexPath {
-        IndexPath(item: 2, section: 0)
+        initialIndexPath(in: sampleCurriculum)
+    }
+
+    static func initialIndexPath(in units: [PathUnit]) -> IndexPath {
+        for (section, unit) in units.enumerated() {
+            if let item = unit.lessons.firstIndex(where: { $0.state == .current }) {
+                return IndexPath(item: item, section: section)
+            }
+        }
+        for (section, unit) in units.enumerated().reversed() {
+            if let item = unit.lessons.lastIndex(where: { $0.state == .completed }) {
+                return IndexPath(item: item, section: section)
+            }
+        }
+        return IndexPath(item: 0, section: 0)
     }
 
     static let sampleCurriculum: [PathUnit] = [
@@ -500,7 +942,7 @@ private struct PathUnit {
             title: "Everyday conversations",
             glowColor: .yellow,
             lessons: [
-                PathLesson(title: "At the Train Station", symbolName: "tram.fill", thumbnailName: "train-station", state: .completed),
+                PathLesson(id: "train-station", title: "At the Train Station", symbolName: "tram.fill", thumbnailName: "train-station", state: .completed),
                 PathLesson(title: "At the Library", symbolName: "book.fill", thumbnailName: "at-the-library", state: .completed),
                 PathLesson(title: "At the Convenience Store", symbolName: "basket.fill", thumbnailName: "at-the-convenient-store", state: .current, completedParts: 2),
                 PathLesson(title: "Asking Directions", symbolName: "map.fill", thumbnailName: "asking-directions", state: .locked),
@@ -581,14 +1023,16 @@ private final class PathUnitHeaderView: UICollectionReusableView {
 
         eyebrowLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         eyebrowLabel.textColor = .secondaryLabel
+        eyebrowLabel.setContentHuggingPriority(.required, for: .vertical)
 
         titleLabel.font = .systemFont(ofSize: 22, weight: .bold)
         titleLabel.textColor = .label
         titleLabel.numberOfLines = 2
+        titleLabel.setContentHuggingPriority(.required, for: .vertical)
 
         let stack = UIStackView(arrangedSubviews: [eyebrowLabel, titleLabel])
         stack.axis = .vertical
-        stack.spacing = 3
+        stack.spacing = 2
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         addSubview(glassGlowView)
@@ -601,10 +1045,10 @@ private final class PathUnitHeaderView: UICollectionReusableView {
             glassView.trailingAnchor.constraint(equalTo: trailingAnchor),
             glassView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            // Slight upward bias so the larger title doesn't sit below center.
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -1),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
         ])
 
         applyUnderglowAppearance()
@@ -706,9 +1150,18 @@ private final class LessonSinePathLayout: UICollectionViewLayout {
     var configuration = LessonPathConfiguration.default
     var unitLengths: [Int] = []
     var lockedFlags: [Bool] = []
+    var bannerHeight: CGFloat = 0
+    var compactStripHeight: CGFloat = 0
+    var bannerCardBottomY: CGFloat = 0
+
+    func compactStripProgress(pinY: CGFloat) -> CGFloat {
+        guard compactStripHeight > 0 else { return 0 }
+        return min(1, max(0, (pinY - bannerCardBottomY) / compactStripHeight))
+    }
 
     private var itemAttributes: [[UICollectionViewLayoutAttributes]] = []
     private var headerRestingAttributes: [UICollectionViewLayoutAttributes] = []
+    private var sectionPinLimits: [CGFloat] = []
     private var pathAttributes: PathDecorationLayoutAttributes?
     private var dividerAttributes: [UICollectionViewLayoutAttributes] = []
     private var contentSize: CGSize = .zero
@@ -716,8 +1169,9 @@ private final class LessonSinePathLayout: UICollectionViewLayout {
     override var collectionViewContentSize: CGSize { contentSize }
 
     func stuckSection(at pinY: CGFloat) -> Int {
+        let shiftedPinY = pinY + compactStripProgress(pinY: pinY) * compactStripHeight
         var section = 0
-        for (index, header) in headerRestingAttributes.enumerated() where header.frame.minY <= pinY + 1 {
+        for (index, header) in headerRestingAttributes.enumerated() where header.frame.minY <= shiftedPinY + 1 {
             section = index
         }
         return section
@@ -733,11 +1187,12 @@ private final class LessonSinePathLayout: UICollectionViewLayout {
 
         itemAttributes = []
         headerRestingAttributes = []
+        sectionPinLimits = []
         dividerAttributes = []
         var stoneCenters: [CGPoint] = []
         var stoneRadii: [CGFloat] = []
         var lengths: [Int] = []
-        var yCursor = configuration.topInset
+        var yCursor = configuration.topInset + bannerHeight
         var globalIndex = 0
 
         for section in 0 ..< sectionCount {
@@ -783,10 +1238,14 @@ private final class LessonSinePathLayout: UICollectionViewLayout {
                     yCursor += configuration.yAdvance(from: CGFloat(globalIndex), width: width)
                 } else {
                     yCursor += size
+                    if section < sectionCount - 1 {
+                        yCursor += LessonPathConfiguration.unitTrailingSpacing
+                    }
                 }
                 globalIndex += 1
             }
             itemAttributes.append(sectionItems)
+            sectionPinLimits.append(yCursor)
 
             if section < sectionCount - 1 {
                 let gap = LessonPathConfiguration.unitSeparatorHeight
@@ -811,6 +1270,8 @@ private final class LessonSinePathLayout: UICollectionViewLayout {
         path.stoneCenters = stoneCenters
         path.stoneRadii = stoneRadii
         path.unitLengths = lengths
+        path.pathWidth = width
+        path.configuration = configuration
         pathAttributes = path
 
         contentSize = CGSize(width: width, height: contentHeight)
@@ -860,11 +1321,14 @@ private final class LessonSinePathLayout: UICollectionViewLayout {
     private func pinnedHeaders(intersecting rect: CGRect) -> [UICollectionViewLayoutAttributes] {
         guard let collectionView else { return headerRestingAttributes }
         let pinY = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
+        let shiftedPinY = pinY + compactStripProgress(pinY: pinY) * compactStripHeight
         return headerRestingAttributes.enumerated().compactMap { section, resting in
             guard let copy = resting.copy() as? UICollectionViewLayoutAttributes else { return nil }
-            let nextY = headerRestingAttributes[safe: section + 1]?.frame.minY ?? .greatestFiniteMagnitude
+            let sectionEnd = sectionPinLimits[safe: section] ?? resting.frame.maxY
             var frame = copy.frame
-            frame.origin.y = min(max(resting.frame.minY, pinY), nextY - frame.height)
+            let minY = resting.frame.minY
+            let maxY = max(minY, sectionEnd - frame.height)
+            frame.origin.y = min(max(minY, shiftedPinY), maxY)
             copy.frame = frame
             copy.zIndex = Int(LessonPathConfiguration.headerZPosition)
             return rect.intersects(frame) ? copy : nil
@@ -882,12 +1346,16 @@ private final class PathDecorationLayoutAttributes: UICollectionViewLayoutAttrib
     var stoneCenters: [CGPoint] = []
     var stoneRadii: [CGFloat] = []
     var unitLengths: [Int] = []
+    var pathWidth: CGFloat = 0
+    var configuration = LessonPathConfiguration.default
 
     override func copy(with zone: NSZone? = nil) -> Any {
         let copy = super.copy(with: zone) as! PathDecorationLayoutAttributes
         copy.stoneCenters = stoneCenters
         copy.stoneRadii = stoneRadii
         copy.unitLengths = unitLengths
+        copy.pathWidth = pathWidth
+        copy.configuration = configuration
         return copy
     }
 
@@ -897,6 +1365,8 @@ private final class PathDecorationLayoutAttributes: UICollectionViewLayoutAttrib
             && other.stoneCenters == stoneCenters
             && other.stoneRadii == stoneRadii
             && other.unitLengths == unitLengths
+            && other.pathWidth == pathWidth
+            && other.configuration == configuration
     }
 }
 
@@ -925,7 +1395,9 @@ private final class PathDecorationView: UICollectionReusableView {
         pathLayer.path = Self.makePath(
             centers: attributes.stoneCenters,
             radii: attributes.stoneRadii,
-            unitLengths: attributes.unitLengths
+            unitLengths: attributes.unitLengths,
+            configuration: attributes.configuration,
+            width: attributes.pathWidth
         ).cgPath
     }
 
@@ -950,7 +1422,9 @@ private final class PathDecorationView: UICollectionReusableView {
     private static func makePath(
         centers: [CGPoint],
         radii: [CGFloat],
-        unitLengths: [Int]
+        unitLengths: [Int],
+        configuration: LessonPathConfiguration,
+        width: CGFloat
     ) -> UIBezierPath {
         let path = UIBezierPath()
         var offset = 0
@@ -959,6 +1433,7 @@ private final class PathDecorationView: UICollectionReusableView {
             let endIndex = min(offset + length, centers.count)
             let unitCenters = Array(centers[offset ..< endIndex])
             let unitRadii = Array(radii[offset ..< min(endIndex, radii.count)])
+            let unitStartIndex = offset
             offset += length
             guard unitCenters.count > 1 else { continue }
 
@@ -967,29 +1442,54 @@ private final class PathDecorationView: UICollectionReusableView {
                 let end = unitCenters[item + 1]
                 let startTrim = (unitRadii[safe: item] ?? 0) + 5
                 let endTrim = (unitRadii[safe: item + 1] ?? 0) + 5
-                var drawing = false
+                let globalIndex = unitStartIndex + item
+                var drawable: [CGPoint] = []
                 for sample in 0 ... 24 {
                     let t = CGFloat(sample) / 24
-                    let point = CGPoint(
-                        x: start.x + (end.x - start.x) * t,
-                        y: start.y + (end.y - start.y) * t
+                    let point = curvedPoint(
+                        from: start,
+                        to: end,
+                        t: t,
+                        index: CGFloat(globalIndex),
+                        configuration: configuration,
+                        width: width
                     )
                     let awayFromStart = hypot(point.x - start.x, point.y - start.y) >= startTrim
                     let awayFromEnd = hypot(point.x - end.x, point.y - end.y) >= endTrim
                     if awayFromStart && awayFromEnd {
-                        if drawing {
-                            path.addLine(to: point)
-                        } else {
-                            path.move(to: point)
-                            drawing = true
-                        }
-                    } else {
-                        drawing = false
+                        drawable.append(point)
                     }
+                }
+                guard let first = drawable.first, let last = drawable.last else { continue }
+                path.move(to: first)
+                if drawable.count >= 3 {
+                    let mid = drawable[drawable.count / 2]
+                    let control = CGPoint(
+                        x: 2 * mid.x - (first.x + last.x) / 2,
+                        y: 2 * mid.y - (first.y + last.y) / 2
+                    )
+                    path.addQuadCurve(to: last, controlPoint: control)
+                } else {
+                    path.addLine(to: last)
                 }
             }
         }
         return path
+    }
+
+    private static func curvedPoint(
+        from start: CGPoint,
+        to end: CGPoint,
+        t: CGFloat,
+        index: CGFloat,
+        configuration: LessonPathConfiguration,
+        width: CGFloat
+    ) -> CGPoint {
+        let y = start.y + (end.y - start.y) * t
+        guard width > 0 else {
+            return CGPoint(x: start.x + (end.x - start.x) * t, y: y)
+        }
+        return CGPoint(x: configuration.xCenter(for: index + t, width: width), y: y)
     }
 }
 
@@ -1017,6 +1517,16 @@ private final class UnitDividerDecorationView: UICollectionReusableView {
 
 // MARK: - Glass stone cell
 
+private struct LessonStoneTitleColumn {
+    var title: String
+    var subtitle: String
+    var padding: CGFloat
+    var trailingMaxX: CGFloat
+    var covered: Bool
+    var titleFontSize: CGFloat
+    var subtitleFontSize: CGFloat
+}
+
 private final class LessonStoneCell: UICollectionViewCell {
 
     static let reuseID = "LessonStoneCell"
@@ -1029,9 +1539,13 @@ private final class LessonStoneCell: UICollectionViewCell {
     private let thumbnailView = UIImageView()
     private let lockOverlay = UIImageView()
     private let badgeView = UIImageView()
+    private let titleLabel = UILabel()
+    private let subtitleLabel = UILabel()
+    private let textStack = UIStackView()
     private var currentLesson: PathLesson?
     private var currentNodeSize: CGFloat = LessonPathConfiguration.default.nodeSize
     private var currentSelected = false
+    private var titleColumn: LessonStoneTitleColumn?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1077,6 +1591,27 @@ private final class LessonStoneCell: UICollectionViewCell {
 
         badgeView.contentMode = .scaleAspectFit
         badgeView.image = UIImage(systemName: "checkmark.circle.fill")
+        badgeView.layer.shadowColor = UIColor.black.cgColor
+        badgeView.layer.shadowOpacity = 0.32
+        badgeView.layer.shadowRadius = 3.5
+        badgeView.layer.shadowOffset = CGSize(width: 0, height: 1.5)
+        badgeView.layer.masksToBounds = false
+
+        titleLabel.font = .systemFont(ofSize: 17, weight: .bold)
+        titleLabel.textColor = .label
+        titleLabel.numberOfLines = 2
+
+        subtitleLabel.font = .systemFont(ofSize: 13, weight: .regular)
+        subtitleLabel.textColor = .secondaryLabel
+        subtitleLabel.numberOfLines = 1
+
+        textStack.axis = .vertical
+        textStack.spacing = 2
+        textStack.alignment = .leading
+        textStack.isUserInteractionEnabled = false
+        textStack.isHidden = true
+        textStack.addArrangedSubview(titleLabel)
+        textStack.addArrangedSubview(subtitleLabel)
 
         contentView.addSubview(haloView)
         contentView.addSubview(progressRing)
@@ -1086,6 +1621,7 @@ private final class LessonStoneCell: UICollectionViewCell {
         stoneContainer.addSubview(thumbnailView)
         stoneContainer.addSubview(lockOverlay)
         contentView.addSubview(badgeView)
+        contentView.addSubview(textStack)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -1098,39 +1634,89 @@ private final class LessonStoneCell: UICollectionViewCell {
         badgeView.isHidden = true
         haloView.isHidden = true
         progressRing.isHidden = true
+        textStack.isHidden = true
+        textStack.alpha = 1
+        titleColumn = nil
         alpha = 1
     }
 
-    func apply(lesson: PathLesson, selected: Bool, nodeSize: CGFloat) {
+    func apply(lesson: PathLesson, selected: Bool, nodeSize: CGFloat, titleColumn: LessonStoneTitleColumn? = nil) {
         currentLesson = lesson
         currentSelected = selected
         currentNodeSize = nodeSize
+        self.titleColumn = titleColumn
         let visualSize = Self.visualSize(for: lesson, nodeSize: nodeSize)
         let iconSize = LessonPathConfiguration.iconPointSize(for: visualSize)
 
         UIView.performWithoutAnimation {
             button.configuration = makeConfiguration(lesson: lesson, iconPointSize: iconSize)
-            haloView.isHidden = !selected || lesson.state == .current
-            let showProgressRing = lesson.state == .current
-                && (selected || lesson.completedParts > 0)
-            progressRing.isHidden = !showProgressRing
+            haloView.isHidden = !(selected && lesson.state == .completed)
+            let showProgressRing: Bool
+            switch lesson.state {
+            case .current:
+                showProgressRing = selected || lesson.completedParts > 0
+            case .locked:
+                showProgressRing = selected
+            case .completed:
+                showProgressRing = false
+            }
             if showProgressRing {
                 progressRing.apply(
                     completedParts: lesson.completedParts,
-                    partCount: LessonPathConfiguration.lessonPartCount,
+                    partCount: lesson.partCount,
                     lineWidth: LessonPathConfiguration.haloBorderWidth,
                     highlightCompleted: selected
                 )
             }
+            progressRing.isHidden = !showProgressRing
 
-            if let thumbnailName = lesson.thumbnailName, let image = UIImage(named: thumbnailName) {
-                thumbnailView.isHidden = false
-                thumbnailView.image = lesson.state == .locked ? Self.grayscaleImage(from: image) ?? image : image
-                lockOverlay.isHidden = lesson.state != .locked
-                lockOverlay.preferredSymbolConfiguration = UIImage.SymbolConfiguration(
-                    pointSize: iconSize,
-                    weight: .semibold
-                )
+            thumbnailView.accessibilityIdentifier = nil
+            let pixelSize = visualSize * UIScreen.main.scale
+            let variant: LessonThumbnailLoader.Variant = lesson.state == .locked ? .grayscale : .color
+            if let remoteURL = lesson.thumbnailURL {
+                let token = "\(remoteURL.absoluteString)|\(variant.rawValue)"
+                thumbnailView.accessibilityIdentifier = token
+                if let cached = LessonThumbnailLoader.cachedImage(
+                    for: remoteURL,
+                    targetPixelSize: pixelSize,
+                    variant: variant
+                ) {
+                    applyThumbnail(cached, lesson: lesson, iconSize: iconSize)
+                } else if let thumbnailName = lesson.thumbnailName,
+                          let image = LessonThumbnailLoader.bundledImage(
+                            named: thumbnailName,
+                            targetPixelSize: pixelSize,
+                            variant: variant
+                          ) {
+                    applyThumbnail(image, lesson: lesson, iconSize: iconSize)
+                    LessonThumbnailLoader.load(
+                        url: remoteURL,
+                        targetPixelSize: pixelSize,
+                        variant: variant
+                    ) { [weak self] image in
+                        guard let self, self.thumbnailView.accessibilityIdentifier == token else { return }
+                        self.applyThumbnail(image, lesson: lesson, iconSize: iconSize)
+                    }
+                } else {
+                    thumbnailView.isHidden = true
+                    thumbnailView.image = nil
+                    lockOverlay.isHidden = true
+                    LessonThumbnailLoader.load(
+                        url: remoteURL,
+                        targetPixelSize: pixelSize,
+                        variant: variant
+                    ) { [weak self] image in
+                        guard let self, self.thumbnailView.accessibilityIdentifier == token else { return }
+                        self.applyThumbnail(image, lesson: lesson, iconSize: iconSize)
+                    }
+                }
+            } else if let thumbnailName = lesson.thumbnailName,
+                      let image = LessonThumbnailLoader.bundledImage(
+                        named: thumbnailName,
+                        targetPixelSize: pixelSize,
+                        variant: variant
+                      ) {
+                applyThumbnail(image, lesson: lesson, iconSize: iconSize)
             } else {
                 thumbnailView.isHidden = true
                 thumbnailView.image = nil
@@ -1147,6 +1733,7 @@ private final class LessonStoneCell: UICollectionViewCell {
             alpha = lesson.state == .locked && !selected ? 0.48 : 1
         }
 
+        applyTitleColumn(titleColumn)
         accessibilityLabel = lesson.title
         isAccessibilityElement = true
         accessibilityTraits = .button
@@ -1162,7 +1749,8 @@ private final class LessonStoneCell: UICollectionViewCell {
 
         let visualSize = Self.visualSize(for: lesson, nodeSize: currentNodeSize)
         let halo = LessonPathConfiguration.haloInset
-        let origin = (bounds.width - visualSize) / 2
+        let stoneSlot = min(bounds.width, currentNodeSize + halo * 2)
+        let origin = (stoneSlot - visualSize) / 2
         let stoneFrame = CGRect(x: origin, y: origin, width: visualSize, height: visualSize)
         let iconSize = LessonPathConfiguration.iconPointSize(for: visualSize)
 
@@ -1191,9 +1779,67 @@ private final class LessonStoneCell: UICollectionViewCell {
             width: badge,
             height: badge
         )
+        badgeView.layer.shadowPath = UIBezierPath(ovalIn: badgeView.bounds).cgPath
+        layoutTitleColumn()
     }
 
-    private static func visualSize(for lesson: PathLesson, nodeSize: CGFloat) -> CGFloat {
+    private func applyTitleColumn(_ column: LessonStoneTitleColumn?) {
+        guard let column else {
+            textStack.isHidden = true
+            textStack.alpha = 1
+            return
+        }
+        titleLabel.text = column.title
+        subtitleLabel.text = column.subtitle
+        titleLabel.font = .systemFont(ofSize: column.titleFontSize, weight: .bold)
+        subtitleLabel.font = .systemFont(ofSize: column.subtitleFontSize, weight: .regular)
+        textStack.isHidden = false
+        let targetAlpha: CGFloat = column.covered ? 0 : 1
+        if abs(textStack.alpha - targetAlpha) > 0.01, window != nil {
+            UIView.animate(withDuration: 0.22, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+                self.textStack.alpha = targetAlpha
+            }
+        } else {
+            textStack.alpha = targetAlpha
+        }
+        setNeedsLayout()
+    }
+
+    private func layoutTitleColumn() {
+        guard let titleColumn, !textStack.isHidden, let lesson = currentLesson else { return }
+        let visualSize = Self.visualSize(for: lesson, nodeSize: currentNodeSize)
+        let halo = LessonPathConfiguration.haloInset
+        let stoneSlot = min(bounds.width, currentNodeSize + halo * 2)
+        let origin = (stoneSlot - visualSize) / 2
+        let minX = origin + visualSize + titleColumn.padding
+        let width = max(0, titleColumn.trailingMaxX - frame.minX - minX)
+        let fitting = textStack.systemLayoutSizeFitting(
+            CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        )
+        textStack.frame = CGRect(
+            x: minX,
+            y: (bounds.height - fitting.height) / 2,
+            width: width,
+            height: fitting.height
+        )
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        guard let lesson = currentLesson else {
+            return super.point(inside: point, with: event)
+        }
+        let visualSize = Self.visualSize(for: lesson, nodeSize: currentNodeSize)
+        let halo = LessonPathConfiguration.haloInset
+        let stoneSlot = min(bounds.width, currentNodeSize + halo * 2)
+        let origin = (stoneSlot - visualSize) / 2
+        let center = CGPoint(x: origin + visualSize / 2, y: origin + visualSize / 2)
+        let radius = visualSize / 2 + halo
+        return hypot(point.x - center.x, point.y - center.y) <= radius
+    }
+
+    static func visualSize(for lesson: PathLesson, nodeSize: CGFloat) -> CGFloat {
         lesson.state == .locked ? nodeSize * LessonPathConfiguration.lockedScale : nodeSize
     }
 
@@ -1208,24 +1854,36 @@ private final class LessonStoneCell: UICollectionViewCell {
             weight: .semibold
         )
         config.baseForegroundColor = lesson.state == .locked ? .secondaryLabel : .label
-        config.image = lesson.thumbnailName == nil
-            ? UIImage(systemName: lesson.state == .locked ? "lock.fill" : lesson.symbolName)
-            : nil
+        let hasLocalThumbnail = lesson.thumbnailName.flatMap { UIImage(named: $0) } != nil
+        let hasRemoteThumbnail = lesson.thumbnailURL != nil
+        config.image = (hasLocalThumbnail || hasRemoteThumbnail)
+            ? nil
+            : UIImage(systemName: lesson.state == .locked ? "lock.fill" : lesson.symbolName)
         return config
     }
 
-    private static let ciContext = CIContext()
-
-    private static func grayscaleImage(from image: UIImage) -> UIImage? {
-        guard let ciImage = CIImage(image: image) else { return nil }
-        guard let filter = CIFilter(name: "CIColorControls") else { return nil }
-        filter.setValue(ciImage, forKey: kCIInputImageKey)
-        filter.setValue(0.0, forKey: kCIInputSaturationKey)
-        guard
-            let output = filter.outputImage,
-            let cgImage = ciContext.createCGImage(output, from: ciImage.extent)
-        else { return nil }
-        return UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
+    private func applyThumbnail(_ image: UIImage?, lesson: PathLesson, iconSize: CGFloat) {
+        if let image {
+            thumbnailView.isHidden = false
+            thumbnailView.image = image
+            lockOverlay.isHidden = lesson.state != .locked
+            lockOverlay.preferredSymbolConfiguration = UIImage.SymbolConfiguration(
+                pointSize: iconSize,
+                weight: .semibold
+            )
+            if var config = button.configuration {
+                config.image = nil
+                button.configuration = config
+            }
+        } else {
+            thumbnailView.isHidden = true
+            thumbnailView.image = nil
+            lockOverlay.isHidden = true
+            if var config = button.configuration {
+                config.image = UIImage(systemName: lesson.state == .locked ? "lock.fill" : lesson.symbolName)
+                button.configuration = config
+            }
+        }
     }
 }
 
@@ -1251,12 +1909,64 @@ private final class LessonPartRingView: UIView {
         self.lineWidth = lineWidth
         self.highlightCompleted = highlightCompleted
         rebuildSegmentsIfNeeded()
+        updateSegmentAppearance()
         setNeedsLayout()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         rebuildSegmentsIfNeeded()
+        updateSegmentAppearance()
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+            setNeedsLayout()
+        }
+    }
+
+    private static let filledColor = UIColor.systemBlue
+
+    private static let emptyColor = UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.26)
+            : UIColor(white: 0, alpha: 0.16)
+    }
+
+    private func rebuildSegmentsIfNeeded() {
+        guard segmentLayers.count != partCount else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+
+        segmentLayers.forEach { $0.removeFromSuperlayer() }
+        let empty = Self.emptyColor.resolvedColor(with: traitCollection).cgColor
+        segmentLayers = (0 ..< partCount).map { _ in
+            let layer = CAShapeLayer()
+            layer.isOpaque = false
+            layer.fillColor = UIColor.clear.cgColor
+            layer.strokeColor = empty
+            layer.lineCap = .round
+            layer.lineJoin = .round
+            layer.actions = [
+                "path": NSNull(),
+                "strokeColor": NSNull(),
+                "strokeStart": NSNull(),
+                "strokeEnd": NSNull(),
+                "opacity": NSNull(),
+                "lineWidth": NSNull(),
+            ]
+            self.layer.addSublayer(layer)
+            return layer
+        }
+    }
+
+    private func updateSegmentAppearance() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+
         let inset = lineWidth / 2
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         let radius = max(0, min(bounds.width, bounds.height) / 2 - inset)
@@ -1264,6 +1974,8 @@ private final class LessonPartRingView: UIView {
         let gap = min(.pi / 8, (lineWidth + visualGap) / max(radius, 1))
         let sweep = (2 * .pi - CGFloat(partCount) * gap) / CGFloat(partCount)
         let start0 = -CGFloat.pi / 2 + gap / 2
+        let empty = Self.emptyColor.resolvedColor(with: traitCollection).cgColor
+        let filled = Self.filledColor.resolvedColor(with: traitCollection).cgColor
 
         for (index, layer) in segmentLayers.enumerated() {
             let start = start0 + CGFloat(index) * (sweep + gap)
@@ -1276,28 +1988,9 @@ private final class LessonPartRingView: UIView {
             )
             layer.path = path.cgPath
             layer.lineWidth = lineWidth
-            let filled = index < completedParts
-            if filled {
-                layer.opacity = Float(highlightCompleted ? 0.82 : 0.38)
-                layer.strokeColor = UIColor.systemBlue.resolvedColor(with: traitCollection).cgColor
-            } else {
-                layer.opacity = 0.08
-                layer.strokeColor = UIColor.systemGray.resolvedColor(with: traitCollection).cgColor
-            }
-        }
-    }
-
-    private func rebuildSegmentsIfNeeded() {
-        guard segmentLayers.count != partCount else { return }
-        segmentLayers.forEach { $0.removeFromSuperlayer() }
-        segmentLayers = (0 ..< partCount).map { _ in
-            let layer = CAShapeLayer()
-            layer.isOpaque = false
-            layer.fillColor = UIColor.clear.cgColor
-            layer.lineCap = .round
-            layer.lineJoin = .round
-            self.layer.addSublayer(layer)
-            return layer
+            let isFilled = index < completedParts
+            layer.strokeColor = isFilled ? filled : empty
+            layer.opacity = isFilled && !highlightCompleted ? 0.78 : 1
         }
     }
 
@@ -1310,6 +2003,7 @@ private final class LessonTitleTipView: UIView {
     enum ArrowEdge {
         case top
         case bottom
+        case none
     }
 
     var onDismiss: (() -> Void)?
@@ -1334,6 +2028,8 @@ private final class LessonTitleTipView: UIView {
     private var arrowBottomConstraint: NSLayoutConstraint?
     private var cardTopConstraint: NSLayoutConstraint?
     private var cardBottomConstraint: NSLayoutConstraint?
+    private var startButtonTopConstraint: NSLayoutConstraint?
+    private var startButtonBottomConstraint: NSLayoutConstraint?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1396,6 +2092,8 @@ private final class LessonTitleTipView: UIView {
         arrowBottomConstraint = arrowView.centerYAnchor.constraint(equalTo: cardView.bottomAnchor)
         cardTopConstraint = cardView.topAnchor.constraint(equalTo: topAnchor, constant: Self.arrowProtrusion)
         cardBottomConstraint = cardView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        startButtonTopConstraint = startButton.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 12)
+        startButtonBottomConstraint = startButton.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -14)
 
         NSLayoutConstraint.activate([
             arrowXConstraint!,
@@ -1416,10 +2114,10 @@ private final class LessonTitleTipView: UIView {
             subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             subtitleLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
 
-            startButton.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 12),
+            startButtonTopConstraint!,
             startButton.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 14),
             startButton.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -14),
-            startButton.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -14),
+            startButtonBottomConstraint!,
             startButton.heightAnchor.constraint(equalToConstant: 40),
         ])
 
@@ -1453,6 +2151,10 @@ private final class LessonTitleTipView: UIView {
         let radius = Self.cornerRadius
         let path = UIBezierPath()
         guard card.width > radius * 2, card.height > radius * 2 else { return path }
+
+        if arrowEdge == .none {
+            return UIBezierPath(roundedRect: card, cornerRadius: radius)
+        }
 
         let baseHalf = Self.arrowProtrusion
         let minTipX = card.minX + radius + baseHalf
@@ -1571,10 +2273,29 @@ private final class LessonTitleTipView: UIView {
         )
     }
 
-    func apply(title: String, subtitle: String, hasProgress: Bool) {
+    func apply(title: String, subtitle: String, hasProgress: Bool, isLocked: Bool = false) {
         titleLabel.text = title
         subtitleLabel.text = subtitle
-        startButton.configuration?.title = hasProgress ? "Continue Lesson" : "Start Lesson"
+        var config = startButton.configuration ?? UIButton.Configuration.filled()
+        if isLocked {
+            config.title = "Lesson Locked"
+            config.image = UIImage(systemName: "lock.fill")
+            config.baseBackgroundColor = UIColor.tertiarySystemFill
+            config.baseForegroundColor = .secondaryLabel
+        } else {
+            let yellow = PrimaryButton.appearance(for: .yellow)
+            config.title = hasProgress ? "Continue Lesson" : "Start Lesson"
+            config.image = UIImage(systemName: "play.fill")
+            config.baseBackgroundColor = yellow.backgroundColor
+            config.baseForegroundColor = yellow.titleColor
+        }
+        startButton.configuration = config
+        startButton.isUserInteractionEnabled = !isLocked
+        if isLocked {
+            startButton.accessibilityTraits.insert(.notEnabled)
+        } else {
+            startButton.accessibilityTraits.remove(.notEnabled)
+        }
         invalidateIntrinsicContentSize()
     }
 
@@ -1591,6 +2312,11 @@ private final class LessonTitleTipView: UIView {
             arrowBottomConstraint?.isActive = true
             cardTopConstraint?.constant = 0
             cardBottomConstraint?.constant = -Self.arrowProtrusion
+        case .none:
+            arrowTopConstraint?.isActive = false
+            arrowBottomConstraint?.isActive = false
+            cardTopConstraint?.constant = 0
+            cardBottomConstraint?.constant = 0
         }
         setNeedsLayout()
     }
@@ -1675,7 +2401,7 @@ private final class LessonPathTuningSheetViewController: UIViewController {
         sliderStack.spacing = 16
         sliderStack.translatesAutoresizingMaskIntoConstraints = false
 
-        for spec in PathTuningSliderSpec.allCases {
+        for spec in PathTuningSliderSpec.specs(for: configuration) {
             let row = makeSliderRow(for: spec)
             sliderRows.append((spec, row.slider, row.valueLabel))
             sliderStack.addArrangedSubview(row.container)
@@ -1795,6 +2521,11 @@ private final class LessonPathTuningSheetViewController: UIViewController {
         case .amplitude: configuration.amplitude = CGFloat(value)
         case .nodeSize: configuration.nodeSize = CGFloat(value)
         case .phase: configuration.phase = CGFloat(value)
+        case .corridor: configuration.corridorFraction = CGFloat(value)
+        case .titleColumnGap: configuration.titleColumnGap = CGFloat(value)
+        case .titleFontSize: configuration.titleFontSize = CGFloat(value)
+        case .subtitleFontSize: configuration.subtitleFontSize = CGFloat(value)
+        case .cardVerticalOffset: configuration.cardVerticalOffset = CGFloat(value)
         }
         updateValueLabel(for: spec)
         onChange?(configuration)
@@ -1819,26 +2550,30 @@ private final class LessonPathTuningSheetViewController: UIViewController {
         case .amplitude: return Float(configuration.amplitude)
         case .nodeSize: return Float(configuration.nodeSize)
         case .phase: return Float(configuration.phase)
+        case .corridor: return Float(configuration.corridorFraction)
+        case .titleColumnGap: return Float(configuration.titleColumnGap)
+        case .titleFontSize: return Float(configuration.titleFontSize)
+        case .subtitleFontSize: return Float(configuration.subtitleFontSize)
+        case .cardVerticalOffset: return Float(configuration.cardVerticalOffset)
         }
     }
 
     private func formattedValue(_ value: Float, spec: PathTuningSliderSpec) -> String {
         switch spec {
-        case .spacing, .nodeSize:
+        case .spacing, .nodeSize, .titleColumnGap, .titleFontSize, .subtitleFontSize, .cardVerticalOffset:
             return String(format: "%.0f", value)
         case .frequency, .amplitude, .phase:
             return String(format: "%.2f", value)
+        case .corridor:
+            return String(format: "%.0f%%", value * 100)
         }
     }
 
     private func copyRecipe() {
-        let text = """
-        spacing: \(formattedValue(Float(configuration.spacing), spec: .spacing))
-        frequency: \(formattedValue(Float(configuration.frequency), spec: .frequency))
-        amplitude: \(formattedValue(Float(configuration.amplitude), spec: .amplitude))
-        nodeSize: \(formattedValue(Float(configuration.nodeSize), spec: .nodeSize))
-        phase: \(formattedValue(Float(configuration.phase), spec: .phase))
-        """
+        let specs = PathTuningSliderSpec.specs(for: configuration)
+        let text = specs.map { spec in
+            "\(spec.title): \(formattedValue(read(spec), spec: spec))"
+        }.joined(separator: "\n")
         UIPasteboard.general.string = text
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }

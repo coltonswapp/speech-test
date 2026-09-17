@@ -40,6 +40,7 @@ export async function upsertCollectionFile(
       subtitle: file.subtitle ?? null,
       sceneImage: file.sceneImage ?? null,
       thumbnailUrl: file.thumbnailUrl ?? null,
+      thumbnailSmallUrl: file.thumbnailSmallUrl ?? null,
     })
     .onConflictDoUpdate({
       target: dialogueCollection.id,
@@ -48,6 +49,7 @@ export async function upsertCollectionFile(
         subtitle: sql`excluded.subtitle`,
         sceneImage: sql`excluded.scene_image`,
         thumbnailUrl: sql`excluded.thumbnail_url`,
+        thumbnailSmallUrl: sql`excluded.thumbnail_small_url`,
         updatedAt: new Date(),
       },
     });
@@ -72,6 +74,7 @@ export async function upsertCollectionFile(
         grammarPointIds: scenario.grammarPointIDs ?? [],
         setting: scenario.scenario.setting ?? null,
         thumbnailUrl: scenario.thumbnailUrl ?? null,
+        thumbnailSmallUrl: scenario.thumbnailSmallUrl ?? null,
         lines: scenario.scenario.lines,
         highlights: scenario.highlights ?? null,
         quiz: scenario.quiz ?? null,

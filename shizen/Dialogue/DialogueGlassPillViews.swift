@@ -38,11 +38,15 @@ final class DialogueGlassPillView: UIView {
     let text: String
     /// Invoked when the pill is tapped, with the pill's text.
     var onTap: ((String) -> Void)?
+    /// True after the learner has opened this pill (dictionary / grammar).
+    private(set) var isViewed = false
 
     // Press feedback adapted from `PrimaryButton` (single haptic on press-down).
     private let pressHaptic = UISelectionFeedbackGenerator()
     /// Tint overlaid on the glass while pressed.
     private let pressTintView = UIView()
+    /// Fallback fill for the viewed state on OS versions without glass tint.
+    private let viewedTintView = UIView()
 
     init(text: String, style: DialogueGlassPillStyle = .vocab) {
         self.style = style
@@ -55,6 +59,13 @@ final class DialogueGlassPillView: UIView {
         accessibilityLabel = text
 
         LiquidGlassEffectView.applyPillStyle(to: glassView, cornerRadius: Self.cornerRadius)
+
+        viewedTintView.translatesAutoresizingMaskIntoConstraints = false
+        viewedTintView.backgroundColor = UIColor.systemGray.withAlphaComponent(0.22)
+        viewedTintView.layer.cornerRadius = Self.cornerRadius
+        viewedTintView.layer.cornerCurve = .continuous
+        viewedTintView.isUserInteractionEnabled = false
+        viewedTintView.alpha = 0
 
         pressTintView.translatesAutoresizingMaskIntoConstraints = false
         pressTintView.backgroundColor = UIColor.label.withAlphaComponent(0.12)
@@ -69,6 +80,7 @@ final class DialogueGlassPillView: UIView {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
         addSubview(glassView)
+        addSubview(viewedTintView)
         addSubview(pressTintView)
         addSubview(titleLabel)
 
@@ -82,6 +94,11 @@ final class DialogueGlassPillView: UIView {
             glassView.leadingAnchor.constraint(equalTo: leadingAnchor),
             glassView.trailingAnchor.constraint(equalTo: trailingAnchor),
             glassView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            viewedTintView.topAnchor.constraint(equalTo: topAnchor),
+            viewedTintView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            viewedTintView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            viewedTintView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             pressTintView.topAnchor.constraint(equalTo: topAnchor),
             pressTintView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -100,6 +117,13 @@ final class DialogueGlassPillView: UIView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    func setViewed(_ viewed: Bool, animated: Bool) {
+        guard isViewed != viewed else { return }
+        isViewed = viewed
+        accessibilityValue = viewed ? "Looked up" : nil
+        applyViewedAppearance(animated: animated)
     }
 
     private func applyText(_ text: String) {
@@ -122,6 +146,51 @@ final class DialogueGlassPillView: UIView {
                 text: text,
                 style: style
             )
+    }
+
+    private func applyViewedAppearance(animated: Bool) {
+        applyGlassTint(viewed: isViewed)
+
+        let borderColor = isViewed
+            ? UIColor.systemGray.withAlphaComponent(0.38).cgColor
+            : UIColor.white.withAlphaComponent(0.22).cgColor
+        let overlayAlpha: CGFloat
+        if #available(iOS 26.0, *) {
+            overlayAlpha = 0
+        } else {
+            overlayAlpha = isViewed ? 1 : 0
+        }
+
+        let updates = { [self] in
+            glassView.layer.borderColor = borderColor
+            viewedTintView.alpha = overlayAlpha
+        }
+
+        if animated {
+            UIView.animate(
+                withDuration: 0.28,
+                delay: 0,
+                options: [.allowUserInteraction, .beginFromCurrentState],
+                animations: updates
+            )
+        } else {
+            updates()
+        }
+    }
+
+    private func applyGlassTint(viewed: Bool) {
+        if #available(iOS 26.0, *) {
+            let glassEffect = UIGlassEffect(style: .regular)
+            glassEffect.isInteractive = false
+            if viewed {
+                glassEffect.tintColor = UIColor.systemGray3.withAlphaComponent(0.55)
+            }
+            glassView.effect = glassEffect
+        } else {
+            glassView.backgroundColor = viewed
+                ? UIColor.systemGray5
+                : UIColor.systemBackground.withAlphaComponent(0.82)
+        }
     }
 
     override func didMoveToWindow() {
@@ -287,13 +356,19 @@ final class DialogueGlassPillFlowView: UIView {
     var onPillTap: ((String) -> Void)?
     /// Invoked with grammar point id when a tagged grammar pill is tapped.
     var onGrammarTap: ((String) -> Void)?
+    /// Vocabulary surfaces already opened in this session, kept across `configure`.
+    private var viewedTexts: Set<String> = []
 
     func configure(texts: [String], style: DialogueGlassPillStyle = .vocab) {
         pillStyle = style
         pillViews.forEach { $0.removeFromSuperview() }
         pillViews = texts.map { text in
             let pill = DialogueGlassPillView(text: text, style: style)
-            pill.onTap = { [weak self] tapped in self?.onPillTap?(tapped) }
+            pill.onTap = { [weak self] tapped in
+                self?.markViewed(text: tapped, animated: true)
+                self?.onPillTap?(tapped)
+            }
+            pill.setViewed(viewedTexts.contains(text), animated: false)
             addSubview(pill)
             return pill
         }
@@ -316,6 +391,11 @@ final class DialogueGlassPillFlowView: UIView {
         laidOutHeight = 0
         invalidateIntrinsicContentSize()
         setNeedsLayout()
+    }
+
+    private func markViewed(text: String, animated: Bool) {
+        viewedTexts.insert(text)
+        pillViews.first { $0.text == text }?.setViewed(true, animated: animated)
     }
 
     override func layoutSubviews() {

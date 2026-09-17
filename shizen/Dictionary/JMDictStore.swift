@@ -97,7 +97,7 @@ final class JMDictStore {
         }
     }
 
-    /// Looks up entries for a surface string: inflected-form → lemma (when recognized, including i-adjective くて/かった), exact match, lemma again, tail trim, expression prefix.
+    /// Looks up entries for a surface string: inflected-form → lemma (when recognized, including i-adjective くて/かった), exact match, lemma again, honorific お-stem, tail trim, then a conservative expression prefix.
     func entries(forSurface surface: String) -> [JMDictEntry] {
         lookup(forSurface: surface).entries
     }
@@ -143,6 +143,12 @@ final class JMDictStore {
                     result = rows
                     return
                 }
+                // お隣 is not a headword; 隣 is. Prefer that over prefix-jumping to お隣さん.
+                if let stem = Self.honorificOStem(trimmed),
+                   let rows = try exactMatch(in: db, surface: stem), !rows.isEmpty {
+                    result = rows
+                    return
+                }
                 // Tail trim: conjugated forms. Skip when the surface is a known i-adjective
                 // inflection (うるさくて) — prefix matches like うる (to sell) are worse than a miss.
                 if Self.iAdjectiveLemmaCandidate(surface: trimmed) == nil {
@@ -150,7 +156,8 @@ final class JMDictStore {
                     while shortened.count > 1 {
                         shortened = String(shortened.dropLast())
                         if let rows = try exactMatch(in: db, surface: shortened), !rows.isEmpty {
-                            if Self.shouldRejectSpuriousSingleKanjiTailMatch(trimmed: shortened, original: trimmed) {
+                            if Self.shouldRejectSpuriousSingleKanjiTailMatch(trimmed: shortened, original: trimmed)
+                                || Self.shouldRejectKanjiSuffixTailMatch(trimmed: shortened, original: trimmed) {
                                 continue
                             }
                             result = rows
@@ -159,6 +166,7 @@ final class JMDictStore {
                     }
                 }
                 result = try prefixMatchExpression(in: db, surface: trimmed, limit: 20)
+                    .filter { !Self.shouldRejectLongerPrefixMatch(surface: trimmed, matchExpression: $0.expression) }
             }
         } catch {
             print("JMDictStore: query error: \(error)")
@@ -242,6 +250,16 @@ final class JMDictStore {
             return corrected
         }
 
+        if let corrected = Self.correctAidaKanRubyReading(
+            wordSurface: trimmedWord,
+            rubySurface: trimmedRuby,
+            rubyReading: rubyReading,
+            range: range,
+            in: sentence
+        ) {
+            return corrected
+        }
+
         // MeCab may emit a lone kanji stem (行こう → 行 + こう); trust its kanji-only ruby for that token.
         if trimmedWord == trimmedRuby,
            Self.isSingleUnifiedKanjiExpression(trimmedRuby) {
@@ -251,12 +269,22 @@ final class JMDictStore {
         openDatabaseIfNeeded()
         guard let dbQueue else { return rubyReading }
 
-        guard let lookupExpression = furiganaLookupExpression(
+        guard var lookupExpression = furiganaLookupExpression(
             wordSurface: trimmedWord,
             wordDictionaryForm: wordDictionaryForm,
             rubySurface: trimmedRuby
         ) else {
             return rubyReading
+        }
+        // MeCab often splits 初めまして as 初め+まして. The only exact 初め row is
+        // the rare ぞめ suffix; extend to the longer greeting when it is on the page.
+        if let longer = kanaExtendedExactMatch(
+            wordSurface: trimmedWord,
+            rubySurface: trimmedRuby,
+            range: range,
+            in: sentence
+        ) {
+            lookupExpression = longer
         }
 
         do {
@@ -293,6 +321,17 @@ final class JMDictStore {
                    chosenLemmaReading.hasSuffix(lemmaTail),
                    chosenLemmaReading.count > lemmaTail.count {
                     return String(chosenLemmaReading.dropLast(lemmaTail.count))
+                }
+                // Kana prefix + kanji (この間 / このあいだ → あいだ on 間).
+                if lookupExpression.hasSuffix(trimmedRuby),
+                   lookupExpression.count > trimmedRuby.count {
+                    let prefix = String(lookupExpression.dropLast(trimmedRuby.count))
+                    if !prefix.isEmpty,
+                       prefix.allSatisfy(Self.isExtendedKana),
+                       chosenLemmaReading.hasPrefix(prefix),
+                       chosenLemmaReading.count > prefix.count {
+                        return String(chosenLemmaReading.dropFirst(prefix.count))
+                    }
                 }
                 return rubyReading
             }
@@ -440,13 +479,20 @@ final class JMDictStore {
         }
 
         guard let top = bestScoreByReading.max(by: { $0.value < $1.value }) else { return mecabReading }
-        // MeCab reading absent from JMdict (e.g. 一人 → いちにん): prefer the top dictionary reading.
-        guard let mecabScore = bestScoreByReading[mecabReading] else { return top.key }
-        if top.key != mecabReading, top.value >= mecabScore + 1000 {
+        // MeCab reading absent from JMdict (一人 → いちにん / ひとり): take the
+        // dictionary reading only when it is actually popular. A score-0 hapax
+        // (初め/ぞめ) must not overwrite MeCab's はじめ.
+        guard let mecabScore = bestScoreByReading[mecabReading] else {
+            return top.value >= Self.minimumDictionaryOverrideScore ? top.key : mecabReading
+        }
+        if top.key != mecabReading, top.value >= mecabScore + Self.minimumDictionaryOverrideScore {
             return top.key
         }
         return mecabReading
     }
+
+    /// Score gap / floor used when JMdict may override MeCab (ひとり vs いちにん).
+    private static let minimumDictionaryOverrideScore = 1000
 
     private static let tsuraiContextSubstrings = [
         "思い出", "世知", "別れ", "運命", "経験", "人生", "状況", "時期", "厳しい", "つらい",
@@ -520,6 +566,48 @@ final class JMDictStore {
             return "かた"
         }
         return nil
+    }
+
+    /// Prefixes after lone 間 that mark ま (間に合う, 間違い), not あいだ.
+    private static let maReadingAfterAidaCues = [
+        "に合", "にあう", "にあわ", "にあっ", "にあえ", "にあお", "にあい",
+        "違",
+    ]
+
+    /// Kanji that commonly leave a leftover 間 token with on-yomi かん
+    /// when a compound failed to merge (時+間, 年+間).
+    private static let kanReadingBeforeAidaCues: Set<Character> = [
+        "時", "年", "週", "月", "日", "人", "空", "期", "瞬", "世", "区", "分",
+    ]
+
+    /// MeCab/IPADic defaults lone 間 to on-yomi かん. Standalone noun usage
+    /// is あいだ (この間, 間に). Keep ま for 間に合う / 間違い. Compounds
+    /// (時間, 間に合う as one token) keep MeCab/JMdict via `wordSurface`.
+    private static func correctAidaKanRubyReading(
+        wordSurface: String,
+        rubySurface: String,
+        rubyReading: String,
+        range: Range<String.Index>?,
+        in sentence: String
+    ) -> String? {
+        guard rubySurface == "間", wordSurface == "間" else { return nil }
+        if rubyReading == "あいだ" || rubyReading == "ま" { return nil }
+
+        if let range {
+            let after = String(sentence[range.upperBound...])
+            if maReadingAfterAidaCues.contains(where: { after.hasPrefix($0) }) {
+                return "ま"
+            }
+            if range.lowerBound > sentence.startIndex {
+                let before = sentence[sentence.index(before: range.lowerBound)]
+                if kanReadingBeforeAidaCues.contains(before) {
+                    return nil
+                }
+            }
+        }
+
+        guard rubyReading == "かん" else { return nil }
+        return "あいだ"
     }
 
     private static func isOclockJiContext(in sentence: String, at range: Range<String.Index>?) -> Bool {
@@ -1400,6 +1488,67 @@ final class JMDictStore {
             return false
         }
         return true
+    }
+
+    /// Tail-trim is for kana conjugations. Dropping a kanji (いい所 → いい) is a
+    /// compound split, not a lemma — keep looking or miss so the original surface stays.
+    private static func shouldRejectKanjiSuffixTailMatch(trimmed: String, original: String) -> Bool {
+        guard trimmed != original, original.hasPrefix(trimmed) else { return false }
+        return original.dropFirst(trimmed.count).contains(where: isKanjiCharacter)
+    }
+
+    /// Honorific お- plus a kanji stem (お隣 → 隣). Kana-only remainders (おく, おいしい)
+    /// are not honorific prefixes.
+    private static func honorificOStem(_ surface: String) -> String? {
+        guard surface.hasPrefix("お"), surface.count > 1 else { return nil }
+        let stem = String(surface.dropFirst())
+        guard stem.contains(where: isKanjiCharacter) else { return nil }
+        return stem
+    }
+
+    /// Prefix match is for incomplete input (食べ → 食べる). Do not jump to a
+    /// longer lexical item (お隣 → お隣さん, 東京 → 東京大学).
+    private static func shouldRejectLongerPrefixMatch(surface: String, matchExpression: String) -> Bool {
+        guard matchExpression.hasPrefix(surface), matchExpression.count > surface.count else {
+            return false
+        }
+        let extra = String(matchExpression.dropFirst(surface.count))
+        if extra.contains(where: isKanjiCharacter) { return true }
+        let nameSuffixes = ["さん", "さま", "ちゃん", "くん"]
+        return nameSuffixes.contains { extra == $0 || extra.hasPrefix($0) }
+    }
+
+    /// MeCab may emit 初め when the page actually has 初めまして / 初めて / 初めに.
+    /// Only grow by kana (plus a listed `Xは` compound) so 今日+は stays split.
+    private func kanaExtendedExactMatch(
+        wordSurface: String,
+        rubySurface: String,
+        range: Range<String.Index>?,
+        in sentence: String
+    ) -> String? {
+        guard let range,
+              !wordSurface.isEmpty,
+              wordSurface.hasPrefix(rubySurface),
+              String(sentence[range]) == rubySurface
+        else { return nil }
+        let start = range.lowerBound
+        let maxLen = min(12, sentence.distance(from: start, to: sentence.endIndex))
+        let minLen = wordSurface.count + 1
+        guard maxLen >= minLen else { return nil }
+        var best: String?
+        for len in minLen...maxLen {
+            let end = sentence.index(start, offsetBy: len)
+            let candidate = String(sentence[start..<end])
+            let extra = String(candidate.dropFirst(wordSurface.count))
+            guard !extra.isEmpty, extra.allSatisfy(Self.isExtendedKana) else { break }
+            if extra == "は", !Self.mergeCompoundWithTrailingHa.contains(candidate) {
+                continue
+            }
+            if hasExactLexicalMatch(for: candidate) {
+                best = candidate
+            }
+        }
+        return best
     }
 
     private static func containsHiragana(_ s: String) -> Bool {

@@ -39,12 +39,15 @@ final class SentenceScrubExperimentViewController: UIViewController {
     /// Authored dialogue tokens (token sync). When set, scrub uses these
     /// instead of running the app tokenizer.
     private var providedTokens: [JapaneseToken]?
+    /// Validated token timings from the host. Used only for dialogue-line karaoke.
+    private var tokenSync: DialogueTokenSync?
     private let recordedClip: RealtimeAudioClip?
     private let onReplayClip: ((RealtimeAudioClip) -> Void)?
     private let dialogueLineAudio: DialogueLineAudioReference?
     /// Neighboring dialogue lines for the Gemini nuance card.
     private var dialogueContext: DialogueNuanceContext?
     private let grammarAudioPlayer = GrammarAudioPlayer()
+    private var appliedKaraokeTokenKey = -1
 
     init(
         sentence: String,
@@ -53,7 +56,8 @@ final class SentenceScrubExperimentViewController: UIViewController {
         onReplayClip: ((RealtimeAudioClip) -> Void)? = nil,
         dialogueLineAudio: DialogueLineAudioReference? = nil,
         dialogueContext: DialogueNuanceContext? = nil,
-        tokens: [JapaneseToken]? = nil
+        tokens: [JapaneseToken]? = nil,
+        tokenSync: DialogueTokenSync? = nil
     ) {
         currentSentence = sentence
         let trimmedEnglish = englishTranslation?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -63,6 +67,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         self.onReplayClip = onReplayClip
         self.dialogueLineAudio = dialogueLineAudio
         self.dialogueContext = dialogueContext
+        self.tokenSync = tokenSync
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -77,6 +82,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         dialogueLineAudio = nil
         dialogueContext = nil
         providedTokens = nil
+        tokenSync = nil
         super.init(coder: coder)
     }
 
@@ -98,10 +104,13 @@ final class SentenceScrubExperimentViewController: UIViewController {
     private var nuanceLoadRequest: GeminiDialogueNuance.Request?
 
     private static let audioButtonSize: CGFloat = 56
+    private static let audioGlyphPointSize: CGFloat = 22
     private static let audioGlyphColor = UIColor.systemYellow
 
     private let speakSentenceButton = UIButton(type: .system)
     private let speakSentenceGlyphView = UIImageView()
+    private var isPlayingSentence = false
+    private var sentencePlaybackGeneration = 0
 
     /// Direct (non-SwiftUI) system translation, iOS 26+. Reused across
     /// sentences — the ja→en pair never changes for this screen.
@@ -202,9 +211,9 @@ final class SentenceScrubExperimentViewController: UIViewController {
         currentSentence = text
         providedEnglish = nil
         providedTokens = nil
+        tokenSync = nil
         dialogueContext = nil
-        wordSpeaker.stop()
-        grammarAudioPlayer.stop()
+        stopSentencePlayback()
         updateSpeakButtonAccessibility()
         beginEnglishTranslationIfNeeded()
         applySentenceToScrubView()
@@ -214,6 +223,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
     }
 
     private func applySentenceToScrubView() {
+        appliedKaraokeTokenKey = -1
         let font = titleFontForSentenceLine()
         if let providedTokens {
             scrubbableSentenceView.configureWithTokens(
@@ -301,7 +311,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
             speakSentenceButton,
             glyphView: speakSentenceGlyphView,
             symbolName: "play.fill",
-            glyphPointSize: 22,
+            glyphPointSize: Self.audioGlyphPointSize,
             accessibilityLabel: "Speak sentence"
         )
         speakSentenceButton.accessibilityHint = "Plays audio of the Japanese example sentence"
@@ -316,7 +326,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
             nuanceButton,
             glyphView: nuanceGlyphView,
             symbolName: "sparkle.magnifyingglass",
-            glyphPointSize: 22,
+            glyphPointSize: Self.audioGlyphPointSize,
             accessibilityLabel: "Implied meaning"
         )
         nuanceButton.accessibilityHint = "Shows the implied meaning of this line"
@@ -388,8 +398,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         if isMovingFromParent || isBeingDismissed {
-            grammarAudioPlayer.stop()
-            wordSpeaker.stop()
+            stopSentencePlayback()
             translationTask?.cancel()
             nuanceLoadTask?.cancel()
         }
@@ -413,6 +422,11 @@ final class SentenceScrubExperimentViewController: UIViewController {
     }
 
     private func updateSpeakButtonAccessibility() {
+        if isPlayingSentence {
+            speakSentenceButton.accessibilityLabel = "Pause"
+            speakSentenceButton.accessibilityHint = "Stops audio playback"
+            return
+        }
         if let recordedClip, !recordedClip.pcmData.isEmpty {
             speakSentenceButton.accessibilityLabel = "Replay recording"
             speakSentenceButton.accessibilityHint = "Plays the recorded audio for this sentence"
@@ -423,6 +437,35 @@ final class SentenceScrubExperimentViewController: UIViewController {
             speakSentenceButton.accessibilityLabel = "Speak sentence"
             speakSentenceButton.accessibilityHint = "Plays audio of the Japanese example sentence"
         }
+    }
+
+    private func setSentencePlaying(_ playing: Bool) {
+        guard isPlayingSentence != playing else { return }
+        isPlayingSentence = playing
+        let symbolName = playing ? "pause.fill" : "play.fill"
+        let symbolConfig = UIImage.SymbolConfiguration(pointSize: Self.audioGlyphPointSize, weight: .semibold)
+        let image = UIImage(systemName: symbolName, withConfiguration: symbolConfig)?
+            .withRenderingMode(.alwaysTemplate)
+        speakSentenceGlyphView.preferredSymbolConfiguration = symbolConfig
+        if let image {
+            speakSentenceGlyphView.setSymbolImage(image, contentTransition: .replace)
+        } else {
+            speakSentenceGlyphView.image = image
+        }
+        updateSpeakButtonAccessibility()
+    }
+
+    private func finishSentencePlayback() {
+        clearKaraokeHighlight()
+        setSentencePlaying(false)
+    }
+
+    private func stopSentencePlayback() {
+        sentencePlaybackGeneration += 1
+        grammarAudioPlayer.stop()
+        wordSpeaker.stop()
+        RealtimePCMPlayer.shared.stop()
+        finishSentencePlayback()
     }
 
     private func setEnglishLabelText(_ text: String) {
@@ -662,13 +705,30 @@ final class SentenceScrubExperimentViewController: UIViewController {
     }
 
     @objc private func speakFullSentenceTapped() {
+        if isPlayingSentence {
+            stopSentencePlayback()
+            return
+        }
+
         let trimmed = currentSentence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+
+        sentencePlaybackGeneration += 1
+        let generation = sentencePlaybackGeneration
+        let finished: () -> Void = { [weak self] in
+            guard let self, self.sentencePlaybackGeneration == generation else { return }
+            self.finishSentencePlayback()
+        }
+
+        setSentencePlaying(true)
         if let recordedClip, !recordedClip.pcmData.isEmpty {
+            clearKaraokeHighlight()
             if let onReplayClip {
                 onReplayClip(recordedClip)
+                let duration = Double(recordedClip.pcmData.count / 2) / recordedClip.sampleRate
+                DispatchQueue.main.asyncAfter(deadline: .now() + max(0.4, duration + 0.15), execute: finished)
             } else {
-                RealtimePCMPlayer.shared.play(recordedClip)
+                RealtimePCMPlayer.shared.play(recordedClip, onFinished: finished)
             }
             return
         }
@@ -679,18 +739,62 @@ final class SentenceScrubExperimentViewController: UIViewController {
                 audioKey: dialogueLineAudio.audioKey,
                 cacheMetadata: dialogueLineAudio.cacheMetadata,
                 dialogueLines: dialogueLineAudio.dialogueLines,
-                fallbackText: trimmed
+                fallbackText: trimmed,
+                onTime: { [weak self] time in
+                    self?.applyKaraoke(at: time)
+                },
+                onFinished: finished
             )
             return
         }
-        wordSpeaker.speak(trimmed)
+        clearKaraokeHighlight()
+        wordSpeaker.speak(trimmed, onFinished: finished)
+    }
+
+    private func applyKaraoke(at time: TimeInterval) {
+        let sync = ExperimentSettings.dialogueShowsTokenSync ? tokenSync : nil
+        guard let sync, let dialogueLineAudio else {
+            clearKaraokeHighlight()
+            return
+        }
+        let fullHeight = ExperimentSettings.dialogueTokenSyncHighlightStyle == .full
+        let tokenIndex = sync.tokenIndex(lineIndex: dialogueLineAudio.lineIndex, at: time)
+        let key = (tokenIndex ?? -1) + (fullHeight ? 10_000 : 0)
+        guard key != appliedKaraokeTokenKey else { return }
+        appliedKaraokeTokenKey = key
+        if let tokenIndex,
+           let range = sync.utf16Range(
+            lineIndex: dialogueLineAudio.lineIndex,
+            tokenIndex: tokenIndex,
+            inDisplay: scrubbableSentenceView.sentenceLineView.displayedString
+           ) {
+            scrubbableSentenceView.setKaraokeHighlight(
+                range: range,
+                fullHeight: fullHeight,
+                highlightColor: FuriganaTranscriptLabel.tokenSyncHighlightColor
+            )
+        } else {
+            scrubbableSentenceView.setKaraokeHighlight(
+                range: nil,
+                fullHeight: fullHeight,
+                highlightColor: FuriganaTranscriptLabel.tokenSyncHighlightColor
+            )
+        }
+    }
+
+    private func clearKaraokeHighlight() {
+        appliedKaraokeTokenKey = -1
+        scrubbableSentenceView.setKaraokeHighlight(
+            range: nil,
+            fullHeight: false,
+            highlightColor: FuriganaTranscriptLabel.tokenSyncHighlightColor
+        )
     }
 
     private func openRepeatAfterMe() {
         let trimmed = currentSentence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        grammarAudioPlayer.stop()
-        wordSpeaker.stop()
+        stopSentencePlayback()
 
         let repeatVC = RepeatAfterMeViewController(
             sentence: trimmed,

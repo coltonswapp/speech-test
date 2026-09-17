@@ -36,6 +36,7 @@ final class LessonAudioReplayButton: UIView {
         size: CGFloat = 50,
         glyphPointSize: CGFloat = 22,
         glyphDimension: CGFloat = 26,
+        symbolName: String = "speaker.wave.2.fill",
         accessibilityLabel: String = "Play pronunciation"
     ) {
         button = UIButton(type: .system)
@@ -51,7 +52,7 @@ final class LessonAudioReplayButton: UIView {
         button.accessibilityLabel = accessibilityLabel
 
         let symbolConfig = UIImage.SymbolConfiguration(pointSize: glyphPointSize, weight: .semibold)
-        glyphView.image = UIImage(systemName: "speaker.wave.2.fill", withConfiguration: symbolConfig)?
+        glyphView.image = UIImage(systemName: symbolName, withConfiguration: symbolConfig)?
             .withRenderingMode(.alwaysTemplate)
         glyphView.tintColor = .systemYellow
         glyphView.preferredSymbolConfiguration = symbolConfig
@@ -99,7 +100,8 @@ enum LessonChoiceGrid {
         spacing: CGFloat,
         target: Any?,
         action: Selector,
-        preferredHeight: CGFloat? = nil
+        preferredHeight: CGFloat? = nil,
+        chrome: KanaChoiceButton.Chrome? = nil
     ) -> [KanaChoiceButton] {
         gridStack.arrangedSubviews.forEach { row in
             gridStack.removeArrangedSubview(row)
@@ -121,7 +123,8 @@ enum LessonChoiceGrid {
                 let button = KanaChoiceButton(
                     value: value,
                     labelStyle: labelStyle,
-                    preferredHeight: preferredHeight
+                    preferredHeight: preferredHeight,
+                    chrome: chrome
                 )
                 button.addTarget(target, action: action, for: .touchUpInside)
                 buttons.append(button)
@@ -144,7 +147,8 @@ enum LessonChoiceList {
         spacing: CGFloat,
         target: Any?,
         action: Selector,
-        preferredHeight: CGFloat? = nil
+        preferredHeight: CGFloat? = nil,
+        chrome: KanaChoiceButton.Chrome? = nil
     ) -> [KanaChoiceButton] {
         listStack.arrangedSubviews.forEach {
             listStack.removeArrangedSubview($0)
@@ -157,7 +161,8 @@ enum LessonChoiceList {
                 value: value,
                 labelStyle: labelStyle,
                 layout: .listRow,
-                preferredHeight: preferredHeight
+                preferredHeight: preferredHeight,
+                chrome: chrome
             )
             button.addTarget(target, action: action, for: .touchUpInside)
             buttons.append(button)

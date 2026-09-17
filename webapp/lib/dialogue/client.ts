@@ -63,6 +63,7 @@ export type CollectionSummary = {
   premise: string | null;
   sceneImage: string | null;
   thumbnailUrl: string | null;
+  thumbnailSmallUrl: string | null;
   orderIndex: number;
   isActive: boolean;
   updatedAt: string;
@@ -100,6 +101,7 @@ export type DialogueScenario = {
   grammarPointIds: string[];
   setting: string | null;
   thumbnailUrl: string | null;
+  thumbnailSmallUrl: string | null;
   lines: DialogueLine[];
   highlights: DialogueHighlights | null;
   quiz: QuizQuestion[] | null;

@@ -10,7 +10,6 @@
 		F629EE192FBBBB15006A3F68 /* TTSCore in Frameworks */ = {isa = PBXBuildFile; productRef = F6AA00022F957A880FFF002 /* TTSCore */; };
 		F65E7DFB300B104C0081F120 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F65E7DFA300B104C0081F120 /* NNKit */; };
 		F66A6EE1303657A700E973CE /* InteractionKit in Frameworks */ = {isa = PBXBuildFile; productRef = F66A6EE0303657A700E973CE /* InteractionKit */; };
-		F6SUIS01SHADERBF01 /* SwiftUIShaders in Frameworks */ = {isa = PBXBuildFile; productRef = F6SUIS01SHADERPD01 /* SwiftUIShaders */; };
 		F66A6EF0303657B000E973CE /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F66A6EEF303657B000E973CE /* GRDB */; };
 		F66A6EF2303657B200E973CE /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6C0FM022FC0A00100000002 /* FoundationModels.framework */; };
 		F6713B1630019B3000A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1530019B3000A89257 /* NNKit */; };
@@ -24,6 +23,7 @@
 		F6DE0FAD2F957A8600FFF413 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F6DE0FAC2F957A8600FFF412 /* GRDB */; };
 		F6IK00102FINTERACT010 /* InteractionKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6IK00022FINTERACT002 /* InteractionKit */; };
 		F6SC00102FCONTENT010 /* GrammarContentKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6SC00022FCONTENT002 /* GrammarContentKit */; };
+		F6SUIS01SHADERBF01 /* SwiftUIShaders in Frameworks */ = {isa = PBXBuildFile; productRef = F6SUIS01SHADERPD01 /* SwiftUIShaders */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */

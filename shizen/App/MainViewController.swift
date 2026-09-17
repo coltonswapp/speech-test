@@ -47,7 +47,7 @@ final class MainViewController: UIViewController {
     private var lastAppliedMainTabTopInset: CGFloat = -1
     private var trackedVerticalScrollPageIndex = 0
     private var lastObservedVerticalOffset: CGFloat = 0
-    private let verticalScrollObserver = MainTabVerticalScrollObserver()
+    private var verticalScrollObservations: [NSKeyValueObservation] = []
 
     private static let verticalScrollTopRevealThreshold: CGFloat = 12
     private static let verticalScrollDirectionThreshold: CGFloat = 2
@@ -113,7 +113,7 @@ final class MainViewController: UIViewController {
     }
 
     @objc private func openSettings() {
-        let settings = SavedGenerationsViewController(store: .shared)
+        let settings = SettingsViewController(store: .shared)
         settings.onSelect = { [weak settings] url in
             guard let settings else { return }
             let tts = TextToSpeechExperimentViewController()
@@ -242,14 +242,15 @@ final class MainViewController: UIViewController {
     }
 
     private func installVerticalScrollObservers() {
-        verticalScrollObserver.onScroll = { [weak self] scrollView in
-            self?.handleMainTabVerticalScroll(scrollView)
-        }
+        verticalScrollObservations = []
         for child in pageViewControllers {
             guard let scrollable = child as? MainTabScrollable else { continue }
             for scrollView in scrollable.mainTabScrollViews {
                 configureScrollEdgeEffects(on: scrollView)
-                scrollView.delegate = verticalScrollObserver
+                let observation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scrollView, _ in
+                    self?.handleMainTabVerticalScroll(scrollView)
+                }
+                verticalScrollObservations.append(observation)
             }
         }
         resetVerticalScrollTrackingForActivePage()
@@ -399,15 +400,6 @@ extension MainViewController: UIScrollViewDelegate {
             isUpdatingFromScroll = false
             syncPagerHapticPageFromCurrentOffset()
         }
-    }
-}
-
-/// Forwards vertical scroll events from main-tab pages without claiming other scroll delegate hooks.
-private final class MainTabVerticalScrollObserver: NSObject, UIScrollViewDelegate {
-    var onScroll: ((UIScrollView) -> Void)?
-
-    func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        onScroll?(scrollView)
     }
 }
 

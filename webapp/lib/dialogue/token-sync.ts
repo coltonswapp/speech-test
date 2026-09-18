@@ -647,10 +647,7 @@ export function applyTokenSelection(
 
   for (const range of ranges) {
     if (range.tokenIndex < first.tokenIndex) {
-      nextTokens.push({
-        text: range.text,
-        startSeconds: range.startSeconds,
-      });
+      nextTokens.push(line.tokens[range.tokenIndex]);
     }
   }
 
@@ -681,10 +678,7 @@ export function applyTokenSelection(
 
   for (const range of ranges) {
     if (range.tokenIndex > last.tokenIndex) {
-      nextTokens.push({
-        text: range.text,
-        startSeconds: range.startSeconds,
-      });
+      nextTokens.push(line.tokens[range.tokenIndex]);
     }
   }
 
@@ -953,6 +947,7 @@ export function publishedTokenSyncFromWorking(params: {
     variantId,
     contentHash,
     lines,
+    ...(sync.source ? { source: sync.source } : {}),
   });
   return published.success ? published.data : null;
 }

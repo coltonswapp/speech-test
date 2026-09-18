@@ -190,10 +190,37 @@ export const highlightsSchema = z.object({
 });
 export type DialogueHighlights = z.output<typeof highlightsSchema>;
 
+// Who produced the stamps on a tokenSync. Absent means a legacy human take.
+//   human    — stamped by hand in Studio
+//   auto     — prefilled by the forced aligner, not yet looked at
+//   reviewed — auto stamps an editor has checked (and possibly corrected)
+export const tokenSyncSourceSchema = z.enum(["human", "auto", "reviewed"]);
+export type TokenSyncSource = z.infer<typeof tokenSyncSourceSchema>;
+
+// Deterministic QA flags raised by the auto-stamp post-process. A flag
+// without tokenIndex applies to the whole line (e.g. script-mismatch).
+export const tokenSyncFlagCodeSchema = z.enum([
+  "stamp-in-silence",
+  "script-mismatch",
+  "reading-fallback",
+  "no-gap",
+]);
+export type TokenSyncFlagCode = z.infer<typeof tokenSyncFlagCodeSchema>;
+
+export const tokenSyncFlagSchema = z.object({
+  code: tokenSyncFlagCodeSchema,
+  lineIndex: z.number().int().nonnegative(),
+  tokenIndex: z.number().int().nonnegative().optional(),
+  detail: z.string().optional(),
+});
+export type TokenSyncFlag = z.infer<typeof tokenSyncFlagSchema>;
+
 // Working copy on a TTS take: startSeconds is null until stamped.
 export const variantTokenSchema = z.object({
   text: z.string().min(1),
   startSeconds: z.number().nullable(),
+  // Kana reading of the surface, used by the aligner (KA-5 fills it in).
+  reading: z.string().optional(),
 });
 export type VariantToken = z.infer<typeof variantTokenSchema>;
 
@@ -207,6 +234,10 @@ export const variantTokenSyncSchema = z.object({
   version: z.literal(1),
   contentHash: z.string(),
   lines: z.array(variantTokenSyncLineSchema),
+  source: tokenSyncSourceSchema.optional(),
+  // Identifier of the aligner build that produced auto stamps.
+  alignerVersion: z.string().optional(),
+  flags: z.array(tokenSyncFlagSchema).optional(),
 });
 export type VariantTokenSync = z.infer<typeof variantTokenSyncSchema>;
 
@@ -229,6 +260,9 @@ export const publishedTokenSyncSchema = z.object({
   variantId: z.string(),
   contentHash: z.string(),
   lines: z.array(publishedTokenSyncLineSchema),
+  // Only provenance is carried through publish; flags and readings stay
+  // on the working copy. Absent on scenes published before auto-stamping.
+  source: tokenSyncSourceSchema.optional(),
 });
 export type PublishedTokenSync = z.infer<typeof publishedTokenSyncSchema>;
 

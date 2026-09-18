@@ -55,7 +55,10 @@ export function tokenSyncStatus(
 }
 
 export function tokenSyncFromSurfaces(params: {
-  lines: Array<{ text: string; tokens: string[] }>;
+  lines: Array<{
+    text: string;
+    tokens: Array<string | { text: string; reading?: string }>;
+  }>;
   contentHash: string;
   lineStartSeconds?: Array<number | null | undefined> | null;
 }): VariantTokenSync {
@@ -64,13 +67,17 @@ export function tokenSyncFromSurfaces(params: {
     contentHash: params.contentHash,
     lines: params.lines.map((line, lineIndex) => ({
       text: line.text,
-      tokens: line.tokens.map((text, tokenIndex) => ({
-        text,
-        startSeconds:
-          tokenIndex === 0 && params.lineStartSeconds?.[lineIndex] != null
-            ? params.lineStartSeconds[lineIndex]!
-            : null,
-      })),
+      tokens: line.tokens.map((token, tokenIndex) => {
+        const surface = typeof token === "string" ? { text: token } : token;
+        return {
+          text: surface.text,
+          startSeconds:
+            tokenIndex === 0 && params.lineStartSeconds?.[lineIndex] != null
+              ? params.lineStartSeconds[lineIndex]!
+              : null,
+          ...(surface.reading ? { reading: surface.reading } : {}),
+        };
+      }),
     })),
   };
 }

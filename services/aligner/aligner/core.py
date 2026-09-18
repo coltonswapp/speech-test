@@ -20,11 +20,10 @@ import torchaudio
 ALIGNER_VERSION = "mms-fa-v1"
 MODEL_SAMPLE_RATE = 16000
 
-# Surfaces pykakasi gets wrong. KA-5 supplies readings from the tokenizer so
-# this table shrinks over time; it stays as the last-resort fallback.
+# Last-resort surface fixes when no kana reading was supplied (KA-5 sends
+# readings from the tokenizer, so numerals such as 三〇二 / 302 no longer
+# need entries here). Keep this to pure orthographic quirks.
 ROMAJI_OVERRIDES = {
-    "三〇二": "sanmaruni",
-    "302": "sanmaruni",
     "はいー": "haii",
     "ー": "",
 }

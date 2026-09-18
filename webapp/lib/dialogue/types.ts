@@ -271,11 +271,19 @@ export const tokenizeLinesRequestSchema = z.object({
 });
 export type TokenizeLinesRequest = z.infer<typeof tokenizeLinesRequestSchema>;
 
+export const tokenizedTokenSchema = z.object({
+  text: z.string().min(1),
+  // Kana reading as spoken in this sentence; absent when the model's reading
+  // was unusable (the aligner then falls back to romanizing the surface).
+  reading: z.string().optional(),
+});
+export type TokenizedToken = z.infer<typeof tokenizedTokenSchema>;
+
 export const tokenizeLinesResultSchema = z.object({
   lines: z.array(
     z.object({
       text: z.string(),
-      tokens: z.array(z.string().min(1)).min(1),
+      tokens: z.array(tokenizedTokenSchema).min(1),
     }),
   ),
 });

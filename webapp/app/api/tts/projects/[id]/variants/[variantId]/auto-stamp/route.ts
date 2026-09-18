@@ -123,8 +123,11 @@ export async function POST(
       lines = tokenized.map((line) => ({
         text: line.text,
         tokens: line.tokens
-          .filter((text) => text.length > 0 && !isAllPunctuationOrWhitespace(text))
-          .map((text) => ({ text })),
+          .filter((token) => token.text.length > 0 && !isAllPunctuationOrWhitespace(token.text))
+          .map((token) => ({
+            text: token.text,
+            ...(token.reading ? { reading: token.reading } : {}),
+          })),
       }));
     } catch (error) {
       if (error instanceof DialogueGenerationError) {

@@ -7,9 +7,10 @@ assert is_kana("さんまるに") and is_kana("カイトー") and not is_kana("�
 # A kana reading wins and is not a fallback.
 assert romanize("三〇二", "さんまるに") == ("sanmaruni", False)
 assert romanize("302", "さんまるに") == ("sanmaruni", False)
-# Non-kana reading is ignored → override table.
-assert romanize("三〇二", "302") == ("sanmaruni", True)
-assert romanize("302") == ("sanmaruni", True)
+# Non-kana reading is ignored; without an override the surface is guessed
+# (and flagged as a fallback) — the tokenizer's reading is what makes numerals work.
+assert romanize("三〇二", "302")[1] is True
+assert romanize("302") == ("a", True)
 # Plain surface → pykakasi.
 assert romanize("すみません") == ("sumimasen", True)
 assert romanize("日本", "にほん") == ("nihon", False)

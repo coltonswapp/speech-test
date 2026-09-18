@@ -8,12 +8,18 @@ import {
   summarizeReviewTiming,
   type ReviewTiming,
 } from "@/lib/dialogue/review-timing";
-import type { TokenSyncFlag } from "@/lib/dialogue/types";
+import type { TokenSyncFlag, VariantTokenSync } from "@/lib/dialogue/types";
 
 export type ReviewQueueLine = {
   lineIndex: number;
   text: string;
-  tokens: Array<{ text: string; codes: TokenSyncFlag["code"][] }>;
+  playFromSeconds: number | null;
+  playUntilSeconds: number | null;
+  tokens: Array<{
+    text: string;
+    codes: TokenSyncFlag["code"][];
+    startSeconds: number | null;
+  }>;
   lineCodes: TokenSyncFlag["code"][];
 };
 
@@ -22,6 +28,9 @@ export type ReviewQueueTake = {
   projectId: string;
   createdAt: string;
   voice: string;
+  sampleRate: number;
+  audioByteCount: number;
+  dialogueLineSwitchSamples: number[] | null;
   scenarioId: string | null;
   collectionId: string | null;
   slug: string | null;
@@ -35,6 +44,47 @@ export type ReviewQueueTake = {
   tokenCount: number;
   timing: ReviewTiming | null;
 };
+
+function linePlayWindow(
+  sync: VariantTokenSync,
+  lineIndex: number,
+  sampleRate: number,
+  markSamples: number[] | null
+): { playFromSeconds: number | null; playUntilSeconds: number | null } {
+  const line = sync.lines[lineIndex];
+  if (!line) return { playFromSeconds: null, playUntilSeconds: null };
+
+  const stamped = line.tokens
+    .map((t) => t.startSeconds)
+    .filter((s): s is number => s != null);
+  let playFromSeconds: number | null =
+    stamped.length > 0 ? Math.max(0, Math.min(...stamped) - 0.25) : null;
+
+  // Prefer line-switch marks when stamps are missing on this line.
+  if (playFromSeconds == null && markSamples && markSamples.length > 0 && sampleRate > 0) {
+    if (lineIndex === 0) playFromSeconds = 0;
+    else if (markSamples[lineIndex - 1] != null) {
+      playFromSeconds = Math.max(0, markSamples[lineIndex - 1]! / sampleRate - 0.1);
+    }
+  }
+
+  let playUntilSeconds: number | null = null;
+  if (markSamples && markSamples[lineIndex] != null && sampleRate > 0) {
+    playUntilSeconds = markSamples[lineIndex]! / sampleRate + 0.15;
+  } else {
+    const nextLine = sync.lines[lineIndex + 1];
+    const nextStart = nextLine?.tokens
+      .map((t) => t.startSeconds)
+      .find((s): s is number => s != null);
+    if (nextStart != null) {
+      playUntilSeconds = nextStart;
+    } else if (stamped.length > 0) {
+      playUntilSeconds = Math.max(...stamped) + 1.2;
+    }
+  }
+
+  return { playFromSeconds, playUntilSeconds };
+}
 
 /** KA-8: every take with source=auto, most flags first, flagged lines inline. */
 export async function GET() {
@@ -55,16 +105,28 @@ export async function GET() {
     const flagsByCode: ReviewQueueTake["flagsByCode"] = {};
     for (const f of flags) flagsByCode[f.code] = (flagsByCode[f.code] ?? 0) + 1;
     const lineIndexes = [...new Set(flags.map((f) => f.lineIndex))].sort((a, b) => a - b);
+    const markSamples = variant.dialogueLineSwitchSamples ?? null;
     const flaggedLines: ReviewQueueLine[] = lineIndexes
       .map((lineIndex) => {
         const line = sync.lines[lineIndex];
         if (!line) return null;
+        const { playFromSeconds, playUntilSeconds } = linePlayWindow(
+          sync,
+          lineIndex,
+          variant.sampleRate,
+          markSamples
+        );
         return {
           lineIndex,
           text: line.text,
-          lineCodes: flags.filter((f) => f.lineIndex === lineIndex && f.tokenIndex == null).map((f) => f.code),
+          playFromSeconds,
+          playUntilSeconds,
+          lineCodes: flags
+            .filter((f) => f.lineIndex === lineIndex && f.tokenIndex == null)
+            .map((f) => f.code),
           tokens: line.tokens.map((token, tokenIndex) => ({
             text: token.text,
+            startSeconds: token.startSeconds ?? null,
             codes: flags
               .filter((f) => f.lineIndex === lineIndex && f.tokenIndex === tokenIndex)
               .map((f) => f.code),
@@ -78,6 +140,9 @@ export async function GET() {
       projectId: project.id,
       createdAt: variant.createdAt.toISOString(),
       voice: variant.voice,
+      sampleRate: variant.sampleRate,
+      audioByteCount: variant.audioByteCount,
+      dialogueLineSwitchSamples: markSamples,
       scenarioId: scenario?.id ?? null,
       collectionId,
       slug: scenario && collectionId ? scenario.id.slice(collectionId.length + 1) : null,

@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { dialogueApi } from "@/lib/dialogue/client";
 import { ttsApi } from "@/lib/tts/client";
 import type { AutoStampResult, Variant } from "@/lib/tts/client";
+import { formatAutoStampDuration } from "@/lib/tts/client";
 import type { TokenSyncFlag, VariantTokenSync } from "@/lib/dialogue/types";
 import { cn } from "@/lib/utils";
 import {
@@ -26,6 +27,7 @@ import {
   applyTokenSelection,
   applyLineStartToFirstTokens,
   clearAllStamps,
+  clearFlagsForReviewed,
   clearLineStamps,
   clearStampsFrom,
   lineDisplayPieces,
@@ -162,6 +164,10 @@ export function TokenSyncEditor({
     y: number;
   } | null>(null);
 
+  const [stampElapsedMs, setStampElapsedMs] = useState(0);
+  const [lastStampDurationMs, setLastStampDurationMs] = useState<number | null>(null);
+  const stampStartedAtRef = useRef<number | null>(null);
+
   const tokenizeMutation = useMutation({
     mutationFn: () => dialogueApi.tokenizeLines(spokenTexts),
     onSuccess: ({ lines }) => {
@@ -181,9 +187,16 @@ export function TokenSyncEditor({
   const autoStampMutation = useMutation({
     mutationFn: (options: { force?: boolean }) => {
       if (!onAutoStamp) throw new Error("Auto-stamp is not available here.");
+      stampStartedAtRef.current = Date.now();
+      setStampElapsedMs(0);
       return onAutoStamp(options);
     },
     onSuccess: (result) => {
+      const started = stampStartedAtRef.current;
+      if (started != null) {
+        setLastStampDurationMs(Date.now() - started);
+        stampStartedAtRef.current = null;
+      }
       // The host patched the variant; `sync` (and the refs) follow on render.
       const nextSync = parseVariantTokenSync(result.variant.tokenSync);
       const firstFlag = result.flags.find((flag) => flag.tokenIndex != null);
@@ -197,6 +210,11 @@ export function TokenSyncEditor({
       toast.success(result.summary);
     },
     onError: (error, options) => {
+      const started = stampStartedAtRef.current;
+      if (started != null) {
+        setLastStampDurationMs(Date.now() - started);
+        stampStartedAtRef.current = null;
+      }
       const message = error.message;
       if (!options.force && /human stamps|line marks but needs/.test(message)) {
         toast.warning(message, {
@@ -211,6 +229,15 @@ export function TokenSyncEditor({
       toast.error(message);
     },
   });
+
+  useEffect(() => {
+    if (!autoStampMutation.isPending) return;
+    const id = window.setInterval(() => {
+      const started = stampStartedAtRef.current;
+      if (started != null) setStampElapsedMs(Date.now() - started);
+    }, 200);
+    return () => window.clearInterval(id);
+  }, [autoStampMutation.isPending]);
 
   const { tokenFlags, lineFlags, flaggedTokens } = useMemo(() => {
     const tokenFlags = new Map<string, TokenSyncFlag[]>();
@@ -355,7 +382,7 @@ export function TokenSyncEditor({
   function markReviewed() {
     const current = syncRef.current;
     if (!current || current.source !== "auto" || hasUnsavedRef.current) return;
-    commitSync({ ...current, source: "reviewed" }, selectedRef.current);
+    commitSync(clearFlagsForReviewed(current), selectedRef.current);
     reportReviewEvent(variant, "reviewed");
     toast.success("Marked reviewed. Publish the lesson to ship these times.");
   }
@@ -710,6 +737,18 @@ export function TokenSyncEditor({
             {autoStampMutation.isPending ? "Aligning…" : "Auto-stamp"}
           </Button>
         )}
+        {onAutoStamp && autoStampMutation.isPending && (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {formatAutoStampDuration(stampElapsedMs, { live: true })}
+          </span>
+        )}
+        {onAutoStamp &&
+          !autoStampMutation.isPending &&
+          lastStampDurationMs != null && (
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {formatAutoStampDuration(lastStampDurationMs)}
+            </span>
+          )}
         {sync?.source === "auto" && (
           <Button
             size="sm"

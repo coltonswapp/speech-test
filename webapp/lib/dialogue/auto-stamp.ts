@@ -11,10 +11,12 @@ import { alignerConfigured, alignVariantAudio, AlignerError } from "@/lib/aligne
 import { tokenizeJapaneseLines } from "@/lib/dialogue/gemini-tokenize";
 import { DialogueGenerationError } from "@/lib/dialogue/gemini-generate";
 import { isAllPunctuationOrWhitespace } from "@/lib/dialogue/japanese-segmentation";
-import { parseVariantTokenSync, tokenSyncStatus } from "@/lib/dialogue/token-sync";
+import { parseVariantTokenSync, tokenSyncStatus, clearFlagsForReviewed } from "@/lib/dialogue/token-sync";
 import { autoStampTokenSync } from "@/lib/dialogue/token-sync-auto";
 import { recordAutoStamp } from "@/lib/dialogue/review-timing";
 import type { TokenSyncFlag, VariantTokenSync } from "@/lib/dialogue/types";
+
+export { clearFlagsForReviewed };
 
 /**
  * Auto-stamp a take: forced-align its script and write an `auto` tokenSync
@@ -26,7 +28,7 @@ export type AutoStampFailure = {
   ok: false;
   status: number;
   error: string;
-  code?: "human-stamps" | "marks-mismatch" | "stale" | "not-configured";
+  code?: "human-stamps" | "marks-mismatch" | "stale" | "not-configured" | "cancelled";
 };
 export type AutoStampSuccess = {
   ok: true;
@@ -51,8 +53,14 @@ export async function autoStampVariant(params: {
   variantId: string;
   projectId?: string;
   force?: boolean;
+  /** Cooperative cancel for the generate → align chain. */
+  signal?: AbortSignal;
 }): Promise<AutoStampOutcome> {
   const force = params.force === true;
+  const signal = params.signal;
+  if (signal?.aborted) {
+    return { ok: false, status: 499, code: "cancelled", error: "Auto-stamp aborted." };
+  }
   if (!alignerConfigured()) {
     return {
       ok: false,
@@ -152,14 +160,25 @@ export async function autoStampVariant(params: {
     return { ok: false, status: 422, error: "A line has no alignable tokens." };
   }
 
+  if (signal?.aborted) {
+    return { ok: false, status: 499, code: "cancelled", error: "Auto-stamp aborted." };
+  }
+
   const wav = await getObject(variant.audioObjectKey);
   const { pcm, sampleRate } = wavToPcm16(wav);
   const samples = pcm16ToFloat32(pcm);
 
   let aligned;
   try {
-    aligned = await alignVariantAudio({ audioObjectKey: variant.audioObjectKey, lines });
+    aligned = await alignVariantAudio({
+      audioObjectKey: variant.audioObjectKey,
+      lines,
+      signal,
+    });
   } catch (error) {
+    if (signal?.aborted) {
+      return { ok: false, status: 499, code: "cancelled", error: "Auto-stamp aborted." };
+    }
     if (error instanceof AlignerError) {
       return { ok: false, status: 502, error: error.message };
     }
@@ -175,6 +194,12 @@ export async function autoStampVariant(params: {
     contentHash,
     existingMarkSamples: existingMarks.length === needed ? existingMarks : null,
   });
+
+  // Best-effort: if abort landed mid-align, skip the write so stamps/marks
+  // are not committed. If the write has already started, it may still land.
+  if (signal?.aborted || (await isAutoStampCancelled(params.variantId))) {
+    return { ok: false, status: 499, code: "cancelled", error: "Auto-stamp aborted." };
+  }
 
   const [updated] = await db
     .update(ttsVariant)
@@ -207,9 +232,13 @@ export async function autoStampVariant(params: {
 // variants list while a job is queued/running.
 
 export const autoStampJobSchema = z.object({
-  status: z.enum(["queued", "running", "done", "error"]),
+  status: z.enum(["queued", "running", "done", "error", "cancelled"]),
   message: z.string().optional(),
+  /** Set once when the job is first queued; used for elapsed/final duration. */
+  startedAt: z.string(),
   updatedAt: z.string(),
+  /** Set when the job reaches done / error / cancelled. */
+  finishedAt: z.string().optional(),
 });
 export type AutoStampJob = z.infer<typeof autoStampJobSchema>;
 
@@ -217,11 +246,17 @@ function jobKey(variantId: string): string {
   return `auto-stamp-job:${variantId}`;
 }
 
+/** In-flight AbortControllers for cooperative cancel of the background chain. */
+const chainControllers = new Map<string, AbortController>();
+
 export async function setAutoStampJob(
   variantId: string,
-  job: Omit<AutoStampJob, "updatedAt">
+  job: Omit<AutoStampJob, "updatedAt"> & { updatedAt?: string }
 ): Promise<void> {
-  const value: AutoStampJob = { ...job, updatedAt: new Date().toISOString() };
+  const value: AutoStampJob = {
+    ...job,
+    updatedAt: job.updatedAt ?? new Date().toISOString(),
+  };
   await db
     .insert(appSettings)
     .values({ key: jobKey(variantId), value })
@@ -229,7 +264,14 @@ export async function setAutoStampJob(
 }
 
 export async function clearAutoStampJob(variantId: string): Promise<void> {
+  chainControllers.get(variantId)?.abort();
+  chainControllers.delete(variantId);
   await db.delete(appSettings).where(eq(appSettings.key, jobKey(variantId)));
+}
+
+export async function getAutoStampJob(variantId: string): Promise<AutoStampJob | null> {
+  const jobs = await getAutoStampJobs([variantId]);
+  return jobs.get(variantId) ?? null;
 }
 
 export async function getAutoStampJobs(
@@ -243,9 +285,63 @@ export async function getAutoStampJobs(
     .where(inArray(appSettings.key, variantIds.map(jobKey)));
   for (const row of rows) {
     const parsed = autoStampJobSchema.safeParse(row.value);
-    if (parsed.success) out.set(row.key.slice(jobKey("").length), parsed.data);
+    if (parsed.success) {
+      out.set(row.key.slice(jobKey("").length), parsed.data);
+      continue;
+    }
+    // Back-compat: jobs written before startedAt existed.
+    const legacy = z
+      .object({
+        status: z.enum(["queued", "running", "done", "error", "cancelled"]),
+        message: z.string().optional(),
+        updatedAt: z.string(),
+        startedAt: z.string().optional(),
+        finishedAt: z.string().optional(),
+      })
+      .safeParse(row.value);
+    if (legacy.success) {
+      out.set(row.key.slice(jobKey("").length), {
+        ...legacy.data,
+        startedAt: legacy.data.startedAt ?? legacy.data.updatedAt,
+      });
+    }
   }
   return out;
+}
+
+export async function isAutoStampCancelled(variantId: string): Promise<boolean> {
+  const job = await getAutoStampJob(variantId);
+  return job?.status === "cancelled";
+}
+
+/**
+ * Abort a queued/running background auto-stamp. Aborts the in-flight aligner
+ * fetch when present, and marks the job cancelled so the chain skips the
+ * stamp write (best-effort if already mid-write).
+ */
+export async function cancelAutoStampJob(variantId: string): Promise<{
+  ok: boolean;
+  job: AutoStampJob | null;
+  error?: string;
+}> {
+  const job = await getAutoStampJob(variantId);
+  if (!job) {
+    return { ok: false, job: null, error: "No auto-stamp job for this take." };
+  }
+  if (job.status !== "queued" && job.status !== "running") {
+    return { ok: false, job, error: `Job is already ${job.status}.` };
+  }
+  chainControllers.get(variantId)?.abort();
+  const finishedAt = new Date().toISOString();
+  const next: AutoStampJob = {
+    status: "cancelled",
+    message: "Aborted",
+    startedAt: job.startedAt,
+    updatedAt: finishedAt,
+    finishedAt,
+  };
+  await setAutoStampJob(variantId, next);
+  return { ok: true, job: next };
 }
 
 /**
@@ -253,17 +349,72 @@ export async function getAutoStampJobs(
  * it. Never throws — the caller runs it after the generate response is sent.
  */
 export async function runAutoStampChain(variantId: string): Promise<void> {
+  const existing = await getAutoStampJob(variantId);
+  if (existing?.status === "cancelled") return;
+
+  const startedAt = existing?.startedAt ?? new Date().toISOString();
+  const controller = new AbortController();
+  chainControllers.set(variantId, controller);
+
   try {
-    await setAutoStampJob(variantId, { status: "running" });
-    const outcome = await autoStampVariant({ variantId });
+    await setAutoStampJob(variantId, { status: "running", startedAt });
+    if (controller.signal.aborted || (await isAutoStampCancelled(variantId))) {
+      return;
+    }
+
+    const outcome = await autoStampVariant({
+      variantId,
+      signal: controller.signal,
+    });
+
+    // Re-read: cancel may have won the race during align/write checks.
+    if ((!outcome.ok && outcome.code === "cancelled") || (await isAutoStampCancelled(variantId))) {
+      const finishedAt = new Date().toISOString();
+      await setAutoStampJob(variantId, {
+        status: "cancelled",
+        message: "Aborted",
+        startedAt,
+        finishedAt,
+      });
+      return;
+    }
+
+    const finishedAt = new Date().toISOString();
     if (outcome.ok) {
-      await clearAutoStampJob(variantId);
+      await setAutoStampJob(variantId, {
+        status: "done",
+        startedAt,
+        finishedAt,
+      });
     } else {
-      await setAutoStampJob(variantId, { status: "error", message: outcome.error });
+      await setAutoStampJob(variantId, {
+        status: "error",
+        message: outcome.error,
+        startedAt,
+        finishedAt,
+      });
     }
   } catch (error) {
+    if (controller.signal.aborted || (await isAutoStampCancelled(variantId))) {
+      const finishedAt = new Date().toISOString();
+      await setAutoStampJob(variantId, {
+        status: "cancelled",
+        message: "Aborted",
+        startedAt,
+        finishedAt,
+      }).catch(() => undefined);
+      return;
+    }
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[auto-stamp] ${variantId}: ${message}`);
-    await setAutoStampJob(variantId, { status: "error", message }).catch(() => undefined);
+    const finishedAt = new Date().toISOString();
+    await setAutoStampJob(variantId, {
+      status: "error",
+      message,
+      startedAt,
+      finishedAt,
+    }).catch(() => undefined);
+  } finally {
+    chainControllers.delete(variantId);
   }
 }

@@ -20,10 +20,82 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { autoStampInProgress, ttsApi } from "@/lib/tts/client";
+import {
+  autoStampElapsedMs,
+  autoStampInProgress,
+  formatAutoStampDuration,
+  ttsApi,
+  type AutoStampJob,
+  type Variant,
+} from "@/lib/tts/client";
 import { WaveformEditor } from "@/components/tts/waveform-editor";
 import type { EditableDialogueLine } from "@/components/tts/dialogue-line-editor";
 import { cn } from "@/lib/utils";
+
+function useNowMs(active: boolean, intervalMs = 500): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(id);
+  }, [active, intervalMs]);
+  return now;
+}
+
+function AutoStampJobBadge({
+  job,
+  nowMs,
+}: {
+  job: AutoStampJob;
+  nowMs: number;
+}) {
+  const ms = autoStampElapsedMs(job, nowMs);
+  if (job.status === "queued" || job.status === "running") {
+    return (
+      <Badge
+        variant="outline"
+        className="animate-pulse border-amber-500/50 text-amber-600 dark:text-amber-400"
+        title="Tokenizing and aligning this take in the background"
+      >
+        Auto-stamping {formatAutoStampDuration(ms, { live: true })}
+      </Badge>
+    );
+  }
+  if (job.status === "error") {
+    return (
+      <Badge
+        variant="outline"
+        className="border-rose-500/50 text-rose-600 dark:text-rose-400"
+        title={job.message ?? "Auto-stamp failed"}
+      >
+        Auto-stamp failed · {formatAutoStampDuration(ms)}
+      </Badge>
+    );
+  }
+  if (job.status === "cancelled") {
+    return (
+      <Badge
+        variant="outline"
+        className="text-muted-foreground"
+        title="Auto-stamp was aborted"
+      >
+        Aborted · {formatAutoStampDuration(ms)}
+      </Badge>
+    );
+  }
+  if (job.status === "done") {
+    return (
+      <Badge
+        variant="outline"
+        className="border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
+        title="Background auto-stamp finished"
+      >
+        Stamped · {formatAutoStampDuration(ms)}
+      </Badge>
+    );
+  }
+  return null;
+}
 
 export function VariantList({
   projectId,
@@ -59,6 +131,10 @@ export function VariantList({
 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  const variants = useMemo(() => data?.variants ?? [], [data?.variants]);
+  const anyJobLive = variants.some(autoStampInProgress);
+  const nowMs = useNowMs(anyJobLive);
 
   const selectMutation = useMutation({
     mutationFn: (variantId: string) =>
@@ -106,7 +182,7 @@ export function VariantList({
   });
 
   const regenerateMutation = useMutation({
-    mutationFn: (variant: NonNullable<typeof data>["variants"][number]) => {
+    mutationFn: (variant: Variant) => {
       const isConversation = variant.voice.includes("/");
       if (isConversation) {
         const [speaker1Voice, speaker2Voice] = variant.voice.split("/");
@@ -142,23 +218,28 @@ export function VariantList({
     onError: (error) => toast.error(error.message),
   });
 
-  const variants = data?.variants ?? [];
+  const abortMutation = useMutation({
+    mutationFn: (variantId: string) => ttsApi.cancelAutoStamp(projectId, variantId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tts-variants", projectId] });
+      toast.success("Auto-stamp aborted.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const selectionEnabled = selectedVariantId !== undefined;
   const variantIdSet = useMemo(
     () => new Set(variants.map((variant) => variant.id)),
     [variants]
   );
-
-  useEffect(() => {
-    setSelectedIds((prev) => {
-      if (prev.size === 0) return prev;
-      const next = new Set([...prev].filter((id) => variantIdSet.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [variantIdSet]);
+  const effectiveSelectedIds = useMemo(
+    () => new Set([...selectedIds].filter((id) => variantIdSet.has(id))),
+    [selectedIds, variantIdSet]
+  );
 
   const allSelected =
-    variants.length > 0 && variants.every((variant) => selectedIds.has(variant.id));
+    variants.length > 0 &&
+    variants.every((variant) => effectiveSelectedIds.has(variant.id));
 
   function toggleSelected(variantId: string) {
     setSelectedIds((prev) => {
@@ -183,7 +264,7 @@ export function VariantList({
   }
 
   function confirmBulkDelete() {
-    const ids = [...selectedIds];
+    const ids = [...effectiveSelectedIds];
     if (ids.length === 0) return;
     const label =
       ids.length === 1
@@ -231,21 +312,21 @@ export function VariantList({
               />
               {selectedIds.size === 0
                 ? "Select takes"
-                : `${selectedIds.size} selected`}
+                : `${effectiveSelectedIds.size} selected`}
             </label>
             <Button
               type="button"
               size="sm"
               variant="destructive"
               className="ml-auto"
-              disabled={selectedIds.size === 0 || bulkDeleteMutation.isPending}
+              disabled={effectiveSelectedIds.size === 0 || bulkDeleteMutation.isPending}
               onClick={confirmBulkDelete}
             >
               {bulkDeleteMutation.isPending
                 ? "Deleting…"
-                : selectedIds.size === 0
+                : effectiveSelectedIds.size === 0
                   ? "Delete selected"
-                  : `Delete ${selectedIds.size} selected`}
+                  : `Delete ${effectiveSelectedIds.size} selected`}
             </Button>
           </div>
         )}
@@ -273,7 +354,14 @@ export function VariantList({
                 !!currentContentHash &&
                 !!variant.contentHash &&
                 variant.contentHash !== currentContentHash;
-              const checked = selectedIds.has(variant.id);
+              const checked = effectiveSelectedIds.has(variant.id);
+              const job = variant.autoStampJob ?? null;
+              const jobLive = autoStampInProgress(variant);
+              const showAutoStampsBadge =
+                !jobLive &&
+                variant.tokenSync?.source === "auto" &&
+                job?.status !== "error" &&
+                job?.status !== "cancelled";
               return (
                 <AccordionItem key={variant.id} value={variant.id}>
                   <div className="flex min-w-0 items-center gap-1">
@@ -315,34 +403,16 @@ export function VariantList({
                             Text changed
                           </Badge>
                         )}
-                        {autoStampInProgress(variant) && (
+                        {job && <AutoStampJobBadge job={job} nowMs={nowMs} />}
+                        {showAutoStampsBadge && (
                           <Badge
                             variant="outline"
-                            className="animate-pulse border-amber-500/50 text-amber-600 dark:text-amber-400"
-                            title="Tokenizing and aligning this take in the background"
+                            className="border-amber-500/50 text-amber-600 dark:text-amber-400"
+                            title="Stamped automatically — review in the Tokens tab, then Mark reviewed"
                           >
-                            Auto-stamping…
+                            auto stamps
                           </Badge>
                         )}
-                        {variant.autoStampJob?.status === "error" && (
-                          <Badge
-                            variant="outline"
-                            className="border-rose-500/50 text-rose-600 dark:text-rose-400"
-                            title={variant.autoStampJob.message ?? "Auto-stamp failed"}
-                          >
-                            Auto-stamp failed
-                          </Badge>
-                        )}
-                        {!autoStampInProgress(variant) &&
-                          variant.tokenSync?.source === "auto" && (
-                            <Badge
-                              variant="outline"
-                              className="border-amber-500/50 text-amber-600 dark:text-amber-400"
-                              title="Stamped automatically — review in the Tokens tab, then Mark reviewed"
-                            >
-                              auto stamps
-                            </Badge>
-                          )}
                         {variant.tokenSync?.source === "reviewed" && (
                           <Badge
                             variant="outline"
@@ -362,7 +432,29 @@ export function VariantList({
                       </span>
                     </AccordionTrigger>
                     {!selectionMode && (
-                      <div className="ml-auto flex shrink-0 items-center">
+                      <div className="ml-auto flex shrink-0 items-center gap-1">
+                        {jobLive && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="min-h-10 touch-manipulation md:min-h-8"
+                            disabled={
+                              abortMutation.isPending &&
+                              abortMutation.variables === variant.id
+                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              abortMutation.mutate(variant.id);
+                            }}
+                            title="Cancel tokenize/align so this take does not write stamps"
+                          >
+                            {abortMutation.isPending &&
+                            abortMutation.variables === variant.id
+                              ? "Aborting…"
+                              : "Abort"}
+                          </Button>
+                        )}
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             render={

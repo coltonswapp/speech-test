@@ -196,17 +196,23 @@ export async function POST(
     );
   }
 
+  // Do not auto-select the newest take — selection stays an explicit user
+  // action in the Takes UI ("Use this take").
   await db
     .update(ttsProject)
-    .set({ selectedVariantId: variant.id, updatedAt: new Date() })
+    .set({ updatedAt: new Date() })
     .where(eq(ttsProject.id, id));
 
   // KA-7: tokenize (cached) + align after the response is sent, so a fresh
   // take arrives in Studio already stamped and flagged. Conversation takes
   // only — narration has no per-line karaoke.
   const chain = project.compositionMode === "conversation" && alignerConfigured();
+  const queuedAt = new Date().toISOString();
   if (chain) {
-    await setAutoStampJob(variant.id, { status: "queued" });
+    await setAutoStampJob(variant.id, {
+      status: "queued",
+      startedAt: queuedAt,
+    });
     after(() => runAutoStampChain(variant.id));
   }
 
@@ -215,7 +221,7 @@ export async function POST(
       variant: {
         ...variant,
         autoStampJob: chain
-          ? { status: "queued", updatedAt: new Date().toISOString() }
+          ? { status: "queued", startedAt: queuedAt, updatedAt: queuedAt }
           : null,
       },
     },

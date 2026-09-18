@@ -21,6 +21,8 @@ export type ReviewQueueLine = {
     startSeconds: number | null;
   }>;
   lineCodes: TokenSyncFlag["code"][];
+  /** Cleared via per-line approve; row stays visible with a green check. */
+  approved: boolean;
 };
 
 export type ReviewQueueTake = {
@@ -96,7 +98,7 @@ function linePlayWindow(
   return { playFromSeconds, playUntilSeconds };
 }
 
-/** KA-8: every take with source=auto, most flags first, flagged lines inline. */
+/** KA-8: every take with source=auto, stable createdAt order, queue lines inline. */
 export async function GET() {
   const rows = await db
     .select({ variant: ttsVariant, project: ttsProject, scenario: dialogueScenario })
@@ -112,9 +114,16 @@ export async function GET() {
     const sync = parseVariantTokenSync(variant.tokenSync);
     if (!sync) continue;
     const flags = sync.flags ?? [];
+    const reviewedLineIndexes = sync.reviewedLineIndexes ?? [];
     const flagsByCode: ReviewQueueTake["flagsByCode"] = {};
     for (const f of flags) flagsByCode[f.code] = (flagsByCode[f.code] ?? 0) + 1;
-    const lineIndexes = [...new Set(flags.map((f) => f.lineIndex))].sort((a, b) => a - b);
+    // Pending flags + already-cleared lines so green-checked rows survive refetch.
+    const lineIndexes = [
+      ...new Set([
+        ...flags.map((f) => f.lineIndex),
+        ...reviewedLineIndexes,
+      ]),
+    ].sort((a, b) => a - b);
     const markSamples = variant.dialogueLineSwitchSamples ?? null;
     const flaggedLines: ReviewQueueLine[] = lineIndexes
       .map((lineIndex) => {
@@ -126,19 +135,23 @@ export async function GET() {
           variant.sampleRate,
           markSamples
         );
+        const lineFlags = flags.filter((f) => f.lineIndex === lineIndex);
+        const approved =
+          reviewedLineIndexes.includes(lineIndex) && lineFlags.length === 0;
         return {
           lineIndex,
           text: line.text,
           playFromSeconds,
           playUntilSeconds,
-          lineCodes: flags
-            .filter((f) => f.lineIndex === lineIndex && f.tokenIndex == null)
+          approved,
+          lineCodes: lineFlags
+            .filter((f) => f.tokenIndex == null)
             .map((f) => f.code),
           tokens: line.tokens.map((token, tokenIndex) => ({
             text: token.text,
             startSeconds: token.startSeconds ?? null,
-            codes: flags
-              .filter((f) => f.lineIndex === lineIndex && f.tokenIndex === tokenIndex)
+            codes: lineFlags
+              .filter((f) => f.tokenIndex === tokenIndex)
               .map((f) => f.code),
           })),
         };
@@ -179,7 +192,9 @@ export async function GET() {
       timing: timing.get(variant.id) ?? null,
     });
   }
-  takes.sort((a, b) => b.flagCount - a.flagCount || b.createdAt.localeCompare(a.createdAt));
+  // Stable order: createdAt only. Do not re-rank by remaining flag count —
+  // per-line approve must not reshuffle the list under the reviewer.
+  takes.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return NextResponse.json({ takes, timing: summarizeReviewTiming(timing.values()) });
 }

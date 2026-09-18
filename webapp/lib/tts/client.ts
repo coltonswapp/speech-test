@@ -127,6 +127,8 @@ export type ReviewQueueResult = {
         startSeconds: number | null;
       }>;
       lineCodes: TokenSyncFlag["code"][];
+      /** Per-line approve cleared this line; row stays with a green check. */
+      approved: boolean;
     }>;
     /** All spoken lines with stamps — used for Play take karaoke follow. */
     lines: Array<{

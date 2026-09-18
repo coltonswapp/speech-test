@@ -238,6 +238,12 @@ export const variantTokenSyncSchema = z.object({
   // Identifier of the aligner build that produced auto stamps.
   alignerVersion: z.string().optional(),
   flags: z.array(tokenSyncFlagSchema).optional(),
+  /**
+   * Spoken lines cleared via review-queue per-line approve. Kept while
+   * source stays `auto` so the queue can show green-checked rows until
+   * whole-take Approve. Dropped when source flips to reviewed.
+   */
+  reviewedLineIndexes: z.array(z.number().int().nonnegative()).optional(),
   // KA-9: which Studio build and playback rates the hand stamps were made
   // with, so the eval can exclude sessions stamped before a timing fix.
   stampedWith: z

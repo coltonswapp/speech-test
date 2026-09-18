@@ -8,15 +8,15 @@ import {
   clearFlagsForLine,
   parseVariantTokenSync,
 } from "@/lib/dialogue/token-sync";
-import { recordReviewEvent } from "@/lib/dialogue/review-timing";
 
 const bodySchema = z.object({
   lineIndex: z.number().int().nonnegative(),
 });
 
 /**
- * Approve one flagged line in the review queue: clear tokenSync.flags for that
- * lineIndex. When no flags remain, flip source → reviewed (take leaves queue).
+ * Approve one line in the review queue: clear tokenSync.flags for that
+ * lineIndex and record it in reviewedLineIndexes. Does not flip source →
+ * reviewed — whole-take Approve does that so the take stays in the queue.
  */
 export async function POST(
   request: NextRequest,
@@ -43,8 +43,9 @@ export async function POST(
   if (sync.source === "reviewed") {
     return NextResponse.json({
       variant,
-      takeReviewed: true,
+      takeReviewed: false,
       alreadyReviewed: true,
+      cleared: false,
     });
   }
   if (sync.source !== "auto") {
@@ -57,9 +58,14 @@ export async function POST(
     return NextResponse.json({ error: "lineIndex out of range." }, { status: 400 });
   }
 
-  const { sync: next, takeReviewed } = clearFlagsForLine(sync, lineIndex);
-  if (next === sync) {
-    return NextResponse.json({ variant, takeReviewed: false, cleared: false });
+  const { sync: next, cleared } = clearFlagsForLine(sync, lineIndex);
+  if (!cleared) {
+    return NextResponse.json({
+      variant,
+      takeReviewed: false,
+      cleared: false,
+      alreadyReviewed: false,
+    });
   }
 
   const [updated] = await db
@@ -68,15 +74,9 @@ export async function POST(
     .where(eq(ttsVariant.id, variantId))
     .returning();
 
-  if (takeReviewed) {
-    await recordReviewEvent(variantId, "reviewed").catch((error: unknown) => {
-      console.error(`[approve-line] timing record failed for ${variantId}:`, error);
-    });
-  }
-
   return NextResponse.json({
     variant: updated,
-    takeReviewed,
+    takeReviewed: false,
     cleared: true,
     alreadyReviewed: false,
   });

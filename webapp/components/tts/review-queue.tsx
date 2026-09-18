@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -144,48 +144,82 @@ function FlaggedLine({
   onApprove: () => void;
 }) {
   const canPlay = line.playFromSeconds != null && !playDisabled;
+  const approved = line.approved;
   return (
     <div
       className={cn(
         "flex flex-wrap items-start gap-2 rounded-md border px-2 py-1.5 transition-colors",
         playing
           ? "border-primary/50 bg-primary/5"
-          : "border-transparent"
+          : approved
+            ? "border-emerald-500/30 bg-emerald-500/5"
+            : "border-transparent"
       )}
     >
-      {/* Keep play / approve / jump adjacent — not pushed to the card edge. */}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="min-h-10 shrink-0 touch-manipulation md:min-h-8"
+        disabled={!canPlay && !playing}
+        onClick={onPlay}
+        title={
+          playing
+            ? `Stop line ${line.lineIndex + 1}`
+            : playDisabled
+              ? "Take audio is not ready"
+              : line.playFromSeconds != null
+                ? `Play line ${line.lineIndex + 1} from the stamps`
+                : "No timing on this line yet"
+        }
+      >
+        {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+        <span className="ml-1">L{line.lineIndex + 1}</span>
+      </Button>
+      <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm leading-relaxed">
+        {!approved &&
+          line.lineCodes.map((code) => (
+            <span
+              key={code}
+              className="rounded border border-amber-500/50 px-1 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+            >
+              {FLAG_LABEL[code]}
+            </span>
+          ))}
+        {line.tokens.map((token, i) => (
+          <KaraokeTokenChip
+            key={`${i}-${token.text}`}
+            token={token}
+            active={playing && activeTokenIndex === i}
+          />
+        ))}
+      </div>
+      {/* Check + jump stay on the right of the chips. */}
       <div className="flex shrink-0 items-center gap-1">
         <Button
           type="button"
           size="sm"
           variant="outline"
-          className="min-h-10 touch-manipulation md:min-h-8"
-          disabled={!canPlay && !playing}
-          onClick={onPlay}
+          className={cn(
+            "min-h-10 touch-manipulation md:min-h-8",
+            approved
+              ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+              : "border-emerald-500/50"
+          )}
+          disabled={approvePending || approved}
+          onClick={onApprove}
           title={
-            playing
-              ? `Stop line ${line.lineIndex + 1}`
-              : playDisabled
-                ? "Take audio is not ready"
-                : line.playFromSeconds != null
-                  ? `Play line ${line.lineIndex + 1} from the stamps`
-                  : "No timing on this line yet"
+            approved
+              ? `Line ${line.lineIndex + 1} approved`
+              : `Approve line ${line.lineIndex + 1}: clear its flags`
+          }
+          aria-label={
+            approved
+              ? `Line ${line.lineIndex + 1} approved`
+              : `Approve line ${line.lineIndex + 1}`
           }
         >
-          {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
-          <span className="ml-1">L{line.lineIndex + 1}</span>
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="min-h-10 touch-manipulation border-emerald-500/50 md:min-h-8"
-          disabled={approvePending}
-          onClick={onApprove}
-          title={`Approve line ${line.lineIndex + 1}: clear its flags`}
-          aria-label={`Approve line ${line.lineIndex + 1}`}
-        >
-          <Check className="size-3.5" />
+          <Check className={cn("size-3.5", approved && "text-emerald-600 dark:text-emerald-400")} />
         </Button>
         <Link
           href={lineEditorHref}
@@ -195,23 +229,6 @@ function FlaggedLine({
         >
           <ExternalLink className="size-3.5" />
         </Link>
-      </div>
-      <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm leading-relaxed">
-        {line.lineCodes.map((code) => (
-          <span
-            key={code}
-            className="rounded border border-amber-500/50 px-1 text-[10px] font-medium text-amber-700 dark:text-amber-300"
-          >
-            {FLAG_LABEL[code]}
-          </span>
-        ))}
-        {line.tokens.map((token, i) => (
-          <KaraokeTokenChip
-            key={`${i}-${token.text}`}
-            token={token}
-            active={playing && activeTokenIndex === i}
-          />
-        ))}
       </div>
     </div>
   );
@@ -338,12 +355,10 @@ function TakeCard({ take }: { take: Take }) {
     onSettled: () => setApprovingLine(null),
     onSuccess: (result, lineIndex) => {
       queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
-      if (result.takeReviewed || result.alreadyReviewed) {
-        toast.success(`Line ${lineIndex + 1} approved — take marked reviewed.`);
-      } else if (result.cleared) {
+      if (result.cleared) {
         toast.success(`Line ${lineIndex + 1} approved.`);
       } else {
-        toast.message(`Line ${lineIndex + 1} had no flags left.`);
+        toast.message(`Line ${lineIndex + 1} was already approved.`);
       }
     },
     onError: (error) => toast.error(error.message),
@@ -514,6 +529,10 @@ function TakeCard({ take }: { take: Take }) {
   const playingTake = playingKey === `${take.variantId}:all`;
   const href = editorHref(take);
   const opened = take.timing?.openedAt;
+  const queueLines = take.flaggedLines;
+  const allLinesApproved =
+    queueLines.length === 0 || queueLines.every((line) => line.approved);
+  const pendingLineCount = queueLines.filter((line) => !line.approved).length;
 
   return (
     <Card>
@@ -528,12 +547,16 @@ function TakeCard({ take }: { take: Take }) {
           <Badge
             variant="outline"
             className={cn(
-              take.flagCount > 0
+              pendingLineCount > 0
                 ? "border-amber-500/50 text-amber-600 dark:text-amber-400"
                 : "border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
             )}
           >
-            {take.flagCount === 0 ? "no flags" : `${take.flagCount} flagged`}
+            {queueLines.length === 0
+              ? "no flags"
+              : allLinesApproved
+                ? "all lines checked"
+                : `${pendingLineCount} pending`}
           </Badge>
           {take.isPublishedTake && <Badge variant="secondary">published</Badge>}
           {take.isSelectedTake && !take.isPublishedTake && (
@@ -582,9 +605,13 @@ function TakeCard({ take }: { take: Take }) {
             size="sm"
             variant="outline"
             className="min-h-11 touch-manipulation border-emerald-500/50 md:min-h-8"
-            disabled={approveMutation.isPending}
+            disabled={approveMutation.isPending || !allLinesApproved}
             onClick={() => approveMutation.mutate()}
-            title="Accept auto stamps: source → reviewed, clear amber flags"
+            title={
+              allLinesApproved
+                ? "Mark take reviewed and leave the queue"
+                : "Check every flagged line first, then Approve the take"
+            }
           >
             {approveMutation.isPending ? "Approving…" : "Approve"}
           </Button>
@@ -602,16 +629,18 @@ function TakeCard({ take }: { take: Take }) {
             playing={playingTake}
           />
         )}
-        {take.flaggedLines.length > 0 && (
+        {queueLines.length > 0 && (
           <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
-              {Object.entries(take.flagsByCode).map(([code, n]) => (
-                <span key={code}>
-                  {FLAG_LABEL[code as TokenSyncFlag["code"]]} ×{n}
-                </span>
-              ))}
-            </div>
-            {take.flaggedLines.map((line) => {
+            {pendingLineCount > 0 && (
+              <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
+                {Object.entries(take.flagsByCode).map(([code, n]) => (
+                  <span key={code}>
+                    {FLAG_LABEL[code as TokenSyncFlag["code"]]} ×{n}
+                  </span>
+                ))}
+              </div>
+            )}
+            {queueLines.map((line) => {
               const linePlaying =
                 playingKey === `${take.variantId}:${line.lineIndex}`;
               const lineActiveToken = linePlaying
@@ -646,6 +675,26 @@ export function ReviewQueue() {
     queryFn: () => ttsApi.reviewQueue(),
     refetchInterval: 30_000,
   });
+  // Freeze first-seen take order for this page session so per-line approve
+  // never reshuffles cards under the reviewer (API also sorts by createdAt).
+  const orderRef = useRef<string[]>([]);
+  const takes = useMemo(() => {
+    const incoming = data?.takes ?? [];
+    if (incoming.length === 0) {
+      orderRef.current = [];
+      return [];
+    }
+    const byId = new Map(incoming.map((take) => [take.variantId, take]));
+    const nextOrder: string[] = [];
+    for (const id of orderRef.current) {
+      if (byId.has(id)) nextOrder.push(id);
+    }
+    for (const take of incoming) {
+      if (!nextOrder.includes(take.variantId)) nextOrder.push(take.variantId);
+    }
+    orderRef.current = nextOrder;
+    return nextOrder.map((id) => byId.get(id)!);
+  }, [data?.takes]);
 
   if (isLoading) {
     return (
@@ -668,16 +717,16 @@ export function ReviewQueue() {
       <div>
         <h1 className="text-xl font-semibold">Review queue</h1>
         <p className="text-sm text-muted-foreground">
-          Takes stamped by the aligner that nobody has marked reviewed, most flags first.
-          Play a flagged line, checkmark to clear that line, or open Token timing on the line to fix stamps.
+          Auto-stamped takes waiting for review. Check each flagged line (row stays green),
+          then Approve the take when every line is checked.
         </p>
       </div>
       <TimingSummary timing={data.timing} />
-      {data.takes.length === 0 && (
+      {takes.length === 0 && (
         <p className="text-sm text-muted-foreground">Nothing waiting for review.</p>
       )}
       <div className="flex flex-col gap-3">
-        {data.takes.map((take) => (
+        {takes.map((take) => (
           <TakeCard key={take.variantId} take={take} />
         ))}
       </div>

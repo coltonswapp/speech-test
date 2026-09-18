@@ -244,12 +244,14 @@ describe("tokenSync provenance (KA-1)", () => {
         { code: "stamp-in-silence", lineIndex: 0, tokenIndex: 1 },
         { code: "no-gap", lineIndex: 1 },
       ],
+      reviewedLineIndexes: [0],
     });
     assert.equal(reviewed.source, "reviewed");
     assert.equal("flags" in reviewed, false);
+    assert.equal("reviewedLineIndexes" in reviewed, false);
   });
 
-  it("clearFlagsForLine drops one line and auto-reviews when none remain", () => {
+  it("clearFlagsForLine drops flags and records the line without auto-review", () => {
     const withFlags: VariantTokenSync = {
       ...stamped,
       source: "auto",
@@ -259,27 +261,30 @@ describe("tokenSync provenance (KA-1)", () => {
       ],
     };
     const afterOne = clearFlagsForLine(withFlags, 0);
-    assert.equal(afterOne.takeReviewed, false);
+    assert.equal(afterOne.cleared, true);
     assert.equal(afterOne.sync.source, "auto");
     assert.deepEqual(afterOne.sync.flags, [
       { code: "no-gap", lineIndex: 1 },
     ]);
+    assert.deepEqual(afterOne.sync.reviewedLineIndexes, [0]);
 
     const afterLast = clearFlagsForLine(afterOne.sync, 1);
-    assert.equal(afterLast.takeReviewed, true);
-    assert.equal(afterLast.sync.source, "reviewed");
+    assert.equal(afterLast.cleared, true);
+    assert.equal(afterLast.sync.source, "auto");
     assert.equal("flags" in afterLast.sync, false);
+    assert.deepEqual(afterLast.sync.reviewedLineIndexes, [0, 1]);
   });
 
-  it("clearFlagsForLine is a no-op when the line has no flags", () => {
-    const withFlags: VariantTokenSync = {
+  it("clearFlagsForLine is a no-op when the line is already reviewed and clear", () => {
+    const withReviewed: VariantTokenSync = {
       ...stamped,
       source: "auto",
       flags: [{ code: "no-gap", lineIndex: 1 }],
+      reviewedLineIndexes: [0],
     };
-    const result = clearFlagsForLine(withFlags, 0);
-    assert.equal(result.takeReviewed, false);
-    assert.equal(result.sync, withFlags);
+    const result = clearFlagsForLine(withReviewed, 0);
+    assert.equal(result.cleared, false);
+    assert.equal(result.sync, withReviewed);
   });
 
   it("publish carries source and drops flags, alignerVersion and readings", () => {

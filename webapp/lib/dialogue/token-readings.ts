@@ -4,6 +4,15 @@
  * pronunciation from the surface (digits, kanji numerals, katakana names).
  */
 
+import { createHash } from "node:crypto";
+
+/** app_settings key for a tokenized line; bump the version when the prompt changes. */
+export const TOKENIZE_CACHE_VERSION = 2;
+export function tokenizeCacheKey(text: string): string {
+  const hash = createHash("sha256").update(text).digest("hex");
+  return `tokenize:v${TOKENIZE_CACHE_VERSION}:${hash}`;
+}
+
 const KANA_RE = /^[ぁ-ゟァ-ヿー〜]+$/u;
 const STRIP_RE = /[\s\p{P}]/gu;
 

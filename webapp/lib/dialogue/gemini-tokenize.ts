@@ -1,5 +1,4 @@
 import "server-only";
-import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getProviderKey } from "@/lib/secrets";
@@ -10,14 +9,13 @@ import { validatedTokens } from "@/lib/dialogue/japanese-segmentation";
 import {
   rawTokenSpans,
   readingsForSegments,
+  tokenizeCacheKey,
   type RawToken,
 } from "@/lib/dialogue/token-readings";
 import type { TokenizedToken } from "@/lib/dialogue/types";
 
 const GEMINI_TOKENIZE_MODEL = "gemini-2.5-flash";
 const DETERMINISTIC_SEED = 42;
-// Bump when the prompt or post-processing changes so cached lines refresh.
-const TOKENIZE_CACHE_VERSION = 2;
 
 const segmentationPayloadSchema = z.object({
   tokens: z.array(
@@ -153,15 +151,10 @@ function tokensWithReadings(raw: RawToken[], text: string): TokenizedToken[] | n
   }));
 }
 
-function cacheKey(text: string): string {
-  const hash = createHash("sha256").update(text).digest("hex");
-  return `tokenize:v${TOKENIZE_CACHE_VERSION}:${hash}`;
-}
-
 async function readCachedLine(text: string): Promise<TokenizedToken[] | null> {
   try {
     const row = await db.query.appSettings.findFirst({
-      where: eq(appSettings.key, cacheKey(text)),
+      where: eq(appSettings.key, tokenizeCacheKey(text)),
     });
     if (!row) return null;
     const parsed = cachedLineSchema.safeParse(row.value);
@@ -176,7 +169,7 @@ async function writeCachedLine(text: string, tokens: TokenizedToken[]): Promise<
   try {
     await db
       .insert(appSettings)
-      .values({ key: cacheKey(text), value: { tokens } })
+      .values({ key: tokenizeCacheKey(text), value: { tokens } })
       .onConflictDoUpdate({ target: appSettings.key, set: { value: { tokens } } });
   } catch {
     // ignore — see readCachedLine

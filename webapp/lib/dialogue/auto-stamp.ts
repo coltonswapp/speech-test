@@ -13,6 +13,7 @@ import { DialogueGenerationError } from "@/lib/dialogue/gemini-generate";
 import { isAllPunctuationOrWhitespace } from "@/lib/dialogue/japanese-segmentation";
 import { parseVariantTokenSync, tokenSyncStatus } from "@/lib/dialogue/token-sync";
 import { autoStampTokenSync } from "@/lib/dialogue/token-sync-auto";
+import { recordAutoStamp } from "@/lib/dialogue/review-timing";
 import type { TokenSyncFlag, VariantTokenSync } from "@/lib/dialogue/types";
 
 /**
@@ -183,6 +184,9 @@ export async function autoStampVariant(params: {
     })
     .where(eq(ttsVariant.id, variant.id))
     .returning();
+  await recordAutoStamp(variant.id, result.tokenSync).catch((error: unknown) => {
+    console.error(`[auto-stamp] timing record failed for ${variant.id}:`, error);
+  });
 
   const tokenCount = lines.reduce((n, line) => n + line.tokens.length, 0);
   const summary = [

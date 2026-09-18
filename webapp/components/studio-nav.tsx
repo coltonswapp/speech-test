@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AudioLinesIcon,
+  ListChecksIcon,
   BookOpenIcon,
   ChevronDownIcon,
   GraduationCapIcon,
@@ -42,6 +43,7 @@ const links: NavLink[] = [
   { href: "/content", label: "Grammar", icon: BookOpenIcon },
   { href: "/content/patterns", label: "Patterns", icon: LayersIcon },
   { href: "/content/coverage", label: "Coverage", icon: PieChartIcon },
+  { href: "/tts/review", label: "Review queue", icon: ListChecksIcon },
   { href: "/tts", label: "TTS Studio", icon: AudioLinesIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];

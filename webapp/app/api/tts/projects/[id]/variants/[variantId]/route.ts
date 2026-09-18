@@ -5,6 +5,8 @@ import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { ttsProject, ttsVariant } from "@/lib/db/schema";
 import { variantTokenSyncSchema } from "@/lib/dialogue/types";
+import { clearAutoStampJob } from "@/lib/dialogue/auto-stamp";
+import { clearReviewTiming } from "@/lib/dialogue/review-timing";
 
 const updateVariantSchema = z.object({
   trimSampleLower: z.number().int().nullable().optional(),
@@ -68,6 +70,7 @@ export async function DELETE(
   if (!deleted) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  await Promise.all([clearAutoStampJob(variantId), clearReviewTiming(variantId)]);
   // Don't leave the project pointing at a deleted take.
   await db
     .update(ttsProject)

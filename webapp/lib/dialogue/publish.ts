@@ -7,6 +7,7 @@ import {
   ttsVariant,
 } from "@/lib/db/schema";
 import type { CollectionFile, DialogueLine } from "@/lib/dialogue/types";
+import { recordPublish } from "@/lib/dialogue/review-timing";
 import { conversationContentHash } from "@/lib/tts/content-hash";
 import { scenarioLinesToConversation } from "@/lib/tts/scenario-conversation";
 import { renderVariantM4a, lineSwitchSecondsForExport } from "@/lib/tts/variant-audio";
@@ -106,6 +107,11 @@ export async function publishScenarioAudio(
     })
     .where(eq(dialogueScenario.id, scenarioId))
     .returning();
+
+  // KA-8 telemetry: open-to-publish time and reviewer corrections by source.
+  await recordPublish(variant).catch((error: unknown) => {
+    console.error(`[publish] timing record failed for ${variant.id}:`, error);
+  });
 
   return {
     scenario: updated,

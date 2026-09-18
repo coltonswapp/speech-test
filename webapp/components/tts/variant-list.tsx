@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { MoreVertical } from "lucide-react";
@@ -46,6 +47,8 @@ export function VariantList({
   emptyHint?: string;
 }) {
   const queryClient = useQueryClient();
+  // Review queue deep-links a specific take (?take=<variantId>).
+  const requestedTakeId = useSearchParams().get("take");
   const { data, isLoading } = useQuery({
     queryKey: ["tts-variants", projectId],
     queryFn: () => ttsApi.listVariants(projectId),
@@ -255,7 +258,13 @@ export function VariantList({
           </p>
         )}
         {variants.length > 0 && (
-          <Accordion defaultValue={[variants[0].id]}>
+          <Accordion
+            defaultValue={[
+              requestedTakeId && variants.some((v) => v.id === requestedTakeId)
+                ? requestedTakeId
+                : variants[0].id,
+            ]}
+          >
             {variants.map((variant) => {
               const isSelected = selectionEnabled
                 ? variant.id === selectedVariantId

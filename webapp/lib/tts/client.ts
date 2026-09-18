@@ -77,6 +77,50 @@ export function autoStampInProgress(variant: Pick<Variant, "autoStampJob">): boo
   return status === "queued" || status === "running";
 }
 
+export type ReviewQueueResult = {
+  takes: Array<{
+    variantId: string;
+    projectId: string;
+    createdAt: string;
+    voice: string;
+    scenarioId: string | null;
+    collectionId: string | null;
+    slug: string | null;
+    title: string;
+    isPublishedTake: boolean;
+    isSelectedTake: boolean;
+    flagCount: number;
+    flagsByCode: Partial<Record<TokenSyncFlag["code"], number>>;
+    flaggedLines: Array<{
+      lineIndex: number;
+      text: string;
+      tokens: Array<{ text: string; codes: TokenSyncFlag["code"][] }>;
+      lineCodes: TokenSyncFlag["code"][];
+    }>;
+    lineCount: number;
+    tokenCount: number;
+    timing: {
+      autoStampedAt?: string;
+      openedAt?: string;
+      reviewedAt?: string;
+      publishedAt?: string;
+      linesTouched?: number;
+      maxCorrectionMs?: number;
+    } | null;
+  }>;
+  timing: {
+    bySource: Array<{
+      source: "auto" | "human";
+      published: number;
+      medianOpenToPublishMinutes: number | null;
+      withOpenTiming: number;
+      linesUntouchedPct: number | null;
+      correctionsOver200msPct: number | null;
+    }>;
+    since: string | null;
+  };
+};
+
 export type AutoStampResult = {
   variant: Variant;
   flags: TokenSyncFlag[];
@@ -182,6 +226,12 @@ export const ttsApi = {
         body: JSON.stringify(contentHash ? { contentHash } : {}),
       }
     ),
+  reviewEvent: (projectId: string, variantId: string, event: "opened" | "reviewed") =>
+    request<{ ok: true }>(
+      `/api/tts/projects/${projectId}/variants/${variantId}/review-event`,
+      { method: "POST", body: JSON.stringify({ event }) }
+    ),
+  reviewQueue: () => request<ReviewQueueResult>("/api/tts/review-queue"),
   autoStamp: (projectId: string, variantId: string, body?: { force?: boolean }) =>
     request<AutoStampResult>(
       `/api/tts/projects/${projectId}/variants/${variantId}/auto-stamp`,

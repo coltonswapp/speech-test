@@ -17,6 +17,7 @@ import { Play, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { dialogueApi } from "@/lib/dialogue/client";
+import { ttsApi } from "@/lib/tts/client";
 import type { AutoStampResult, Variant } from "@/lib/tts/client";
 import type { TokenSyncFlag, VariantTokenSync } from "@/lib/dialogue/types";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,20 @@ import {
 } from "@/lib/dialogue/token-sync";
 
 const LONG_PRESS_MS = 550;
+const STUDIO_BUILD = process.env.NEXT_PUBLIC_BUILD_SHA ?? "dev";
+/** Takes whose first open was already reported this page load (KA-8). */
+const reportedOpens = new Set<string>();
+
+function reportReviewEvent(
+  variant: Pick<Variant, "id" | "projectId">,
+  event: "opened" | "reviewed"
+) {
+  if (event === "opened") {
+    if (reportedOpens.has(variant.id)) return;
+    reportedOpens.add(variant.id);
+  }
+  void ttsApi.reviewEvent(variant.projectId, variant.id, event).catch(() => undefined);
+}
 
 const STATUS_LABEL: Record<TokenSyncStatus, string> = {
   missing: "not started",
@@ -256,6 +271,11 @@ export function TokenSyncEditor({
   useLayoutEffect(() => {
     syncRef.current = sync;
   }, [sync]);
+
+  // KA-8: first open of the token editor on a take starts its review clock.
+  useEffect(() => {
+    reportReviewEvent(variant, "opened");
+  }, [variant]);
   useLayoutEffect(() => {
     selectedRef.current = selectedToken;
   }, [selectedToken]);
@@ -315,11 +335,20 @@ export function TokenSyncEditor({
       windowsRef.current,
       playbackRateRef.current
     );
+    if (stamped === current) return;
     // First hand stamp on a take with no provenance makes it a human take.
-    const next =
-      stamped !== current && stamped.source == null
-        ? { ...stamped, source: "human" as const }
-        : stamped;
+    // KA-9: record the build and playback rates behind the hand stamps.
+    const rates = new Set(stamped.stampedWith?.playbackRates ?? []);
+    rates.add(playbackRateRef.current);
+    const next: VariantTokenSync = {
+      ...stamped,
+      ...(stamped.source == null ? { source: "human" as const } : {}),
+      stampedWith: {
+        build: STUDIO_BUILD,
+        playbackRates: [...rates].sort((a, b) => a - b),
+        lastStampedAt: new Date().toISOString(),
+      },
+    };
     commitSync(next, nextUnstamped(next, target.lineIndex, target.tokenIndex));
   }
 
@@ -327,6 +356,7 @@ export function TokenSyncEditor({
     const current = syncRef.current;
     if (!current || current.source !== "auto" || hasUnsavedRef.current) return;
     commitSync({ ...current, source: "reviewed" }, selectedRef.current);
+    reportReviewEvent(variant, "reviewed");
     toast.success("Marked reviewed. Publish the lesson to ship these times.");
   }
 

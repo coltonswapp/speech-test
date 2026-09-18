@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import type { NextRequest } from "next/server";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -15,16 +15,31 @@ import { align } from "@/lib/tts/alignment";
 import { putObject } from "@/lib/storage/r2";
 import { conversationContentHash } from "@/lib/tts/content-hash";
 import { loadConversationLines, UserFacingError } from "@/lib/tts/project-lines";
+import { alignerConfigured } from "@/lib/aligner/client";
+import {
+  getAutoStampJobs,
+  runAutoStampChain,
+  setAutoStampJob,
+} from "@/lib/dialogue/auto-stamp";
+
+// Generation plus the post-response auto-stamp chain (tokenize + align) can
+// take a few minutes on an uncached script.
+export const maxDuration = 300;
 
 export async function GET(
   _request: NextRequest,
   ctx: RouteContext<"/api/tts/projects/[id]/variants">
 ) {
   const { id } = await ctx.params;
-  const variants = await db.query.ttsVariant.findMany({
+  const rows = await db.query.ttsVariant.findMany({
     where: eq(ttsVariant.projectId, id),
     orderBy: [desc(ttsVariant.createdAt)],
   });
+  const jobs = await getAutoStampJobs(rows.map((v) => v.id));
+  const variants = rows.map((variant) => ({
+    ...variant,
+    autoStampJob: jobs.get(variant.id) ?? null,
+  }));
   return NextResponse.json({ variants });
 }
 
@@ -186,5 +201,24 @@ export async function POST(
     .set({ selectedVariantId: variant.id, updatedAt: new Date() })
     .where(eq(ttsProject.id, id));
 
-  return NextResponse.json({ variant }, { status: 201 });
+  // KA-7: tokenize (cached) + align after the response is sent, so a fresh
+  // take arrives in Studio already stamped and flagged. Conversation takes
+  // only — narration has no per-line karaoke.
+  const chain = project.compositionMode === "conversation" && alignerConfigured();
+  if (chain) {
+    await setAutoStampJob(variant.id, { status: "queued" });
+    after(() => runAutoStampChain(variant.id));
+  }
+
+  return NextResponse.json(
+    {
+      variant: {
+        ...variant,
+        autoStampJob: chain
+          ? { status: "queued", updatedAt: new Date().toISOString() }
+          : null,
+      },
+    },
+    { status: 201 }
+  );
 }

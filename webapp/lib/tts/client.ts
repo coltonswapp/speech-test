@@ -62,7 +62,20 @@ export type Variant = {
   provider: string;
   contentHash: string | null;
   tokenSync: VariantTokenSync | null;
+  /** Background generate → tokenize → align chain state; null when idle. */
+  autoStampJob?: AutoStampJob | null;
 };
+
+export type AutoStampJob = {
+  status: "queued" | "running" | "done" | "error";
+  message?: string;
+  updatedAt: string;
+};
+
+export function autoStampInProgress(variant: Pick<Variant, "autoStampJob">): boolean {
+  const status = variant.autoStampJob?.status;
+  return status === "queued" || status === "running";
+}
 
 export type AutoStampResult = {
   variant: Variant;

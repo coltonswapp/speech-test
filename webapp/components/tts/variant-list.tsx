@@ -19,7 +19,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { ttsApi } from "@/lib/tts/client";
+import { autoStampInProgress, ttsApi } from "@/lib/tts/client";
 import { WaveformEditor } from "@/components/tts/waveform-editor";
 import type { EditableDialogueLine } from "@/components/tts/dialogue-line-editor";
 import { cn } from "@/lib/utils";
@@ -49,6 +49,9 @@ export function VariantList({
   const { data, isLoading } = useQuery({
     queryKey: ["tts-variants", projectId],
     queryFn: () => ttsApi.listVariants(projectId),
+    // Poll while a fresh take is being tokenized/aligned in the background.
+    refetchInterval: (query) =>
+      query.state.data?.variants.some(autoStampInProgress) ? 3000 : false,
   });
 
   const [selectionMode, setSelectionMode] = useState(false);
@@ -301,6 +304,42 @@ export function VariantList({
                             className="border-amber-500/50 text-amber-600 dark:text-amber-400"
                           >
                             Text changed
+                          </Badge>
+                        )}
+                        {autoStampInProgress(variant) && (
+                          <Badge
+                            variant="outline"
+                            className="animate-pulse border-amber-500/50 text-amber-600 dark:text-amber-400"
+                            title="Tokenizing and aligning this take in the background"
+                          >
+                            Auto-stamping…
+                          </Badge>
+                        )}
+                        {variant.autoStampJob?.status === "error" && (
+                          <Badge
+                            variant="outline"
+                            className="border-rose-500/50 text-rose-600 dark:text-rose-400"
+                            title={variant.autoStampJob.message ?? "Auto-stamp failed"}
+                          >
+                            Auto-stamp failed
+                          </Badge>
+                        )}
+                        {!autoStampInProgress(variant) &&
+                          variant.tokenSync?.source === "auto" && (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-500/50 text-amber-600 dark:text-amber-400"
+                              title="Stamped automatically — review in the Tokens tab, then Mark reviewed"
+                            >
+                              auto stamps
+                            </Badge>
+                          )}
+                        {variant.tokenSync?.source === "reviewed" && (
+                          <Badge
+                            variant="outline"
+                            className="border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
+                          >
+                            reviewed
                           </Badge>
                         )}
                         {!!currentContentHash && !variant.contentHash && (

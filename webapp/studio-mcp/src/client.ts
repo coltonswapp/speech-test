@@ -175,7 +175,40 @@ export type TtsVariant = {
   provider: string;
   contentHash: string | null;
   isSelected?: boolean;
+  /** Background generate → tokenize → align state; null/undefined when idle. */
+  autoStampJob?: { status: "queued" | "running" | "done" | "error"; message?: string } | null;
 };
+
+export type TokenSyncFlag = {
+  code: "stamp-in-silence" | "script-mismatch" | "reading-fallback" | "no-gap";
+  lineIndex: number;
+  tokenIndex?: number;
+  detail?: string;
+};
+
+export type AutoStampTakeResult = {
+  variant: TtsVariant;
+  flags: TokenSyncFlag[];
+  marksDerived: boolean;
+  summary: string;
+};
+
+/**
+ * Time every word of a take from its audio and derive line marks (KA-3).
+ * Generating a take already queues this in the background; call it directly
+ * to re-run, or with `force` to replace human stamps. Wire as the
+ * `auto_stamp_take` MCP tool next to `generate_take`.
+ */
+export function autoStampTake(
+  projectId: string,
+  variantId: string,
+  options: { force?: boolean } = {}
+): Promise<AutoStampTakeResult> {
+  return studioFetch<AutoStampTakeResult>(
+    `/api/tts/projects/${projectId}/variants/${variantId}/auto-stamp`,
+    { method: "POST", body: JSON.stringify(options), timeoutMs: 300_000 }
+  );
+}
 
 export function scenarioSlug(scenario: { id: string; collectionId: string }): string {
   return scenario.id.slice(scenario.collectionId.length + 1);

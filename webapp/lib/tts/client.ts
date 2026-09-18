@@ -128,6 +128,16 @@ export type ReviewQueueResult = {
       }>;
       lineCodes: TokenSyncFlag["code"][];
     }>;
+    /** All spoken lines with stamps — used for Play take karaoke follow. */
+    lines: Array<{
+      lineIndex: number;
+      text: string;
+      tokens: Array<{
+        text: string;
+        codes: TokenSyncFlag["code"][];
+        startSeconds: number | null;
+      }>;
+    }>;
     lineCount: number;
     tokenCount: number;
     timing: {

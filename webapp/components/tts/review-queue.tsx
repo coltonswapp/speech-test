@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ttsApi, type ReviewQueueResult } from "@/lib/tts/client";
 import type { TokenSyncFlag } from "@/lib/dialogue/types";
+import { activeTokenAtTime } from "@/lib/dialogue/token-sync";
 import { cn } from "@/lib/utils";
 
 const FLAG_LABEL: Record<TokenSyncFlag["code"], string> = {
@@ -22,6 +23,8 @@ const FLAG_LABEL: Record<TokenSyncFlag["code"], string> = {
 
 type Take = ReviewQueueResult["takes"][number];
 type FlaggedLine = Take["flaggedLines"][number];
+type KaraokeLine = Take["lines"][number];
+type KaraokeToken = KaraokeLine["tokens"][number];
 
 function minutes(from?: string, to?: string): string | null {
   if (!from || !to) return null;
@@ -81,18 +84,51 @@ function TimingSummary({ timing }: { timing: ReviewQueueResult["timing"] }) {
   );
 }
 
+function KaraokeTokenChip({
+  token,
+  active,
+}: {
+  token: KaraokeToken;
+  active: boolean;
+}) {
+  const flagged = token.codes.length > 0;
+  return (
+    <span
+      title={token.codes.map((c) => FLAG_LABEL[c]).join("; ") || undefined}
+      className={cn(
+        "rounded px-0.5",
+        flagged && "border border-amber-500/70 bg-amber-500/15",
+        active &&
+          token.startSeconds != null &&
+          "border border-primary bg-primary/15 ring-2 ring-primary/60"
+      )}
+    >
+      {token.text}
+    </span>
+  );
+}
+
 function FlaggedLine({
   line,
   playing,
+  activeTokenIndex,
   onPlay,
 }: {
   line: FlaggedLine;
   playing: boolean;
+  activeTokenIndex: number | null;
   onPlay: () => void;
 }) {
   const canPlay = line.playFromSeconds != null;
   return (
-    <div className="flex flex-wrap items-start gap-2">
+    <div
+      className={cn(
+        "flex flex-wrap items-start gap-2 rounded-md border px-2 py-1.5 transition-colors",
+        playing
+          ? "border-primary/50 bg-primary/5"
+          : "border-transparent"
+      )}
+    >
       <Button
         type="button"
         size="sm"
@@ -119,18 +155,49 @@ function FlaggedLine({
           </span>
         ))}
         {line.tokens.map((token, i) => (
-          <span
+          <KaraokeTokenChip
             key={`${i}-${token.text}`}
-            title={token.codes.map((c) => FLAG_LABEL[c]).join("; ") || undefined}
-            className={cn(
-              "rounded px-0.5",
-              token.codes.length > 0 && "border border-amber-500/70 bg-amber-500/15"
-            )}
-          >
-            {token.text}
-          </span>
+            token={token}
+            active={playing && activeTokenIndex === i}
+          />
         ))}
       </div>
+    </div>
+  );
+}
+
+function TakeKaraoke({
+  lines,
+  active,
+}: {
+  lines: KaraokeLine[];
+  active: { lineIndex: number; tokenIndex: number } | null;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md border border-border/60 bg-muted/20 px-2 py-2">
+      {lines.map((line) => {
+        const lineActive = active?.lineIndex === line.lineIndex;
+        return (
+          <div
+            key={line.lineIndex}
+            className={cn(
+              "flex flex-wrap items-baseline gap-x-1 gap-y-1 rounded px-1 py-0.5 text-sm leading-relaxed transition-colors",
+              lineActive && "bg-primary/5"
+            )}
+          >
+            <span className="mr-1 font-mono text-[10px] text-muted-foreground">
+              L{line.lineIndex + 1}
+            </span>
+            {line.tokens.map((token, i) => (
+              <KaraokeTokenChip
+                key={`${i}-${token.text}`}
+                token={token}
+                active={lineActive && active?.tokenIndex === i}
+              />
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -140,6 +207,7 @@ function TakeCard({ take }: { take: Take }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const stopTimerRef = useRef<number | null>(null);
   const [playingKey, setPlayingKey] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
 
   const audioUrl = ttsApi.variantAudioUrl(
     take.projectId,
@@ -151,12 +219,15 @@ function TakeCard({ take }: { take: Take }) {
     const audio = new Audio(audioUrl);
     audio.preload = "auto";
     const onEnded = () => setPlayingKey(null);
+    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
     audio.addEventListener("ended", onEnded);
+    audio.addEventListener("timeupdate", onTimeUpdate);
     audioRef.current = audio;
     return () => {
       if (stopTimerRef.current != null) window.clearTimeout(stopTimerRef.current);
       audio.pause();
       audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("timeupdate", onTimeUpdate);
       audioRef.current = null;
     };
   }, [audioUrl]);
@@ -197,6 +268,7 @@ function TakeCard({ take }: { take: Take }) {
     try {
       audio.pause();
       audio.currentTime = fromSeconds;
+      setCurrentTime(fromSeconds);
       await audio.play();
       setPlayingKey(key);
       if (untilSeconds != null && untilSeconds > fromSeconds) {
@@ -228,6 +300,12 @@ function TakeCard({ take }: { take: Take }) {
   async function playTake() {
     await playSegment(`${take.variantId}:all`, 0, null);
   }
+
+  const playingTake = playingKey === `${take.variantId}:all`;
+  const active =
+    playingKey != null
+      ? activeTokenAtTime(take.lines, currentTime)
+      : null;
 
   const href =
     take.collectionId && take.slug
@@ -278,14 +356,12 @@ function TakeCard({ take }: { take: Take }) {
             className="min-h-11 touch-manipulation md:min-h-8"
             onClick={playTake}
           >
-            {playingKey === `${take.variantId}:all` ? (
+            {playingTake ? (
               <Pause className="size-3.5" />
             ) : (
               <Play className="size-3.5" />
             )}
-            <span className="ml-1.5">
-              {playingKey === `${take.variantId}:all` ? "Stop" : "Play take"}
-            </span>
+            <span className="ml-1.5">{playingTake ? "Stop" : "Play take"}</span>
           </Button>
           <Button
             type="button"
@@ -305,6 +381,9 @@ function TakeCard({ take }: { take: Take }) {
             Open in editor
           </Link>
         </div>
+        {playingTake && take.lines.length > 0 && (
+          <TakeKaraoke lines={take.lines} active={active} />
+        )}
         {take.flaggedLines.length > 0 && (
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
@@ -314,14 +393,23 @@ function TakeCard({ take }: { take: Take }) {
                 </span>
               ))}
             </div>
-            {take.flaggedLines.map((line) => (
-              <FlaggedLine
-                key={line.lineIndex}
-                line={line}
-                playing={playingKey === `${take.variantId}:${line.lineIndex}`}
-                onPlay={() => playLine(line)}
-              />
-            ))}
+            {take.flaggedLines.map((line) => {
+              const linePlaying =
+                playingKey === `${take.variantId}:${line.lineIndex}`;
+              const lineActiveToken =
+                linePlaying && active?.lineIndex === line.lineIndex
+                  ? active.tokenIndex
+                  : null;
+              return (
+                <FlaggedLine
+                  key={line.lineIndex}
+                  line={line}
+                  playing={linePlaying}
+                  activeTokenIndex={lineActiveToken}
+                  onPlay={() => playLine(line)}
+                />
+              );
+            })}
           </div>
         )}
       </CardContent>

@@ -40,6 +40,16 @@ export type ReviewQueueTake = {
   flagCount: number;
   flagsByCode: Partial<Record<TokenSyncFlag["code"], number>>;
   flaggedLines: ReviewQueueLine[];
+  /** All spoken lines with stamps — used for Play take karaoke follow. */
+  lines: Array<{
+    lineIndex: number;
+    text: string;
+    tokens: Array<{
+      text: string;
+      codes: TokenSyncFlag["code"][];
+      startSeconds: number | null;
+    }>;
+  }>;
   lineCount: number;
   tokenCount: number;
   timing: ReviewTiming | null;
@@ -135,6 +145,17 @@ export async function GET() {
       })
       .filter((l): l is ReviewQueueLine => l != null);
     const collectionId = scenario?.collectionId ?? null;
+    const lines = sync.lines.map((line, lineIndex) => ({
+      lineIndex,
+      text: line.text,
+      tokens: line.tokens.map((token, tokenIndex) => ({
+        text: token.text,
+        startSeconds: token.startSeconds ?? null,
+        codes: flags
+          .filter((f) => f.lineIndex === lineIndex && f.tokenIndex === tokenIndex)
+          .map((f) => f.code),
+      })),
+    }));
     takes.push({
       variantId: variant.id,
       projectId: project.id,
@@ -152,6 +173,7 @@ export async function GET() {
       flagCount: flags.length,
       flagsByCode,
       flaggedLines,
+      lines,
       lineCount: sync.lines.length,
       tokenCount: sync.lines.reduce((n, l) => n + l.tokens.length, 0),
       timing: timing.get(variant.id) ?? null,

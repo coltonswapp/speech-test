@@ -1,0 +1,1159 @@
+{
+ "first-hello/shizuoka-tea": {
+  "version": 1,
+  "variantId": "62ea4b82-2315-47af-b69d-73cdc0d1399e",
+  "contentHash": "749314cb8b2058ada8b8e5332acc308c463b91d4b90a79e7f78605bda4bc1b3c",
+  "lines": [
+   {
+    "text": "すみません。",
+    "tokens": [
+     {
+      "text": "すみません",
+      "startSeconds": 0
+     }
+    ]
+   },
+   {
+    "text": "はいー。",
+    "tokens": [
+     {
+      "text": "はいー",
+      "startSeconds": 1.096
+     }
+    ]
+   },
+   {
+    "text": "はじめまして。三〇二のカイトです。",
+    "tokens": [
+     {
+      "text": "はじめまして",
+      "startSeconds": 1.8
+     },
+     {
+      "text": "三〇二",
+      "startSeconds": 2.958
+     },
+     {
+      "text": "の",
+      "startSeconds": 3.392
+     },
+     {
+      "text": "カイト",
+      "startSeconds": 3.622
+     },
+     {
+      "text": "です",
+      "startSeconds": 3.901
+     }
+    ]
+   },
+   {
+    "text": "あ、お隣ですね。初めまして。ミカです。",
+    "tokens": [
+     {
+      "text": "あ",
+      "startSeconds": 4.324
+     },
+     {
+      "text": "お隣",
+      "startSeconds": 5.006
+     },
+     {
+      "text": "です",
+      "startSeconds": 5.366
+     },
+     {
+      "text": "ね",
+      "startSeconds": 5.531
+     },
+     {
+      "text": "初めまして",
+      "startSeconds": 6.338
+     },
+     {
+      "text": "ミカ",
+      "startSeconds": 7.291
+     },
+     {
+      "text": "です",
+      "startSeconds": 7.517
+     }
+    ]
+   },
+   {
+    "text": "ミカさん。よろしくお願いします。",
+    "tokens": [
+     {
+      "text": "ミカさん",
+      "startSeconds": 8.063
+     },
+     {
+      "text": "よろしくお願いします",
+      "startSeconds": 9.356
+     }
+    ]
+   },
+   {
+    "text": "こちらこそ。",
+    "tokens": [
+     {
+      "text": "こちらこそ",
+      "startSeconds": 10.55
+     }
+    ]
+   },
+   {
+    "text": "あの、最近うるさくしてしまってすみませんでした。",
+    "tokens": [
+     {
+      "text": "あの",
+      "startSeconds": 12.245
+     },
+     {
+      "text": "最近",
+      "startSeconds": 12.466
+     },
+     {
+      "text": "うるさくしてしまって",
+      "startSeconds": 12.946
+     },
+     {
+      "text": "すみませんでした",
+      "startSeconds": 14.018
+     }
+    ]
+   },
+   {
+    "text": "いいえ、全然大丈夫ですよ。",
+    "tokens": [
+     {
+      "text": "いいえ",
+      "startSeconds": 15.078
+     },
+     {
+      "text": "全然",
+      "startSeconds": 15.837
+     },
+     {
+      "text": "大丈夫",
+      "startSeconds": 16.246
+     },
+     {
+      "text": "です",
+      "startSeconds": 16.481
+     },
+     {
+      "text": "よ",
+      "startSeconds": 16.681
+     }
+    ]
+   },
+   {
+    "text": "これ、静岡のお茶です。よかったらどうぞ。",
+    "tokens": [
+     {
+      "text": "これ",
+      "startSeconds": 17.301
+     },
+     {
+      "text": "静岡",
+      "startSeconds": 17.896
+     },
+     {
+      "text": "の",
+      "startSeconds": 18.331
+     },
+     {
+      "text": "お茶",
+      "startSeconds": 18.527
+     },
+     {
+      "text": "です",
+      "startSeconds": 18.706
+     },
+     {
+      "text": "よかったら",
+      "startSeconds": 19.493
+     },
+     {
+      "text": "どうぞ",
+      "startSeconds": 19.861
+     }
+    ]
+   },
+   {
+    "text": "え、いいんですか。実家から送ってもらったんですか？",
+    "tokens": [
+     {
+      "text": "え",
+      "startSeconds": 20.632
+     },
+     {
+      "text": "いい",
+      "startSeconds": 21.181
+     },
+     {
+      "text": "んですか",
+      "startSeconds": 21.631
+     },
+     {
+      "text": "実家",
+      "startSeconds": 22.456
+     },
+     {
+      "text": "から",
+      "startSeconds": 22.702
+     },
+     {
+      "text": "送ってもらった",
+      "startSeconds": 22.906
+     },
+     {
+      "text": "んですか",
+      "startSeconds": 23.536
+     }
+    ]
+   },
+   {
+    "text": "はい。実家からです。",
+    "tokens": [
+     {
+      "text": "はい",
+      "startSeconds": 24.364
+     },
+     {
+      "text": "実家",
+      "startSeconds": 25.1
+     },
+     {
+      "text": "から",
+      "startSeconds": 25.49
+     },
+     {
+      "text": "です",
+      "startSeconds": 25.61
+     }
+    ]
+   },
+   {
+    "text": "そうなんですね。ありがとうございます。静岡のお茶、大好きなんです。",
+    "tokens": [
+     {
+      "text": "そう",
+      "startSeconds": 26.22
+     },
+     {
+      "text": "なんですね",
+      "startSeconds": 26.646
+     },
+     {
+      "text": "ありがとうございます",
+      "startSeconds": 27.871
+     },
+     {
+      "text": "静岡",
+      "startSeconds": 29.453
+     },
+     {
+      "text": "の",
+      "startSeconds": 29.916
+     },
+     {
+      "text": "お茶",
+      "startSeconds": 30.067
+     },
+     {
+      "text": "大好き",
+      "startSeconds": 30.436
+     },
+     {
+      "text": "なんです",
+      "startSeconds": 30.996
+     }
+    ]
+   },
+   {
+    "text": "それはよかったです。",
+    "tokens": [
+     {
+      "text": "それ",
+      "startSeconds": 31.815
+     },
+     {
+      "text": "は",
+      "startSeconds": 32.161
+     },
+     {
+      "text": "よかった",
+      "startSeconds": 32.316
+     },
+     {
+      "text": "です",
+      "startSeconds": 32.581
+     }
+    ]
+   },
+   {
+    "text": "今度ゆっくり飲みますね。",
+    "tokens": [
+     {
+      "text": "今度",
+      "startSeconds": 33.338
+     },
+     {
+      "text": "ゆっくり",
+      "startSeconds": 33.925
+     },
+     {
+      "text": "飲みます",
+      "startSeconds": 34.195
+     },
+     {
+      "text": "ね",
+      "startSeconds": 34.437
+     }
+    ]
+   },
+   {
+    "text": "はい。では、これで失礼します。",
+    "tokens": [
+     {
+      "text": "はい",
+      "startSeconds": 35.124
+     },
+     {
+      "text": "では",
+      "startSeconds": 35.975
+     },
+     {
+      "text": "これ",
+      "startSeconds": 36.419
+     },
+     {
+      "text": "で",
+      "startSeconds": 36.599
+     },
+     {
+      "text": "失礼します",
+      "startSeconds": 36.769
+     }
+    ]
+   },
+   {
+    "text": "はい。気をつけて。",
+    "tokens": [
+     {
+      "text": "はい",
+      "startSeconds": 37.627
+     },
+     {
+      "text": "気をつけて",
+      "startSeconds": 38.213
+     }
+    ]
+   }
+  ]
+ },
+ "first-hello/nine-oclock": {
+  "version": 1,
+  "variantId": "988c5a50-1677-4f76-a63b-c1b4b0153b8b",
+  "contentHash": "486e8269cf06b49c5fb0c6d9b209c7d1ddc1a5a924f00b061b154a00f8a567ca",
+  "lines": [
+   {
+    "text": "あ、カイトさん。おはようございます。",
+    "tokens": [
+     {
+      "text": "あ",
+      "startSeconds": 0
+     },
+     {
+      "text": "カイトさん",
+      "startSeconds": 0.568
+     },
+     {
+      "text": "おはようございます",
+      "startSeconds": 1.491
+     }
+    ]
+   },
+   {
+    "text": "おはようございます。",
+    "tokens": [
+     {
+      "text": "おはようございます",
+      "startSeconds": 2.925
+     }
+    ]
+   },
+   {
+    "text": "お仕事ですか？",
+    "tokens": [
+     {
+      "text": "お",
+      "startSeconds": 4.356
+     },
+     {
+      "text": "仕事",
+      "startSeconds": 4.806
+     },
+     {
+      "text": "です",
+      "startSeconds": 5.031
+     },
+     {
+      "text": "か",
+      "startSeconds": 5.189
+     }
+    ]
+   },
+   {
+    "text": "はい。今日はちょっと遅れそうで。",
+    "tokens": [
+     {
+      "text": "はい",
+      "startSeconds": 6.006
+     },
+     {
+      "text": "今日",
+      "startSeconds": 6.856
+     },
+     {
+      "text": "は",
+      "startSeconds": 7.056
+     },
+     {
+      "text": "ちょっと",
+      "startSeconds": 7.239
+     },
+     {
+      "text": "遅れそうで",
+      "startSeconds": 7.611
+     }
+    ]
+   },
+   {
+    "text": "え、何時からですか？",
+    "tokens": [
+     {
+      "text": "え",
+      "startSeconds": 8.732
+     },
+     {
+      "text": "何時",
+      "startSeconds": 9.579
+     },
+     {
+      "text": "から",
+      "startSeconds": 9.781
+     },
+     {
+      "text": "です",
+      "startSeconds": 9.933
+     },
+     {
+      "text": "か",
+      "startSeconds": 10.104
+     }
+    ]
+   },
+   {
+    "text": "九時からなんです。",
+    "tokens": [
+     {
+      "text": "九時",
+      "startSeconds": 10.774
+     },
+     {
+      "text": "から",
+      "startSeconds": 11.435
+     },
+     {
+      "text": "なんです",
+      "startSeconds": 11.616
+     }
+    ]
+   },
+   {
+    "text": "今、八時半ですよ。",
+    "tokens": [
+     {
+      "text": "今",
+      "startSeconds": 12.481
+     },
+     {
+      "text": "八時半",
+      "startSeconds": 13.222
+     },
+     {
+      "text": "です",
+      "startSeconds": 13.757
+     },
+     {
+      "text": "よ",
+      "startSeconds": 13.942
+     }
+    ]
+   },
+   {
+    "text": "そうですよね。ちゃんと間に合いますか？",
+    "tokens": [
+     {
+      "text": "そう",
+      "startSeconds": 14.764
+     },
+     {
+      "text": "です",
+      "startSeconds": 15.462
+     },
+     {
+      "text": "よね",
+      "startSeconds": 15.607
+     },
+     {
+      "text": "ちゃんと",
+      "startSeconds": 16.511
+     },
+     {
+      "text": "間に合います",
+      "startSeconds": 16.895
+     },
+     {
+      "text": "か",
+      "startSeconds": 17.306
+     }
+    ]
+   },
+   {
+    "text": "駅まで近いから、大丈夫だと思いますよ。",
+    "tokens": [
+     {
+      "text": "駅",
+      "startSeconds": 18.224
+     },
+     {
+      "text": "まで",
+      "startSeconds": 18.59
+     },
+     {
+      "text": "近い",
+      "startSeconds": 18.807
+     },
+     {
+      "text": "から",
+      "startSeconds": 19.109
+     },
+     {
+      "text": "大丈夫",
+      "startSeconds": 19.482
+     },
+     {
+      "text": "だ",
+      "startSeconds": 19.955
+     },
+     {
+      "text": "と",
+      "startSeconds": 20.139
+     },
+     {
+      "text": "思います",
+      "startSeconds": 20.269
+     },
+     {
+      "text": "よ",
+      "startSeconds": 20.436
+     }
+    ]
+   },
+   {
+    "text": "本当ですか。よかったです。",
+    "tokens": [
+     {
+      "text": "本当",
+      "startSeconds": 21.332
+     },
+     {
+      "text": "です",
+      "startSeconds": 21.958
+     },
+     {
+      "text": "か",
+      "startSeconds": 22.128
+     },
+     {
+      "text": "よかった",
+      "startSeconds": 22.8
+     },
+     {
+      "text": "です",
+      "startSeconds": 23.219
+     }
+    ]
+   },
+   {
+    "text": "私もよく遅刻しそうになるので、気持ち分かります。",
+    "tokens": [
+     {
+      "text": "私",
+      "startSeconds": 24.017
+     },
+     {
+      "text": "も",
+      "startSeconds": 24.738
+     },
+     {
+      "text": "よく",
+      "startSeconds": 24.901
+     },
+     {
+      "text": "遅刻しそうになる",
+      "startSeconds": 25.118
+     },
+     {
+      "text": "ので",
+      "startSeconds": 26.146
+     },
+     {
+      "text": "気持ち",
+      "startSeconds": 26.733
+     },
+     {
+      "text": "分かります",
+      "startSeconds": 27.015
+     }
+    ]
+   },
+   {
+    "text": "え、ミカさんもですか？",
+    "tokens": [
+     {
+      "text": "え",
+      "startSeconds": 28.127
+     },
+     {
+      "text": "ミカ",
+      "startSeconds": 28.764
+     },
+     {
+      "text": "さん",
+      "startSeconds": 28.989
+     },
+     {
+      "text": "も",
+      "startSeconds": 29.208
+     },
+     {
+      "text": "です",
+      "startSeconds": 29.379
+     },
+     {
+      "text": "か",
+      "startSeconds": 29.544
+     }
+    ]
+   },
+   {
+    "text": "はい。特に月曜日は危ないです。",
+    "tokens": [
+     {
+      "text": "はい",
+      "startSeconds": 30.061
+     },
+     {
+      "text": "特に",
+      "startSeconds": 31.142
+     },
+     {
+      "text": "月曜日",
+      "startSeconds": 31.769
+     },
+     {
+      "text": "は",
+      "startSeconds": 32.324
+     },
+     {
+      "text": "危ない",
+      "startSeconds": 32.507
+     },
+     {
+      "text": "です",
+      "startSeconds": 32.797
+     }
+    ]
+   },
+   {
+    "text": "分かります。今日は月曜日じゃなくてよかったです。",
+    "tokens": [
+     {
+      "text": "分かります",
+      "startSeconds": 33.606
+     },
+     {
+      "text": "今日",
+      "startSeconds": 34.872
+     },
+     {
+      "text": "は",
+      "startSeconds": 35.149
+     },
+     {
+      "text": "月曜日",
+      "startSeconds": 35.337
+     },
+     {
+      "text": "じゃなくて",
+      "startSeconds": 35.869
+     },
+     {
+      "text": "よかった",
+      "startSeconds": 36.253
+     },
+     {
+      "text": "です",
+      "startSeconds": 36.538
+     }
+    ]
+   },
+   {
+    "text": "それは良かったですね。じゃあ、いってらっしゃい。",
+    "tokens": [
+     {
+      "text": "それ",
+      "startSeconds": 37.503
+     },
+     {
+      "text": "は",
+      "startSeconds": 38.004
+     },
+     {
+      "text": "良かった",
+      "startSeconds": 38.146
+     },
+     {
+      "text": "です",
+      "startSeconds": 38.464
+     },
+     {
+      "text": "ね",
+      "startSeconds": 38.629
+     },
+     {
+      "text": "じゃあ",
+      "startSeconds": 39.594
+     },
+     {
+      "text": "いってらっしゃい",
+      "startSeconds": 39.991
+     }
+    ]
+   },
+   {
+    "text": "はい、いってきます。",
+    "tokens": [
+     {
+      "text": "はい",
+      "startSeconds": 41.178
+     },
+     {
+      "text": "いってきます",
+      "startSeconds": 41.899
+     }
+    ]
+   }
+  ]
+ },
+ "first-hello/which-mailbox": {
+  "version": 1,
+  "variantId": "3609a6cd-dbae-4345-a9ac-9445ab51abee",
+  "contentHash": "3e657473f421f26505c833a2035c676d91b1205cada9415c2827f53447fe2f6a",
+  "lines": [
+   {
+    "text": "あ、カイトさん。",
+    "tokens": [
+     {
+      "text": "あ",
+      "startSeconds": 0
+     },
+     {
+      "text": "カイト",
+      "startSeconds": 0.501
+     },
+     {
+      "text": "さん",
+      "startSeconds": 0.834
+     }
+    ]
+   },
+   {
+    "text": "あ、ミカさん。おはようございます。",
+    "tokens": [
+     {
+      "text": "あ",
+      "startSeconds": 1.498
+     },
+     {
+      "text": "ミカさん",
+      "startSeconds": 1.965
+     },
+     {
+      "text": "おはようございます",
+      "startSeconds": 2.959
+     }
+    ]
+   },
+   {
+    "text": "ポスト探してるんですか？",
+    "tokens": [
+     {
+      "text": "ポスト",
+      "startSeconds": 4
+     },
+     {
+      "text": "探してる",
+      "startSeconds": 4.651
+     },
+     {
+      "text": "んですか",
+      "startSeconds": 4.898
+     }
+    ]
+   },
+   {
+    "text": "はい。302がどれか分からなくて。",
+    "tokens": [
+     {
+      "text": "はい",
+      "startSeconds": 6.019
+     },
+     {
+      "text": "302",
+      "startSeconds": 7.039
+     },
+     {
+      "text": "が",
+      "startSeconds": 7.796
+     },
+     {
+      "text": "どれ",
+      "startSeconds": 8.006
+     },
+     {
+      "text": "か",
+      "startSeconds": 8.3
+     },
+     {
+      "text": "分からなくて",
+      "startSeconds": 8.504
+     }
+    ]
+   },
+   {
+    "text": "下の段の右側ですよ。",
+    "tokens": [
+     {
+      "text": "下",
+      "startSeconds": 9.627
+     },
+     {
+      "text": "の",
+      "startSeconds": 10.12
+     },
+     {
+      "text": "段",
+      "startSeconds": 10.277
+     },
+     {
+      "text": "の",
+      "startSeconds": 10.512
+     },
+     {
+      "text": "右側",
+      "startSeconds": 10.787
+     },
+     {
+      "text": "です",
+      "startSeconds": 11.043
+     },
+     {
+      "text": "よ",
+      "startSeconds": 11.245
+     }
+    ]
+   },
+   {
+    "text": "これですか？",
+    "tokens": [
+     {
+      "text": "これ",
+      "startSeconds": 11.815
+     },
+     {
+      "text": "です",
+      "startSeconds": 12.173
+     },
+     {
+      "text": "か",
+      "startSeconds": 12.339
+     }
+    ]
+   },
+   {
+    "text": "あ、それ私のです。",
+    "tokens": [
+     {
+      "text": "あ",
+      "startSeconds": 13.166
+     },
+     {
+      "text": "それ",
+      "startSeconds": 13.442
+     },
+     {
+      "text": "私",
+      "startSeconds": 14.277
+     },
+     {
+      "text": "の",
+      "startSeconds": 14.531
+     },
+     {
+      "text": "です",
+      "startSeconds": 14.701
+     }
+    ]
+   },
+   {
+    "text": "あ、すみません。",
+    "tokens": [
+     {
+      "text": "あ",
+      "startSeconds": 15.358
+     },
+     {
+      "text": "すみません",
+      "startSeconds": 15.776
+     }
+    ]
+   },
+   {
+    "text": "302はその隣ですよ。",
+    "tokens": [
+     {
+      "text": "302",
+      "startSeconds": 17.02
+     },
+     {
+      "text": "は",
+      "startSeconds": 17.581
+     },
+     {
+      "text": "その",
+      "startSeconds": 17.731
+     },
+     {
+      "text": "隣",
+      "startSeconds": 17.962
+     },
+     {
+      "text": "です",
+      "startSeconds": 18.256
+     },
+     {
+      "text": "よ",
+      "startSeconds": 18.422
+     }
+    ]
+   },
+   {
+    "text": "あ、本当だ。開きました。ありがとうございます。",
+    "tokens": [
+     {
+      "text": "あ",
+      "startSeconds": 18.976
+     },
+     {
+      "text": "本当",
+      "startSeconds": 19.532
+     },
+     {
+      "text": "だ",
+      "startSeconds": 19.793
+     },
+     {
+      "text": "開きました",
+      "startSeconds": 20.497
+     },
+     {
+      "text": "ありがとうございます",
+      "startSeconds": 21.773
+     }
+    ]
+   },
+   {
+    "text": "鍵、部屋のとは違う形なので分かりにくいですよね。",
+    "tokens": [
+     {
+      "text": "鍵",
+      "startSeconds": 22.957
+     },
+     {
+      "text": "部屋",
+      "startSeconds": 23.969
+     },
+     {
+      "text": "の",
+      "startSeconds": 24.218
+     },
+     {
+      "text": "と",
+      "startSeconds": 24.368
+     },
+     {
+      "text": "は",
+      "startSeconds": 24.509
+     },
+     {
+      "text": "違う",
+      "startSeconds": 24.758
+     },
+     {
+      "text": "形",
+      "startSeconds": 24.998
+     },
+     {
+      "text": "な",
+      "startSeconds": 25.243
+     },
+     {
+      "text": "ので",
+      "startSeconds": 25.408
+     },
+     {
+      "text": "分かりにくい",
+      "startSeconds": 25.573
+     },
+     {
+      "text": "です",
+      "startSeconds": 26.318
+     },
+     {
+      "text": "よ",
+      "startSeconds": 26.465
+     },
+     {
+      "text": "ね",
+      "startSeconds": 26.623
+     }
+    ]
+   },
+   {
+    "text": "そうなんですね。だから、開かなかったんですね。",
+    "tokens": [
+     {
+      "text": "そう",
+      "startSeconds": 27.263
+     },
+     {
+      "text": "なんですね",
+      "startSeconds": 27.804
+     },
+     {
+      "text": "だから",
+      "startSeconds": 28.769
+     },
+     {
+      "text": "開かなかった",
+      "startSeconds": 29.589
+     },
+     {
+      "text": "んですね",
+      "startSeconds": 29.799
+     }
+    ]
+   },
+   {
+    "text": "最初はみんな間違えますよ。",
+    "tokens": [
+     {
+      "text": "最初",
+      "startSeconds": 30.848
+     },
+     {
+      "text": "は",
+      "startSeconds": 31.56
+     },
+     {
+      "text": "みんな",
+      "startSeconds": 31.688
+     },
+     {
+      "text": "間違えます",
+      "startSeconds": 31.965
+     },
+     {
+      "text": "よ",
+      "startSeconds": 32.364
+     }
+    ]
+   },
+   {
+    "text": "そうなんですか。ちょっと安心しました。",
+    "tokens": [
+     {
+      "text": "そう",
+      "startSeconds": 33.472
+     },
+     {
+      "text": "なんですか",
+      "startSeconds": 33.541
+     },
+     {
+      "text": "ちょっと",
+      "startSeconds": 34.426
+     },
+     {
+      "text": "安心しました",
+      "startSeconds": 34.919
+     }
+    ]
+   },
+   {
+    "text": "慣れれば大丈夫ですよ。",
+    "tokens": [
+     {
+      "text": "慣れれば",
+      "startSeconds": 36.532
+     },
+     {
+      "text": "大丈夫",
+      "startSeconds": 36.894
+     },
+     {
+      "text": "です",
+      "startSeconds": 37.184
+     },
+     {
+      "text": "よ",
+      "startSeconds": 37.353
+     }
+    ]
+   },
+   {
+    "text": "はい。ありがとうございます。助かりました。",
+    "tokens": [
+     {
+      "text": "はい",
+      "startSeconds": 38.468
+     },
+     {
+      "text": "ありがとうございます",
+      "startSeconds": 39.061
+     },
+     {
+      "text": "助かりました",
+      "startSeconds": 40.074
+     }
+    ]
+   }
+  ]
+ }
+}

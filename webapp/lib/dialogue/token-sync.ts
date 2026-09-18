@@ -37,6 +37,24 @@ export function clearFlagsForReviewed(sync: VariantTokenSync): VariantTokenSync 
   return { ...rest, source: "reviewed" };
 }
 
+/**
+ * Drop QA flags for one spoken line. When none remain, flip source → reviewed
+ * the same way whole-take Approve does (take leaves the review queue).
+ */
+export function clearFlagsForLine(
+  sync: VariantTokenSync,
+  lineIndex: number
+): { sync: VariantTokenSync; takeReviewed: boolean } {
+  const remaining = (sync.flags ?? []).filter((f) => f.lineIndex !== lineIndex);
+  if (remaining.length === (sync.flags ?? []).length) {
+    return { sync, takeReviewed: false };
+  }
+  if (remaining.length === 0) {
+    return { sync: clearFlagsForReviewed(sync), takeReviewed: true };
+  }
+  return { sync: { ...sync, flags: remaining }, takeReviewed: false };
+}
+
 export function parsePublishedTokenSync(raw: unknown): PublishedTokenSync | null {
   const parsed = publishedTokenSyncSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
@@ -831,16 +849,14 @@ export function shiftTokenSyncSeconds(
   };
 }
 
-export function activeTokenIndexForTime(
-  sync: VariantTokenSync | PublishedTokenSync,
-  lineIndex: number,
+/** Latest stamped token on one line whose start is at or before `timeSeconds`. */
+export function activeTokenIndexInLine(
+  tokens: Array<{ startSeconds?: number | null }>,
   timeSeconds: number
 ): number | null {
-  const line = sync.lines[lineIndex];
-  if (!line) return null;
   let active: number | null = null;
-  for (let i = 0; i < line.tokens.length; i++) {
-    const start = line.tokens[i].startSeconds;
+  for (let i = 0; i < tokens.length; i++) {
+    const start = tokens[i]?.startSeconds;
     if (start == null) break;
     if (timeSeconds >= start) active = i;
     else break;
@@ -848,9 +864,22 @@ export function activeTokenIndexForTime(
   return active;
 }
 
+export function activeTokenIndexForTime(
+  sync: {
+    lines: Array<{ tokens: Array<{ startSeconds?: number | null }> }>;
+  },
+  lineIndex: number,
+  timeSeconds: number
+): number | null {
+  const line = sync.lines[lineIndex];
+  if (!line) return null;
+  return activeTokenIndexInLine(line.tokens, timeSeconds);
+}
+
 /**
  * Latest stamped token whose start is at or before `timeSeconds`, across all
- * lines. Used for review-queue / full-take karaoke follow.
+ * lines. Prefer per-line `activeTokenIndexForTime` when matching Token timing
+ * karaoke (editor highlights each line independently).
  */
 export function activeTokenAtTime(
   lines: Array<{ tokens: Array<{ startSeconds?: number | null }> }>,

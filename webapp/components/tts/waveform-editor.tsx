@@ -232,12 +232,18 @@ export function WaveformEditor({
   dialogueLines,
   currentContentHash,
   hasUnsavedChanges,
+  focusLineIndex = null,
+  focusTimingMode = null,
 }: {
   projectId: string;
   variant: Variant;
   dialogueLines?: EditableDialogueLine[];
   currentContentHash?: string;
   hasUnsavedChanges?: boolean;
+  /** Review-queue deep link: scroll/select this spoken line in Token timing. */
+  focusLineIndex?: number | null;
+  /** Review-queue deep link: open Line timing or Token timing tab. */
+  focusTimingMode?: "lines" | "tokens" | null;
 }) {
   const queryClient = useQueryClient();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -289,7 +295,11 @@ export function WaveformEditor({
   } | null>(null);
   const [playerBarHeight, setPlayerBarHeight] = useState(0);
   const [sectionHeaderHeight, setSectionHeaderHeight] = useState(0);
-  const [timingMode, setTimingMode] = useState<"lines" | "tokens">("lines");
+  const [timingMode, setTimingMode] = useState<"lines" | "tokens">(
+    focusTimingMode === "tokens" || focusTimingMode === "lines"
+      ? focusTimingMode
+      : "lines"
+  );
   const [playbackRate, setPlaybackRate] =
     useState<(typeof PLAYBACK_RATES)[number]>(1);
   const playbackRateRef = useRef(playbackRate);
@@ -381,6 +391,21 @@ export function WaveformEditor({
     if (userScrollHoldRef.current) return;
     scrollRowIntoView(activeRowIndex);
   }, [activeRowIndex, timingMode, followPlayhead]);
+
+  // Review-queue deep link: open Token/Line timing and scroll the spoken line.
+  useEffect(() => {
+    if (focusTimingMode === "tokens" || focusTimingMode === "lines") {
+      setTimingMode(focusTimingMode);
+    }
+  }, [focusTimingMode]);
+
+  useEffect(() => {
+    if (focusLineIndex == null || timingMode !== "lines") return;
+    const id = window.requestAnimationFrame(() => {
+      scrollRowIntoView(focusLineIndex);
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [focusLineIndex, timingMode]);
 
   // Track chrome heights for scroll-margin on active sentence rows.
   useEffect(() => {
@@ -2047,6 +2072,7 @@ export function WaveformEditor({
               actionsRef={tokenActionsRef}
               onAvailabilityChange={setTokenActionState}
               onGetPlayhead={heardPlayheadSeconds}
+              focusLineIndex={focusLineIndex}
               onPlayLine={(lineIndex) => {
                 const ws = wavesurferRef.current;
                 if (!ws) return;

@@ -1,3 +1,4 @@
+import type { TokenSyncFlag } from "@/lib/dialogue/types";
 import { formatApiError } from "@/lib/api-error";
 import type { VariantTokenSync } from "@/lib/dialogue/types";
 
@@ -61,6 +62,13 @@ export type Variant = {
   provider: string;
   contentHash: string | null;
   tokenSync: VariantTokenSync | null;
+};
+
+export type AutoStampResult = {
+  variant: Variant;
+  flags: TokenSyncFlag[];
+  marksDerived: boolean;
+  summary: string;
 };
 
 export type SuggestBreaksResult = {
@@ -160,6 +168,11 @@ export const ttsApi = {
         method: "POST",
         body: JSON.stringify(contentHash ? { contentHash } : {}),
       }
+    ),
+  autoStamp: (projectId: string, variantId: string, body?: { force?: boolean }) =>
+    request<AutoStampResult>(
+      `/api/tts/projects/${projectId}/variants/${variantId}/auto-stamp`,
+      { method: "POST", body: JSON.stringify(body ?? {}) }
     ),
   suggestBreaks: (projectId: string, variantId: string) =>
     request<SuggestBreaksResult>(

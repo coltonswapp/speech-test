@@ -204,7 +204,7 @@ function proposedStampSeconds(
   return pulledBack > floor ? pulledBack : Math.max(clipSeconds, floor);
 }
 
-function clampStamp(params: {
+export function clampStamp(params: {
   proposed: number;
   previous: number;
   window: LineWindow | null;

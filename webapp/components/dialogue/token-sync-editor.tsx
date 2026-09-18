@@ -17,8 +17,8 @@ import { Play, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { dialogueApi } from "@/lib/dialogue/client";
-import type { Variant } from "@/lib/tts/client";
-import type { VariantTokenSync } from "@/lib/dialogue/types";
+import type { AutoStampResult, Variant } from "@/lib/tts/client";
+import type { TokenSyncFlag, VariantTokenSync } from "@/lib/dialogue/types";
 import { cn } from "@/lib/utils";
 import {
   activeTokenIndexForTime,
@@ -55,6 +55,17 @@ function formatStamp(seconds: number): string {
   return `${seconds.toFixed(2)}s`;
 }
 
+const FLAG_LABEL: Record<TokenSyncFlag["code"], string> = {
+  "stamp-in-silence": "stamp in silence",
+  "script-mismatch": "script mismatch",
+  "reading-fallback": "reading fallback",
+  "no-gap": "no gap before line",
+};
+
+function flagKey(lineIndex: number, tokenIndex: number): string {
+  return `${lineIndex}:${tokenIndex}`;
+}
+
 /**
  * Stamp/undo handed up to the host so the shared transport dock (and its
  * M / Backspace hotkeys) can drive token timing without duplicating the logic.
@@ -85,6 +96,7 @@ export function TokenSyncEditor({
   onPlayLine,
   onPlayFromSeconds,
   playingLineIndex,
+  onAutoStamp,
 }: {
   variant: Variant;
   spokenLines: Array<{ speaker: string; text: string }>;
@@ -103,6 +115,8 @@ export function TokenSyncEditor({
   /** Seek + play from an absolute playhead time (mid-line stamp recovery). */
   onPlayFromSeconds?: (seconds: number) => void;
   playingLineIndex?: number | null;
+  /** Host runs the aligner and patches the take; resolves with the route result. */
+  onAutoStamp?: (options: { force?: boolean }) => Promise<AutoStampResult>;
 }) {
   const spokenTexts = useMemo(
     () => spokenLines.map((line) => line.text.trim()).filter(Boolean),
@@ -148,6 +162,58 @@ export function TokenSyncEditor({
     },
     onError: (error) => toast.error(error.message),
   });
+
+  const autoStampMutation = useMutation({
+    mutationFn: (options: { force?: boolean }) => {
+      if (!onAutoStamp) throw new Error("Auto-stamp is not available here.");
+      return onAutoStamp(options);
+    },
+    onSuccess: (result) => {
+      // The host patched the variant; `sync` (and the refs) follow on render.
+      const nextSync = parseVariantTokenSync(result.variant.tokenSync);
+      const firstFlag = result.flags.find((flag) => flag.tokenIndex != null);
+      setSelectedToken(
+        firstFlag
+          ? { lineIndex: firstFlag.lineIndex, tokenIndex: firstFlag.tokenIndex! }
+          : nextSync
+            ? firstUnstamped(nextSync)
+            : null
+      );
+      toast.success(result.summary);
+    },
+    onError: (error, options) => {
+      const message = error.message;
+      if (!options.force && /human stamps|line marks but needs/.test(message)) {
+        toast.warning(message, {
+          duration: 10000,
+          action: {
+            label: "Replace",
+            onClick: () => autoStampMutation.mutate({ force: true }),
+          },
+        });
+        return;
+      }
+      toast.error(message);
+    },
+  });
+
+  const { tokenFlags, lineFlags, flaggedTokens } = useMemo(() => {
+    const tokenFlags = new Map<string, TokenSyncFlag[]>();
+    const lineFlags = new Map<number, TokenSyncFlag[]>();
+    const flaggedTokens: Array<{ lineIndex: number; tokenIndex: number }> = [];
+    for (const flag of sync?.flags ?? []) {
+      if (flag.tokenIndex == null) {
+        lineFlags.set(flag.lineIndex, [...(lineFlags.get(flag.lineIndex) ?? []), flag]);
+        continue;
+      }
+      const key = flagKey(flag.lineIndex, flag.tokenIndex);
+      if (!tokenFlags.has(key)) {
+        flaggedTokens.push({ lineIndex: flag.lineIndex, tokenIndex: flag.tokenIndex });
+      }
+      tokenFlags.set(key, [...(tokenFlags.get(key) ?? []), flag]);
+    }
+    return { tokenFlags, lineFlags, flaggedTokens };
+  }, [sync]);
 
   const unstampedCount = useMemo(() => {
     if (!sync) return 0;
@@ -241,7 +307,7 @@ export function TokenSyncEditor({
     }
     const clipSeconds =
       getPlayheadRef.current?.() ?? currentTimeRef.current;
-    const next = restampToken(
+    const stamped = restampToken(
       current,
       target.lineIndex,
       target.tokenIndex,
@@ -249,7 +315,36 @@ export function TokenSyncEditor({
       windowsRef.current,
       playbackRateRef.current
     );
+    // First hand stamp on a take with no provenance makes it a human take.
+    const next =
+      stamped !== current && stamped.source == null
+        ? { ...stamped, source: "human" as const }
+        : stamped;
     commitSync(next, nextUnstamped(next, target.lineIndex, target.tokenIndex));
+  }
+
+  function markReviewed() {
+    const current = syncRef.current;
+    if (!current || current.source !== "auto" || hasUnsavedRef.current) return;
+    commitSync({ ...current, source: "reviewed" }, selectedRef.current);
+    toast.success("Marked reviewed. Publish the lesson to ship these times.");
+  }
+
+  function jumpToFlagged() {
+    if (!sync || flaggedTokens.length === 0) return;
+    const at = selectedToken
+      ? flaggedTokens.findIndex(
+          (f) =>
+            f.lineIndex === selectedToken.lineIndex &&
+            f.tokenIndex === selectedToken.tokenIndex
+        )
+      : -1;
+    const next = flaggedTokens[(at + 1) % flaggedTokens.length];
+    setSelectedToken(next);
+    const seconds = sync.lines[next.lineIndex]?.tokens[next.tokenIndex]?.startSeconds;
+    if (seconds != null) {
+      onPlayFromSeconds?.(Math.max(0, seconds - 1));
+    }
   }
 
   function undo() {
@@ -407,7 +502,20 @@ export function TokenSyncEditor({
     spokenTexts.length === 0 ||
     hasUnsavedChanges ||
     !contentHash ||
-    tokenizeMutation.isPending;
+    tokenizeMutation.isPending ||
+    autoStampMutation.isPending;
+  const autoStampDisabled =
+    !onAutoStamp ||
+    spokenTexts.length === 0 ||
+    hasUnsavedChanges ||
+    !contentHash ||
+    tokenizeMutation.isPending ||
+    autoStampMutation.isPending;
+  const canMarkReviewed =
+    !!sync &&
+    sync.source === "auto" &&
+    status === "complete" &&
+    !hasUnsavedChanges;
 
   const canStamp =
     !!sync && status !== "stale" && !hasUnsavedChanges && !!stampTarget;
@@ -437,6 +545,28 @@ export function TokenSyncEditor({
             ? `${stampedCount} / ${totalCount} stamped`
             : STATUS_LABEL[status]}
         </Badge>
+        {sync?.source === "auto" && status !== "stale" && (
+          <Badge
+            variant="outline"
+            className="border-amber-500/50 text-amber-600 dark:text-amber-400"
+            title={
+              sync.alignerVersion
+                ? `Stamped automatically by ${sync.alignerVersion}. Review, then Mark reviewed.`
+                : "Stamped automatically. Review, then Mark reviewed."
+            }
+          >
+            auto
+          </Badge>
+        )}
+        {sync?.source === "reviewed" && status !== "stale" && (
+          <Badge
+            variant="outline"
+            className="border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
+            title="Auto stamps checked by an editor."
+          >
+            reviewed
+          </Badge>
+        )}
         {unstampedCount > 0 && (
           <Button
             type="button"
@@ -449,9 +579,27 @@ export function TokenSyncEditor({
             {nextUntimed ? `: ${nextUntimed.text}` : ""}
           </Button>
         )}
+        {flaggedTokens.length > 0 && status !== "stale" && (
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            className="border-amber-500/50 text-amber-700 dark:text-amber-300"
+            onClick={jumpToFlagged}
+            title="Cycle through tokens the aligner flagged for review"
+          >
+            {flaggedTokens.length} flagged
+          </Button>
+        )}
       </div>
       <ol className="list-decimal space-y-0.5 pl-4 text-xs text-muted-foreground">
-        <li>Tokenize splits each line into tap-sized words. The first word of each line is already timed from the line mark.</li>
+        <li>
+          <span className="font-medium text-foreground">Auto-stamp</span>{" "}
+          tokenizes, times every word from the audio, and places line marks
+          if the take has none. Listen through, fix anything flagged in amber,
+          then <span className="font-medium text-foreground">Mark reviewed</span>.
+        </li>
+        <li>Or by hand: Tokenize splits each line into tap-sized words. The first word of each line is already timed from the line mark.</li>
         <li>Play the take from the waveform below.</li>
         <li>
           Tap <span className="font-medium text-foreground">Mark</span> in the
@@ -520,6 +668,34 @@ export function TokenSyncEditor({
         >
           {tokenizeMutation.isPending ? "Tokenizing…" : "Tokenize"}
         </Button>
+        {onAutoStamp && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="min-h-11 touch-manipulation border-amber-500/50 md:min-h-8"
+            onClick={() => autoStampMutation.mutate({})}
+            disabled={autoStampDisabled}
+            title="Time every word from the audio with the aligner"
+          >
+            {autoStampMutation.isPending ? "Aligning…" : "Auto-stamp"}
+          </Button>
+        )}
+        {sync?.source === "auto" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="min-h-11 touch-manipulation border-emerald-500/50 md:min-h-8"
+            onClick={markReviewed}
+            disabled={!canMarkReviewed}
+            title={
+              canMarkReviewed
+                ? "Confirm these auto stamps are checked"
+                : "Stamp every word before marking reviewed"
+            }
+          >
+            Mark reviewed
+          </Button>
+        )}
         <Button
           size="sm"
           variant="outline"
@@ -566,6 +742,15 @@ export function TokenSyncEditor({
                       {missingOnLine} missing
                     </span>
                   )}
+                  {(lineFlags.get(lineIndex) ?? []).map((flag) => (
+                    <span
+                      key={flag.code}
+                      title={flag.detail ?? FLAG_LABEL[flag.code]}
+                      className="rounded border border-amber-500/50 px-1 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+                    >
+                      {FLAG_LABEL[flag.code]}
+                    </span>
+                  ))}
                   {lineHasStamps && (
                     <Button
                       type="button"
@@ -581,6 +766,8 @@ export function TokenSyncEditor({
                 <TokenLine
                   lineText={line.text}
                   tokens={line.tokens}
+                  lineIndex={lineIndex}
+                  tokenFlags={tokenFlags}
                   activeToken={activeToken}
                   nextTokenIndex={
                     stampTarget?.lineIndex === lineIndex
@@ -626,6 +813,8 @@ export function TokenSyncEditor({
 function TokenLine({
   lineText,
   tokens,
+  lineIndex,
+  tokenFlags,
   activeToken,
   nextTokenIndex,
   onMouseUp,
@@ -634,6 +823,8 @@ function TokenLine({
 }: {
   lineText: string;
   tokens: VariantTokenSync["lines"][number]["tokens"];
+  lineIndex: number;
+  tokenFlags: Map<string, TokenSyncFlag[]>;
   activeToken: number | null;
   nextTokenIndex: number | null;
   onMouseUp: (container: HTMLElement, event: MouseEvent<HTMLElement>) => void;
@@ -654,6 +845,7 @@ function TokenLine({
             text={token.text}
             startSeconds={token.startSeconds}
             tokenIndex={tokenIndex}
+            flags={tokenFlags.get(flagKey(lineIndex, tokenIndex))}
             isNext={nextTokenIndex === tokenIndex}
             isPlaying={activeToken === tokenIndex && token.startSeconds != null}
             onOpenMenu={(x, y) => onTokenMenu(tokenIndex, x, y)}
@@ -690,6 +882,7 @@ function TokenLine({
               text={range.text}
               startSeconds={range.startSeconds}
               tokenIndex={range.tokenIndex}
+              flags={tokenFlags.get(flagKey(lineIndex, range.tokenIndex))}
               isNext={nextTokenIndex === range.tokenIndex}
               isPlaying={
                 activeToken === range.tokenIndex && range.startSeconds != null
@@ -718,6 +911,7 @@ function TokenChip({
   text,
   startSeconds,
   tokenIndex,
+  flags,
   isNext,
   isPlaying,
   onOpenMenu,
@@ -725,11 +919,16 @@ function TokenChip({
   text: string;
   startSeconds: number | null;
   tokenIndex: number;
+  flags?: TokenSyncFlag[];
   isNext: boolean;
   isPlaying: boolean;
   onOpenMenu: (x: number, y: number) => void;
 }) {
   const untimed = startSeconds == null;
+  const flagged = !!flags && flags.length > 0;
+  const flagText = flagged
+    ? flags.map((flag) => flag.detail ?? FLAG_LABEL[flag.code]).join("; ")
+    : null;
   const longPressRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
 
@@ -782,11 +981,12 @@ function TokenChip({
     <span
       data-token-index={tokenIndex}
       title={
-        untimed
+        (flagText ? `Flagged: ${flagText}. ` : "") +
+        (untimed
           ? isNext
             ? "Tap to stamp this word at the playhead. Right-click or long-press to clear from here."
             : "Tap to make this the next word to stamp. Right-click or long-press to clear from here."
-          : `Stamped at ${formatStamp(startSeconds)}. Right-click or long-press to clear from here.`
+          : `Stamped at ${formatStamp(startSeconds)}. Right-click or long-press to clear from here.`)
       }
       onContextMenu={onContextMenu}
       onPointerDown={onPointerDown}
@@ -809,6 +1009,7 @@ function TokenChip({
         "mx-px inline-block cursor-pointer touch-manipulation whitespace-nowrap rounded-md border px-1.5 py-1 align-middle md:px-1 md:py-px",
         untimed && "border-dashed border-rose-400 bg-rose-500/15",
         !untimed && "border-sky-500/30 bg-sky-500/10",
+        flagged && "border-amber-500/70 bg-amber-500/15",
         isNext && untimed && "border-solid ring-2 ring-rose-400",
         isNext && !untimed && "ring-2 ring-amber-400",
         isPlaying && !untimed && "border-primary bg-primary/15"

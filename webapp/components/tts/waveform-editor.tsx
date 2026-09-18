@@ -296,6 +296,9 @@ export function WaveformEditor({
     canStamp: false,
     canUndo: false,
   });
+  // Marks the aligner placed on the last auto-stamp; tinted amber until the
+  // editor moves one or marks the take reviewed.
+  const [derivedMarkSamples, setDerivedMarkSamples] = useState<number[]>([]);
 
   // Page-level auto-scroll fights the user's own scrolling on touch devices,
   // so default it off there; the Follow toggle lets either side override.
@@ -432,10 +435,25 @@ export function WaveformEditor({
   }
 
   function setMarks(next: number[]) {
+    setDerivedMarkSamples([]);
     updateVariantMutation.mutate({
       dialogueLineSwitchSamples: next.length > 0 ? next : null,
     });
   }
+
+  async function autoStamp(options: { force?: boolean }) {
+    const result = await ttsApi.autoStamp(projectId, variantRef.current.id, options);
+    patchVariantInCache(result.variant);
+    setDerivedMarkSamples(
+      result.marksDerived ? (result.variant.dialogueLineSwitchSamples ?? []) : []
+    );
+    return result;
+  }
+
+  const showDerivedMarks =
+    derivedMarkSamples.length > 0 && variant.tokenSync?.source === "auto";
+  const isDerivedMark = (sample: number) =>
+    showDerivedMarks && derivedMarkSamples.includes(sample);
 
   useEffect(() => {
     const containerEl = containerRef.current;
@@ -1349,11 +1367,19 @@ export function WaveformEditor({
               <div
                 key={`mark-guide-${i}`}
                 data-mark-guide={i}
-                className={`absolute top-0 bottom-0 -translate-x-1/2 ${
+                className={cn(
+                  "absolute top-0 bottom-0 -translate-x-1/2",
                   dragging?.index === i || selectedMarkIndex === i
-                    ? "w-0.5 bg-emerald-500/55"
-                    : "w-px bg-emerald-500/35"
-                }`}
+                    ? "w-0.5"
+                    : "w-px",
+                  isDerivedMark(sample)
+                    ? dragging?.index === i || selectedMarkIndex === i
+                      ? "bg-amber-500/60"
+                      : "bg-amber-500/40"
+                    : dragging?.index === i || selectedMarkIndex === i
+                      ? "bg-emerald-500/55"
+                      : "bg-emerald-500/35"
+                )}
                 style={{ left: `${(sample / totalSamples) * 100}%` }}
               />
             ))}
@@ -1411,14 +1437,18 @@ export function WaveformEditor({
                   selected && "z-20"
                 )}
                 style={{ left: `${(sample / totalSamples) * 100}%` }}
-                title={`Line switch ${i + 1} · ${(sample / variant.sampleRate).toFixed(2)}s — drag to move, right-click/long-press to delete`}
+                title={`${isDerivedMark(sample) ? "Suggested by auto-stamp. " : ""}Line switch ${i + 1} · ${(sample / variant.sampleRate).toFixed(2)}s — drag to move, right-click/long-press to delete`}
               >
                 <div
                   className={cn(
                     "mx-auto h-0 w-0 border-x-[5px] border-t-[6px] border-x-transparent sm:border-x-4 sm:border-t-4",
-                    selected || isDragging
-                      ? "border-t-emerald-400"
-                      : "border-t-emerald-500",
+                    isDerivedMark(sample)
+                      ? selected || isDragging
+                        ? "border-t-amber-400"
+                        : "border-t-amber-500"
+                      : selected || isDragging
+                        ? "border-t-emerald-400"
+                        : "border-t-emerald-500",
                     selected && "drop-shadow-[0_0_3px_rgba(52,211,153,0.9)]"
                   )}
                 />
@@ -1426,6 +1456,12 @@ export function WaveformEditor({
             );
           })}
         </div>
+      )}
+      {isConversation && timingMode === "lines" && showDerivedMarks && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Amber marks were placed by auto-stamp from each speaker&apos;s onset.
+          Drag any that clip speech; they turn green once you touch them.
+        </p>
       )}
 
       {isConversation &&
@@ -1998,6 +2034,7 @@ export function WaveformEditor({
               onPlayFromSeconds={playFromSeconds}
               playingLineIndex={loopingRowIndex}
               onPersist={persistTokenSync}
+              onAutoStamp={autoStamp}
             />
           )}
           {/* Holds layout space while the player is fixed to the viewport bottom. */}

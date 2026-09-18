@@ -9,6 +9,7 @@ import {
   restampToken,
   seekSecondsBeforeToken,
   splitTokenAt,
+  activeTokenAtTime,
   TOKEN_STAMP_LOOKBACK_SECONDS,
   type LineWindow,
 } from "./token-sync";
@@ -290,5 +291,47 @@ describe("tokenSync provenance (KA-1)", () => {
     });
     assert.equal(merged.lines[0].tokens[1].text, "いい天気");
     assert.equal(merged.lines[0].tokens[1].reading, undefined);
+  });
+});
+
+describe("activeTokenAtTime", () => {
+  const lines = [
+    {
+      tokens: [
+        { startSeconds: 0.1 },
+        { startSeconds: 0.5 },
+        { startSeconds: 0.9 },
+      ],
+    },
+    {
+      tokens: [
+        { startSeconds: 1.2 },
+        { startSeconds: 1.6 },
+        { startSeconds: null },
+      ],
+    },
+  ];
+
+  it("returns null before the first stamp", () => {
+    assert.equal(activeTokenAtTime(lines, 0), null);
+  });
+
+  it("follows the latest started token across lines", () => {
+    assert.deepEqual(activeTokenAtTime(lines, 0.5), {
+      lineIndex: 0,
+      tokenIndex: 1,
+    });
+    assert.deepEqual(activeTokenAtTime(lines, 1.0), {
+      lineIndex: 0,
+      tokenIndex: 2,
+    });
+    assert.deepEqual(activeTokenAtTime(lines, 1.4), {
+      lineIndex: 1,
+      tokenIndex: 0,
+    });
+    assert.deepEqual(activeTokenAtTime(lines, 2.0), {
+      lineIndex: 1,
+      tokenIndex: 1,
+    });
   });
 });

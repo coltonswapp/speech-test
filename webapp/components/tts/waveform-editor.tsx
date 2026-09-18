@@ -32,13 +32,21 @@ import {
   SquareSplitHorizontal,
   X,
 } from "lucide-react";
-import { ttsApi, type Variant } from "@/lib/tts/client";
+import {
+  autoStampInProgress,
+  ttsApi,
+  type Variant,
+} from "@/lib/tts/client";
 import { cn } from "@/lib/utils";
 import type { EditableDialogueLine } from "@/components/tts/dialogue-line-editor";
 import {
   TokenSyncEditor,
   type TokenSyncActions,
 } from "@/components/dialogue/token-sync-editor";
+import {
+  AutoStampControls,
+  useAutoStampControls,
+} from "@/components/tts/auto-stamp-controls";
 import type { VariantTokenSync } from "@/lib/dialogue/types";
 import { enqueueTokenSyncSave } from "@/lib/dialogue/token-sync-persist";
 import { stampMediaTimeNow } from "@/lib/tts/media-timing";
@@ -449,6 +457,31 @@ export function WaveformEditor({
     );
     return result;
   }
+
+  async function abortAutoStamp() {
+    const result = await ttsApi.cancelAutoStamp(
+      projectId,
+      variantRef.current.id
+    );
+    await queryClient.invalidateQueries({ queryKey: ["tts-variants", projectId] });
+    return result;
+  }
+
+  const autoStampSuccessHandlerRef = useRef<
+    ((result: Awaited<ReturnType<typeof autoStamp>>) => void) | null
+  >(null);
+
+  const autoStampControls = useAutoStampControls({
+    onAutoStamp: autoStamp,
+    onAbort: abortAutoStamp,
+    jobLive: autoStampInProgress(variant),
+    onSuccess: (result) => autoStampSuccessHandlerRef.current?.(result),
+  });
+
+  const autoStampDisabled =
+    spokenLines.length === 0 ||
+    !!hasUnsavedChanges ||
+    !(currentContentHash ?? variant.contentHash);
 
   const showDerivedMarks =
     derivedMarkSamples.length > 0 && variant.tokenSync?.source === "auto";
@@ -1789,29 +1822,35 @@ export function WaveformEditor({
             ref={sectionHeaderRef}
             className="sticky top-14 z-20 flex flex-col gap-2 bg-background pb-2"
           >
-            <Tabs
-              value={timingMode}
-              onValueChange={(value) => {
-                if (value === "lines" || value === "tokens") {
-                  setLoopingRowIndex(null);
-                  setIsTrimMode(false);
-                  setIsCutMode(false);
-                  setDragging(null);
-                  setSelectedMarkIndex(null);
-                  setMarkMenu(null);
-                  setTimingMode(value);
-                }
-              }}
-            >
-              <TabsList className="h-auto min-h-10 touch-manipulation">
-                <TabsTrigger value="lines" className="min-h-9 px-3">
-                  Line timing
-                </TabsTrigger>
-                <TabsTrigger value="tokens" className="min-h-9 px-3">
-                  Token timing
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex flex-wrap items-center gap-2">
+              <Tabs
+                value={timingMode}
+                onValueChange={(value) => {
+                  if (value === "lines" || value === "tokens") {
+                    setLoopingRowIndex(null);
+                    setIsTrimMode(false);
+                    setIsCutMode(false);
+                    setDragging(null);
+                    setSelectedMarkIndex(null);
+                    setMarkMenu(null);
+                    setTimingMode(value);
+                  }
+                }}
+              >
+                <TabsList className="h-auto min-h-10 touch-manipulation">
+                  <TabsTrigger value="lines" className="min-h-9 px-3">
+                    Line timing
+                  </TabsTrigger>
+                  <TabsTrigger value="tokens" className="min-h-9 px-3">
+                    Token timing
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <AutoStampControls
+                state={autoStampControls}
+                disabled={autoStampDisabled}
+              />
+            </div>
             {timingMode === "lines" && (
               <>
                 <p className="text-sm font-medium">Sentence map</p>
@@ -2034,7 +2073,9 @@ export function WaveformEditor({
               onPlayFromSeconds={playFromSeconds}
               playingLineIndex={loopingRowIndex}
               onPersist={persistTokenSync}
-              onAutoStamp={autoStamp}
+              autoStampControls={autoStampControls}
+              autoStampDisabled={autoStampDisabled}
+              onAutoStampSuccessRef={autoStampSuccessHandlerRef}
             />
           )}
           {/* Holds layout space while the player is fixed to the viewport bottom. */}

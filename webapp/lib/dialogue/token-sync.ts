@@ -848,6 +848,31 @@ export function activeTokenIndexForTime(
   return active;
 }
 
+/**
+ * Latest stamped token whose start is at or before `timeSeconds`, across all
+ * lines. Used for review-queue / full-take karaoke follow.
+ */
+export function activeTokenAtTime(
+  lines: Array<{ tokens: Array<{ startSeconds?: number | null }> }>,
+  timeSeconds: number
+): { lineIndex: number; tokenIndex: number } | null {
+  let best: { lineIndex: number; tokenIndex: number; start: number } | null =
+    null;
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const tokens = lines[lineIndex]?.tokens ?? [];
+    for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
+      const start = tokens[tokenIndex]?.startSeconds;
+      if (start == null) continue;
+      if (timeSeconds >= start && (!best || start >= best.start)) {
+        best = { lineIndex, tokenIndex, start };
+      }
+    }
+  }
+  return best
+    ? { lineIndex: best.lineIndex, tokenIndex: best.tokenIndex }
+    : null;
+}
+
 export function exportLineWindows(params: {
   lineSwitchSeconds: number[];
   spokenCount: number;

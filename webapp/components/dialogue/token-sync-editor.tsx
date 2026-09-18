@@ -10,6 +10,7 @@ import {
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
   type Ref,
+  type RefObject,
 } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -19,9 +20,12 @@ import { Badge } from "@/components/ui/badge";
 import { dialogueApi } from "@/lib/dialogue/client";
 import { ttsApi } from "@/lib/tts/client";
 import type { AutoStampResult, Variant } from "@/lib/tts/client";
-import { formatAutoStampDuration } from "@/lib/tts/client";
 import type { TokenSyncFlag, VariantTokenSync } from "@/lib/dialogue/types";
 import { cn } from "@/lib/utils";
+import {
+  AutoStampControls,
+  type AutoStampControlsState,
+} from "@/components/tts/auto-stamp-controls";
 import {
   activeTokenIndexForTime,
   applyTokenSelection,
@@ -113,7 +117,9 @@ export function TokenSyncEditor({
   onPlayLine,
   onPlayFromSeconds,
   playingLineIndex,
-  onAutoStamp,
+  autoStampControls,
+  autoStampDisabled: autoStampDisabledProp,
+  onAutoStampSuccessRef,
 }: {
   variant: Variant;
   spokenLines: Array<{ speaker: string; text: string }>;
@@ -132,8 +138,11 @@ export function TokenSyncEditor({
   /** Seek + play from an absolute playhead time (mid-line stamp recovery). */
   onPlayFromSeconds?: (seconds: number) => void;
   playingLineIndex?: number | null;
-  /** Host runs the aligner and patches the take; resolves with the route result. */
-  onAutoStamp?: (options: { force?: boolean }) => Promise<AutoStampResult>;
+  /** Shared with the Audio mode picker chrome so labels/state stay in sync. */
+  autoStampControls?: AutoStampControlsState;
+  autoStampDisabled?: boolean;
+  /** Host ref; editor installs a handler to jump to the first flag after stamp. */
+  onAutoStampSuccessRef?: RefObject<((result: AutoStampResult) => void) | null>;
 }) {
   const spokenTexts = useMemo(
     () => spokenLines.map((line) => line.text.trim()).filter(Boolean),
@@ -164,10 +173,6 @@ export function TokenSyncEditor({
     y: number;
   } | null>(null);
 
-  const [stampElapsedMs, setStampElapsedMs] = useState(0);
-  const [lastStampDurationMs, setLastStampDurationMs] = useState<number | null>(null);
-  const stampStartedAtRef = useRef<number | null>(null);
-
   const tokenizeMutation = useMutation({
     mutationFn: () => dialogueApi.tokenizeLines(spokenTexts),
     onSuccess: ({ lines }) => {
@@ -184,20 +189,10 @@ export function TokenSyncEditor({
     onError: (error) => toast.error(error.message),
   });
 
-  const autoStampMutation = useMutation({
-    mutationFn: (options: { force?: boolean }) => {
-      if (!onAutoStamp) throw new Error("Auto-stamp is not available here.");
-      stampStartedAtRef.current = Date.now();
-      setStampElapsedMs(0);
-      return onAutoStamp(options);
-    },
-    onSuccess: (result) => {
-      const started = stampStartedAtRef.current;
-      if (started != null) {
-        setLastStampDurationMs(Date.now() - started);
-        stampStartedAtRef.current = null;
-      }
-      // The host patched the variant; `sync` (and the refs) follow on render.
+  // Install selection jump for shared Auto-stamp (chrome or this toolbar).
+  useLayoutEffect(() => {
+    if (!onAutoStampSuccessRef) return;
+    onAutoStampSuccessRef.current = (result) => {
       const nextSync = parseVariantTokenSync(result.variant.tokenSync);
       const firstFlag = result.flags.find((flag) => flag.tokenIndex != null);
       setSelectedToken(
@@ -207,37 +202,11 @@ export function TokenSyncEditor({
             ? firstUnstamped(nextSync)
             : null
       );
-      toast.success(result.summary);
-    },
-    onError: (error, options) => {
-      const started = stampStartedAtRef.current;
-      if (started != null) {
-        setLastStampDurationMs(Date.now() - started);
-        stampStartedAtRef.current = null;
-      }
-      const message = error.message;
-      if (!options.force && /human stamps|line marks but needs/.test(message)) {
-        toast.warning(message, {
-          duration: 10000,
-          action: {
-            label: "Replace",
-            onClick: () => autoStampMutation.mutate({ force: true }),
-          },
-        });
-        return;
-      }
-      toast.error(message);
-    },
-  });
-
-  useEffect(() => {
-    if (!autoStampMutation.isPending) return;
-    const id = window.setInterval(() => {
-      const started = stampStartedAtRef.current;
-      if (started != null) setStampElapsedMs(Date.now() - started);
-    }, 200);
-    return () => window.clearInterval(id);
-  }, [autoStampMutation.isPending]);
+    };
+    return () => {
+      onAutoStampSuccessRef.current = null;
+    };
+  }, [onAutoStampSuccessRef]);
 
   const { tokenFlags, lineFlags, flaggedTokens } = useMemo(() => {
     const tokenFlags = new Map<string, TokenSyncFlag[]>();
@@ -560,14 +529,15 @@ export function TokenSyncEditor({
     hasUnsavedChanges ||
     !contentHash ||
     tokenizeMutation.isPending ||
-    autoStampMutation.isPending;
+    !!autoStampControls?.isPending ||
+    !!autoStampControls?.jobLive;
   const autoStampDisabled =
-    !onAutoStamp ||
+    autoStampDisabledProp === true ||
+    !autoStampControls ||
     spokenTexts.length === 0 ||
-    hasUnsavedChanges ||
+    !!hasUnsavedChanges ||
     !contentHash ||
-    tokenizeMutation.isPending ||
-    autoStampMutation.isPending;
+    tokenizeMutation.isPending;
   const canMarkReviewed =
     !!sync &&
     sync.source === "auto" &&
@@ -725,30 +695,12 @@ export function TokenSyncEditor({
         >
           {tokenizeMutation.isPending ? "Tokenizing…" : "Tokenize"}
         </Button>
-        {onAutoStamp && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="min-h-11 touch-manipulation border-amber-500/50 md:min-h-8"
-            onClick={() => autoStampMutation.mutate({})}
+        {autoStampControls && (
+          <AutoStampControls
+            state={autoStampControls}
             disabled={autoStampDisabled}
-            title="Time every word from the audio with the aligner"
-          >
-            {autoStampMutation.isPending ? "Aligning…" : "Auto-stamp"}
-          </Button>
+          />
         )}
-        {onAutoStamp && autoStampMutation.isPending && (
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {formatAutoStampDuration(stampElapsedMs, { live: true })}
-          </span>
-        )}
-        {onAutoStamp &&
-          !autoStampMutation.isPending &&
-          lastStampDurationMs != null && (
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {formatAutoStampDuration(lastStampDurationMs)}
-            </span>
-          )}
         {sync?.source === "auto" && (
           <Button
             size="sm"

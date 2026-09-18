@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   applyTokenSelection,
+  clearFlagsForReviewed,
   clearStampsFrom,
   midpointSplitOffset,
   publishedTokenSyncFromWorking,
@@ -230,6 +231,19 @@ describe("tokenSync provenance (KA-1)", () => {
       }).success,
       false
     );
+  });
+
+  it("clearFlagsForReviewed flips source and drops amber flags", () => {
+    const reviewed = clearFlagsForReviewed({
+      ...stamped,
+      source: "auto",
+      flags: [
+        { code: "stamp-in-silence", lineIndex: 0, tokenIndex: 1 },
+        { code: "no-gap", lineIndex: 1 },
+      ],
+    });
+    assert.equal(reviewed.source, "reviewed");
+    assert.equal("flags" in reviewed, false);
   });
 
   it("publish carries source and drops flags, alignerVersion and readings", () => {

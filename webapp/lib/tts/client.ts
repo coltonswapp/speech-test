@@ -67,14 +67,34 @@ export type Variant = {
 };
 
 export type AutoStampJob = {
-  status: "queued" | "running" | "done" | "error";
+  status: "queued" | "running" | "done" | "error" | "cancelled";
   message?: string;
+  /** ISO time when the job was first queued (stable for elapsed duration). */
+  startedAt: string;
   updatedAt: string;
+  finishedAt?: string;
 };
 
 export function autoStampInProgress(variant: Pick<Variant, "autoStampJob">): boolean {
   const status = variant.autoStampJob?.status;
   return status === "queued" || status === "running";
+}
+
+/** Elapsed ms for a job: startedAt → finishedAt (or now while in flight). */
+export function autoStampElapsedMs(
+  job: Pick<AutoStampJob, "startedAt" | "finishedAt">,
+  nowMs = Date.now()
+): number {
+  const start = new Date(job.startedAt).getTime();
+  const end = job.finishedAt ? new Date(job.finishedAt).getTime() : nowMs;
+  return Math.max(0, end - start);
+}
+
+/** Live label while running (`3.2s…`) or final (`took 8.2s`). */
+export function formatAutoStampDuration(ms: number, opts?: { live?: boolean }): string {
+  const seconds = ms / 1000;
+  const body = seconds < 10 ? `${seconds.toFixed(1)}s` : `${Math.round(seconds)}s`;
+  return opts?.live ? `${body}…` : `took ${body}`;
 }
 
 export type ReviewQueueResult = {
@@ -83,6 +103,9 @@ export type ReviewQueueResult = {
     projectId: string;
     createdAt: string;
     voice: string;
+    sampleRate: number;
+    audioByteCount: number;
+    dialogueLineSwitchSamples: number[] | null;
     scenarioId: string | null;
     collectionId: string | null;
     slug: string | null;
@@ -94,7 +117,15 @@ export type ReviewQueueResult = {
     flaggedLines: Array<{
       lineIndex: number;
       text: string;
-      tokens: Array<{ text: string; codes: TokenSyncFlag["code"][] }>;
+      /** Seconds to seek when playing this flagged line (first stamped/flagged token). */
+      playFromSeconds: number | null;
+      /** Approximate end of the line for short segment playback. */
+      playUntilSeconds: number | null;
+      tokens: Array<{
+        text: string;
+        codes: TokenSyncFlag["code"][];
+        startSeconds: number | null;
+      }>;
       lineCodes: TokenSyncFlag["code"][];
     }>;
     lineCount: number;
@@ -231,11 +262,21 @@ export const ttsApi = {
       `/api/tts/projects/${projectId}/variants/${variantId}/review-event`,
       { method: "POST", body: JSON.stringify({ event }) }
     ),
+  markReviewed: (projectId: string, variantId: string) =>
+    request<{ variant: Variant; alreadyReviewed: boolean }>(
+      `/api/tts/projects/${projectId}/variants/${variantId}/mark-reviewed`,
+      { method: "POST" }
+    ),
   reviewQueue: () => request<ReviewQueueResult>("/api/tts/review-queue"),
   autoStamp: (projectId: string, variantId: string, body?: { force?: boolean }) =>
     request<AutoStampResult>(
       `/api/tts/projects/${projectId}/variants/${variantId}/auto-stamp`,
       { method: "POST", body: JSON.stringify(body ?? {}) }
+    ),
+  cancelAutoStamp: (projectId: string, variantId: string) =>
+    request<{ ok: true; job: AutoStampJob }>(
+      `/api/tts/projects/${projectId}/variants/${variantId}/auto-stamp`,
+      { method: "DELETE" }
     ),
   suggestBreaks: (projectId: string, variantId: string) =>
     request<SuggestBreaksResult>(
@@ -257,4 +298,9 @@ export const ttsApi = {
     ),
   listVoicePreviews: () =>
     request<{ previews: VoicePreview[] }>("/api/tts/voice-previews"),
+  /** Studio audio proxy URL for a take (same path the waveform editor uses). */
+  variantAudioUrl: (projectId: string, variantId: string, audioByteCount?: number) =>
+    `/api/tts/projects/${projectId}/variants/${variantId}/audio${
+      audioByteCount != null ? `?v=${audioByteCount}` : ""
+    }`,
 };

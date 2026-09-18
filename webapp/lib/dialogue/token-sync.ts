@@ -28,6 +28,15 @@ export function parseVariantTokenSync(raw: unknown): VariantTokenSync | null {
   return parsed.success ? parsed.data : null;
 }
 
+/** Clear amber QA flags when an editor accepts auto stamps as reviewed. */
+export function clearFlagsForReviewed(sync: VariantTokenSync): VariantTokenSync {
+  if (!sync.flags?.length) {
+    return { ...sync, source: "reviewed" };
+  }
+  const { flags: _flags, ...rest } = sync;
+  return { ...rest, source: "reviewed" };
+}
+
 export function parsePublishedTokenSync(raw: unknown): PublishedTokenSync | null {
   const parsed = publishedTokenSyncSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;

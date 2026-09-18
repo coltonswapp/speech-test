@@ -64,17 +64,37 @@ const REQUEST_TIMEOUT_MS = 90_000;
 export async function alignVariantAudio(params: {
   audioObjectKey: string;
   lines: AlignerLineInput[];
+  signal?: AbortSignal;
 }): Promise<AlignerResponse> {
   const audioUrl = await getSignedDownloadUrl(
     params.audioObjectKey,
     SIGNED_URL_TTL_SECONDS
   );
-  return alignAudioUrl({ audioUrl, lines: params.lines });
+  return alignAudioUrl({ audioUrl, lines: params.lines, signal: params.signal });
+}
+
+function alignFetchSignal(userSignal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  if (!userSignal) return timeout;
+  if (typeof AbortSignal.any === "function") {
+    return AbortSignal.any([timeout, userSignal]);
+  }
+  // Fallback when AbortSignal.any is unavailable: race via AbortController.
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  if (timeout.aborted || userSignal.aborted) {
+    controller.abort();
+    return controller.signal;
+  }
+  timeout.addEventListener("abort", onAbort, { once: true });
+  userSignal.addEventListener("abort", onAbort, { once: true });
+  return controller.signal;
 }
 
 export async function alignAudioUrl(params: {
   audioUrl: string;
   lines: AlignerLineInput[];
+  signal?: AbortSignal;
 }): Promise<AlignerResponse> {
   const base = requiredEnv("ALIGNER_URL").replace(/\/+$/, "");
   const token = requiredEnv("ALIGNER_TOKEN");
@@ -98,9 +118,10 @@ export async function alignAudioUrl(params: {
         authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: alignFetchSignal(params.signal),
     });
   } catch (error) {
+    if (params.signal?.aborted) throw error;
     throw new AlignerError(
       `aligner unreachable: ${error instanceof Error ? error.message : String(error)}`,
       null

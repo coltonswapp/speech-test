@@ -176,7 +176,13 @@ export type TtsVariant = {
   contentHash: string | null;
   isSelected?: boolean;
   /** Background generate → tokenize → align state; null/undefined when idle. */
-  autoStampJob?: { status: "queued" | "running" | "done" | "error"; message?: string } | null;
+  autoStampJob?: {
+    status: "queued" | "running" | "done" | "error" | "cancelled";
+    message?: string;
+    startedAt?: string;
+    updatedAt?: string;
+    finishedAt?: string;
+  } | null;
 };
 
 export type TokenSyncFlag = {

@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { autoStampVariant, clearAutoStampJob } from "@/lib/dialogue/auto-stamp";
+import {
+  autoStampVariant,
+  cancelAutoStampJob,
+  clearAutoStampJob,
+} from "@/lib/dialogue/auto-stamp";
 
 export const maxDuration = 300;
 
@@ -35,7 +39,7 @@ export async function POST(
       { status: outcome.status }
     );
   }
-  // A manual run supersedes any failed background chain for this take.
+  // A manual run supersedes any failed/done/cancelled background chain.
   await clearAutoStampJob(variantId);
   return NextResponse.json({
     variant: outcome.variant,
@@ -43,4 +47,24 @@ export async function POST(
     marksDerived: outcome.marksDerived,
     summary: outcome.summary,
   });
+}
+
+/**
+ * Abort a queued/running generate → tokenize → align chain for this take.
+ * Cancels the in-flight aligner request when possible and skips the stamp
+ * write (best-effort if the write has already started).
+ */
+export async function DELETE(
+  _request: NextRequest,
+  ctx: RouteContext<"/api/tts/projects/[id]/variants/[variantId]/auto-stamp">
+) {
+  const { variantId } = await ctx.params;
+  const result = await cancelAutoStampJob(variantId);
+  if (!result.ok) {
+    return NextResponse.json(
+      { error: result.error ?? "Could not abort auto-stamp.", job: result.job },
+      { status: result.job ? 409 : 404 }
+    );
+  }
+  return NextResponse.json({ ok: true, job: result.job });
 }

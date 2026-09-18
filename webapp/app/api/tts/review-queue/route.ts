@@ -21,8 +21,6 @@ export type ReviewQueueLine = {
     startSeconds: number | null;
   }>;
   lineCodes: TokenSyncFlag["code"][];
-  /** Cleared via per-line approve; row stays visible with a green check. */
-  approved: boolean;
 };
 
 export type ReviewQueueTake = {
@@ -114,16 +112,9 @@ export async function GET() {
     const sync = parseVariantTokenSync(variant.tokenSync);
     if (!sync) continue;
     const flags = sync.flags ?? [];
-    const reviewedLineIndexes = sync.reviewedLineIndexes ?? [];
     const flagsByCode: ReviewQueueTake["flagsByCode"] = {};
     for (const f of flags) flagsByCode[f.code] = (flagsByCode[f.code] ?? 0) + 1;
-    // Pending flags + already-cleared lines so green-checked rows survive refetch.
-    const lineIndexes = [
-      ...new Set([
-        ...flags.map((f) => f.lineIndex),
-        ...reviewedLineIndexes,
-      ]),
-    ].sort((a, b) => a - b);
+    const lineIndexes = [...new Set(flags.map((f) => f.lineIndex))].sort((a, b) => a - b);
     const markSamples = variant.dialogueLineSwitchSamples ?? null;
     const flaggedLines: ReviewQueueLine[] = lineIndexes
       .map((lineIndex) => {
@@ -135,23 +126,19 @@ export async function GET() {
           variant.sampleRate,
           markSamples
         );
-        const lineFlags = flags.filter((f) => f.lineIndex === lineIndex);
-        const approved =
-          reviewedLineIndexes.includes(lineIndex) && lineFlags.length === 0;
         return {
           lineIndex,
           text: line.text,
           playFromSeconds,
           playUntilSeconds,
-          approved,
-          lineCodes: lineFlags
-            .filter((f) => f.tokenIndex == null)
+          lineCodes: flags
+            .filter((f) => f.lineIndex === lineIndex && f.tokenIndex == null)
             .map((f) => f.code),
           tokens: line.tokens.map((token, tokenIndex) => ({
             text: token.text,
             startSeconds: token.startSeconds ?? null,
-            codes: lineFlags
-              .filter((f) => f.tokenIndex === tokenIndex)
+            codes: flags
+              .filter((f) => f.lineIndex === lineIndex && f.tokenIndex === tokenIndex)
               .map((f) => f.code),
           })),
         };

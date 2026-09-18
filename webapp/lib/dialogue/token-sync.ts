@@ -30,46 +30,11 @@ export function parseVariantTokenSync(raw: unknown): VariantTokenSync | null {
 
 /** Clear amber QA flags when an editor accepts auto stamps as reviewed. */
 export function clearFlagsForReviewed(sync: VariantTokenSync): VariantTokenSync {
-  const {
-    flags: _flags,
-    reviewedLineIndexes: _reviewed,
-    ...rest
-  } = sync;
+  if (!sync.flags?.length) {
+    return { ...sync, source: "reviewed" };
+  }
+  const { flags: _flags, ...rest } = sync;
   return { ...rest, source: "reviewed" };
-}
-
-/**
- * Drop QA flags for one spoken line and record it as queue-reviewed.
- * Does not flip source → reviewed; whole-take Approve does that.
- */
-export function clearFlagsForLine(
-  sync: VariantTokenSync,
-  lineIndex: number
-): { sync: VariantTokenSync; cleared: boolean } {
-  const flags = sync.flags ?? [];
-  const remaining = flags.filter((f) => f.lineIndex !== lineIndex);
-  const alreadyReviewed = (sync.reviewedLineIndexes ?? []).includes(lineIndex);
-  const flagsChanged = remaining.length !== flags.length;
-
-  if (!flagsChanged && alreadyReviewed) {
-    return { sync, cleared: false };
-  }
-
-  const reviewedLineIndexes = [
-    ...new Set([...(sync.reviewedLineIndexes ?? []), lineIndex]),
-  ].sort((a, b) => a - b);
-
-  if (remaining.length === 0) {
-    const { flags: _flags, ...rest } = sync;
-    return {
-      sync: { ...rest, reviewedLineIndexes },
-      cleared: true,
-    };
-  }
-  return {
-    sync: { ...sync, flags: remaining, reviewedLineIndexes },
-    cleared: true,
-  };
 }
 
 export function parsePublishedTokenSync(raw: unknown): PublishedTokenSync | null {

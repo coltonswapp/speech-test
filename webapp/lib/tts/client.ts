@@ -127,8 +127,6 @@ export type ReviewQueueResult = {
         startSeconds: number | null;
       }>;
       lineCodes: TokenSyncFlag["code"][];
-      /** Per-line approve cleared this line; row stays with a green check. */
-      approved: boolean;
     }>;
     /** All spoken lines with stamps — used for Play take karaoke follow. */
     lines: Array<{
@@ -279,16 +277,6 @@ export const ttsApi = {
       `/api/tts/projects/${projectId}/variants/${variantId}/mark-reviewed`,
       { method: "POST" }
     ),
-  approveLine: (projectId: string, variantId: string, lineIndex: number) =>
-    request<{
-      variant: Variant;
-      takeReviewed: boolean;
-      cleared: boolean;
-      alreadyReviewed: boolean;
-    }>(`/api/tts/projects/${projectId}/variants/${variantId}/approve-line`, {
-      method: "POST",
-      body: JSON.stringify({ lineIndex }),
-    }),
   reviewQueue: () => request<ReviewQueueResult>("/api/tts/review-queue"),
   autoStamp: (projectId: string, variantId: string, body?: { force?: boolean }) =>
     request<AutoStampResult>(

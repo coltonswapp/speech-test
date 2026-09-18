@@ -128,32 +128,28 @@ function FlaggedLine({
   editorHref: lineEditorHref,
   playing,
   activeTokenIndex,
-  approvePending,
+  checked,
   playDisabled,
   onPlay,
-  onApprove,
+  onToggleChecked,
 }: {
   line: FlaggedLine;
   editorHref: string;
   playing: boolean;
   activeTokenIndex: number | null;
-  approvePending: boolean;
+  /** Local UI only — not persisted until whole-take Approve. */
+  checked: boolean;
   /** True while audio is loading or take has no bytes. */
   playDisabled: boolean;
   onPlay: () => void;
-  onApprove: () => void;
+  onToggleChecked: () => void;
 }) {
   const canPlay = line.playFromSeconds != null && !playDisabled;
-  const approved = line.approved;
   return (
     <div
       className={cn(
         "flex flex-wrap items-start gap-2 rounded-md border px-2 py-1.5 transition-colors",
-        playing
-          ? "border-primary/50 bg-primary/5"
-          : approved
-            ? "border-emerald-500/30 bg-emerald-500/5"
-            : "border-transparent"
+        playing ? "border-primary/50 bg-primary/5" : "border-transparent"
       )}
     >
       <Button
@@ -176,9 +172,10 @@ function FlaggedLine({
         {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
         <span className="ml-1">L{line.lineIndex + 1}</span>
       </Button>
-      <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm leading-relaxed">
-        {!approved &&
-          line.lineCodes.map((code) => (
+      {/* Chips + controls share one group so Check sits right after tokens. */}
+      <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 text-sm leading-relaxed">
+          {line.lineCodes.map((code) => (
             <span
               key={code}
               className="rounded border border-amber-500/50 px-1 text-[10px] font-medium text-amber-700 dark:text-amber-300"
@@ -186,49 +183,54 @@ function FlaggedLine({
               {FLAG_LABEL[code]}
             </span>
           ))}
-        {line.tokens.map((token, i) => (
-          <KaraokeTokenChip
-            key={`${i}-${token.text}`}
-            token={token}
-            active={playing && activeTokenIndex === i}
-          />
-        ))}
-      </div>
-      {/* Check + jump stay on the right of the chips. */}
-      <div className="flex shrink-0 items-center gap-1">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className={cn(
-            "min-h-10 touch-manipulation md:min-h-8",
-            approved
-              ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-              : "border-emerald-500/50"
-          )}
-          disabled={approvePending || approved}
-          onClick={onApprove}
-          title={
-            approved
-              ? `Line ${line.lineIndex + 1} approved`
-              : `Approve line ${line.lineIndex + 1}: clear its flags`
-          }
-          aria-label={
-            approved
-              ? `Line ${line.lineIndex + 1} approved`
-              : `Approve line ${line.lineIndex + 1}`
-          }
-        >
-          <Check className={cn("size-3.5", approved && "text-emerald-600 dark:text-emerald-400")} />
-        </Button>
-        <Link
-          href={lineEditorHref}
-          className="inline-flex min-h-10 items-center justify-center rounded-lg border border-border/60 px-2 text-muted-foreground touch-manipulation hover:text-foreground md:min-h-8"
-          title={`Open Token timing on line ${line.lineIndex + 1}`}
-          aria-label={`Open line ${line.lineIndex + 1} in editor`}
-        >
-          <ExternalLink className="size-3.5" />
-        </Link>
+          {line.tokens.map((token, i) => (
+            <KaraokeTokenChip
+              key={`${i}-${token.text}`}
+              token={token}
+              active={playing && activeTokenIndex === i}
+            />
+          ))}
+        </div>
+        <div className="flex shrink-0 items-center gap-1 pl-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className={cn(
+              "min-h-10 touch-manipulation md:min-h-8",
+              checked
+                ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                : "border-border/60"
+            )}
+            onClick={onToggleChecked}
+            title={
+              checked
+                ? `Uncheck line ${line.lineIndex + 1}`
+                : `Check line ${line.lineIndex + 1}`
+            }
+            aria-pressed={checked}
+            aria-label={
+              checked
+                ? `Line ${line.lineIndex + 1} checked`
+                : `Check line ${line.lineIndex + 1}`
+            }
+          >
+            <Check
+              className={cn(
+                "size-3.5",
+                checked && "text-emerald-600 dark:text-emerald-400"
+              )}
+            />
+          </Button>
+          <Link
+            href={lineEditorHref}
+            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-border/60 px-2 text-muted-foreground touch-manipulation hover:text-foreground md:min-h-8"
+            title={`Open Token timing on line ${line.lineIndex + 1}`}
+            aria-label={`Open line ${line.lineIndex + 1} in editor`}
+          >
+            <ExternalLink className="size-3.5" />
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -284,8 +286,9 @@ function TakeCard({ take }: { take: Take }) {
   const rafRef = useRef<number | null>(null);
   const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
-  const [approvingLine, setApprovingLine] = useState<number | null>(null);
   const [audioLoading, setAudioLoading] = useState(false);
+  // Local-only line checks — nothing hits the server until whole-take Approve.
+  const [checkedLines, setCheckedLines] = useState<Set<number>>(() => new Set());
 
   const audioUrl = ttsApi.variantAudioUrl(
     take.projectId,
@@ -348,21 +351,14 @@ function TakeCard({ take }: { take: Take }) {
     onError: (error) => toast.error(error.message),
   });
 
-  const approveLineMutation = useMutation({
-    mutationFn: (lineIndex: number) =>
-      ttsApi.approveLine(take.projectId, take.variantId, lineIndex),
-    onMutate: (lineIndex) => setApprovingLine(lineIndex),
-    onSettled: () => setApprovingLine(null),
-    onSuccess: (result, lineIndex) => {
-      queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
-      if (result.cleared) {
-        toast.success(`Line ${lineIndex + 1} approved.`);
-      } else {
-        toast.message(`Line ${lineIndex + 1} was already approved.`);
-      }
-    },
-    onError: (error) => toast.error(error.message),
-  });
+  function toggleLineChecked(lineIndex: number) {
+    setCheckedLines((prev) => {
+      const next = new Set(prev);
+      if (next.has(lineIndex)) next.delete(lineIndex);
+      else next.add(lineIndex);
+      return next;
+    });
+  }
 
   function clearStopTimer() {
     if (stopTimerRef.current != null) {
@@ -530,9 +526,12 @@ function TakeCard({ take }: { take: Take }) {
   const href = editorHref(take);
   const opened = take.timing?.openedAt;
   const queueLines = take.flaggedLines;
-  const allLinesApproved =
-    queueLines.length === 0 || queueLines.every((line) => line.approved);
-  const pendingLineCount = queueLines.filter((line) => !line.approved).length;
+  const allLinesChecked =
+    queueLines.length === 0 ||
+    queueLines.every((line) => checkedLines.has(line.lineIndex));
+  const uncheckedCount = queueLines.filter(
+    (line) => !checkedLines.has(line.lineIndex)
+  ).length;
 
   return (
     <Card>
@@ -547,16 +546,16 @@ function TakeCard({ take }: { take: Take }) {
           <Badge
             variant="outline"
             className={cn(
-              pendingLineCount > 0
+              uncheckedCount > 0
                 ? "border-amber-500/50 text-amber-600 dark:text-amber-400"
                 : "border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
             )}
           >
             {queueLines.length === 0
               ? "no flags"
-              : allLinesApproved
+              : allLinesChecked
                 ? "all lines checked"
-                : `${pendingLineCount} pending`}
+                : `${uncheckedCount} unchecked`}
           </Badge>
           {take.isPublishedTake && <Badge variant="secondary">published</Badge>}
           {take.isSelectedTake && !take.isPublishedTake && (
@@ -605,10 +604,10 @@ function TakeCard({ take }: { take: Take }) {
             size="sm"
             variant="outline"
             className="min-h-11 touch-manipulation border-emerald-500/50 md:min-h-8"
-            disabled={approveMutation.isPending || !allLinesApproved}
+            disabled={approveMutation.isPending || !allLinesChecked}
             onClick={() => approveMutation.mutate()}
             title={
-              allLinesApproved
+              allLinesChecked
                 ? "Mark take reviewed and leave the queue"
                 : "Check every flagged line first, then Approve the take"
             }
@@ -631,7 +630,7 @@ function TakeCard({ take }: { take: Take }) {
         )}
         {queueLines.length > 0 && (
           <div className="flex flex-col gap-2">
-            {pendingLineCount > 0 && (
+            {take.flagCount > 0 && (
               <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
                 {Object.entries(take.flagsByCode).map(([code, n]) => (
                   <span key={code}>
@@ -653,12 +652,10 @@ function TakeCard({ take }: { take: Take }) {
                   editorHref={editorHref(take, line.lineIndex)}
                   playing={linePlaying}
                   activeTokenIndex={lineActiveToken}
-                  approvePending={
-                    approveLineMutation.isPending && approvingLine === line.lineIndex
-                  }
+                  checked={checkedLines.has(line.lineIndex)}
                   playDisabled={!hasAudioBytes || (audioLoading && !linePlaying)}
                   onPlay={() => playLine(line)}
-                  onApprove={() => approveLineMutation.mutate(line.lineIndex)}
+                  onToggleChecked={() => toggleLineChecked(line.lineIndex)}
                 />
               );
             })}
@@ -717,8 +714,9 @@ export function ReviewQueue() {
       <div>
         <h1 className="text-xl font-semibold">Review queue</h1>
         <p className="text-sm text-muted-foreground">
-          Auto-stamped takes waiting for review. Check each flagged line (row stays green),
-          then Approve the take when every line is checked.
+          Auto-stamped takes waiting for review. Check each flagged line locally,
+          then Approve the take when every line is checked — that clears flags and
+          leaves the queue.
         </p>
       </div>
       <TimingSummary timing={data.timing} />

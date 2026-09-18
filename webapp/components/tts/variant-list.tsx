@@ -119,8 +119,23 @@ export function VariantList({
   emptyHint?: string;
 }) {
   const queryClient = useQueryClient();
-  // Review queue deep-links a specific take (?take=<variantId>).
-  const requestedTakeId = useSearchParams().get("take");
+  // Review queue deep-links a specific take (?take=<variantId>), optional line
+  // (?line=N) and Token timing tab (?timing=tokens).
+  const searchParams = useSearchParams();
+  const requestedTakeId = searchParams.get("take");
+  const requestedLineRaw = searchParams.get("line");
+  const requestedLineIndex = (() => {
+    if (requestedLineRaw == null || requestedLineRaw === "") return null;
+    const n = Number.parseInt(requestedLineRaw, 10);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  })();
+  const requestedTiming = searchParams.get("timing");
+  const focusTimingMode =
+    requestedTiming === "tokens" || requestedTiming === "lines"
+      ? requestedTiming
+      : requestedLineIndex != null
+        ? ("tokens" as const)
+        : null;
   const { data, isLoading } = useQuery({
     queryKey: ["tts-variants", projectId],
     queryFn: () => ttsApi.listVariants(projectId),
@@ -523,6 +538,16 @@ export function VariantList({
                         dialogueLines={dialogueLines}
                         currentContentHash={currentContentHash}
                         hasUnsavedChanges={hasUnsavedChanges}
+                        focusLineIndex={
+                          requestedTakeId === variant.id
+                            ? requestedLineIndex
+                            : null
+                        }
+                        focusTimingMode={
+                          requestedTakeId === variant.id
+                            ? focusTimingMode
+                            : null
+                        }
                       />
                     </div>
                   </AccordionPanel>

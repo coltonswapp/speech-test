@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   applyTokenSelection,
+  clearFlagsForLine,
   clearFlagsForReviewed,
   clearStampsFrom,
   midpointSplitOffset,
@@ -10,6 +11,7 @@ import {
   seekSecondsBeforeToken,
   splitTokenAt,
   activeTokenAtTime,
+  activeTokenIndexInLine,
   TOKEN_STAMP_LOOKBACK_SECONDS,
   type LineWindow,
 } from "./token-sync";
@@ -247,6 +249,39 @@ describe("tokenSync provenance (KA-1)", () => {
     assert.equal("flags" in reviewed, false);
   });
 
+  it("clearFlagsForLine drops one line and auto-reviews when none remain", () => {
+    const withFlags: VariantTokenSync = {
+      ...stamped,
+      source: "auto",
+      flags: [
+        { code: "stamp-in-silence", lineIndex: 0, tokenIndex: 1 },
+        { code: "no-gap", lineIndex: 1 },
+      ],
+    };
+    const afterOne = clearFlagsForLine(withFlags, 0);
+    assert.equal(afterOne.takeReviewed, false);
+    assert.equal(afterOne.sync.source, "auto");
+    assert.deepEqual(afterOne.sync.flags, [
+      { code: "no-gap", lineIndex: 1 },
+    ]);
+
+    const afterLast = clearFlagsForLine(afterOne.sync, 1);
+    assert.equal(afterLast.takeReviewed, true);
+    assert.equal(afterLast.sync.source, "reviewed");
+    assert.equal("flags" in afterLast.sync, false);
+  });
+
+  it("clearFlagsForLine is a no-op when the line has no flags", () => {
+    const withFlags: VariantTokenSync = {
+      ...stamped,
+      source: "auto",
+      flags: [{ code: "no-gap", lineIndex: 1 }],
+    };
+    const result = clearFlagsForLine(withFlags, 0);
+    assert.equal(result.takeReviewed, false);
+    assert.equal(result.sync, withFlags);
+  });
+
   it("publish carries source and drops flags, alignerVersion and readings", () => {
     const published = publishedTokenSyncFromWorking({
       ...publishParams,
@@ -333,5 +368,22 @@ describe("activeTokenAtTime", () => {
       lineIndex: 1,
       tokenIndex: 1,
     });
+  });
+});
+
+describe("activeTokenIndexInLine", () => {
+  const tokens = [
+    { startSeconds: 0.1 },
+    { startSeconds: 0.5 },
+    { startSeconds: 0.9 },
+    { startSeconds: null },
+  ];
+
+  it("matches Token timing: latest start on this line at or before time", () => {
+    assert.equal(activeTokenIndexInLine(tokens, 0), null);
+    assert.equal(activeTokenIndexInLine(tokens, 0.1), 0);
+    assert.equal(activeTokenIndexInLine(tokens, 0.49), 0);
+    assert.equal(activeTokenIndexInLine(tokens, 0.5), 1);
+    assert.equal(activeTokenIndexInLine(tokens, 2.0), 2);
   });
 });

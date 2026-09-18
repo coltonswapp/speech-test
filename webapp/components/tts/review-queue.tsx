@@ -4,14 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Pause, Play } from "lucide-react";
+import { Check, ExternalLink, Pause, Play } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ttsApi, type ReviewQueueResult } from "@/lib/tts/client";
 import type { TokenSyncFlag } from "@/lib/dialogue/types";
-import { activeTokenAtTime } from "@/lib/dialogue/token-sync";
+import { activeTokenIndexInLine } from "@/lib/dialogue/token-sync";
 import { cn } from "@/lib/utils";
 
 const FLAG_LABEL: Record<TokenSyncFlag["code"], string> = {
@@ -34,6 +34,16 @@ function minutes(from?: string, to?: string): string | null {
 
 function fmt(n: number | null, unit = ""): string {
   return n == null ? "—" : `${n < 10 ? n.toFixed(1) : Math.round(n)}${unit}`;
+}
+
+/** Deep-link into scene Audio → Token timing focused on a spoken line. */
+function editorHref(take: Take, lineIndex?: number): string {
+  const lineQs =
+    lineIndex != null ? `&line=${lineIndex}&timing=tokens` : "";
+  if (take.collectionId && take.slug) {
+    return `/content/dialogues/${take.collectionId}/${take.slug}?tab=audio&take=${take.variantId}${lineQs}`;
+  }
+  return `/tts/${take.projectId}?take=${take.variantId}${lineQs}`;
 }
 
 function TimingSummary({ timing }: { timing: ReviewQueueResult["timing"] }) {
@@ -84,6 +94,10 @@ function TimingSummary({ timing }: { timing: ReviewQueueResult["timing"] }) {
   );
 }
 
+/**
+ * Match Token timing chips: stamped sky base, amber when flagged, primary fill
+ * while playing — no extra ring (that made queue karaoke look “off”).
+ */
 function KaraokeTokenChip({
   token,
   active,
@@ -91,16 +105,17 @@ function KaraokeTokenChip({
   token: KaraokeToken;
   active: boolean;
 }) {
+  const untimed = token.startSeconds == null;
   const flagged = token.codes.length > 0;
   return (
     <span
       title={token.codes.map((c) => FLAG_LABEL[c]).join("; ") || undefined}
       className={cn(
-        "rounded px-0.5",
-        flagged && "border border-amber-500/70 bg-amber-500/15",
-        active &&
-          token.startSeconds != null &&
-          "border border-primary bg-primary/15 ring-2 ring-primary/60"
+        "mx-px inline-block whitespace-nowrap rounded-md border px-1.5 py-1 align-middle md:px-1 md:py-px",
+        untimed && "border-dashed border-rose-400 bg-rose-500/15",
+        !untimed && "border-sky-500/30 bg-sky-500/10",
+        flagged && "border-amber-500/70 bg-amber-500/15",
+        active && !untimed && "border-primary bg-primary/15"
       )}
     >
       {token.text}
@@ -110,14 +125,20 @@ function KaraokeTokenChip({
 
 function FlaggedLine({
   line,
+  editorHref: lineEditorHref,
   playing,
   activeTokenIndex,
+  approvePending,
   onPlay,
+  onApprove,
 }: {
   line: FlaggedLine;
+  editorHref: string;
   playing: boolean;
   activeTokenIndex: number | null;
+  approvePending: boolean;
   onPlay: () => void;
+  onApprove: () => void;
 }) {
   const canPlay = line.playFromSeconds != null;
   return (
@@ -162,27 +183,54 @@ function FlaggedLine({
           />
         ))}
       </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="min-h-10 touch-manipulation border-emerald-500/50 md:min-h-8"
+          disabled={approvePending}
+          onClick={onApprove}
+          title={`Approve line ${line.lineIndex + 1}: clear its flags`}
+          aria-label={`Approve line ${line.lineIndex + 1}`}
+        >
+          <Check className="size-3.5" />
+        </Button>
+        <Link
+          href={lineEditorHref}
+          className="inline-flex min-h-10 items-center justify-center rounded-lg border border-border/60 px-2 text-muted-foreground touch-manipulation hover:text-foreground md:min-h-8"
+          title={`Open Token timing on line ${line.lineIndex + 1}`}
+          aria-label={`Open line ${line.lineIndex + 1} in editor`}
+        >
+          <ExternalLink className="size-3.5" />
+        </Link>
+      </div>
     </div>
   );
 }
 
 function TakeKaraoke({
   lines,
-  active,
+  currentTime,
+  playing,
 }: {
   lines: KaraokeLine[];
-  active: { lineIndex: number; tokenIndex: number } | null;
+  currentTime: number;
+  playing: boolean;
 }) {
   return (
     <div className="flex flex-col gap-1.5 rounded-md border border-border/60 bg-muted/20 px-2 py-2">
       {lines.map((line) => {
-        const lineActive = active?.lineIndex === line.lineIndex;
+        // Same rule as TokenSyncEditor: each line’s latest started token.
+        const activeTokenIndex = playing
+          ? activeTokenIndexInLine(line.tokens, currentTime)
+          : null;
         return (
           <div
             key={line.lineIndex}
             className={cn(
               "flex flex-wrap items-baseline gap-x-1 gap-y-1 rounded px-1 py-0.5 text-sm leading-relaxed transition-colors",
-              lineActive && "bg-primary/5"
+              activeTokenIndex != null && "bg-primary/5"
             )}
           >
             <span className="mr-1 font-mono text-[10px] text-muted-foreground">
@@ -192,7 +240,7 @@ function TakeKaraoke({
               <KaraokeTokenChip
                 key={`${i}-${token.text}`}
                 token={token}
-                active={lineActive && active?.tokenIndex === i}
+                active={activeTokenIndex === i}
               />
             ))}
           </div>
@@ -206,8 +254,10 @@ function TakeCard({ take }: { take: Take }) {
   const queryClient = useQueryClient();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const stopTimerRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
   const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
+  const [approvingLine, setApprovingLine] = useState<number | null>(null);
 
   const audioUrl = ttsApi.variantAudioUrl(
     take.projectId,
@@ -218,25 +268,73 @@ function TakeCard({ take }: { take: Take }) {
   useEffect(() => {
     const audio = new Audio(audioUrl);
     audio.preload = "auto";
-    const onEnded = () => setPlayingKey(null);
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onEnded = () => {
+      setPlayingKey(null);
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
     audio.addEventListener("ended", onEnded);
-    audio.addEventListener("timeupdate", onTimeUpdate);
     audioRef.current = audio;
     return () => {
       if (stopTimerRef.current != null) window.clearTimeout(stopTimerRef.current);
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       audio.pause();
       audio.removeEventListener("ended", onEnded);
-      audio.removeEventListener("timeupdate", onTimeUpdate);
       audioRef.current = null;
     };
   }, [audioUrl]);
+
+  // Poll media clock while playing — timeupdate is too coarse vs Token timing’s
+  // audioprocess/playhead and made stamps look slightly late in the queue.
+  useEffect(() => {
+    if (playingKey == null) {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+    const tick = () => {
+      const audio = audioRef.current;
+      if (audio && Number.isFinite(audio.currentTime)) {
+        setCurrentTime(audio.currentTime);
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [playingKey]);
 
   const approveMutation = useMutation({
     mutationFn: () => ttsApi.markReviewed(take.projectId, take.variantId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
       toast.success("Marked reviewed. Flags cleared.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const approveLineMutation = useMutation({
+    mutationFn: (lineIndex: number) =>
+      ttsApi.approveLine(take.projectId, take.variantId, lineIndex),
+    onMutate: (lineIndex) => setApprovingLine(lineIndex),
+    onSettled: () => setApprovingLine(null),
+    onSuccess: (result, lineIndex) => {
+      queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
+      if (result.takeReviewed || result.alreadyReviewed) {
+        toast.success(`Line ${lineIndex + 1} approved — take marked reviewed.`);
+      } else if (result.cleared) {
+        toast.success(`Line ${lineIndex + 1} approved.`);
+      } else {
+        toast.message(`Line ${lineIndex + 1} had no flags left.`);
+      }
     },
     onError: (error) => toast.error(error.message),
   });
@@ -302,15 +400,7 @@ function TakeCard({ take }: { take: Take }) {
   }
 
   const playingTake = playingKey === `${take.variantId}:all`;
-  const active =
-    playingKey != null
-      ? activeTokenAtTime(take.lines, currentTime)
-      : null;
-
-  const href =
-    take.collectionId && take.slug
-      ? `/content/dialogues/${take.collectionId}/${take.slug}?tab=audio&take=${take.variantId}`
-      : `/tts/${take.projectId}?take=${take.variantId}`;
+  const href = editorHref(take);
   const opened = take.timing?.openedAt;
 
   return (
@@ -382,7 +472,11 @@ function TakeCard({ take }: { take: Take }) {
           </Link>
         </div>
         {playingTake && take.lines.length > 0 && (
-          <TakeKaraoke lines={take.lines} active={active} />
+          <TakeKaraoke
+            lines={take.lines}
+            currentTime={currentTime}
+            playing={playingTake}
+          />
         )}
         {take.flaggedLines.length > 0 && (
           <div className="flex flex-col gap-2">
@@ -396,17 +490,21 @@ function TakeCard({ take }: { take: Take }) {
             {take.flaggedLines.map((line) => {
               const linePlaying =
                 playingKey === `${take.variantId}:${line.lineIndex}`;
-              const lineActiveToken =
-                linePlaying && active?.lineIndex === line.lineIndex
-                  ? active.tokenIndex
-                  : null;
+              const lineActiveToken = linePlaying
+                ? activeTokenIndexInLine(line.tokens, currentTime)
+                : null;
               return (
                 <FlaggedLine
                   key={line.lineIndex}
                   line={line}
+                  editorHref={editorHref(take, line.lineIndex)}
                   playing={linePlaying}
                   activeTokenIndex={lineActiveToken}
+                  approvePending={
+                    approveLineMutation.isPending && approvingLine === line.lineIndex
+                  }
                   onPlay={() => playLine(line)}
+                  onApprove={() => approveLineMutation.mutate(line.lineIndex)}
                 />
               );
             })}
@@ -446,7 +544,7 @@ export function ReviewQueue() {
         <h1 className="text-xl font-semibold">Review queue</h1>
         <p className="text-sm text-muted-foreground">
           Takes stamped by the aligner that nobody has marked reviewed, most flags first.
-          Play a flagged line here, Approve if it sounds fine, or open the scene Audio tab to fix stamps.
+          Play a flagged line, checkmark to clear that line, or open Token timing on the line to fix stamps.
         </p>
       </div>
       <TimingSummary timing={data.timing} />

@@ -120,6 +120,7 @@ export function TokenSyncEditor({
   autoStampControls,
   autoStampDisabled: autoStampDisabledProp,
   onAutoStampSuccessRef,
+  focusLineIndex = null,
 }: {
   variant: Variant;
   spokenLines: Array<{ speaker: string; text: string }>;
@@ -143,6 +144,8 @@ export function TokenSyncEditor({
   autoStampDisabled?: boolean;
   /** Host ref; editor installs a handler to jump to the first flag after stamp. */
   onAutoStampSuccessRef?: RefObject<((result: AutoStampResult) => void) | null>;
+  /** Review-queue deep link: scroll this line into view and select a token. */
+  focusLineIndex?: number | null;
 }) {
   const spokenTexts = useMemo(
     () => spokenLines.map((line) => line.text.trim()).filter(Boolean),
@@ -172,6 +175,8 @@ export function TokenSyncEditor({
     x: number;
     y: number;
   } | null>(null);
+  const lineRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const focusAppliedRef = useRef<number | null>(null);
 
   const tokenizeMutation = useMutation({
     mutationFn: () => dialogueApi.tokenizeLines(spokenTexts),
@@ -225,6 +230,26 @@ export function TokenSyncEditor({
     }
     return { tokenFlags, lineFlags, flaggedTokens };
   }, [sync]);
+
+  // Review queue → Token timing: land on the requested spoken line once.
+  useLayoutEffect(() => {
+    if (focusLineIndex == null || !sync) return;
+    if (focusLineIndex < 0 || focusLineIndex >= sync.lines.length) return;
+    if (focusAppliedRef.current === focusLineIndex) return;
+    focusAppliedRef.current = focusLineIndex;
+
+    const flaggedOnLine = flaggedTokens.find((f) => f.lineIndex === focusLineIndex);
+    const tokenIndex = flaggedOnLine?.tokenIndex ?? 0;
+    setSelectedToken({ lineIndex: focusLineIndex, tokenIndex });
+
+    // Wait a frame so accordion/layout settle before scrolling.
+    requestAnimationFrame(() => {
+      lineRefs.current[focusLineIndex]?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+  }, [focusLineIndex, sync, flaggedTokens]);
 
   const unstampedCount = useMemo(() => {
     if (!sync) return 0;
@@ -736,7 +761,19 @@ export function TokenSyncEditor({
             ).length;
             const lineHasStamps = missingOnLine < line.tokens.length;
             return (
-              <div key={`${lineIndex}-${line.text}`} className="flex flex-col gap-1">
+              <div
+                key={`${lineIndex}-${line.text}`}
+                ref={(el) => {
+                  lineRefs.current[lineIndex] = el;
+                }}
+                data-line-index={lineIndex}
+                className={cn(
+                  "flex flex-col gap-1 rounded-md px-1 py-1 transition-colors",
+                  focusLineIndex === lineIndex &&
+                    selectedToken?.lineIndex === lineIndex &&
+                    "bg-primary/5 ring-1 ring-primary/30"
+                )}
+              >
                 <div className="flex items-center gap-2">
                   <button
                     type="button"

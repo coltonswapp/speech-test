@@ -68,13 +68,14 @@ export type AutoStampResult = {
   flags: TokenSyncFlag[];
 };
 
-type Track = {
+export type Track = {
   rms: number[];
   threshold: number;
   windowSeconds: number;
 };
 
-function buildTrack(samples: Float32Array, sampleRate: number): Track {
+/** 10 ms RMS track plus the quiet threshold; shared with the eval script. */
+export function buildTrack(samples: Float32Array, sampleRate: number): Track {
   const windowSamples = Math.max(1, Math.round(sampleRate * RMS_WINDOW_SECONDS));
   const rms = rmsTrack(samples, windowSamples);
   return {
@@ -84,12 +85,12 @@ function buildTrack(samples: Float32Array, sampleRate: number): Track {
   };
 }
 
-function frameOf(track: Track, seconds: number): number {
+export function frameOf(track: Track, seconds: number): number {
   const k = Math.floor(seconds / track.windowSeconds);
   return Math.min(Math.max(k, 0), track.rms.length - 1);
 }
 
-function isLoud(track: Track, frame: number): boolean {
+export function isLoud(track: Track, frame: number): boolean {
   return track.rms[frame] >= track.threshold;
 }
 
@@ -120,12 +121,42 @@ export function speechOnsetNear(
 }
 
 /** Seconds of silence immediately before `onsetSeconds` (bounded scan). */
-function quietBefore(track: Track, onsetSeconds: number): number {
+export function quietBefore(track: Track, onsetSeconds: number): number {
   const k = frameOf(track, onsetSeconds);
   const limit = Math.round(MAX_GAP_SCAN_SECONDS / track.windowSeconds);
   let j = k;
   while (j > 0 && !isLoud(track, j - 1) && k - j < limit) j--;
   return (k - j) * track.windowSeconds;
+}
+
+/**
+ * Longest quiet run inside [fromSeconds, toSeconds], in seconds, or null when
+ * every frame is loud. Used for line boundaries: the region between the
+ * previous line's last token end and the next line's first token start
+ * contains the real gap, even when a breath or click sits right before the
+ * onset and would fool a walk-back from the onset.
+ */
+export function longestQuietRun(
+  track: Track,
+  fromSeconds: number,
+  toSeconds: number
+): { start: number; end: number } | null {
+  if (track.rms.length === 0 || toSeconds <= fromSeconds) return null;
+  const from = frameOf(track, fromSeconds);
+  const to = frameOf(track, toSeconds);
+  let best: { start: number; end: number } | null = null;
+  let runStart: number | null = null;
+  for (let f = from; f <= to + 1; f++) {
+    const quiet = f <= to && !isLoud(track, f);
+    if (quiet) {
+      if (runStart == null) runStart = f;
+    } else if (runStart != null) {
+      if (!best || f - runStart > best.end - best.start) best = { start: runStart, end: f };
+      runStart = null;
+    }
+  }
+  if (!best) return null;
+  return { start: best.start * track.windowSeconds, end: best.end * track.windowSeconds };
 }
 
 function speechWithin(track: Track, fromSeconds: number, spanSeconds: number): boolean {
@@ -147,6 +178,27 @@ function median(values: number[]): number {
  * clamped to 80–250 ms before the onset, never earlier than the previous
  * speaker's last sound. Returns seconds plus `no-gap` flags.
  */
+/** Search window for the gap: from the previous line's last token end back a little, to just after the next raw start. */
+const GAP_SEARCH_BACK_SECONDS = 0.3;
+const GAP_SEARCH_FORWARD_SECONDS = 0.1;
+
+/** The silence gap in front of line `li` (seconds), from aligner bounds. */
+export function lineGap(
+  track: Track,
+  aligned: AlignedLine[],
+  li: number
+): { start: number; end: number } | null {
+  const rawStart = aligned[li]?.tokens[0]?.startSeconds;
+  if (rawStart == null) return null;
+  const prevTokens = aligned[li - 1]?.tokens ?? [];
+  const prevEnd = prevTokens[prevTokens.length - 1]?.endSeconds ?? rawStart;
+  return longestQuietRun(
+    track,
+    Math.max(0, Math.min(prevEnd, rawStart) - GAP_SEARCH_BACK_SECONDS),
+    rawStart + GAP_SEARCH_FORWARD_SECONDS
+  );
+}
+
 export function deriveLineMarks(
   track: Track,
   aligned: AlignedLine[],
@@ -155,10 +207,12 @@ export function deriveLineMarks(
   const markSeconds: number[] = [];
   const flags: TokenSyncFlag[] = [];
   for (let li = 1; li < aligned.length; li++) {
-    const first = aligned[li].tokens[0];
-    const rawStart = first?.startSeconds ?? 0;
-    const onset = speechOnsetNear(track, rawStart);
-    const gap = quietBefore(track, onset);
+    const rawStart = aligned[li].tokens[0]?.startSeconds ?? 0;
+    const gapRun = lineGap(track, aligned, li);
+    const gap = gapRun ? gapRun.end - gapRun.start : 0;
+    // The next speaker's onset is where the gap ends; fall back to a local
+    // walk-back when there is no usable gap at all.
+    const onset = gapRun && gap >= NO_GAP_MIN_SECONDS ? gapRun.end : speechOnsetNear(track, rawStart);
     let lead = Math.min(Math.max(gap / 2, MARK_LEAD_MIN_SECONDS), MARK_LEAD_MAX_SECONDS);
     if (gap < NO_GAP_MIN_SECONDS) {
       flags.push({
@@ -171,6 +225,9 @@ export function deriveLineMarks(
       lead = gap / 2;
     }
     let mark = onset - lead;
+    if (gapRun && gap >= NO_GAP_MIN_SECONDS) {
+      mark = Math.max(mark, gapRun.start + TOKEN_STAMP_MIN_GAP_SECONDS);
+    }
     const previous = markSeconds[markSeconds.length - 1] ?? 0;
     mark = Math.max(mark, previous + TOKEN_STAMP_MIN_GAP_SECONDS);
     mark = Math.min(mark, Math.max(previous + TOKEN_STAMP_MIN_GAP_SECONDS, durationSeconds - TOKEN_STAMP_MIN_GAP_SECONDS));

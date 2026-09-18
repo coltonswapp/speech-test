@@ -77,6 +77,15 @@ describe("autoStampTokenSync", () => {
     for (let i = 1; i < all.length; i++) assert.ok(all[i] > all[i - 1]);
   });
 
+  it("ignores a short blip before the onset and marks inside the real gap", () => {
+    // Line A 0.10–1.00, a 20 ms click at 1.50, line B from 1.60.
+    const blip = synth([[0.1, 1.0], [1.5, 1.52], [1.6, 2.5]], 3.0);
+    const r = autoStampTokenSync({ alignerVersion: "t", aligned, lines, samples: blip, sampleRate: SR, contentHash: "h" });
+    const mark = r.markSamples[0] / SR;
+    assert.ok(!r.flags.some((f) => f.code === "no-gap"), "blip must not read as no-gap");
+    assert.ok(mark > 1.0 && mark < 1.5, `mark ${mark} should sit in the 1.0–1.5 silence`);
+  });
+
   it("flags no-gap when speakers overlap and still places a mark", () => {
     const glued = synth([[0.1, 2.5]], 3.0);
     const r = autoStampTokenSync({ alignerVersion: "t", aligned, lines, samples: glued, sampleRate: SR, contentHash: "h" });

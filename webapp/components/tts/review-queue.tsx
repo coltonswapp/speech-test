@@ -129,6 +129,7 @@ function FlaggedLine({
   playing,
   activeTokenIndex,
   approvePending,
+  playDisabled,
   onPlay,
   onApprove,
 }: {
@@ -137,10 +138,12 @@ function FlaggedLine({
   playing: boolean;
   activeTokenIndex: number | null;
   approvePending: boolean;
+  /** True while audio is loading or take has no bytes. */
+  playDisabled: boolean;
   onPlay: () => void;
   onApprove: () => void;
 }) {
-  const canPlay = line.playFromSeconds != null;
+  const canPlay = line.playFromSeconds != null && !playDisabled;
   return (
     <div
       className={cn(
@@ -150,40 +153,28 @@ function FlaggedLine({
           : "border-transparent"
       )}
     >
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="min-h-10 shrink-0 touch-manipulation md:min-h-8"
-        disabled={!canPlay}
-        onClick={onPlay}
-        title={
-          canPlay
-            ? `Play line ${line.lineIndex + 1} from the stamps`
-            : "No timing on this line yet"
-        }
-      >
-        {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
-        <span className="ml-1">L{line.lineIndex + 1}</span>
-      </Button>
-      <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm leading-relaxed">
-        {line.lineCodes.map((code) => (
-          <span
-            key={code}
-            className="rounded border border-amber-500/50 px-1 text-[10px] font-medium text-amber-700 dark:text-amber-300"
-          >
-            {FLAG_LABEL[code]}
-          </span>
-        ))}
-        {line.tokens.map((token, i) => (
-          <KaraokeTokenChip
-            key={`${i}-${token.text}`}
-            token={token}
-            active={playing && activeTokenIndex === i}
-          />
-        ))}
-      </div>
+      {/* Keep play / approve / jump adjacent — not pushed to the card edge. */}
       <div className="flex shrink-0 items-center gap-1">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="min-h-10 touch-manipulation md:min-h-8"
+          disabled={!canPlay && !playing}
+          onClick={onPlay}
+          title={
+            playing
+              ? `Stop line ${line.lineIndex + 1}`
+              : playDisabled
+                ? "Take audio is not ready"
+                : line.playFromSeconds != null
+                  ? `Play line ${line.lineIndex + 1} from the stamps`
+                  : "No timing on this line yet"
+          }
+        >
+          {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+          <span className="ml-1">L{line.lineIndex + 1}</span>
+        </Button>
         <Button
           type="button"
           size="sm"
@@ -204,6 +195,23 @@ function FlaggedLine({
         >
           <ExternalLink className="size-3.5" />
         </Link>
+      </div>
+      <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm leading-relaxed">
+        {line.lineCodes.map((code) => (
+          <span
+            key={code}
+            className="rounded border border-amber-500/50 px-1 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+          >
+            {FLAG_LABEL[code]}
+          </span>
+        ))}
+        {line.tokens.map((token, i) => (
+          <KaraokeTokenChip
+            key={`${i}-${token.text}`}
+            token={token}
+            active={playing && activeTokenIndex === i}
+          />
+        ))}
       </div>
     </div>
   );
@@ -253,38 +261,40 @@ function TakeKaraoke({
 function TakeCard({ take }: { take: Take }) {
   const queryClient = useQueryClient();
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
+  const loadPromiseRef = useRef<Promise<HTMLAudioElement> | null>(null);
   const stopTimerRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [approvingLine, setApprovingLine] = useState<number | null>(null);
+  const [audioLoading, setAudioLoading] = useState(false);
 
   const audioUrl = ttsApi.variantAudioUrl(
     take.projectId,
     take.variantId,
     take.audioByteCount
   );
+  const hasAudioBytes = take.audioByteCount > 0;
 
   useEffect(() => {
-    const audio = new Audio(audioUrl);
-    audio.preload = "auto";
-    const onEnded = () => {
-      setPlayingKey(null);
-      if (rafRef.current != null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-    };
-    audio.addEventListener("ended", onEnded);
-    audioRef.current = audio;
     return () => {
       if (stopTimerRef.current != null) window.clearTimeout(stopTimerRef.current);
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-      audio.pause();
-      audio.removeEventListener("ended", onEnded);
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+      }
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
       audioRef.current = null;
+      loadPromiseRef.current = null;
     };
-  }, [audioUrl]);
+  }, []);
 
   // Poll media clock while playing — timeupdate is too coarse vs Token timing’s
   // audioprocess/playhead and made stamps look slightly late in the queue.
@@ -352,18 +362,109 @@ function TakeCard({ take }: { take: Take }) {
     setPlayingKey(null);
   }
 
+  /**
+   * Same path as WaveSurfer: fetch the take WAV, then play a blob: URL.
+   * Assigning the API path to HTMLAudioElement.src can fail on Safari/Mac with
+   * "This Element has no supported sources" even when the waveform player works.
+   */
+  function ensureAudio(): Promise<HTMLAudioElement> {
+    if (audioRef.current?.src) {
+      return Promise.resolve(audioRef.current);
+    }
+    if (loadPromiseRef.current) return loadPromiseRef.current;
+
+    if (!hasAudioBytes) {
+      return Promise.reject(new Error("This take has no audio."));
+    }
+
+    setAudioLoading(true);
+    const promise = (async () => {
+      const res = await fetch(audioUrl, { credentials: "same-origin" });
+      if (!res.ok) {
+        throw new Error(
+          res.status === 404
+            ? "Take audio was not found."
+            : `Could not load take audio (${res.status}).`
+        );
+      }
+      const contentType = res.headers.get("content-type") ?? "";
+      if (
+        contentType.includes("application/json") ||
+        contentType.includes("text/html")
+      ) {
+        throw new Error("Take audio response was not audio data.");
+      }
+      const buffer = await res.arrayBuffer();
+      if (buffer.byteLength === 0) {
+        throw new Error("This take has no audio.");
+      }
+      const mime = contentType.startsWith("audio/")
+        ? contentType.split(";")[0]!.trim()
+        : "audio/wav";
+      const blob = new Blob([buffer], { type: mime });
+      const objectUrl = URL.createObjectURL(blob);
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = objectUrl;
+
+      const audio = audioRef.current ?? new Audio();
+      audio.preload = "auto";
+      audio.onended = () => {
+        setPlayingKey(null);
+        if (rafRef.current != null) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = null;
+        }
+      };
+      audio.src = objectUrl;
+      audioRef.current = audio;
+
+      if (audio.readyState < HTMLMediaElement.HAVE_METADATA) {
+        await new Promise<void>((resolve, reject) => {
+          const onReady = () => {
+            cleanup();
+            resolve();
+          };
+          const onError = () => {
+            cleanup();
+            reject(new Error("Could not load take audio."));
+          };
+          const cleanup = () => {
+            audio.removeEventListener("loadedmetadata", onReady);
+            audio.removeEventListener("error", onError);
+          };
+          audio.addEventListener("loadedmetadata", onReady);
+          audio.addEventListener("error", onError);
+        });
+      }
+      return audio;
+    })();
+
+    loadPromiseRef.current = promise.then(
+      (audio) => {
+        setAudioLoading(false);
+        return audio;
+      },
+      (error) => {
+        setAudioLoading(false);
+        loadPromiseRef.current = null;
+        throw error;
+      }
+    );
+    return loadPromiseRef.current;
+  }
+
   async function playSegment(key: string, fromSeconds: number, untilSeconds: number | null) {
     if (playingKey === key) {
       stopPlayback();
       return;
     }
-    clearStopTimer();
-    const audio = audioRef.current;
-    if (!audio) {
-      toast.error("Audio is not ready yet.");
+    if (!hasAudioBytes) {
+      toast.error("This take has no audio.");
       return;
     }
+    clearStopTimer();
     try {
+      const audio = await ensureAudio();
       audio.pause();
       audio.currentTime = fromSeconds;
       setCurrentTime(fromSeconds);
@@ -379,7 +480,18 @@ function TakeCard({ take }: { take: Take }) {
       }
     } catch (error) {
       setPlayingKey(null);
-      toast.error(error instanceof Error ? error.message : "Could not play audio.");
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Could not play audio.";
+      if (
+        message.includes("no supported sources") ||
+        message.includes("NotSupportedError")
+      ) {
+        toast.error("Could not load take audio.");
+      } else {
+        toast.error(message);
+      }
     }
   }
 
@@ -445,13 +557,25 @@ function TakeCard({ take }: { take: Take }) {
             variant="outline"
             className="min-h-11 touch-manipulation md:min-h-8"
             onClick={playTake}
+            disabled={!hasAudioBytes || (audioLoading && !playingTake)}
+            title={
+              !hasAudioBytes
+                ? "This take has no audio"
+                : audioLoading
+                  ? "Loading take audio…"
+                  : playingTake
+                    ? "Stop"
+                    : "Play take"
+            }
           >
             {playingTake ? (
               <Pause className="size-3.5" />
             ) : (
               <Play className="size-3.5" />
             )}
-            <span className="ml-1.5">{playingTake ? "Stop" : "Play take"}</span>
+            <span className="ml-1.5">
+              {playingTake ? "Stop" : audioLoading ? "Loading…" : "Play take"}
+            </span>
           </Button>
           <Button
             type="button"
@@ -503,6 +627,7 @@ function TakeCard({ take }: { take: Take }) {
                   approvePending={
                     approveLineMutation.isPending && approvingLine === line.lineIndex
                   }
+                  playDisabled={!hasAudioBytes || (audioLoading && !linePlaying)}
                   onPlay={() => playLine(line)}
                   onApprove={() => approveLineMutation.mutate(line.lineIndex)}
                 />

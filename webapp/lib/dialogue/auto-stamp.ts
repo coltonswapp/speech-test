@@ -14,6 +14,10 @@ import { isAllPunctuationOrWhitespace } from "@/lib/dialogue/japanese-segmentati
 import { parseVariantTokenSync, tokenSyncStatus, clearFlagsForReviewed } from "@/lib/dialogue/token-sync";
 import { autoStampTokenSync } from "@/lib/dialogue/token-sync-auto";
 import { recordAutoStamp } from "@/lib/dialogue/review-timing";
+import {
+  lineMarkAttentionCount,
+  notifyAutoStampReview,
+} from "@/lib/dialogue/auto-stamp-review-webhook";
 import type { TokenSyncFlag, VariantTokenSync } from "@/lib/dialogue/types";
 
 export { clearFlagsForReviewed };
@@ -58,15 +62,40 @@ export async function autoStampVariant(params: {
 }): Promise<AutoStampOutcome> {
   const force = params.force === true;
   const signal = params.signal;
+  const wallStartMs = Date.now();
+  const wallSeconds = () =>
+    Math.round(((Date.now() - wallStartMs) / 1000) * 10) / 10;
+
+  const notifyFailed = (
+    error: string,
+    opts?: {
+      project?: typeof ttsProject.$inferSelect;
+      projectId?: string;
+      alignSeconds?: number | null;
+    }
+  ) => {
+    notifyAutoStampReview({
+      kind: "auto-stamp-failed",
+      variantId: params.variantId,
+      projectId: opts?.projectId ?? opts?.project?.id ?? params.projectId,
+      project: opts?.project,
+      summary: error,
+      alignSeconds: opts?.alignSeconds ?? null,
+      wallSeconds: wallSeconds(),
+    });
+  };
+
   if (signal?.aborted) {
     return { ok: false, status: 499, code: "cancelled", error: "Auto-stamp aborted." };
   }
   if (!alignerConfigured()) {
+    const error = "Aligner is not configured (ALIGNER_URL / ALIGNER_TOKEN).";
+    notifyFailed(error, { projectId: params.projectId });
     return {
       ok: false,
       status: 503,
       code: "not-configured",
-      error: "Aligner is not configured (ALIGNER_URL / ALIGNER_TOKEN).",
+      error,
     };
   }
 
@@ -81,48 +110,95 @@ export async function autoStampVariant(params: {
   });
   if (!project) return { ok: false, status: 404, error: "Not found" };
 
+  try {
+    return await runAutoStampBody({
+      params,
+      force,
+      signal,
+      variant,
+      project,
+      wallSeconds,
+      notifyFailed,
+    });
+  } catch (error) {
+    if (!signal?.aborted) {
+      const message = error instanceof Error ? error.message : String(error);
+      notifyFailed(message, { project });
+    }
+    throw error;
+  }
+}
+
+async function runAutoStampBody(args: {
+  params: { variantId: string; projectId?: string; force?: boolean; signal?: AbortSignal };
+  force: boolean;
+  signal?: AbortSignal;
+  variant: typeof ttsVariant.$inferSelect;
+  project: typeof ttsProject.$inferSelect;
+  wallSeconds: () => number;
+  notifyFailed: (
+    error: string,
+    opts?: {
+      project?: typeof ttsProject.$inferSelect;
+      projectId?: string;
+      alignSeconds?: number | null;
+    }
+  ) => void;
+}): Promise<AutoStampOutcome> {
+  const { force, signal, variant, project, wallSeconds, notifyFailed, params } = args;
+
   let conversation;
   try {
     conversation = await loadConversationLines(project);
   } catch (error) {
     if (error instanceof UserFacingError) {
+      notifyFailed(error.message, { project });
       return { ok: false, status: 400, error: error.message };
     }
     throw error;
   }
   const spokenTexts = conversation.map((line) => line.text.trim()).filter(Boolean);
   if (spokenTexts.length === 0) {
-    return { ok: false, status: 400, error: "No spoken lines." };
+    const error = "No spoken lines.";
+    notifyFailed(error, { project });
+    return { ok: false, status: 400, error };
   }
   const contentHash = conversationContentHash(conversation);
   if (variant.contentHash && variant.contentHash !== contentHash) {
+    const error =
+      "Dialogue text changed since this take was generated. Regenerate the take first.";
+    notifyFailed(error, { project });
     return {
       ok: false,
       status: 409,
       code: "stale",
-      error: "Dialogue text changed since this take was generated. Regenerate the take first.",
+      error,
     };
   }
 
   const existingSync = parseVariantTokenSync(variant.tokenSync);
   const status = tokenSyncStatus(existingSync, contentHash, spokenTexts);
   if (!force && (status === "tokens-only" || status === "complete") && hasHumanStamps(existingSync)) {
+    const error = "This take already has human stamps. Re-run with force to replace them.";
+    notifyFailed(error, { project });
     return {
       ok: false,
       status: 409,
       code: "human-stamps",
-      error: "This take already has human stamps. Re-run with force to replace them.",
+      error,
     };
   }
 
   const existingMarks = variant.dialogueLineSwitchSamples ?? [];
   const needed = spokenTexts.length - 1;
   if (!force && existingMarks.length > 0 && existingMarks.length !== needed) {
+    const error = `This take has ${existingMarks.length} line marks but needs ${needed}. Fix the marks or re-run with force.`;
+    notifyFailed(error, { project });
     return {
       ok: false,
       status: 409,
       code: "marks-mismatch",
-      error: `This take has ${existingMarks.length} line marks but needs ${needed}. Fix the marks or re-run with force.`,
+      error,
     };
   }
 
@@ -151,13 +227,16 @@ export async function autoStampVariant(params: {
       }));
     } catch (error) {
       if (error instanceof DialogueGenerationError) {
+        notifyFailed(error.message, { project });
         return { ok: false, status: 502, error: error.message };
       }
       throw error;
     }
   }
   if (lines.some((line) => line.tokens.length === 0)) {
-    return { ok: false, status: 422, error: "A line has no alignable tokens." };
+    const error = "A line has no alignable tokens.";
+    notifyFailed(error, { project });
+    return { ok: false, status: 422, error };
   }
 
   if (signal?.aborted) {
@@ -180,10 +259,16 @@ export async function autoStampVariant(params: {
       return { ok: false, status: 499, code: "cancelled", error: "Auto-stamp aborted." };
     }
     if (error instanceof AlignerError) {
+      notifyFailed(error.message, { project });
       return { ok: false, status: 502, error: error.message };
     }
     throw error;
   }
+
+  const alignSeconds =
+    typeof aligned.timings?.alignSeconds === "number"
+      ? aligned.timings.alignSeconds
+      : null;
 
   const result = autoStampTokenSync({
     alignerVersion: aligned.alignerVersion,
@@ -220,9 +305,23 @@ export async function autoStampVariant(params: {
       ? `, derived ${result.markSamples.length} line marks`
       : "",
     result.flags.length > 0 ? `, ${result.flags.length} flagged for review` : "",
-    aligned.timings?.alignSeconds != null ? ` (${aligned.timings.alignSeconds.toFixed(1)} s align)` : "",
+    alignSeconds != null ? ` (${alignSeconds.toFixed(1)} s align)` : "",
     ".",
   ].join("");
+
+  const lmAttention = lineMarkAttentionCount(result.flags);
+  if (result.flags.length > 0 || lmAttention > 0) {
+    notifyAutoStampReview({
+      kind: "auto-stamp-review",
+      variantId: variant.id,
+      projectId: project.id,
+      project,
+      flags: result.flags,
+      summary,
+      alignSeconds,
+      wallSeconds: wallSeconds(),
+    });
+  }
 
   return { ok: true, variant: updated, flags: result.flags, marksDerived: result.marksDerived, summary };
 }
@@ -408,6 +507,7 @@ export async function runAutoStampChain(variantId: string): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[auto-stamp] ${variantId}: ${message}`);
     const finishedAt = new Date().toISOString();
+    // Failure notify already fired inside autoStampVariant (returned error or throw).
     await setAutoStampJob(variantId, {
       status: "error",
       message,

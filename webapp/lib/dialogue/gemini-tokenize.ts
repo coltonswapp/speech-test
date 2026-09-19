@@ -1,14 +1,33 @@
 import "server-only";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getProviderKey } from "@/lib/secrets";
+import { db } from "@/lib/db/client";
+import { appSettings } from "@/lib/db/schema";
 import { DialogueGenerationError } from "@/lib/dialogue/gemini-generate";
 import { validatedTokens } from "@/lib/dialogue/japanese-segmentation";
+import {
+  rawTokenSpans,
+  readingsForSegments,
+  tokenizeCacheKey,
+  type RawToken,
+} from "@/lib/dialogue/token-readings";
+import type { TokenizedToken } from "@/lib/dialogue/types";
 
 const GEMINI_TOKENIZE_MODEL = "gemini-2.5-flash";
 const DETERMINISTIC_SEED = 42;
 
 const segmentationPayloadSchema = z.object({
-  tokens: z.array(z.string()),
+  tokens: z.array(
+    z.object({
+      text: z.string(),
+      reading: z.string().optional(),
+    })
+  ),
+});
+
+const cachedLineSchema = z.object({
+  tokens: z.array(z.object({ text: z.string().min(1), reading: z.string().optional() })).min(1),
 });
 
 // Copied from shizen/Dictionary/GeminiJapaneseTokenizer.swift instructionsText.
@@ -26,6 +45,17 @@ Split standalone particles, nouns, and punctuation when that helps lookup.
 Keep punctuation as separate tokens when present.
 Punctuation (、 。 ， ． , . ！ ？ ! ? … ・ etc.) is always a hard token boundary. NEVER keep words on both sides of a comma or period in one token (e.g. え、いいん must be え and いいん, not one token).`;
 
+// Readings feed the forced aligner (KA-5): it needs the pronunciation as
+// spoken, which the surface alone cannot give for numerals and names.
+const READING_INSTRUCTIONS = `
+
+Each token is an object {"text", "reading"}. "text" is the verbatim surface as described above. "reading" is the token's pronunciation in kana exactly as it is spoken in this sentence:
+- Hiragana for native and Sino-Japanese words (今日 → きょう, 分からなくて → わからなくて); katakana surfaces may keep katakana.
+- Numbers, counters and Latin letters are written out as spoken in context, never as digits (302 → さんまるに for a room number, 430円 → よんひゃくさんじゅうえん, 三〇二 → さんまるに, ATM → えーてぃーえむ, 9時 → くじ).
+- Long vowels use ー or the spelled kana as pronounced (はいー → はいー, コーヒー → コーヒー).
+- Punctuation tokens get an empty reading.
+Never put kanji, digits or Latin letters in "reading".`;
+
 const RETRY_SUFFIX = `
 
 CRITICAL: Copy tokens exactly from the input string. For 歩いて use 歩いて or 歩い and て in Japanese script — never invent arui, aruite, or te in Latin letters. Latin/digits are allowed only when copied exactly from the input (e.g. ATM).`;
@@ -34,10 +64,11 @@ async function requestTokenSurfaces(
   apiKey: string,
   text: string,
   isRetry: boolean
-): Promise<string[]> {
+): Promise<RawToken[]> {
+  const base = `${INSTRUCTIONS_TEXT}${READING_INSTRUCTIONS}`;
   const prompt = isRetry
-    ? `${INSTRUCTIONS_TEXT}${RETRY_SUFFIX}\n\nInput:\n${text}`
-    : `${INSTRUCTIONS_TEXT}\n\nInput:\n${text}`;
+    ? `${base}${RETRY_SUFFIX}\n\nInput:\n${text}`
+    : `${base}\n\nInput:\n${text}`;
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TOKENIZE_MODEL}:generateContent`,
@@ -59,7 +90,17 @@ async function requestTokenSurfaces(
           responseSchema: {
             type: "object",
             properties: {
-              tokens: { type: "array", items: { type: "string" } },
+              tokens: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    text: { type: "string" },
+                    reading: { type: "string" },
+                  },
+                  required: ["text", "reading"],
+                },
+              },
             },
             required: ["tokens"],
           },
@@ -96,9 +137,53 @@ async function requestTokenSurfaces(
   return parsed.data.tokens;
 }
 
-export async function tokenizeJapaneseLine(text: string): Promise<string[]> {
+/** Validated segments plus whichever readings survive the split/merge pass. */
+function tokensWithReadings(raw: RawToken[], text: string): TokenizedToken[] | null {
+  const segments = validatedTokens(
+    raw.map((token) => token.text),
+    text
+  );
+  if (!segments || segments.length === 0) return null;
+  const readings = readingsForSegments(segments, rawTokenSpans(raw, text));
+  return segments.map((segment, i) => ({
+    text: segment.text,
+    ...(readings[i] ? { reading: readings[i] } : {}),
+  }));
+}
+
+async function readCachedLine(text: string): Promise<TokenizedToken[] | null> {
+  try {
+    const row = await db.query.appSettings.findFirst({
+      where: eq(appSettings.key, tokenizeCacheKey(text)),
+    });
+    if (!row) return null;
+    const parsed = cachedLineSchema.safeParse(row.value);
+    return parsed.success ? parsed.data.tokens : null;
+  } catch {
+    // The cache is an optimization; never let it block tokenizing.
+    return null;
+  }
+}
+
+async function writeCachedLine(text: string, tokens: TokenizedToken[]): Promise<void> {
+  try {
+    await db
+      .insert(appSettings)
+      .values({ key: tokenizeCacheKey(text), value: { tokens } })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value: { tokens } } });
+  } catch {
+    // ignore — see readCachedLine
+  }
+}
+
+export async function tokenizeJapaneseLine(
+  text: string
+): Promise<TokenizedToken[]> {
   const trimmed = text.trim();
   if (!trimmed) return [];
+
+  const cached = await readCachedLine(trimmed);
+  if (cached) return cached;
 
   const apiKey = getProviderKey("gemini");
   if (!apiKey) {
@@ -106,15 +191,17 @@ export async function tokenizeJapaneseLine(text: string): Promise<string[]> {
   }
 
   const first = await requestTokenSurfaces(apiKey, trimmed, false);
-  const firstTokens = validatedTokens(first, trimmed);
-  if (firstTokens && firstTokens.length > 0) {
-    return firstTokens.map((token) => token.text);
+  const firstTokens = tokensWithReadings(first, trimmed);
+  if (firstTokens) {
+    await writeCachedLine(trimmed, firstTokens);
+    return firstTokens;
   }
 
   const retry = await requestTokenSurfaces(apiKey, trimmed, true);
-  const retryTokens = validatedTokens(retry, trimmed);
-  if (retryTokens && retryTokens.length > 0) {
-    return retryTokens.map((token) => token.text);
+  const retryTokens = tokensWithReadings(retry, trimmed);
+  if (retryTokens) {
+    await writeCachedLine(trimmed, retryTokens);
+    return retryTokens;
   }
 
   throw new DialogueGenerationError(
@@ -124,8 +211,8 @@ export async function tokenizeJapaneseLine(text: string): Promise<string[]> {
 
 export async function tokenizeJapaneseLines(
   texts: string[]
-): Promise<Array<{ text: string; tokens: string[] }>> {
-  const results: Array<{ text: string; tokens: string[] }> = [];
+): Promise<Array<{ text: string; tokens: TokenizedToken[] }>> {
+  const results: Array<{ text: string; tokens: TokenizedToken[] }> = [];
   for (const text of texts) {
     const trimmed = text.trim();
     if (!trimmed) {

@@ -263,18 +263,32 @@ function contiguousRanges(
 /** Studio break-suggestion lead-in: how far a suggested line-switch mark is backed off from the next speaker's detected onset. */
 export const SUGGESTED_BREAK_LEAD_IN_SECONDS = 0.08;
 
-function quietRMSThreshold(samples: Float32Array, windowSamples: number): number {
+/** RMS per fixed window (last partial window included). */
+export function rmsTrack(samples: Float32Array, windowSamples: number): number[] {
   const rms: number[] = [];
   for (let i = 0; i < samples.length; i += windowSamples) {
     const end = Math.min(i + windowSamples, samples.length);
     rms.push(rmsOfSlice(samples, i, end));
   }
+  return rms;
+}
+
+/**
+ * Quiet/loud RMS threshold for a track: a fraction above the 10th-percentile
+ * floor, never below an absolute noise floor. Shared by break suggestion and
+ * auto-stamp so both agree on what "silence" is.
+ */
+export function quietThresholdFromRms(rms: number[]): number {
   const sorted = [...rms].sort((a, b) => a - b);
   const maxRms = sorted[sorted.length - 1];
   if (maxRms === undefined) return 0.003;
   const floorIdx = Math.max(0, Math.min(sorted.length - 1, Math.floor(sorted.length * 0.1)));
   const floor = sorted[floorIdx];
   return Math.max(floor * 1.6, floor + (maxRms - floor) * 0.04, 0.003);
+}
+
+function quietRMSThreshold(samples: Float32Array, windowSamples: number): number {
+  return quietThresholdFromRms(rmsTrack(samples, windowSamples));
 }
 
 /**

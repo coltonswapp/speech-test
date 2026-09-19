@@ -4,6 +4,14 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { dialogueScenario } from "@/lib/db/schema";
 import { updateScenarioSchema } from "@/lib/dialogue/types";
+import { mixHashForScenario } from "@/lib/tts/ambience-mix";
+
+function withMixHash(scenario: typeof dialogueScenario.$inferSelect) {
+  return {
+    scenario,
+    ambienceMixHash: mixHashForScenario(scenario),
+  };
+}
 
 // Scenario ids embed the collection ("train-station/buying-a-ticket"), so the
 // route addresses them as collectionId + tail slug to keep slashes out of a
@@ -20,7 +28,7 @@ export async function GET(
   if (!scenario) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  return NextResponse.json({ scenario });
+  return NextResponse.json(withMixHash(scenario));
 }
 
 export async function PATCH(
@@ -45,7 +53,7 @@ export async function PATCH(
   if (!scenario) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  return NextResponse.json({ scenario });
+  return NextResponse.json(withMixHash(scenario));
 }
 
 export async function DELETE(

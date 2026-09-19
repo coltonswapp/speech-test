@@ -1,0 +1,303 @@
+<title>Shizen Karaoke Autotiming</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #F3F5F7; --surface: #FFFFFF; --ink: #17212B; --muted: #5B6873; --line: #D5DCE2;
+    --accent: #1B7F73; --accent-soft: #DDF0EC; --flag: #B8791E; --flag-soft: #F6ECD8; --crit: #B23F36; --crit-soft: #F5E0DD;
+    --code-bg: #EAEEF1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0F1519; --surface: #171F26; --ink: #E6ECF0; --muted: #94A2AD; --line: #2B3640;
+      --accent: #4FC3B3; --accent-soft: #163B37; --flag: #E0A24A; --flag-soft: #3C2E14; --crit: #E06A5F; --crit-soft: #44221F;
+      --code-bg: #1F2930;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0F1519; --surface: #171F26; --ink: #E6ECF0; --muted: #94A2AD; --line: #2B3640;
+    --accent: #4FC3B3; --accent-soft: #163B37; --flag: #E0A24A; --flag-soft: #3C2E14; --crit: #E06A5F; --crit-soft: #44221F;
+    --code-bg: #1F2930;
+  }
+  body { background: var(--ground); color: var(--ink); font-family: "IBM Plex Sans", "Noto Sans JP", system-ui, sans-serif; font-size: 15.5px; line-height: 1.55; padding-block: 40px 96px; padding-inline: 20px; }
+  .wrap { max-width: 78ch; margin: 0 auto; }
+  h1, h2, h3 { font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", "Noto Sans JP", sans-serif; text-wrap: balance; line-height: 1.15; margin: 0; }
+  h1 { font-size: 2.4rem; font-weight: 600; letter-spacing: -0.01em; }
+  h2 { font-size: 1.5rem; font-weight: 600; margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--line); }
+  h3 { font-size: 1.08rem; font-weight: 600; margin-top: 1.6rem; }
+  p { margin: 0.7rem 0; max-width: 70ch; }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .lede { font-size: 1.08rem; color: var(--muted); max-width: 66ch; margin-top: 0.8rem; }
+  code, pre { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.86em; }
+  code { background: var(--code-bg); padding: 0.08em 0.35em; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 0.9rem 1rem; border-radius: 4px; overflow-x: auto; line-height: 1.45; margin: 0.8rem 0; }
+  pre code { background: none; padding: 0; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 1.6rem 0 0.4rem; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; }
+  .stat .n { font-family: "IBM Plex Sans Condensed", sans-serif; font-size: 1.9rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .stat .l { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+  .stat.go .n { color: var(--accent); } .stat.flag .n { color: var(--flag); }
+  .verdict { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: baseline; margin-top: 1.4rem; padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 4px 4px 0; }
+  .verdict b { font-family: "IBM Plex Sans Condensed", sans-serif; font-size: 1.05rem; }
+  .pill { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); vertical-align: middle; }
+  .pill.go { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .pill.flag { color: var(--flag); border-color: var(--flag); background: var(--flag-soft); }
+  .pill.crit { color: var(--crit); border-color: var(--crit); background: var(--crit-soft); }
+  .tbl { overflow-x: auto; margin: 0.9rem 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-family: "IBM Plex Mono", monospace; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; background: var(--code-bg); }
+  tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: "IBM Plex Mono", monospace; font-size: 0.84rem; white-space: nowrap; }
+  td code { white-space: nowrap; }
+  .bar { position: relative; height: 6px; background: var(--code-bg); border-radius: 3px; min-width: 90px; margin-top: 5px; }
+  .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 3px; }
+  .bar.warn i { background: var(--flag); }
+  ul, ol { padding-left: 1.3rem; margin: 0.5rem 0; max-width: 70ch; }
+  li { margin: 0.3rem 0; }
+  li::marker { color: var(--muted); }
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; margin: 1rem 0; align-items: stretch; }
+  .stage { flex: 1 1 150px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; }
+  .stage .k { font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+  .stage .t { font-weight: 600; margin: 3px 0 4px; }
+  .stage .d { font-size: 0.82rem; color: var(--muted); line-height: 1.4; }
+  .stage.new { border-color: var(--accent); }
+  .note { border-left: 3px solid var(--flag); background: var(--flag-soft); padding: 10px 14px; border-radius: 0 4px 4px 0; margin: 1rem 0; max-width: 70ch; }
+  .note.crit { border-color: var(--crit); background: var(--crit-soft); }
+  .ticket { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; margin: 10px 0; }
+  .ticket .h { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+  .ticket .id { font-family: "IBM Plex Mono", monospace; font-size: 0.78rem; color: var(--muted); }
+  .ticket .t { font-weight: 600; }
+  .ticket p, .ticket ul { font-size: 0.9rem; margin: 6px 0 0; }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 1.4rem; font-size: 0.88rem; }
+  .toc a { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent; }
+  .toc a:hover, .toc a:focus-visible { border-bottom-color: var(--accent); outline: none; }
+  a { color: var(--accent); }
+  .jp { font-family: "Noto Sans JP", "IBM Plex Sans", sans-serif; }
+  .dim { color: var(--muted); }
+  @media (max-width: 480px) { h1 { font-size: 1.9rem; } body { font-size: 15px; } }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Shizen Content Studio · design + eval · 17 Sep 2026 · implementation status 18 Sep 2026</div>
+  <h1>Shizen Karaoke Autotiming</h1>
+  <p class="lede">Replace hand-stamped karaoke timing with forced alignment of the known script against the take. Measured against the three human-stamped scenes in <span class="jp">first-hello</span>, the aligner lands within 100 ms on 84% of in-line tokens and puts every speaker boundary inside the silence gap.</p>
+
+  <div class="stats">
+    <div class="stat go"><div class="n">47 ms</div><div class="l">median |Δstart| vs human gold, in-line tokens</div></div>
+    <div class="stat go"><div class="n">83.5%</div><div class="l">in-line tokens within ±100 ms (92.6% within ±150)</div></div>
+    <div class="stat go"><div class="n">486 / 486</div><div class="l">derived speaker boundaries inside the silence gap, 38 scenes (shipped derivation; the prototype rule scored 484)</div></div>
+    <div class="stat flag"><div class="n">66.6%</div><div class="l">within ±100 ms on 35 unseen scenes; human gold drifts ±54 ms per session</div></div>
+    <div class="stat go"><div class="n">20 vs 63 ms</div><div class="l">scene-to-scene offset sd, aligner vs human, against acoustic onsets</div></div>
+    <div class="stat flag"><div class="n">≈0</div><div class="l">correlation of aligner confidence with error, so no confidence gating</div></div>
+    <div class="stat"><div class="n">~$0.02</div><div class="l">marginal cost per scene, TTS + tokenize + CPU alignment</div></div>
+  </div>
+
+  <div class="note">
+    <b>Implementation status, 18 Sep 2026.</b> KA-1 through KA-7 are built on branch <code>claude/studio-karaoke-timing-automation</code>: schema, the aligner service on Modal (8 vCPU, 3–4 s per take), post-process and route, the Studio Auto-stamp / Mark reviewed flow, tokenizer readings with a per-line cache, the onset eval (<code>pnpm eval:token-sync</code>), and the generate → tokenize → align chain. Two decisions differ from the prototype described below. <b>Shift:</b> the shipped constant is 65 ms, anchored so stamps land about 40 ms before the RMS onset, not the 150 ms that matched one editor's tap lookback; the human-gold percentages below are therefore the prototype configuration, reproducible with <code>--shift 150</code>. <b>Marks:</b> the shipped rule takes the midpoint of the longest quiet run between the previous line's last token and the next line's first, clamped 80–250 ms before onset, because a walk-back from the onset is fooled by breaths and clicks. Shipped eval on the 38 scenes: stamp − onset median −39 ms, scene-to-scene sd 15 ms, within-scene sd 79 ms, marks 486/486 in gap, zero monotonic violations. Open: KA-8 (review queue + timing telemetry), KA-9 (second-editor gold), and a device listen of one auto-stamped scene before the shift is judged final.
+  </div>
+
+  <div class="verdict"><b>Verdict</b> <span class="pill go">GO for v0</span> Ship the aligner as a prefill that replaces manual stamping and keeps a human review pass. <span class="pill flag">NO-GO</span> for blind auto-publish. <span class="pill crit">Gold is not a fixed target</span> The 38-scene run (section 2b) shows human stamps drift by session; the v1 bar must be measured against acoustic onsets and a two-editor floor, not against a single human.</div>
+
+  <div class="toc">
+    <a href="#code">Code paths</a><a href="#gold">Gold &amp; findings</a><a href="#gold38">38-scene run</a><a href="#pipeline">Pipeline</a><a href="#llm">LLM placement &amp; cost</a><a href="#eval">Eval harness</a><a href="#thresholds">Thresholds &amp; phases</a><a href="#tickets">Tickets</a>
+  </div>
+
+  <h2 id="code">1. Current Studio code paths</h2>
+  <p>Everything below is under <code>webapp/</code>. The pieces we need already exist as separate manual steps. The pipeline stitches them together and inserts one new stage.</p>
+  <div class="tbl"><table>
+    <tr><th>Concern</th><th>File</th><th>What it does today</th></tr>
+    <tr><td>Take generation</td><td><code>app/api/tts/projects/[id]/variants/route.ts</code></td><td>POST builds the two-voice conversation from scenario lines, calls <code>synthesizeGeminiConversation</code> (<code>lib/tts/gemini-tts.ts</code>, model <code>gemini-3.1-flash-tts-preview</code>, 24 kHz PCM), stores the WAV in R2, sets <code>contentHash</code>, then runs the VAD line aligner and writes <code>tts_variant_sentence</code> rows.</td></tr>
+    <tr><td>Content hash</td><td><code>lib/tts/content-hash.ts</code></td><td>sha256 over (speaker slot, text) pairs; the staleness key for tokenSync and publish.</td></tr>
+    <tr><td>Line boundaries (existing aligner)</td><td><code>lib/tts/alignment.ts</code>, <code>…/[variantId]/suggest-breaks/route.ts</code></td><td>RMS VAD + proportional DP. Produces suggested line-switch marks; <code>leadInAdjustedBoundaries</code> backs each mark 80 ms into silence. Suggestions are unsaved; the editor writes <code>dialogueLineSwitchSamples</code> via PATCH.</td></tr>
+    <tr><td>Waveform / marks UI</td><td><code>components/tts/waveform-editor.tsx</code></td><td>wavesurfer timeline, mark insert/delete, trim, remove-gap and insert-line-break routes which shift tokenSync through <code>shiftTokenSyncBySamples</code>.</td></tr>
+    <tr><td>Tokenization</td><td><code>lib/dialogue/gemini-tokenize.ts</code>, <code>app/api/content/dialogues/tokenize-lines/route.ts</code></td><td>Gemini 2.5 Flash, temperature 0, seed 42, one call per line. Surfaces are validated as exact substrings by <code>japanese-segmentation.ts</code> (punctuation split, ≥90% coverage, んです gluing).</td></tr>
+    <tr><td>Token stamping model</td><td><code>lib/dialogue/token-sync.ts</code></td><td>Working copy <code>VariantTokenSync</code> on <code>tts_variant.token_sync</code>. Taps go through <code>proposedStampSeconds</code> which subtracts a 120 ms lookback (<code>TOKEN_STAMP_LOOKBACK_SECONDS</code>) and clamps to the line window with a 20 ms minimum gap. First token of each line follows the line mark.</td></tr>
+    <tr><td>Stamping UI</td><td><code>components/dialogue/token-sync-editor.tsx</code></td><td>Tokenize button, tap-to-stamp, split and merge tokens, persists through <code>onPersist</code> → PATCH <code>…/variants/[variantId]</code> (<code>updateVariantSchema.tokenSync</code>).</td></tr>
+    <tr><td>Publish snapshot</td><td><code>lib/dialogue/publish.ts</code></td><td><code>completeTokenSyncForVariant</code> converts playhead seconds to export seconds (minus trim), clamps to line windows, rounds to ms, and copies the result to <code>dialogue_scenario.token_sync</code>. The m4a carries line marks in the comment tag <code>shizen.dialogue.v1:{lineSwitchSeconds}</code> (<code>lib/tts/audio-encode.ts</code>).</td></tr>
+    <tr><td>Public export</td><td><code>lib/dialogue/export.ts</code>, <code>lib/dialogue/public-api.ts</code>, <code>app/api/public/dialogues/[collectionId]/route.ts</code></td><td><code>buildScenarioFile</code> emits <code>tokenSync</code> only if it parses as <code>publishedTokenSyncSchema</code>. Any new field must be added to that zod schema and rebuilt in <code>publishedTokenSyncFromWorking</code>, otherwise zod strips it before iOS sees it.</td></tr>
+    <tr><td>iOS consumer</td><td><code>shizen/Dialogue/DialogueTokenSync.swift</code>, <code>shizen/Grammar/GrammarAudioPlayer.swift</code></td><td>Validates monotonic starts and substring order, drops the payload on any mismatch. Line focus and per-line playback come from the m4a line marks, not from first-token stamps.</td></tr>
+  </table></div>
+
+  <h2 id="gold">2. Gold set and what the eval found</h2>
+  <p>No gold files were attached locally, so I used the live public export for <span class="jp">first-hello</span>, which carries human tokenSync for shizuoka-tea, nine-oclock and which-mailbox. That is 48 spoken lines and 224 tokens, plus 45 human line marks read back from the m4a comment tag. new-neighbor has no tokenSync yet. The gold and prototype scripts are checked into <code>docs/karaoke-autotiming/</code>.</p>
+
+  <h3>Prototype</h3>
+  <p>torchaudio <code>MMS_FA</code> (wav2vec2 CTC, 20 ms frames), tokens romanized with pykakasi plus a small override table (<span class="jp">三〇二 → sanmaruni</span>, <span class="jp">はいー → haii</span>). One CTC pass over the whole take using the gold tokenization, then a deterministic post-process. CPU runtime is about 3 s per 40 s scene on a laptop, including model load amortized over three scenes.</p>
+
+  <div class="tbl"><table>
+    <tr><th>Token class</th><th class="num">n</th><th class="num">median |Δ|</th><th class="num">p95 |Δ|</th><th class="num">≤50 ms</th><th class="num">≤100 ms</th><th class="num">≤150 ms</th><th class="num">signed bias</th></tr>
+    <tr><td>Raw CTC output, all tokens</td><td class="num">224</td><td class="num">159</td><td class="num">395</td><td class="num">6.7%</td><td class="num">19.6%</td><td class="num">45.1%</td><td class="num">+158 late</td></tr>
+    <tr><td>Post-processed, in-line tokens</td><td class="num">176</td><td class="num">47</td><td class="num">175</td><td class="num">52.3%</td><td class="num">83.5%<div class="bar"><i style="width:83.5%"></i></div></td><td class="num">92.6%</td><td class="num">−7</td></tr>
+    <tr><td>…particles (は が を の です よ ね…)</td><td class="num">79</td><td class="num">42</td><td class="num">175</td><td class="num">57.0%</td><td class="num">86.1%</td><td class="num">93.7%</td><td class="num">+10</td></tr>
+    <tr><td>…post-pause (gap &gt; 350 ms before)</td><td class="num">90</td><td class="num">48</td><td class="num">155</td><td class="num">51.1%</td><td class="num">86.7%</td><td class="num">93.3%</td><td class="num">−18</td></tr>
+    <tr><td>…single-character tokens</td><td class="num">63</td><td class="num">76</td><td class="num">343</td><td class="num">41.3%</td><td class="num">66.7%<div class="bar warn"><i style="width:66.7%"></i></div></td><td class="num">77.8%</td><td class="num">+40</td></tr>
+    <tr><td>Post-processed, first-of-line tokens</td><td class="num">48</td><td class="num">187</td><td class="num">369</td><td class="num">2.1%</td><td class="num">12.5%</td><td class="num">39.6%</td><td class="num">+167</td></tr>
+  </table></div>
+
+  <div class="tbl"><table>
+    <tr><th>Scene (in-line tokens)</th><th class="num">n</th><th class="num">median |Δ|</th><th class="num">≤100 ms</th><th class="num">≤150 ms</th></tr>
+    <tr><td>nine-oclock</td><td class="num">64</td><td class="num">42</td><td class="num">90.6%</td><td class="num">98.4%</td></tr>
+    <tr><td>shizuoka-tea</td><td class="num">51</td><td class="num">46</td><td class="num">88.2%</td><td class="num">96.1%</td></tr>
+    <tr><td>which-mailbox</td><td class="num">61</td><td class="num">62</td><td class="num">72.1%</td><td class="num">83.6%</td></tr>
+  </table></div>
+
+  <h3>Systematic biases, and how the post-process handles them</h3>
+  <ul>
+    <li><b>Raw CTC is ~150 ms late.</b> The signed median was +158 ms across every class. Two causes stack: CTC emits a character a few frames after its acoustic onset, and human stamps are pulled 120 ms earlier than the tap by <code>TOKEN_STAMP_LOOKBACK_SECONDS</code>. A global −150 ms shift removes it (bias after shift: −7 ms). This constant should be re-fit whenever the aligner model or the Studio lookback changes.</li>
+    <li><b>First-of-line stamps are not a timing target.</b> Human marks sit in the middle of the silence gap, a median 279 ms before the next speaker's onset and 331 ms after the previous speaker stops. On device those marks define per-line playback ranges, so the only requirement is "inside the gap, not clipping speech". Deriving the mark as the acoustic onset minus 80 ms (the existing <code>SUGGESTED_BREAK_LEAD_IN_SECONDS</code>) put 45 of 45 marks inside the gap. Placing it at the gap midpoint, clamped to 80–250 ms before onset, would match human placement more closely. <b>Shipped:</b> that midpoint rule, with the gap taken as the longest quiet run between the previous line's last token end and the next line's first token start (aligner bounds) rather than a walk-back from the onset, which breaths and clicks cut short: 486 of 486 marks inside the gap, median 74 ms from the human mark.</li>
+    <li><b>Single-character tokens and <span class="jp">あ、</span> / <span class="jp">え、</span> interjections</b> are the weakest class (66.7% ≤100 ms). Short tokens have one or two CTC characters, so a single late frame is a large relative error. This is the class to spot-check in review.</li>
+    <li><b>Some residual error is gold noise.</b> Of the 13 in-line tokens more than 150 ms off, four have the human stamp sitting in silence (for example <span class="jp">それ</span> in <span class="jp">あ、それ私のです</span> at +415 ms) while the aligner stamp sits at speech onset. Two are aligner mistakes where the prediction lands in silence (<span class="jp">ありがとうございます</span> in which-mailbox line 15). A second stamping pass by a different editor on the same scenes would tell us the human-vs-human floor; I would expect the achievable ceiling near 90% within 100 ms.</li>
+  </ul>
+
+  <div class="note"><b>Confidence gating does not work.</b> Per-token CTC score, romaji characters per second, and disagreement between a whole-take pass and a per-line-window pass all had roughly zero correlation with error (−0.02, −0.11, −0.01). The model is self-consistent even when it is wrong. The QA stage must therefore rely on deterministic checks plus human review, not on aligner confidence. This is the main reason v1 keeps a review pass rather than auto-publishing.</div>
+
+  <h2 id="gold38">2b. The 38-scene run: the gold moves</h2>
+  <p>After the first pass, 38 published scenes with human tokenSync turned out to be reachable through the public export: 524 lines and 3,105 tokens across nine collections. I re-ran the aligner on all of them with the post-process constants frozen from first-hello, so the other 35 scenes are a genuine unseen set. Alignment took 95 s total, 2.5 s per scene, with no failures and 100% token coverage.</p>
+
+  <div class="tbl"><table>
+    <tr><th>Set (in-line tokens)</th><th class="num">n</th><th class="num">median |Δ|</th><th class="num">p95 |Δ|</th><th class="num">≤100 ms</th><th class="num">≤150 ms</th><th class="num">signed bias</th></tr>
+    <tr><td>first-hello (tuning set)</td><td class="num">176</td><td class="num">47</td><td class="num">175</td><td class="num">83.5%</td><td class="num">92.6%</td><td class="num">−7</td></tr>
+    <tr><td>35 unseen scenes</td><td class="num">2405</td><td class="num">68</td><td class="num">226</td><td class="num">66.6%<div class="bar warn"><i style="width:66.6%"></i></div></td><td class="num">83.9%</td><td class="num">−13</td></tr>
+    <tr><td>…particles</td><td class="num">810</td><td class="num">60</td><td class="num">192</td><td class="num">74.2%</td><td class="num">90.2%</td><td class="num">+12</td></tr>
+    <tr><td>…single-character</td><td class="num">714</td><td class="num">65</td><td class="num">196</td><td class="num">72.1%</td><td class="num">89.8%</td><td class="num">+15</td></tr>
+    <tr><td>…post-pause</td><td class="num">1222</td><td class="num">72</td><td class="num">244</td><td class="num">63.3%</td><td class="num">80.9%</td><td class="num">−18</td></tr>
+    <tr><td>Unseen, after removing each scene's own median offset</td><td class="num">2405</td><td class="num">—</td><td class="num">—</td><td class="num">74.0%</td><td class="num">—</td><td class="num">0</td></tr>
+  </table></div>
+
+  <p>The unseen result is clearly below the first-hello number, but the per-collection breakdown shows the reason is not mainly the aligner. Each scene's human stamps sit at a different constant offset from the audio: the per-scene signed bias runs from −203 ms (festival-day takoyaki-booth, where the aligner places nearly every token 150–400 ms earlier than the human did) to +61 ms, with a standard deviation of 54 ms across scenes. Within festival-day alone the five scenes span −128 to +1 ms. That pattern is a stamping-session effect, not a property of the audio: playback rate, output latency, and reviewer habit all shift every tap in a scene by the same amount, and the Studio fixes for 0.5× stamping (PRs 17 and 19) landed while these collections were being stamped.</p>
+
+  <div class="tbl"><table>
+    <tr><th>Collection (in-line tokens)</th><th class="num">n</th><th class="num">median |Δ|</th><th class="num">≤100 ms</th><th class="num">≤150 ms</th><th class="num">signed bias</th></tr>
+    <tr><td>first-hello</td><td class="num">176</td><td class="num">47</td><td class="num">83.5%</td><td class="num">92.6%</td><td class="num">−7</td></tr>
+    <tr><td>tea-at-mikas</td><td class="num">240</td><td class="num">52</td><td class="num">76.7%</td><td class="num">88.8%</td><td class="num">−17</td></tr>
+    <tr><td>around-the-block</td><td class="num">552</td><td class="num">65</td><td class="num">71.4%</td><td class="num">88.8%</td><td class="num">+27</td></tr>
+    <tr><td>building-rules</td><td class="num">292</td><td class="num">66</td><td class="num">70.5%</td><td class="num">89.0%</td><td class="num">−17</td></tr>
+    <tr><td>dinner-plans</td><td class="num">367</td><td class="num">61</td><td class="num">70.3%</td><td class="num">88.6%</td><td class="num">+7</td></tr>
+    <tr><td>one-offs</td><td class="num">220</td><td class="num">71</td><td class="num">64.1%</td><td class="num">77.7%</td><td class="num">−47</td></tr>
+    <tr><td>home-setup</td><td class="num">432</td><td class="num">72</td><td class="num">62.5%</td><td class="num">79.9%</td><td class="num">−12</td></tr>
+    <tr><td>festival-day</td><td class="num">302</td><td class="num">103</td><td class="num">49.0%</td><td class="num">70.5%</td><td class="num">−91</td></tr>
+  </table></div>
+
+  <h3>Who is closer to the audio</h3>
+  <p>To get a target that does not depend on any one editor, I took the 614 post-pause tokens with a clean silence of at least 150 ms before them and measured each stamp against the RMS-detected speech onset. The human stamps sit a median 95 ms before onset with a standard deviation of 155 ms; the aligner sits a median 125 ms before onset with a standard deviation of 107 ms. Scene-to-scene, the human median offset varies with a standard deviation of 63 ms, the aligner's with 20 ms. The aligner's constant lead is just the −150 ms calibration I fitted to first-hello's editor, and it can be re-fitted to the onset directly. Its consistency cannot be bought with calibration, and it is three times better than the gold's.</p>
+
+  <div class="note crit"><b>What this changes.</b> "Within 100 ms of a single human" has a ceiling around 75% on this gold no matter how good the aligner is, because the gold itself disagrees with the audio by more than that from scene to scene. Two consequences: the v1 bar below is restated against acoustic onsets and a two-editor floor, and the −150 ms shift should be re-fitted so stamps land a fixed small lead (about 40 ms) before onset rather than matching one editor's reaction time. Derived line marks remain solid: 484 of 486 fell inside the silence gap on the full set.</div>
+
+  <p>Two more results from the full set. Lines with no in-line token more than 150 ms from the human stamp are 51.9% of 507, which would look like a poor auto-accept rate if the gold were trustworthy; against the session-drift evidence it mostly measures the gold. The stamp-in-silence heuristic flags 31.9% of tokens and catches 174 of 388 tokens more than 150 ms off, which is useful for directing review but too noisy to gate on alone. It should be tightened to post-pause tokens only, where an onset is expected.</p>
+
+  <h2 id="pipeline">3. Proposed production pipeline</h2>
+  <div class="flow">
+    <div class="stage"><div class="k">exists</div><div class="t">Generate take</div><div class="d">Gemini multi-speaker TTS → WAV in R2, contentHash, VAD sentences.</div></div>
+    <div class="stage"><div class="k">exists</div><div class="t">Tokenize</div><div class="d">Gemini Flash per line, validated surfaces. Add per-token kana reading in the same call.</div></div>
+    <div class="stage new"><div class="k">new</div><div class="t">Align</div><div class="d">Python service: MMS_FA forced alignment of readings against the WAV. Returns start/end per token.</div></div>
+    <div class="stage new"><div class="k">new</div><div class="t">Post-process</div><div class="d">TypeScript in webapp (<code>lib/dialogue/token-sync-auto.ts</code>): 65 ms shift anchored ~40 ms before RMS onset, line marks from the longest quiet run between lines, monotonic clamp, deterministic flags.</div></div>
+    <div class="stage new"><div class="k">new</div><div class="t">Write + QA</div><div class="d">Save tokenSync (source: auto) and marks; run deterministic checks; queue for review.</div></div>
+    <div class="stage"><div class="k">exists</div><div class="t">Publish</div><div class="d">Unchanged snapshot to dialogue_scenario, m4a with marks, public export.</div></div>
+  </div>
+
+  <h3>Stage contracts</h3>
+  <div class="tbl"><table>
+    <tr><th>Stage</th><th>Input</th><th>Output</th><th>Failure modes → handling</th></tr>
+    <tr><td>Tokenize</td><td>spoken line texts (from <code>scenarioLinesToConversation</code>)</td><td><code>{text, tokens:[{text, reading}]}</code> per line, cached by sha256(line text)</td><td>Surface not a substring → existing retry. Reading missing or non-kana → fall back to pykakasi in the aligner, flag line <code>reading-fallback</code>.</td></tr>
+    <tr><td>Align</td><td>signed R2 URL of the full untrimmed WAV, lines with token readings, sample rate</td><td><code>{lines:[{tokens:[{startSeconds, endSeconds, score}]}], alignerVersion}</code> in full-WAV seconds</td><td>Take does not match script (TTS dropped or added words, speaker swap): the line's mean score falls far below the scene median → flag <code>script-mismatch</code>, do not write stamps for that line. Audio &gt; 90 s: chunk at existing VAD sentence bounds. Service down: leave tokenSync tokens-only, surface error in Studio.</td></tr>
+    <tr><td>Post-process</td><td>aligner output, WAV samples (for RMS), existing marks</td><td><code>VariantTokenSync</code> with all starts stamped, <code>dialogueLineSwitchSamples</code></td><td>Predicted token start inside silence with no speech in the following 60 ms → flag <code>stamp-in-silence</code> (this caught 4 of the 13 worst tokens in the gold). Non-monotonic or gap &lt; 20 ms → clamp with existing <code>clampStamp</code> rules. Derived mark would clip speech (no silence between lines) → keep any existing human mark, else flag <code>no-gap</code>.</td></tr>
+    <tr><td>Write + QA</td><td>post-processed sync, flags</td><td>PATCH variant; <code>tokenSync.source = "auto"</code>, <code>tokenSync.flags[]</code>; review-queue row</td><td>Existing human stamps on this variant → never overwrite; require explicit "Re-stamp automatically". Content hash changed since generation → refuse, same as today's stale rule.</td></tr>
+  </table></div>
+
+  <h3>Persisted fields</h3>
+  <p>Add to the working <code>variantTokenSyncSchema</code>: <code>source: "auto" | "human" | "reviewed"</code>, <code>alignerVersion?: string</code>, <code>flags?: string[]</code>, and per-token optional <code>reading?: string</code>. On publish, carry only <code>source</code> through <code>publishedTokenSyncFromWorking</code> and <code>publishedTokenSyncSchema</code> so the app can distinguish reviewed from auto timing in telemetry. The Swift decoder in <code>DialogueScenarioCollection.swift</code> decodes fields by name and ignores extras, so adding an optional key is backwards compatible with shipped builds.</p>
+
+  <h3>Why not construct boundaries with per-line TTS and concatenation</h3>
+  <p>It stays on the list as a v2 option, but the gold shows it is not needed for boundaries: whole-take alignment recovered every speaker switch inside the silence gap, and Studio already suggests marks from VAD. Per-line synthesis also costs prosody: Gemini multi-speaker takes carry turn-taking intonation that isolated lines lose, and the first-turn voice-swap quirk noted in <code>gemini-tts.ts</code> would need handling per line. Revisit only if a real corpus shows overlapping speech or missing gaps.</p>
+
+  <h2 id="llm">4. LLM placement and cost</h2>
+  <div class="tbl"><table>
+    <tr><th>Step</th><th>Model</th><th>Role</th><th class="num">$ / scene</th><th>Keep or skip</th></tr>
+    <tr><td>Take generation</td><td>Gemini 3.1 Flash TTS</td><td>Audio (already in place)</td><td class="num">0.010</td><td>Keep. 40 s × 25 audio tokens/s at $10 per 1M output tokens.</td></tr>
+    <tr><td>Tokenize + readings</td><td>Gemini 2.5 Flash, temp 0, seed 42</td><td>Segmentation policy for learners; adds kana reading per token</td><td class="num">0.005</td><td>Keep. 16 calls × ~450 input tokens + ~80 output tokens at $0.30 / $2.50 per 1M. Cache by line text, so regenerated takes cost nothing here. Flash-Lite would cut this to ~$0.002 but has not been checked against the んです gluing rules.</td></tr>
+    <tr><td>Timing</td><td>None (MMS_FA on CPU)</td><td>Frame-level alignment</td><td class="num">0.001</td><td>Never an LLM. About 3 CPU-seconds per scene; ~$0.001 on Cloud Run or Modal CPU, no GPU.</td></tr>
+    <tr><td>QA triage</td><td>None</td><td>Deterministic checks</td><td class="num">0</td><td>Skip LLM. The failure modes we can detect (stamp in silence, script mismatch, no gap) are signal-level, not linguistic. An LLM listening to audio would cost more than the review minutes it saves at this volume.</td></tr>
+    <tr><td>Orchestration</td><td>None</td><td>Chained routes / MCP tool</td><td class="num">0</td><td>Skip LLM. The chain is fixed: generate → tokenize → align → write.</td></tr>
+  </table></div>
+  <p>Marginal cost is about $0.02 per scene, $0.15 per six-scene collection, and roughly $1 per curriculum unit if a unit is about five collections. At 200 scenes per month the whole pipeline is under $5. Fixed cost is the aligner service: a 1.2 GB model, warm CPU container, on the order of $10–20 per month, or near zero if run scale-to-zero with a 20 s cold start. Cost is not the constraint; editor minutes are.</p>
+  <p>Editor time today, per scene, is roughly listen-and-mark (2–3 min), tokenize (seconds), stamp about 75 tokens at real time with re-listens (6–8 min), and fixes (2–3 min): 10–14 minutes. With prefill the pass becomes a listen-through with corrections to flagged and single-character tokens, 2–4 minutes. Saving is about 8–10 minutes per scene, so a six-scene collection drops from over an hour to about 20 minutes. These are estimates from the interaction model, not measured; ticket 8 adds the timer that measures them.</p>
+
+  <h2 id="eval">5. Eval harness</h2>
+  <p>Gold is any <code>dialogue_scenario.token_sync</code> published with <code>source</code> human or reviewed. The harness compares an aligner output for the same variant and contentHash. Prototype implementation is <code>docs/karaoke-autotiming/eval_tokensync.py</code>; ticket 6 ports it to TypeScript so it runs in CI against the DB.</p>
+
+  <h3>Alignment policy when tokenization diverges</h3>
+  <ul>
+    <li>Lines are paired by index; a line whose trimmed text differs is skipped and counted as <code>line_text_mismatch</code>.</li>
+    <li>Tokens are mapped to character spans in the line text by sequential indexOf, the same rule as <code>tokenRangesInLine</code>. A gold token is matched when a predicted token starts at the same character offset.</li>
+    <li>Gold tokens whose start falls inside a predicted token count as <code>unmatched_merged</code>; predicted tokens starting mid-gold-token count as <code>extra_split</code>. Both are reported as rates, and Δ is computed only on matched tokens.</li>
+    <li>For end-to-end runs the pipeline's own tokenization is used, so tokenization drift shows up in coverage, not in timing. For aligner-only runs the gold tokenization is used, which isolates timing.</li>
+  </ul>
+
+  <h3>Metrics</h3>
+  <ul>
+    <li><b>Δ</b> = predicted start − gold start in ms, positive is late. Report median |Δ|, p95 |Δ|, signed median (bias), and share within ±50, ±100, ±150 ms.</li>
+    <li><b>Classes</b>: first-of-line, in-line, particle, single-character, post-pause (gold gap &gt; 350 ms before the token), mid-phrase. First-of-line is reported but excluded from the go/no-go bar.</li>
+    <li><b>Boundary</b>: derived line mark inside the silence gap between speakers (pass/fail), and |mark − human mark| for reference.</li>
+    <li><b>Acceptance</b>: share of lines with no token flagged and no token beyond 150 ms, which is the proxy for lines an editor will not touch.</li>
+    <li><b>Minutes saved</b>: measured in Studio as time from opening the take to publish, split by source.</li>
+  </ul>
+
+<pre><code>// scripts/eval-token-sync.ts (outline)
+const gold = await db.select().from(dialogueScenario)
+  .where(sql`token_sync->>'source' in ('human','reviewed')`);
+for (const scene of gold) {
+  const variant = await loadVariant(scene.publishedVariantId);
+  const pred = postProcess(await aligner.align(variant, tokensOf(scene.tokenSync)), variant);
+  rows.push(...compare(pred, scene.tokenSync));   // Δ per matched token + class labels
+}
+print(summary(rows, { classes: ['in-line','particle','single-char','post-pause'] }));
+assert(within(rows.inLine, 100) >= 0.80 &amp;&amp; median(rows.inLine) <= 70);   // v0 bar</code></pre>
+
+  <h2 id="thresholds">6. Go/no-go thresholds and phases</h2>
+  <div class="tbl"><table>
+    <tr><th>Phase</th><th>Ships</th><th>Bar (in-line tokens unless stated)</th><th>Status now</th></tr>
+    <tr><td><b>v0</b> aligner as prefill</td><td>Auto-stamp button in the token editor, marks suggested from onsets, human reviews every take</td><td>median |Δ| ≤ 70 ms; ≥ 80% within 100 ms; ≥ 90% within 150 ms; 100% of derived marks inside a silence gap; zero monotonic violations after clamp</td><td><span class="pill go">met, shipped</span> prototype at 150 ms: 47 ms, 83.5%, 92.6%, 45/45. Shipped 65 ms is judged on the onset bar below, not this one</td></tr>
+    <tr><td><b>v1</b> automated chain + review queue</td><td>Generate → tokenize → align runs without clicks; queue shows flagged lines; publish allowed with source auto after a reviewer marks the take reviewed</td><td>Against acoustic onsets on clean post-pause tokens: aligner scene-to-scene offset sd ≤ 25 ms and within-scene sd ≤ 110 ms (human gold: 63 / 155). Against a two-editor floor: aligner-vs-editor agreement within 100 ms no worse than editor-vs-editor minus 5 points. ≥ 80% of lines untouched by the reviewer; reviewer time ≤ 4 min per scene</td><td><span class="pill go">onset bar met</span> 15 ms / 79 ms on 38 scenes at the shipped 65 ms shift (prototype 20 / 107). Chain shipped (KA-7); queue pending (KA-8). <span class="pill flag">floor unmeasured</span> needs two editors on the same takes</td></tr>
+    <tr><td><b>v2</b> only if v1 metrics justify</td><td>Auto-publish without review for takes with zero flags; a Japanese-specific CTC model or per-line synthesis to shrink the tail</td><td>Aligner-vs-editor agreement at or above editor-vs-editor; auto-accepted lines with a reviewer correction &gt; 200 ms ≤ 2% over a month of takes</td><td><span class="pill crit">not yet</span></td></tr>
+  </table></div>
+  <p>Auto-accept is measured as lines the reviewer does not touch, not as an aligner confidence rate. The 80–90% target is realistic on the current numbers: 92.6% of in-line tokens are within 150 ms, and the flagged classes (single-character tokens, stamp-in-silence) concentrate the rest.</p>
+
+  <h2 id="tickets">7. Implementation tickets, in order</h2>
+
+  <div class="ticket"><div class="h"><span class="id">KA-1</span><span class="t">Schema: provenance and readings on tokenSync</span><span class="pill">webapp · S</span></div>
+    <p>In <code>lib/dialogue/types.ts</code> add optional <code>source</code>, <code>alignerVersion</code>, <code>flags</code> to <code>variantTokenSyncSchema</code>, optional <code>reading</code> on working tokens, and optional <code>source</code> on <code>publishedTokenSyncSchema</code>. Thread <code>source</code> through <code>publishedTokenSyncFromWorking</code> in <code>token-sync.ts</code>. Add a drizzle migration only if you want an indexed column for the queue; otherwise jsonb is enough.</p>
+    <ul><li>Done when the public export for a reviewed scene shows <code>tokenSync.source</code> and the iOS app still validates the payload.</li></ul></div>
+
+  <div class="ticket"><div class="h"><span class="id">KA-2</span><span class="t">Aligner service</span><span class="pill">new repo or services/aligner · M</span></div>
+    <p>Python FastAPI container: torchaudio MMS_FA, pykakasi fallback romanizer with the override table, <code>POST /align</code> taking a signed WAV URL and lines with token readings, returning start/end/score per token in full-WAV seconds. Start from <code>docs/karaoke-autotiming/align_mms.py</code>. Deploy on Cloud Run or Modal, CPU only, bearer token auth. Vercel env: <code>ALIGNER_URL</code>, <code>ALIGNER_TOKEN</code>.</p>
+    <ul><li>Done when the three gold scenes align in under 5 s each from a warm container and the output matches the prototype within a frame.</li></ul></div>
+
+  <div class="ticket"><div class="h"><span class="id">KA-3</span><span class="t">Post-process and auto-stamp route</span><span class="pill">webapp · M</span></div>
+    <p>New <code>lib/dialogue/token-sync-auto.ts</code> porting <code>postprocess.py</code>: a constant shift re-fitted so post-pause stamps land about 40 ms before the RMS onset (the −150 ms used in the prototype matched one editor's reaction time), onset snap using the RMS helpers already in <code>lib/tts/alignment.ts</code>, line marks derived from first-token onsets (gap midpoint clamped to 80–250 ms before onset), monotonic clamp via existing <code>clampStamp</code> logic, and the deterministic flags. New route <code>POST …/variants/[variantId]/auto-stamp</code> that fetches the WAV from R2, calls the service, post-processes, and PATCHes <code>tokenSync</code> (source auto) plus <code>dialogueLineSwitchSamples</code> when no marks exist.</p>
+    <ul><li>Never overwrite a tokenSync whose source is human or reviewed without <code>force: true</code>.</li><li>Done when running it on a fresh take of shizuoka-tea reproduces the eval numbers.</li></ul></div>
+
+  <div class="ticket"><div class="h"><span class="id">KA-4</span><span class="t">Studio UI: Auto-stamp and review state</span><span class="pill">webapp · M</span></div>
+    <p>In <code>token-sync-editor.tsx</code> add "Auto-stamp" beside Tokenize, a source badge (auto / reviewed), a flagged-token highlight, and a "Mark reviewed" action that sets source to reviewed. In <code>waveform-editor.tsx</code> show derived marks as suggestions the same way suggest-breaks does today.</p>
+    <ul><li>Done when an editor can go from generated take to reviewed tokenSync without tapping a single stamp on a clean take.</li></ul></div>
+
+  <div class="ticket"><div class="h"><span class="id">KA-5</span><span class="t">Tokenize returns readings</span><span class="pill">webapp · S</span></div>
+    <p>Extend the Gemini response schema in <code>gemini-tokenize.ts</code> to <code>{tokens:[{text, reading}]}</code> with the instruction that reading is kana for the surface, digits read as spoken (302 → さんまるに). Validate reading is kana; on failure keep the token and let the service fall back. Cache results by line text hash in <code>app_settings</code> or a small table.</p>
+    <ul><li>Done when 三〇二 and 302 align correctly without the hard-coded override.</li></ul></div>
+
+  <div class="ticket"><div class="h"><span class="id">KA-6</span><span class="t">Eval script in CI</span><span class="pill">webapp · S</span></div>
+    <p><code>scripts/eval-token-sync.ts</code> per the outline above, run with <code>pnpm eval:token-sync</code>. Prints the class table and fails on the v0 bar. Add a <code>--scenes</code> filter and a JSON output for tracking over time.</p>
+    <ul><li>Primary metric is against RMS acoustic onsets on clean post-pause tokens (offset median, within-scene sd, scene-to-scene sd), not against a single human; the human-gold table stays as a secondary view. Done when it reports the onset numbers for the 38 scenes and reproduces the first-hello human-gold table when run with <code>--shift 150</code>.</li></ul></div>
+
+  <div class="ticket"><div class="h"><span class="id">KA-7</span><span class="t">Chain generate → tokenize → align</span><span class="pill">webapp · S</span></div>
+    <p>After the variant insert in <code>variants/route.ts</code>, enqueue tokenize (cached) and auto-stamp; expose the same chain as an MCP tool <code>auto_stamp_take</code> next to <code>generate_take</code>. Surface progress in the Audio tab.</p>
+    <ul><li>Done when generating a take in Studio yields a stamped, flagged tokenSync with no further clicks.</li></ul></div>
+
+  <div class="ticket"><div class="h"><span class="id">KA-8</span><span class="t">Review queue and timing telemetry</span><span class="pill">webapp · M · v1</span></div>
+    <p>Studio page listing takes with source auto, sorted by flag count, showing flagged lines inline. Record open-to-publish time per take by source so the minutes-saved claim becomes a measurement.</p>
+    <ul><li>Done when a week of takes gives the v1 metrics table.</li></ul></div>
+
+  <div class="ticket"><div class="h"><span class="id">KA-9</span><span class="t">Gold expansion and human floor</span><span class="pill">content · S · v1</span></div>
+    <p>Gold volume is no longer the gap: 38 published scenes already carry human tokenSync. The gap is consistency. Have a second editor re-stamp four scenes (one each from first-hello, festival-day, home-setup, around-the-block) at 1× on the current Studio build, and record playback rate and build per stamping session going forward (a <code>stampedWith</code> field on the working tokenSync). That gives the editor-vs-editor floor the v1 bar needs and lets the eval exclude scenes stamped before the 0.5× fix.</p></div>
+
+  <p class="dim" style="margin-top:2.5rem">Prototype scripts, gold JSON for all 38 scenes, and the eval harness are in <code>docs/karaoke-autotiming/</code>. Numbers in this document come from those scripts run on 17 Sep 2026 against the live public export.</p>
+</div>

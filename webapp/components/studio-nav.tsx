@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AudioLinesIcon,
+  ListChecksIcon,
   BookOpenIcon,
   ChevronDownIcon,
   GraduationCapIcon,
@@ -12,6 +13,7 @@ import {
   MessagesSquareIcon,
   PieChartIcon,
   SettingsIcon,
+  WindIcon,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -42,6 +44,8 @@ const links: NavLink[] = [
   { href: "/content", label: "Grammar", icon: BookOpenIcon },
   { href: "/content/patterns", label: "Patterns", icon: LayersIcon },
   { href: "/content/coverage", label: "Coverage", icon: PieChartIcon },
+  { href: "/tts/review", label: "Review queue", icon: ListChecksIcon },
+  { href: "/tts/ambience", label: "Ambience", icon: WindIcon },
   { href: "/tts", label: "TTS Studio", icon: AudioLinesIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];

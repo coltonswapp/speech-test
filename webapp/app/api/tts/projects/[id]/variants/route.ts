@@ -1,15 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import type { NextRequest } from "next/server";
-import { asc, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
-import {
-  dialogueScenario,
-  ttsDialogueLine,
-  ttsProject,
-  ttsVariant,
-  ttsVariantSentence,
-} from "@/lib/db/schema";
+import { ttsProject, ttsVariant, ttsVariantSentence } from "@/lib/db/schema";
 import { synthesizeOpenAI, OPENAI_SAMPLE_RATE } from "@/lib/tts/openai";
 import {
   synthesizeGeminiConversation,
@@ -20,19 +14,32 @@ import { pcm16ToFloat32, pcm16ToWav } from "@/lib/tts/wav";
 import { align } from "@/lib/tts/alignment";
 import { putObject } from "@/lib/storage/r2";
 import { conversationContentHash } from "@/lib/tts/content-hash";
-import { scenarioLinesToConversation } from "@/lib/tts/scenario-conversation";
-import type { ConversationLine } from "@/lib/tts/scenario-conversation";
-import type { DialogueLine as ScenarioDialogueLine } from "@/lib/dialogue/types";
+import { loadConversationLines, UserFacingError } from "@/lib/tts/project-lines";
+import { alignerConfigured } from "@/lib/aligner/client";
+import {
+  getAutoStampJobs,
+  runAutoStampChain,
+  setAutoStampJob,
+} from "@/lib/dialogue/auto-stamp";
+
+// Generation plus the post-response auto-stamp chain (tokenize + align) can
+// take a few minutes on an uncached script.
+export const maxDuration = 300;
 
 export async function GET(
   _request: NextRequest,
   ctx: RouteContext<"/api/tts/projects/[id]/variants">
 ) {
   const { id } = await ctx.params;
-  const variants = await db.query.ttsVariant.findMany({
+  const rows = await db.query.ttsVariant.findMany({
     where: eq(ttsVariant.projectId, id),
     orderBy: [desc(ttsVariant.createdAt)],
   });
+  const jobs = await getAutoStampJobs(rows.map((v) => v.id));
+  const variants = rows.map((variant) => ({
+    ...variant,
+    autoStampJob: jobs.get(variant.id) ?? null,
+  }));
   return NextResponse.json({ variants });
 }
 
@@ -71,60 +78,6 @@ async function generateNarration(
   };
 }
 
-// Scenario-backed projects speak the scenario's current lines; ad-hoc tracks
-// keep their own tts_dialogue_line rows.
-async function loadConversationLines(
-  project: typeof ttsProject.$inferSelect
-): Promise<ConversationLine[]> {
-  if (project.sourceScenarioId) {
-    const scenario = await db.query.dialogueScenario.findFirst({
-      where: eq(dialogueScenario.id, project.sourceScenarioId),
-    });
-    if (!scenario) {
-      throw new UserFacingError("Source scenario no longer exists.");
-    }
-    const conversation = scenarioLinesToConversation(
-      scenario.lines as ScenarioDialogueLine[]
-    );
-    if (conversation.lines.length === 0) {
-      throw new UserFacingError(
-        "The scenario has no dialogue lines with a speaker and Japanese text."
-      );
-    }
-    // Keep the project's display fields in sync with the scenario so the TTS
-    // sidebar reflects what was actually spoken.
-    await db
-      .update(ttsProject)
-      .set({
-        speaker1Name: conversation.speaker1Name,
-        speaker2Name: conversation.speaker2Name,
-        promptText: conversation.lines
-          .map((line) => {
-            const name =
-              line.speaker === "speaker1"
-                ? (conversation.speaker1Name ?? "Speaker 1")
-                : (conversation.speaker2Name ?? "Speaker 2");
-            return `${name}: ${line.text}`;
-          })
-          .join("\n"),
-        updatedAt: new Date(),
-      })
-      .where(eq(ttsProject.id, project.id));
-    return conversation.lines;
-  }
-
-  const lines = await db.query.ttsDialogueLine.findMany({
-    where: eq(ttsDialogueLine.projectId, project.id),
-    orderBy: [asc(ttsDialogueLine.orderIndex)],
-  });
-  return lines
-    .filter((l) => l.text.trim().length > 0)
-    .map((l) => ({
-      speaker: l.speaker as "speaker1" | "speaker2",
-      text: l.text,
-    }));
-}
-
 async function generateConversation(
   project: typeof ttsProject.$inferSelect,
   overrides?: { speaker1Voice?: string; speaker2Voice?: string }
@@ -161,8 +114,6 @@ async function generateConversation(
     contentHash: conversationContentHash(lines),
   };
 }
-
-class UserFacingError extends Error {}
 
 const generateOverridesSchema = z
   .object({
@@ -245,10 +196,35 @@ export async function POST(
     );
   }
 
+  // Do not auto-select the newest take — selection stays an explicit user
+  // action in the Takes UI ("Use this take").
   await db
     .update(ttsProject)
-    .set({ selectedVariantId: variant.id, updatedAt: new Date() })
+    .set({ updatedAt: new Date() })
     .where(eq(ttsProject.id, id));
 
-  return NextResponse.json({ variant }, { status: 201 });
+  // KA-7: tokenize (cached) + align after the response is sent, so a fresh
+  // take arrives in Studio already stamped and flagged. Conversation takes
+  // only — narration has no per-line karaoke.
+  const chain = project.compositionMode === "conversation" && alignerConfigured();
+  const queuedAt = new Date().toISOString();
+  if (chain) {
+    await setAutoStampJob(variant.id, {
+      status: "queued",
+      startedAt: queuedAt,
+    });
+    after(() => runAutoStampChain(variant.id));
+  }
+
+  return NextResponse.json(
+    {
+      variant: {
+        ...variant,
+        autoStampJob: chain
+          ? { status: "queued", startedAt: queuedAt, updatedAt: queuedAt }
+          : null,
+      },
+    },
+    { status: 201 }
+  );
 }

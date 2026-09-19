@@ -5,6 +5,8 @@ import {
   unpublishScenarioAudio,
 } from "@/lib/dialogue/publish";
 
+export const maxDuration = 120;
+
 export async function POST(
   _request: NextRequest,
   ctx: RouteContext<"/api/content/dialogues/[collectionId]/scenarios/[slug]/publish">

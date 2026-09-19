@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useRef, type MouseEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronDown, ExternalLink, TriangleAlert } from "lucide-react";
+import { Check, ChevronDown, ExternalLink, TriangleAlert } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,7 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { dialogueApi } from "@/lib/dialogue/client";
+import { dialogueApi, formatPublishedAt } from "@/lib/dialogue/client";
 import { ttsApi } from "@/lib/tts/client";
 import { scenarioLinesToConversation } from "@/lib/tts/scenario-conversation";
 import { isSpokenLine, isStageLine, type DialogueLine } from "@/lib/dialogue/types";
@@ -23,6 +23,7 @@ import { VariantList } from "@/components/tts/variant-list";
 import { VoiceSelect } from "@/components/tts/voice-select";
 import type { EditableDialogueLine } from "@/components/tts/dialogue-line-editor";
 import { flushPendingTokenSync } from "@/lib/dialogue/token-sync-persist";
+import { isPublishKaraokeStale } from "@/lib/dialogue/publish-lockstep";
 
 // The scenario's audio workspace: voices, take generation, staleness, publish,
 // and the shared take list/waveform editor. The scenario's lines are the single
@@ -202,16 +203,31 @@ export function ScenarioAudioPanel({
   const scenario = scenarioQuery.data?.scenario;
   const speakableLineCount = conversation.lines.length;
   const selectedVariant = project?.selectedVariantId ?? null;
-  const selectedVariantHash = variantsQuery.data?.variants.find(
+  const selectedVariantRow = variantsQuery.data?.variants.find(
     (v) => v.id === selectedVariant
-  )?.contentHash;
+  ) ?? null;
+  const selectedVariantHash = selectedVariantRow?.contentHash;
   const selectedTakeIsStale =
     !!selectedVariantHash && selectedVariantHash !== data.currentContentHash;
   const publishedAudioUrl = scenario?.publishedAudioUrl ?? null;
-  const publishStale =
+  const publishedAtLabel = formatPublishedAt(scenario?.publishedAt);
+  const mixHash = scenarioQuery.data?.ambienceMixHash ?? null;
+  const audioStale =
     !!publishedAudioUrl &&
-    !!scenario?.publishedContentHash &&
-    scenario.publishedContentHash !== data.currentContentHash;
+    ((!!scenario?.publishedContentHash &&
+      scenario.publishedContentHash !== data.currentContentHash) ||
+      (scenario?.publishedAmbienceHash ?? null) !== mixHash);
+  const karaokeStale =
+    !!publishedAudioUrl &&
+    !!selectedVariantRow &&
+    isPublishKaraokeStale({
+      publishedTokenSync: scenario?.tokenSync,
+      take: selectedVariantRow,
+      lines,
+      contentHash: data.currentContentHash,
+    });
+  const publishStale = audioStale || karaokeStale;
+  const publishCurrent = !!publishedAudioUrl && !publishStale;
   const canPublish = !!selectedVariant && !hasUnsavedChanges;
 
   const editorLines: EditableDialogueLine[] = (() => {
@@ -320,7 +336,7 @@ export function ScenarioAudioPanel({
             </div>
           )}
 
-            <div className="flex flex-col gap-3 rounded-md border p-4">
+          <div className="flex flex-col gap-3 rounded-md border p-4">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-medium">Publish scenario audio</h3>
               {publishedAudioUrl ? (
@@ -338,22 +354,41 @@ export function ScenarioAudioPanel({
                 <Badge variant="outline">unpublished</Badge>
               )}
             </div>
+            {publishedAtLabel ? (
+              <p className="text-xs text-muted-foreground">
+                Last published {publishedAtLabel}.
+              </p>
+            ) : null}
             <p className="text-sm text-muted-foreground">
-              Encodes this scenario&apos;s selected take as m4a and uploads it to
-              the public CDN. Prefer <span className="font-medium">Publish lesson</span>{" "}
-              on the collection page to ship the full lesson JSON with every
-              scenario&apos;s URL; use this to republish one scenario.
+              Encodes this scenario&apos;s selected take as dry m4a and uploads
+              it to the public CDN. If a bed is attached, publish also ships
+              that loop plus gain in the lesson JSON — the app plays it as a
+              second track. Same action as{" "}
+              <span className="font-medium">Publish</span> on the take&apos;s{" "}
+              <span className="font-medium">Ambience</span> tab. Prefer{" "}
+              <span className="font-medium">Publish lesson</span> on the
+              collection page to ship the full lesson JSON with every
+              scenario&apos;s URL. Karaoke timing stays aligned to the dry take.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <Button
                 onClick={() => publishMutation.mutate()}
-                disabled={!canPublish || publishMutation.isPending}
+                disabled={
+                  !canPublish || publishMutation.isPending || publishCurrent
+                }
               >
-                {publishMutation.isPending
-                  ? "Publishing…"
-                  : publishedAudioUrl
-                    ? "Republish"
-                    : "Publish"}
+                {publishMutation.isPending ? (
+                  "Publishing…"
+                ) : publishCurrent ? (
+                  <>
+                    <Check className="mr-1 size-3.5" />
+                    Published
+                  </>
+                ) : publishedAudioUrl ? (
+                  "Republish"
+                ) : (
+                  "Publish"
+                )}
               </Button>
               {publishedAudioUrl && (
                 <Button
@@ -383,8 +418,11 @@ export function ScenarioAudioPanel({
             )}
             {publishStale && (
               <p className="text-xs text-amber-600 dark:text-amber-400">
-                Dialogue text changed since the last publish — republish to update
-                the learner clip.
+                {audioStale && karaokeStale
+                  ? "Dialogue, bed, or karaoke changed since the last publish — republish so audio and sync stay in lock step."
+                  : karaokeStale
+                    ? "Token karaoke changed since the last publish — republish to ship it with the clip."
+                    : "Dialogue or ambience bed changed since the last publish — republish to update the learner clip and bed metadata."}
               </p>
             )}
           </div>
@@ -398,6 +436,16 @@ export function ScenarioAudioPanel({
           currentContentHash={data.currentContentHash}
           selectedVariantId={selectedVariant}
           hasUnsavedChanges={hasUnsavedChanges}
+          ambience={
+            scenario
+              ? {
+                  collectionId,
+                  scenarioSlug,
+                  scenario,
+                  ambienceMixHash: mixHash,
+                }
+              : undefined
+          }
           headerActions={
             <div className="flex flex-wrap items-center gap-2">
               <GenerateTakeControl

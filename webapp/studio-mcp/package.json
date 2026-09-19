@@ -1,0 +1,26 @@
+{
+  "name": "shizen-studio-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local MCP server wrapping Shizen Content Studio REST APIs for Hitomi/Hana.",
+  "type": "module",
+  "bin": {
+    "shizen-studio-mcp": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "mcp": "tsx src/index.ts"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

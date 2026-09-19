@@ -3,18 +3,27 @@ import "server-only";
 import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { ttsProject, ttsVariant } from "@/lib/db/schema";
+import { isPublishKaraokeStale } from "@/lib/dialogue/publish-lockstep";
 import {
   buildScenarioReadiness,
   type ScenarioReadiness,
 } from "@/lib/dialogue/scenario-readiness";
 import type { DialogueLine } from "@/lib/dialogue/types";
+import { currentAmbienceMixHash } from "@/lib/tts/ambience-mix";
 import { conversationContentHash } from "@/lib/tts/content-hash";
 import { scenarioLinesToConversation } from "@/lib/tts/scenario-conversation";
+import { isPublishStale } from "@/lib/dialogue/publish";
 
 export type ScenarioReadinessSource = {
   id: string;
   publishedAudioUrl: string | null;
   publishedVariantId: string | null;
+  publishedContentHash?: string | null;
+  publishedAmbienceHash?: string | null;
+  ambienceAssetId?: string | null;
+  ambienceGainDb?: number | null;
+  ambienceOffsetSeconds?: number | null;
+  ambienceLayers?: unknown;
   lines: unknown;
   quiz: unknown;
   tokenSync: unknown;
@@ -60,6 +69,10 @@ export async function loadScenarioReadinessById(
             dialogueLineSwitchSamples: true,
             tokenSync: true,
             contentHash: true,
+            sampleRate: true,
+            audioByteCount: true,
+            trimSampleLower: true,
+            trimSampleUpper: true,
           },
         })
       : [];
@@ -75,23 +88,44 @@ export async function loadScenarioReadinessById(
     const selectedVariant = selectedVariantId
       ? variantById.get(selectedVariantId)
       : undefined;
-    // Prefer the published take's line marks; fall back to the selected take
-    // so drafts still show timing progress.
-    const timingVariant = publishedVariant ?? selectedVariant;
-    const workingSyncVariant = publishedVariant ?? selectedVariant;
     const spokenLines = scenarioLinesToConversation(
       scenario.lines as DialogueLine[],
     ).lines;
     const contentHash = conversationContentHash(spokenLines);
+    const mixHash = currentAmbienceMixHash({
+      assetId: scenario.ambienceAssetId ?? null,
+      gainDb: scenario.ambienceGainDb ?? null,
+      offsetSeconds: scenario.ambienceOffsetSeconds ?? null,
+      layers: scenario.ambienceLayers,
+    });
+    const audioStale = isPublishStale(
+      {
+        publishedAudioUrl: scenario.publishedAudioUrl,
+        publishedContentHash: scenario.publishedContentHash ?? null,
+        publishedAmbienceHash: scenario.publishedAmbienceHash ?? null,
+        lines: scenario.lines,
+      },
+      mixHash,
+    );
+    const take = selectedVariant ?? publishedVariant;
+    const karaokeStale = isPublishKaraokeStale({
+      publishedTokenSync: scenario.tokenSync,
+      take,
+      lines: scenario.lines,
+      contentHash,
+    });
     result.set(
       scenario.id,
       buildScenarioReadiness({
         publishedAudioUrl: scenario.publishedAudioUrl,
+        audioStale,
+        karaokeStale,
         lines: scenario.lines,
         quiz: scenario.quiz,
         tokenSync: scenario.tokenSync,
-        markSamples: timingVariant?.dialogueLineSwitchSamples,
-        workingTokenSync: workingSyncVariant?.tokenSync,
+        publishedMarks: publishedVariant?.dialogueLineSwitchSamples,
+        workingMarks: selectedVariant?.dialogueLineSwitchSamples,
+        workingTokenSync: take?.tokenSync,
         contentHash,
       }),
     );

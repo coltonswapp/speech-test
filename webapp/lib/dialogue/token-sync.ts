@@ -28,9 +28,51 @@ export function parseVariantTokenSync(raw: unknown): VariantTokenSync | null {
   return parsed.success ? parsed.data : null;
 }
 
+/** Clear amber QA flags when an editor accepts auto stamps as reviewed. */
+export function clearFlagsForReviewed(sync: VariantTokenSync): VariantTokenSync {
+  if (!sync.flags?.length) {
+    return { ...sync, source: "reviewed" };
+  }
+  const { flags: _flags, ...rest } = sync;
+  return { ...rest, source: "reviewed" };
+}
+
+/** Drop QA flags on one token. Leaves source as-is (take still needs Mark reviewed). */
+export function clearFlagsForToken(
+  sync: VariantTokenSync,
+  lineIndex: number,
+  tokenIndex: number
+): VariantTokenSync {
+  const flags = sync.flags;
+  if (!flags?.length) return sync;
+  const nextFlags = flags.filter(
+    (flag) => !(flag.lineIndex === lineIndex && flag.tokenIndex === tokenIndex)
+  );
+  if (nextFlags.length === flags.length) return sync;
+  if (nextFlags.length === 0) {
+    const { flags: _flags, ...rest } = sync;
+    return rest;
+  }
+  return { ...sync, flags: nextFlags };
+}
+
+/** Drop every QA flag. Leaves source as-is (take still needs Mark reviewed). */
+export function clearAllFlags(sync: VariantTokenSync): VariantTokenSync {
+  if (!sync.flags?.length) return sync;
+  const { flags: _flags, ...rest } = sync;
+  return rest;
+}
+
 export function parsePublishedTokenSync(raw: unknown): PublishedTokenSync | null {
   const parsed = publishedTokenSyncSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
+}
+
+export function isKaraokeSnapshotsEqual(
+  left: PublishedTokenSync,
+  right: PublishedTokenSync,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function textsMatch(sync: VariantTokenSync, spokenTexts: string[]): boolean {
@@ -55,7 +97,10 @@ export function tokenSyncStatus(
 }
 
 export function tokenSyncFromSurfaces(params: {
-  lines: Array<{ text: string; tokens: string[] }>;
+  lines: Array<{
+    text: string;
+    tokens: Array<string | { text: string; reading?: string }>;
+  }>;
   contentHash: string;
   lineStartSeconds?: Array<number | null | undefined> | null;
 }): VariantTokenSync {
@@ -64,13 +109,17 @@ export function tokenSyncFromSurfaces(params: {
     contentHash: params.contentHash,
     lines: params.lines.map((line, lineIndex) => ({
       text: line.text,
-      tokens: line.tokens.map((text, tokenIndex) => ({
-        text,
-        startSeconds:
-          tokenIndex === 0 && params.lineStartSeconds?.[lineIndex] != null
-            ? params.lineStartSeconds[lineIndex]!
-            : null,
-      })),
+      tokens: line.tokens.map((token, tokenIndex) => {
+        const surface = typeof token === "string" ? { text: token } : token;
+        return {
+          text: surface.text,
+          startSeconds:
+            tokenIndex === 0 && params.lineStartSeconds?.[lineIndex] != null
+              ? params.lineStartSeconds[lineIndex]!
+              : null,
+          ...(surface.reading ? { reading: surface.reading } : {}),
+        };
+      }),
     })),
   };
 }
@@ -204,7 +253,7 @@ function proposedStampSeconds(
   return pulledBack > floor ? pulledBack : Math.max(clipSeconds, floor);
 }
 
-function clampStamp(params: {
+export function clampStamp(params: {
   proposed: number;
   previous: number;
   window: LineWindow | null;
@@ -647,10 +696,7 @@ export function applyTokenSelection(
 
   for (const range of ranges) {
     if (range.tokenIndex < first.tokenIndex) {
-      nextTokens.push({
-        text: range.text,
-        startSeconds: range.startSeconds,
-      });
+      nextTokens.push(line.tokens[range.tokenIndex]);
     }
   }
 
@@ -681,10 +727,7 @@ export function applyTokenSelection(
 
   for (const range of ranges) {
     if (range.tokenIndex > last.tokenIndex) {
-      nextTokens.push({
-        text: range.text,
-        startSeconds: range.startSeconds,
-      });
+      nextTokens.push(line.tokens[range.tokenIndex]);
     }
   }
 
@@ -821,21 +864,71 @@ export function shiftTokenSyncSeconds(
   };
 }
 
-export function activeTokenIndexForTime(
-  sync: VariantTokenSync | PublishedTokenSync,
-  lineIndex: number,
+/** Latest stamped token on one line whose start is at or before `timeSeconds`. */
+export function activeTokenIndexInLine(
+  tokens: Array<{ startSeconds?: number | null }>,
   timeSeconds: number
 ): number | null {
-  const line = sync.lines[lineIndex];
-  if (!line) return null;
   let active: number | null = null;
-  for (let i = 0; i < line.tokens.length; i++) {
-    const start = line.tokens[i].startSeconds;
+  for (let i = 0; i < tokens.length; i++) {
+    const start = tokens[i]?.startSeconds;
     if (start == null) break;
     if (timeSeconds >= start) active = i;
     else break;
   }
   return active;
+}
+
+export function activeTokenIndexForTime(
+  sync: {
+    lines: Array<{ tokens: Array<{ startSeconds?: number | null }> }>;
+  },
+  lineIndex: number,
+  timeSeconds: number
+): number | null {
+  const line = sync.lines[lineIndex];
+  if (!line) return null;
+  return activeTokenIndexInLine(line.tokens, timeSeconds);
+}
+
+/**
+ * Latest stamped token whose start is at or before `timeSeconds`, across all
+ * lines. Prefer per-line `activeTokenIndexForTime` when matching Token timing
+ * karaoke (editor highlights each line independently).
+ */
+export function activeTokenAtTime(
+  lines: Array<{ tokens: Array<{ startSeconds?: number | null }> }>,
+  timeSeconds: number
+): { lineIndex: number; tokenIndex: number } | null {
+  let best: { lineIndex: number; tokenIndex: number; start: number } | null =
+    null;
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const tokens = lines[lineIndex]?.tokens ?? [];
+    for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
+      const start = tokens[tokenIndex]?.startSeconds;
+      if (start == null) continue;
+      if (timeSeconds >= start && (!best || start >= best.start)) {
+        best = { lineIndex, tokenIndex, start };
+      }
+    }
+  }
+  return best
+    ? { lineIndex: best.lineIndex, tokenIndex: best.tokenIndex }
+    : null;
+}
+
+/** Line-switch marks as export seconds, same rule as publish encode. */
+export function lineSwitchSecondsFromMarks(params: {
+  markSamples: number[] | null | undefined;
+  trimSampleLower?: number | null;
+  sampleRate: number;
+}): number[] {
+  const marks = params.markSamples ?? [];
+  if (marks.length === 0 || params.sampleRate <= 0) return [];
+  const trimLower = params.trimSampleLower ?? 0;
+  return marks
+    .map((sample) => (sample - trimLower) / params.sampleRate)
+    .filter((seconds) => seconds > 0);
 }
 
 export function exportLineWindows(params: {
@@ -953,6 +1046,7 @@ export function publishedTokenSyncFromWorking(params: {
     variantId,
     contentHash,
     lines,
+    ...(sync.source ? { source: sync.source } : {}),
   });
   return published.success ? published.data : null;
 }

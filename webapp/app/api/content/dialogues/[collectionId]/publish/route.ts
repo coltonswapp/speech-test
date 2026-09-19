@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { publishLesson } from "@/lib/dialogue/publish";
 
+export const maxDuration = 300;
+
 // Publishes a whole lesson (dialogue collection): uploads CDN audio for every
 // scenario with a selected take, then returns the full lesson JSON with accurate
 // publishedAudioUrl fields for Shizen.

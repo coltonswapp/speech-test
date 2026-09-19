@@ -82,12 +82,16 @@ private struct DialogueScenarioCollectionFile: Decodable {
         let highlights: HighlightsRecord?
         let quiz: [QuizRecord]?
         let tokenSync: TokenSyncRecord?
+        let ambienceId: String?
+        let ambienceUrl: String?
+        let ambienceGainDb: Double?
 
         enum CodingKeys: String, CodingKey {
             case id, menuTitle, menuSubtitle, japanese, romaji, english
             case targetSubstring, audioKey, publishedAudioUrl, publishedVariantId
             case publishedContentHash, publishedAt, grammarPointIDs, thumbnailUrl
             case scenario, highlights, quiz, tokenSync
+            case ambienceId, ambienceUrl, ambienceGainDb
         }
 
         init(from decoder: Decoder) throws {
@@ -111,6 +115,9 @@ private struct DialogueScenarioCollectionFile: Decodable {
             quiz = try container.decodeIfPresent([QuizRecord].self, forKey: .quiz)
             // Karaoke is optional — a bad stamp payload must not drop the lesson.
             tokenSync = try? container.decode(TokenSyncRecord.self, forKey: .tokenSync)
+            ambienceId = try container.decodeIfPresent(String.self, forKey: .ambienceId)
+            ambienceUrl = try container.decodeIfPresent(String.self, forKey: .ambienceUrl)
+            ambienceGainDb = try container.decodeIfPresent(Double.self, forKey: .ambienceGainDb)
         }
     }
 
@@ -358,6 +365,11 @@ private extension DialogueScenarioCollection {
                     record.tokenSync?.model(),
                     spokenTexts: lines.filter(\.isSpokenLine).map(\.japanese),
                     publishedContentHash: record.publishedContentHash
+                ),
+                ambience: AmbienceBedRef.fromPublished(
+                    id: record.ambienceId,
+                    urlString: record.ambienceUrl,
+                    gainDb: record.ambienceGainDb
                 )
             )
             let grammarPatterns = (record.highlights?.grammarPatterns ?? []).map {

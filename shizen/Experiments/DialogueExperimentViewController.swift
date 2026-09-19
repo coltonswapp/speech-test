@@ -311,6 +311,7 @@ class DialogueExperimentViewController: UIViewController {
     }()
 
     private var audioPlayer: AVAudioPlayer?
+    private let ambienceBedPlayer = AmbienceBedPlayer()
     private var resolvedAudioURL: URL?
     private var alignedLines: [AlignedTimeLine] = []
     private var clipDuration: TimeInterval = 0
@@ -1781,6 +1782,7 @@ class DialogueExperimentViewController: UIViewController {
     // MARK: - Audio
 
     private func resolveLessonAudio() {
+        ambienceBedPlayer.prepare(example.ambience)
         GrammarAudioCatalog.ensureLocalURL(
             publishedAudioUrl: example.publishedAudioUrl,
             audioKey: example.audioKey,
@@ -1877,6 +1879,15 @@ class DialogueExperimentViewController: UIViewController {
         audioPlayer?.rate = playbackSpeed
     }
 
+    private func startAmbienceBed(fromStart: Bool) {
+        ambienceBedPlayer.prepare(example.ambience)
+        PlaybackAudioSession.activateForPlayback { [weak self] success in
+            guard let self, success else { return }
+            guard self.playbackPhase == .playing else { return }
+            self.ambienceBedPlayer.play(fromStart: fromStart)
+        }
+    }
+
     private func startPlayback(fromBeginning: Bool) {
         guard let player = makePlayer() else { return }
 
@@ -1890,6 +1901,8 @@ class DialogueExperimentViewController: UIViewController {
             heldInlineQuestionBoundaries = []
             didHoldTrailingStageLines = false
         }
+
+        startAmbienceBed(fromStart: fromBeginning)
 
         if fromBeginning, dialogueShouldHoldForStageLinesDuringPlayback() {
             let leading = stageLineDisplayIndices(beforeSpokenIndex: 0)
@@ -1967,6 +1980,7 @@ class DialogueExperimentViewController: UIViewController {
         cancelStageLineHold()
         cancelInlineQuestionHold()
         audioPlayer?.pause()
+        ambienceBedPlayer.pause()
         playbackPhase = .paused
         stopProgressDisplayLink()
         releaseListeningMetersToRest()
@@ -1979,6 +1993,7 @@ class DialogueExperimentViewController: UIViewController {
         scrollListeningBubblesIntoView()
         playbackResumeStartedAt = CACurrentMediaTime()
         player.play()
+        ambienceBedPlayer.play(fromStart: false)
         applyPlaybackSpeedToPlayer()
         playbackPhase = .playing
         startProgressDisplayLink()
@@ -1996,6 +2011,7 @@ class DialogueExperimentViewController: UIViewController {
         releaseListeningMetersToRest()
         seekTargetLineIndex = nil
         audioPlayer?.stop()
+        ambienceBedPlayer.stop()
         if resetPosition {
             audioPlayer?.currentTime = 0
             heldStageBoundaries = []
@@ -2037,6 +2053,7 @@ class DialogueExperimentViewController: UIViewController {
         pendingFinishAfterStageHold = false
         stopProgressDisplayLink()
         releaseListeningMetersToRest()
+        ambienceBedPlayer.stop()
         playbackPhase = .finished
         setActiveLine(nil, animated: true)
         updateElapsedLabel(currentTime: clipDuration)

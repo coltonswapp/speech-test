@@ -98,21 +98,36 @@ export function ScenarioReadinessChips({
   hrefBase?: string;
 }) {
   const audioTone =
-    readiness.audio === "published" ? ("ok" as const) : ("draft" as const);
+    readiness.audio === "published"
+      ? ("ok" as const)
+      : readiness.audio === "stale"
+        ? ("warn" as const)
+        : ("draft" as const);
   const timingTone =
     readiness.timing === "done"
       ? ("ok" as const)
-      : readiness.timing === "partial"
+      : readiness.timing === "ready" || readiness.timing === "partial"
         ? ("warn" as const)
         : ("muted" as const);
   const syncTone =
     readiness.sync === "complete"
       ? ("ok" as const)
-      : readiness.sync === "stale"
+      : readiness.sync === "stale" || readiness.sync === "ready"
         ? ("warn" as const)
         : ("muted" as const);
+  const quizStatus =
+    readiness.quiz ??
+    (readiness.quizCount <= 0
+      ? "missing"
+      : readiness.audio === "published"
+        ? "published"
+        : "ready");
   const quizTone =
-    readiness.quizCount > 0 ? ("ok" as const) : ("muted" as const);
+    quizStatus === "published"
+      ? ("ok" as const)
+      : quizStatus === "ready"
+        ? ("warn" as const)
+        : ("muted" as const);
   const quizLabel =
     readiness.quizCount === 0 ? "—" : `quiz ${readiness.quizCount}`;
 
@@ -126,10 +141,12 @@ export function ScenarioReadinessChips({
           audioTitle ??
           (readiness.audio === "published"
             ? "Published audio"
-            : "No published audio yet")
+            : readiness.audio === "stale"
+              ? "Published audio is stale vs current lines or bed"
+              : "No published audio yet")
         }
       >
-        {readiness.audio === "published" ? "audio" : "draft"}
+        {readiness.audio === "draft" ? "draft" : "audio"}
       </ReadinessChip>
       <ReadinessChip
         hrefBase={hrefBase}
@@ -137,10 +154,12 @@ export function ScenarioReadinessChips({
         tone={timingTone}
         title={
           readiness.timing === "done"
-            ? "Line timing complete"
-            : readiness.timing === "partial"
-              ? "Line timing partial"
-              : "Line timing missing"
+            ? "Line timing published with the current clip"
+            : readiness.timing === "ready"
+              ? "Line timing ready — republish to ship with audio"
+              : readiness.timing === "partial"
+                ? "Line timing partial"
+                : "Line timing missing"
         }
       >
         timing
@@ -151,12 +170,14 @@ export function ScenarioReadinessChips({
         tone={syncTone}
         title={
           readiness.sync === "complete"
-            ? "Token karaoke complete"
-            : readiness.sync === "tokens-only"
-              ? "Tokens present, times incomplete"
-              : readiness.sync === "stale"
-                ? "Token sync stale vs current lines"
-                : "No token sync"
+            ? "Token karaoke published with the current clip"
+            : readiness.sync === "ready"
+              ? "Token karaoke ready — republish to ship with audio"
+              : readiness.sync === "tokens-only"
+                ? "Tokens present, times incomplete"
+                : readiness.sync === "stale"
+                  ? "Token karaoke stale vs the last publish"
+                  : "No token sync"
         }
       >
         {syncChipLabel(readiness.sync)}
@@ -166,11 +187,15 @@ export function ScenarioReadinessChips({
         tab={CHIP_TAB.quiz}
         tone={quizTone}
         title={
-          readiness.quizCount === 0
+          quizStatus === "missing"
             ? "No quiz"
             : `${readiness.quizCount} quiz question${readiness.quizCount === 1 ? "" : "s"}${
                 readiness.quizWithEvidence > 0
                   ? ` (${readiness.quizWithEvidence} with evidence links)`
+                  : ""
+              }${
+                quizStatus === "ready"
+                  ? " — republish audio to keep the lesson in lock step"
                   : ""
               }`
         }

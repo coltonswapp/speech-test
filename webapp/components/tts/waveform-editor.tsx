@@ -32,13 +32,31 @@ import {
   SquareSplitHorizontal,
   X,
 } from "lucide-react";
-import { ttsApi, type Variant } from "@/lib/tts/client";
+import {
+  autoStampInProgress,
+  ttsApi,
+  type Variant,
+} from "@/lib/tts/client";
 import { cn } from "@/lib/utils";
+import {
+  STUDIO_PAUSE_TAKE_AUDIO,
+  STUDIO_RESTART_MARRIED_MIX,
+  STUDIO_STOP_AMBIENCE_PREVIEW,
+  STUDIO_TOGGLE_MARRIED_MIX,
+} from "@/lib/tts/ambience";
+import {
+  AmbienceMixTab,
+  type AmbienceMixContext,
+} from "@/components/tts/ambience-mix-tab";
 import type { EditableDialogueLine } from "@/components/tts/dialogue-line-editor";
 import {
   TokenSyncEditor,
   type TokenSyncActions,
 } from "@/components/dialogue/token-sync-editor";
+import {
+  AutoStampControls,
+  useAutoStampControls,
+} from "@/components/tts/auto-stamp-controls";
 import type { VariantTokenSync } from "@/lib/dialogue/types";
 import { enqueueTokenSyncSave } from "@/lib/dialogue/token-sync-persist";
 import { stampMediaTimeNow } from "@/lib/tts/media-timing";
@@ -224,12 +242,23 @@ export function WaveformEditor({
   dialogueLines,
   currentContentHash,
   hasUnsavedChanges,
+  focusLineIndex = null,
+  focusTimingMode = null,
+  ambience,
+  isSelectedTake = false,
 }: {
   projectId: string;
   variant: Variant;
   dialogueLines?: EditableDialogueLine[];
   currentContentHash?: string;
   hasUnsavedChanges?: boolean;
+  /** Review-queue deep link: scroll/select this spoken line in Token timing. */
+  focusLineIndex?: number | null;
+  /** Review-queue deep link: open Line timing or Token timing tab. */
+  focusTimingMode?: "lines" | "tokens" | null;
+  /** Scene-level bed; when set, the take editor gains an Ambience tab. */
+  ambience?: AmbienceMixContext;
+  isSelectedTake?: boolean;
 }) {
   const queryClient = useQueryClient();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -281,7 +310,18 @@ export function WaveformEditor({
   } | null>(null);
   const [playerBarHeight, setPlayerBarHeight] = useState(0);
   const [sectionHeaderHeight, setSectionHeaderHeight] = useState(0);
-  const [timingMode, setTimingMode] = useState<"lines" | "tokens">("lines");
+  const [timingMode, setTimingMode] = useState<"lines" | "tokens" | "ambience">(
+    focusTimingMode === "tokens" || focusTimingMode === "lines"
+      ? focusTimingMode
+      : "lines"
+  );
+  const [mixMarried, setMixMarried] = useState(false);
+  const mixMarriedRef = useRef(false);
+  mixMarriedRef.current = mixMarried;
+  const mixLiveOnCdn =
+    !!ambience?.scenario.publishedAudioUrl &&
+    (ambience.scenario.publishedAmbienceHash ?? null) ===
+      (ambience.ambienceMixHash ?? null);
   const [playbackRate, setPlaybackRate] =
     useState<(typeof PLAYBACK_RATES)[number]>(1);
   const playbackRateRef = useRef(playbackRate);
@@ -296,6 +336,9 @@ export function WaveformEditor({
     canStamp: false,
     canUndo: false,
   });
+  // Marks the aligner placed on the last auto-stamp; tinted amber until the
+  // editor moves one or marks the take reviewed.
+  const [derivedMarkSamples, setDerivedMarkSamples] = useState<number[]>([]);
 
   // Page-level auto-scroll fights the user's own scrolling on touch devices,
   // so default it off there; the Follow toggle lets either side override.
@@ -371,6 +414,21 @@ export function WaveformEditor({
     scrollRowIntoView(activeRowIndex);
   }, [activeRowIndex, timingMode, followPlayhead]);
 
+  // Review-queue deep link: open Token/Line timing and scroll the spoken line.
+  useEffect(() => {
+    if (focusTimingMode === "tokens" || focusTimingMode === "lines") {
+      setTimingMode(focusTimingMode);
+    }
+  }, [focusTimingMode]);
+
+  useEffect(() => {
+    if (focusLineIndex == null || timingMode !== "lines") return;
+    const id = window.requestAnimationFrame(() => {
+      scrollRowIntoView(focusLineIndex);
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [focusLineIndex, timingMode]);
+
   // Track chrome heights for scroll-margin on active sentence rows.
   useEffect(() => {
     const playerEl = playerBarRef.current;
@@ -419,6 +477,7 @@ export function WaveformEditor({
   function persistTokenSync(tokenSync: VariantTokenSync | null) {
     const variantId = variantRef.current.id;
     patchVariantInCache({ ...variantRef.current, tokenSync }, { refetch: false });
+    void queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
     void enqueueTokenSyncSave(() =>
       ttsApi
         .updateVariant(projectId, variantId, { tokenSync })
@@ -432,10 +491,50 @@ export function WaveformEditor({
   }
 
   function setMarks(next: number[]) {
+    setDerivedMarkSamples([]);
     updateVariantMutation.mutate({
       dialogueLineSwitchSamples: next.length > 0 ? next : null,
     });
   }
+
+  async function autoStamp(options: { force?: boolean }) {
+    const result = await ttsApi.autoStamp(projectId, variantRef.current.id, options);
+    patchVariantInCache(result.variant);
+    setDerivedMarkSamples(
+      result.marksDerived ? (result.variant.dialogueLineSwitchSamples ?? []) : []
+    );
+    return result;
+  }
+
+  async function abortAutoStamp() {
+    const result = await ttsApi.cancelAutoStamp(
+      projectId,
+      variantRef.current.id
+    );
+    await queryClient.invalidateQueries({ queryKey: ["tts-variants", projectId] });
+    return result;
+  }
+
+  const autoStampSuccessHandlerRef = useRef<
+    ((result: Awaited<ReturnType<typeof autoStamp>>) => void) | null
+  >(null);
+
+  const autoStampControls = useAutoStampControls({
+    onAutoStamp: autoStamp,
+    onAbort: abortAutoStamp,
+    jobLive: autoStampInProgress(variant),
+    onSuccess: (result) => autoStampSuccessHandlerRef.current?.(result),
+  });
+
+  const autoStampDisabled =
+    spokenLines.length === 0 ||
+    !!hasUnsavedChanges ||
+    !(currentContentHash ?? variant.contentHash);
+
+  const showDerivedMarks =
+    derivedMarkSamples.length > 0 && variant.tokenSync?.source === "auto";
+  const isDerivedMark = (sample: number) =>
+    showDerivedMarks && derivedMarkSamples.includes(sample);
 
   useEffect(() => {
     const containerEl = containerRef.current;
@@ -538,7 +637,11 @@ export function WaveformEditor({
       seekSyncCleanupRef.current = null;
       setCurrentTime(mediaClockSeconds(ws, ws.getCurrentTime()));
     });
-    ws.on("play", () => !cancelled && setIsPlaying(true));
+    ws.on("play", () => {
+      if (cancelled) return;
+      setIsPlaying(true);
+      window.dispatchEvent(new Event(STUDIO_STOP_AMBIENCE_PREVIEW));
+    });
     ws.on("pause", () => !cancelled && setIsPlaying(false));
     ws.on("finish", () => !cancelled && setIsPlaying(false));
     ws.on("error", (err) => {
@@ -546,6 +649,11 @@ export function WaveformEditor({
       console.error("wavesurfer load error", err);
       toast.error("Failed to load audio waveform.");
     });
+
+    function pauseTakeForMixPreview() {
+      if (!cancelled) ws.pause();
+    }
+    window.addEventListener(STUDIO_PAUSE_TAKE_AUDIO, pauseTakeForMixPreview);
 
     // Thicken the playhead while the user is actively scrubbing so it's easier
     // to grab/track, then shrink it back once the drag ends. Styling the
@@ -613,6 +721,7 @@ export function WaveformEditor({
 
     return () => {
       cancelled = true;
+      window.removeEventListener(STUDIO_PAUSE_TAKE_AUDIO, pauseTakeForMixPreview);
       seekSyncCleanupRef.current?.();
       seekSyncCleanupRef.current = null;
       resizeObserver.disconnect();
@@ -898,6 +1007,7 @@ export function WaveformEditor({
 
   /** Mark in whichever timing mode is active: a line switch, or the next token. */
   function markAtPlayhead() {
+    if (timingModeRef.current === "ambience") return;
     if (timingModeRef.current === "lines") {
       markLineSwitchAtPlayhead();
     } else {
@@ -922,6 +1032,7 @@ export function WaveformEditor({
         e.preventDefault();
         toggleMainPlayback();
       } else if (e.key === "m" || e.key === "M") {
+        if (timingModeRef.current === "ambience") return;
         // Token mode lets you drag-select text to split/merge tokens; don't
         // stamp while a selection is in progress.
         const selection = window.getSelection();
@@ -1006,6 +1117,10 @@ export function WaveformEditor({
 
   /** Main transport: clears per-row loop so full-track QC can run through the map. */
   function toggleMainPlayback() {
+    if (timingModeRef.current === "ambience" && mixMarriedRef.current) {
+      window.dispatchEvent(new Event(STUDIO_TOGGLE_MARRIED_MIX));
+      return;
+    }
     setLoopingRowIndex(null);
     resumeAudioContext();
     wavesurferRef.current?.playPause();
@@ -1013,6 +1128,10 @@ export function WaveformEditor({
 
   /** Jump back to the start and play the whole take from the top. */
   function restartPlayback() {
+    if (timingModeRef.current === "ambience" && mixMarriedRef.current) {
+      window.dispatchEvent(new Event(STUDIO_RESTART_MARRIED_MIX));
+      return;
+    }
     const ws = wavesurferRef.current;
     if (!ws) return;
     setLoopingRowIndex(null);
@@ -1341,7 +1460,18 @@ export function WaveformEditor({
 
   const playerTools = (
     <>
-      <div className="relative w-full">
+      <div
+        className={cn(
+          "flex w-full flex-col gap-1",
+          timingMode === "ambience" && mixMarried && "hidden"
+        )}
+      >
+        {timingMode === "ambience" && (
+          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Dialogue
+          </span>
+        )}
+        <div className="relative w-full">
         <div ref={containerRef} className="h-[72px] w-full" />
         {isConversation && timingMode === "lines" && duration > 0 && (
           <div className="pointer-events-none absolute inset-0 z-[1]">
@@ -1349,17 +1479,43 @@ export function WaveformEditor({
               <div
                 key={`mark-guide-${i}`}
                 data-mark-guide={i}
-                className={`absolute top-0 bottom-0 -translate-x-1/2 ${
+                className={cn(
+                  "absolute top-0 bottom-0 -translate-x-1/2",
                   dragging?.index === i || selectedMarkIndex === i
-                    ? "w-0.5 bg-emerald-500/55"
-                    : "w-px bg-emerald-500/35"
-                }`}
+                    ? "w-0.5"
+                    : "w-px",
+                  isDerivedMark(sample)
+                    ? dragging?.index === i || selectedMarkIndex === i
+                      ? "bg-amber-500/60"
+                      : "bg-amber-500/40"
+                    : dragging?.index === i || selectedMarkIndex === i
+                      ? "bg-emerald-500/55"
+                      : "bg-emerald-500/35"
+                )}
                 style={{ left: `${(sample / totalSamples) * 100}%` }}
               />
             ))}
           </div>
         )}
+        </div>
       </div>
+
+      {ambience && (
+        <div className={timingMode === "ambience" ? "contents" : "hidden"}>
+          <AmbienceMixTab
+            context={ambience}
+            projectId={projectId}
+            variantId={variant.id}
+            takeDuration={duration}
+            playheadSeconds={currentTime}
+            takePlaying={timingMode === "ambience" && isPlaying}
+            isSelectedTake={isSelectedTake}
+            hasUnsavedChanges={hasUnsavedChanges}
+            active={timingMode === "ambience"}
+            onMarriedChange={setMixMarried}
+          />
+        </div>
+      )}
 
       {isConversation && timingMode === "lines" && duration > 0 && (
         <div
@@ -1411,14 +1567,18 @@ export function WaveformEditor({
                   selected && "z-20"
                 )}
                 style={{ left: `${(sample / totalSamples) * 100}%` }}
-                title={`Line switch ${i + 1} · ${(sample / variant.sampleRate).toFixed(2)}s — drag to move, right-click/long-press to delete`}
+                title={`${isDerivedMark(sample) ? "Suggested by auto-stamp. " : ""}Line switch ${i + 1} · ${(sample / variant.sampleRate).toFixed(2)}s — drag to move, right-click/long-press to delete`}
               >
                 <div
                   className={cn(
                     "mx-auto h-0 w-0 border-x-[5px] border-t-[6px] border-x-transparent sm:border-x-4 sm:border-t-4",
-                    selected || isDragging
-                      ? "border-t-emerald-400"
-                      : "border-t-emerald-500",
+                    isDerivedMark(sample)
+                      ? selected || isDragging
+                        ? "border-t-amber-400"
+                        : "border-t-amber-500"
+                      : selected || isDragging
+                        ? "border-t-emerald-400"
+                        : "border-t-emerald-500",
                     selected && "drop-shadow-[0_0_3px_rgba(52,211,153,0.9)]"
                   )}
                 />
@@ -1426,6 +1586,12 @@ export function WaveformEditor({
             );
           })}
         </div>
+      )}
+      {isConversation && timingMode === "lines" && showDerivedMarks && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Amber marks were placed by auto-stamp from each speaker&apos;s onset.
+          Drag any that clip speech; they turn green once you touch them.
+        </p>
       )}
 
       {isConversation &&
@@ -1463,7 +1629,12 @@ export function WaveformEditor({
         </button>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-2 sm:gap-3",
+          timingMode === "ambience" && mixMarried && "hidden"
+        )}
+      >
         <div className="flex items-center gap-1">
           <Button
             size="icon"
@@ -1490,7 +1661,7 @@ export function WaveformEditor({
             )}
           </Button>
         </div>
-        {isConversation && (
+        {isConversation && timingMode !== "ambience" && (
           <>
             <Button
               size="sm"
@@ -1601,6 +1772,12 @@ export function WaveformEditor({
               Stamps land ~{Math.round(latencyMs * playbackRate)}ms of media time before the cursor to offset audio output latency (wall delay × rate).
             </>
           )}
+        </p>
+      )}
+      {isConversation && timingMode === "ambience" && !mixMarried && (
+        <p className="text-xs text-muted-foreground">
+          Play hears the dry take plus every bed in its window. Drag a clip to
+          place it, lock the mix, then encode & listen for the ducked publish mix.
         </p>
       )}
 
@@ -1753,29 +1930,42 @@ export function WaveformEditor({
             ref={sectionHeaderRef}
             className="sticky top-14 z-20 flex flex-col gap-2 bg-background pb-2"
           >
-            <Tabs
-              value={timingMode}
-              onValueChange={(value) => {
-                if (value === "lines" || value === "tokens") {
-                  setLoopingRowIndex(null);
-                  setIsTrimMode(false);
-                  setIsCutMode(false);
-                  setDragging(null);
-                  setSelectedMarkIndex(null);
-                  setMarkMenu(null);
-                  setTimingMode(value);
-                }
-              }}
-            >
-              <TabsList className="h-auto min-h-10 touch-manipulation">
-                <TabsTrigger value="lines" className="min-h-9 px-3">
-                  Line timing
-                </TabsTrigger>
-                <TabsTrigger value="tokens" className="min-h-9 px-3">
-                  Token timing
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex flex-wrap items-center gap-2">
+              <Tabs
+                value={timingMode}
+                onValueChange={(value) => {
+                  if (value === "lines" || value === "tokens" || value === "ambience") {
+                    setLoopingRowIndex(null);
+                    setIsTrimMode(false);
+                    setIsCutMode(false);
+                    setDragging(null);
+                    setSelectedMarkIndex(null);
+                    setMarkMenu(null);
+                    setTimingMode(value);
+                  }
+                }}
+              >
+                <TabsList className="h-auto min-h-10 touch-manipulation">
+                  <TabsTrigger value="lines" className="min-h-9 px-3">
+                    Line timing
+                  </TabsTrigger>
+                  <TabsTrigger value="tokens" className="min-h-9 px-3">
+                    Token timing
+                  </TabsTrigger>
+                  {ambience ? (
+                    <TabsTrigger value="ambience" className="min-h-9 px-3">
+                      Ambience
+                    </TabsTrigger>
+                  ) : null}
+                </TabsList>
+              </Tabs>
+              {timingMode !== "ambience" && (
+              <AutoStampControls
+                state={autoStampControls}
+                disabled={autoStampDisabled}
+              />
+              )}
+            </div>
             {timingMode === "lines" && (
               <>
                 <p className="text-sm font-medium">Sentence map</p>
@@ -1812,6 +2002,18 @@ export function WaveformEditor({
             )}
             {timingMode === "tokens" && (
               <p className="text-sm font-medium">Token karaoke</p>
+            )}
+            {timingMode === "ambience" && (
+              <>
+                <p className="text-sm font-medium">
+                  {mixMarried ? "Baked preview" : "Ambience bed"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {mixMarried
+                    ? "Studio-only bake for a level check. Publish still ships dry dialogue plus a looping bed."
+                    : "Dialogue on top, a continuous bed underneath. The app loops the first bed; extra layers stay Studio-only."}
+                </p>
+              </>
             )}
           </div>
           {timingMode === "lines" && (
@@ -1972,6 +2174,7 @@ export function WaveformEditor({
               actionsRef={tokenActionsRef}
               onAvailabilityChange={setTokenActionState}
               onGetPlayhead={heardPlayheadSeconds}
+              focusLineIndex={focusLineIndex}
               onPlayLine={(lineIndex) => {
                 const ws = wavesurferRef.current;
                 if (!ws) return;
@@ -1998,6 +2201,9 @@ export function WaveformEditor({
               onPlayFromSeconds={playFromSeconds}
               playingLineIndex={loopingRowIndex}
               onPersist={persistTokenSync}
+              autoStampControls={autoStampControls}
+              autoStampDisabled={autoStampDisabled}
+              onAutoStampSuccessRef={autoStampSuccessHandlerRef}
             />
           )}
           {/* Holds layout space while the player is fixed to the viewport bottom. */}

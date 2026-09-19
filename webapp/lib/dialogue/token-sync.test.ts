@@ -1,15 +1,26 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  applyTokenSelection,
+  clearFlagsForReviewed,
+  clearFlagsForToken,
+  clearAllFlags,
   clearStampsFrom,
   midpointSplitOffset,
+  publishedTokenSyncFromWorking,
   restampToken,
   seekSecondsBeforeToken,
   splitTokenAt,
+  activeTokenAtTime,
+  activeTokenIndexInLine,
   TOKEN_STAMP_LOOKBACK_SECONDS,
   type LineWindow,
 } from "./token-sync";
-import type { VariantTokenSync } from "./types";
+import {
+  publishedTokenSyncSchema,
+  variantTokenSyncSchema,
+  type VariantTokenSync,
+} from "./types";
 
 function syncWithTimes(
   times: Array<number | null>
@@ -159,5 +170,226 @@ describe("splitTokenAt", () => {
     const sync = gluedSync();
     assert.equal(splitTokenAt(sync, 0, 0, 0), sync);
     assert.equal(splitTokenAt(sync, 0, 0, 99), sync);
+  });
+});
+
+describe("tokenSync provenance (KA-1)", () => {
+  const stamped: VariantTokenSync = {
+    version: 1,
+    contentHash: "hash",
+    lines: [
+      {
+        text: "今日はいい天気",
+        tokens: [
+          { text: "今日は", startSeconds: 0.1, reading: "きょうは" },
+          { text: "いい", startSeconds: 0.5, reading: "いい" },
+          { text: "天気", startSeconds: 0.9, reading: "てんき" },
+        ],
+      },
+    ],
+  };
+  const publishParams = {
+    variantId: "v1",
+    contentHash: "hash",
+    spokenTexts: ["今日はいい天気"],
+    windows: null,
+    sampleRate: 24000,
+  };
+
+  it("working schema accepts source, alignerVersion, flags and readings", () => {
+    const parsed = variantTokenSyncSchema.safeParse({
+      ...stamped,
+      source: "auto",
+      alignerVersion: "mms-fa-1",
+      flags: [
+        { code: "stamp-in-silence", lineIndex: 0, tokenIndex: 1 },
+        { code: "script-mismatch", lineIndex: 0, detail: "score 0.02" },
+      ],
+    });
+    assert.ok(parsed.success);
+    assert.equal(parsed.data.source, "auto");
+    assert.equal(parsed.data.flags?.length, 2);
+    assert.equal(parsed.data.lines[0].tokens[0].reading, "きょうは");
+  });
+
+  it("working schema still accepts a legacy sync with none of the new keys", () => {
+    const legacy = {
+      version: 1,
+      contentHash: "hash",
+      lines: [{ text: "はい", tokens: [{ text: "はい", startSeconds: null }] }],
+    };
+    const parsed = variantTokenSyncSchema.safeParse(legacy);
+    assert.ok(parsed.success);
+    assert.equal(parsed.data.source, undefined);
+  });
+
+  it("working schema rejects an unknown source or flag code", () => {
+    assert.equal(
+      variantTokenSyncSchema.safeParse({ ...stamped, source: "robot" }).success,
+      false
+    );
+    assert.equal(
+      variantTokenSyncSchema.safeParse({
+        ...stamped,
+        flags: [{ code: "made-up", lineIndex: 0 }],
+      }).success,
+      false
+    );
+  });
+
+  it("clearFlagsForReviewed flips source and drops amber flags", () => {
+    const reviewed = clearFlagsForReviewed({
+      ...stamped,
+      source: "auto",
+      flags: [
+        { code: "stamp-in-silence", lineIndex: 0, tokenIndex: 1 },
+        { code: "no-gap", lineIndex: 1 },
+      ],
+    });
+    assert.equal(reviewed.source, "reviewed");
+    assert.equal("flags" in reviewed, false);
+  });
+
+  it("clearFlagsForToken drops that token's flags and keeps source and line flags", () => {
+    const auto: VariantTokenSync = {
+      ...stamped,
+      source: "auto",
+      flags: [
+        { code: "stamp-in-silence", lineIndex: 0, tokenIndex: 1 },
+        { code: "no-gap", lineIndex: 0, tokenIndex: 1 },
+        { code: "script-mismatch", lineIndex: 0 },
+      ],
+    };
+    const next = clearFlagsForToken(auto, 0, 1);
+    assert.equal(next.source, "auto");
+    assert.deepEqual(next.flags, [{ code: "script-mismatch", lineIndex: 0 }]);
+    assert.equal(clearFlagsForToken(auto, 0, 2), auto);
+    const last = clearFlagsForToken(
+      { ...stamped, source: "auto", flags: [{ code: "no-gap", lineIndex: 0, tokenIndex: 0 }] },
+      0,
+      0
+    );
+    assert.equal(last.source, "auto");
+    assert.equal("flags" in last, false);
+  });
+
+  it("clearAllFlags drops every flag and keeps source", () => {
+    const auto: VariantTokenSync = {
+      ...stamped,
+      source: "auto",
+      flags: [
+        { code: "stamp-in-silence", lineIndex: 0, tokenIndex: 1 },
+        { code: "script-mismatch", lineIndex: 0 },
+      ],
+    };
+    const next = clearAllFlags(auto);
+    assert.equal(next.source, "auto");
+    assert.equal("flags" in next, false);
+    assert.equal(clearAllFlags(stamped), stamped);
+  });
+
+  it("publish carries source and drops flags, alignerVersion and readings", () => {
+    const published = publishedTokenSyncFromWorking({
+      ...publishParams,
+      sync: {
+        ...stamped,
+        source: "reviewed",
+        alignerVersion: "mms-fa-1",
+        flags: [{ code: "no-gap", lineIndex: 0 }],
+      },
+    });
+    assert.ok(published);
+    assert.equal(published.source, "reviewed");
+    assert.equal("flags" in published, false);
+    assert.equal("alignerVersion" in published, false);
+    assert.deepEqual(Object.keys(published.lines[0].tokens[0]), [
+      "text",
+      "startSeconds",
+    ]);
+    assert.ok(publishedTokenSyncSchema.safeParse(published).success);
+  });
+
+  it("publish omits source when the working sync has none", () => {
+    const published = publishedTokenSyncFromWorking({
+      ...publishParams,
+      sync: stamped,
+    });
+    assert.ok(published);
+    assert.equal("source" in published, false);
+  });
+
+  it("applyTokenSelection keeps readings on tokens it does not touch", () => {
+    // Re-select the middle token only; neighbours must survive intact.
+    const next = applyTokenSelection(stamped, 0, 3, 5);
+    // Selecting exactly an existing token is a no-op.
+    assert.equal(next, null);
+    const merged = applyTokenSelection(stamped, 0, 3, 7);
+    assert.ok(merged);
+    assert.deepEqual(merged.lines[0].tokens[0], {
+      text: "今日は",
+      startSeconds: 0.1,
+      reading: "きょうは",
+    });
+    assert.equal(merged.lines[0].tokens[1].text, "いい天気");
+    assert.equal(merged.lines[0].tokens[1].reading, undefined);
+  });
+});
+
+describe("activeTokenAtTime", () => {
+  const lines = [
+    {
+      tokens: [
+        { startSeconds: 0.1 },
+        { startSeconds: 0.5 },
+        { startSeconds: 0.9 },
+      ],
+    },
+    {
+      tokens: [
+        { startSeconds: 1.2 },
+        { startSeconds: 1.6 },
+        { startSeconds: null },
+      ],
+    },
+  ];
+
+  it("returns null before the first stamp", () => {
+    assert.equal(activeTokenAtTime(lines, 0), null);
+  });
+
+  it("follows the latest started token across lines", () => {
+    assert.deepEqual(activeTokenAtTime(lines, 0.5), {
+      lineIndex: 0,
+      tokenIndex: 1,
+    });
+    assert.deepEqual(activeTokenAtTime(lines, 1.0), {
+      lineIndex: 0,
+      tokenIndex: 2,
+    });
+    assert.deepEqual(activeTokenAtTime(lines, 1.4), {
+      lineIndex: 1,
+      tokenIndex: 0,
+    });
+    assert.deepEqual(activeTokenAtTime(lines, 2.0), {
+      lineIndex: 1,
+      tokenIndex: 1,
+    });
+  });
+});
+
+describe("activeTokenIndexInLine", () => {
+  const tokens = [
+    { startSeconds: 0.1 },
+    { startSeconds: 0.5 },
+    { startSeconds: 0.9 },
+    { startSeconds: null },
+  ];
+
+  it("matches Token timing: latest start on this line at or before time", () => {
+    assert.equal(activeTokenIndexInLine(tokens, 0), null);
+    assert.equal(activeTokenIndexInLine(tokens, 0.1), 0);
+    assert.equal(activeTokenIndexInLine(tokens, 0.49), 0);
+    assert.equal(activeTokenIndexInLine(tokens, 0.5), 1);
+    assert.equal(activeTokenIndexInLine(tokens, 2.0), 2);
   });
 });

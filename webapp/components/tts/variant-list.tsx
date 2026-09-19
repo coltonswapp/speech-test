@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { MoreVertical } from "lucide-react";
@@ -19,10 +20,83 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { ttsApi } from "@/lib/tts/client";
+import {
+  autoStampElapsedMs,
+  autoStampInProgress,
+  formatAutoStampDuration,
+  ttsApi,
+  type AutoStampJob,
+  type Variant,
+} from "@/lib/tts/client";
 import { WaveformEditor } from "@/components/tts/waveform-editor";
 import type { EditableDialogueLine } from "@/components/tts/dialogue-line-editor";
+import type { AmbienceMixContext } from "@/components/tts/ambience-mix-tab";
 import { cn } from "@/lib/utils";
+
+function useNowMs(active: boolean, intervalMs = 500): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(id);
+  }, [active, intervalMs]);
+  return now;
+}
+
+function AutoStampJobBadge({
+  job,
+  nowMs,
+}: {
+  job: AutoStampJob;
+  nowMs: number;
+}) {
+  const ms = autoStampElapsedMs(job, nowMs);
+  if (job.status === "queued" || job.status === "running") {
+    return (
+      <Badge
+        variant="outline"
+        className="animate-pulse border-amber-500/50 text-amber-600 dark:text-amber-400"
+        title="Tokenizing and aligning this take in the background"
+      >
+        Auto-stamping {formatAutoStampDuration(ms, { live: true })}
+      </Badge>
+    );
+  }
+  if (job.status === "error") {
+    return (
+      <Badge
+        variant="outline"
+        className="border-rose-500/50 text-rose-600 dark:text-rose-400"
+        title={job.message ?? "Auto-stamp failed"}
+      >
+        Auto-stamp failed · {formatAutoStampDuration(ms)}
+      </Badge>
+    );
+  }
+  if (job.status === "cancelled") {
+    return (
+      <Badge
+        variant="outline"
+        className="text-muted-foreground"
+        title="Auto-stamp was aborted"
+      >
+        Aborted · {formatAutoStampDuration(ms)}
+      </Badge>
+    );
+  }
+  if (job.status === "done") {
+    return (
+      <Badge
+        variant="outline"
+        className="border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
+        title="Background auto-stamp finished"
+      >
+        Stamped · {formatAutoStampDuration(ms)}
+      </Badge>
+    );
+  }
+  return null;
+}
 
 export function VariantList({
   projectId,
@@ -32,6 +106,7 @@ export function VariantList({
   hasUnsavedChanges,
   headerActions,
   emptyHint,
+  ambience,
 }: {
   projectId: string;
   dialogueLines?: EditableDialogueLine[];
@@ -44,15 +119,41 @@ export function VariantList({
   headerActions?: ReactNode;
   /** Empty-state copy when there are no takes yet. */
   emptyHint?: string;
+  /** Scene-level ambience mix; shown as an Ambience tab on each take. */
+  ambience?: AmbienceMixContext;
 }) {
   const queryClient = useQueryClient();
+  // Review queue deep-links a specific take (?take=<variantId>), optional line
+  // (?line=N) and Token timing tab (?timing=tokens).
+  const searchParams = useSearchParams();
+  const requestedTakeId = searchParams.get("take");
+  const requestedLineRaw = searchParams.get("line");
+  const requestedLineIndex = (() => {
+    if (requestedLineRaw == null || requestedLineRaw === "") return null;
+    const n = Number.parseInt(requestedLineRaw, 10);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  })();
+  const requestedTiming = searchParams.get("timing");
+  const focusTimingMode =
+    requestedTiming === "tokens" || requestedTiming === "lines"
+      ? requestedTiming
+      : requestedLineIndex != null
+        ? ("tokens" as const)
+        : null;
   const { data, isLoading } = useQuery({
     queryKey: ["tts-variants", projectId],
     queryFn: () => ttsApi.listVariants(projectId),
+    // Poll while a fresh take is being tokenized/aligned in the background.
+    refetchInterval: (query) =>
+      query.state.data?.variants.some(autoStampInProgress) ? 3000 : false,
   });
 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  const variants = useMemo(() => data?.variants ?? [], [data?.variants]);
+  const anyJobLive = variants.some(autoStampInProgress);
+  const nowMs = useNowMs(anyJobLive);
 
   const selectMutation = useMutation({
     mutationFn: (variantId: string) =>
@@ -100,7 +201,7 @@ export function VariantList({
   });
 
   const regenerateMutation = useMutation({
-    mutationFn: (variant: NonNullable<typeof data>["variants"][number]) => {
+    mutationFn: (variant: Variant) => {
       const isConversation = variant.voice.includes("/");
       if (isConversation) {
         const [speaker1Voice, speaker2Voice] = variant.voice.split("/");
@@ -136,23 +237,28 @@ export function VariantList({
     onError: (error) => toast.error(error.message),
   });
 
-  const variants = data?.variants ?? [];
+  const abortMutation = useMutation({
+    mutationFn: (variantId: string) => ttsApi.cancelAutoStamp(projectId, variantId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tts-variants", projectId] });
+      toast.success("Auto-stamp aborted.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const selectionEnabled = selectedVariantId !== undefined;
   const variantIdSet = useMemo(
     () => new Set(variants.map((variant) => variant.id)),
     [variants]
   );
-
-  useEffect(() => {
-    setSelectedIds((prev) => {
-      if (prev.size === 0) return prev;
-      const next = new Set([...prev].filter((id) => variantIdSet.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [variantIdSet]);
+  const effectiveSelectedIds = useMemo(
+    () => new Set([...selectedIds].filter((id) => variantIdSet.has(id))),
+    [selectedIds, variantIdSet]
+  );
 
   const allSelected =
-    variants.length > 0 && variants.every((variant) => selectedIds.has(variant.id));
+    variants.length > 0 &&
+    variants.every((variant) => effectiveSelectedIds.has(variant.id));
 
   function toggleSelected(variantId: string) {
     setSelectedIds((prev) => {
@@ -177,7 +283,7 @@ export function VariantList({
   }
 
   function confirmBulkDelete() {
-    const ids = [...selectedIds];
+    const ids = [...effectiveSelectedIds];
     if (ids.length === 0) return;
     const label =
       ids.length === 1
@@ -225,21 +331,21 @@ export function VariantList({
               />
               {selectedIds.size === 0
                 ? "Select takes"
-                : `${selectedIds.size} selected`}
+                : `${effectiveSelectedIds.size} selected`}
             </label>
             <Button
               type="button"
               size="sm"
               variant="destructive"
               className="ml-auto"
-              disabled={selectedIds.size === 0 || bulkDeleteMutation.isPending}
+              disabled={effectiveSelectedIds.size === 0 || bulkDeleteMutation.isPending}
               onClick={confirmBulkDelete}
             >
               {bulkDeleteMutation.isPending
                 ? "Deleting…"
-                : selectedIds.size === 0
+                : effectiveSelectedIds.size === 0
                   ? "Delete selected"
-                  : `Delete ${selectedIds.size} selected`}
+                  : `Delete ${effectiveSelectedIds.size} selected`}
             </Button>
           </div>
         )}
@@ -252,7 +358,13 @@ export function VariantList({
           </p>
         )}
         {variants.length > 0 && (
-          <Accordion defaultValue={[variants[0].id]}>
+          <Accordion
+            defaultValue={[
+              requestedTakeId && variants.some((v) => v.id === requestedTakeId)
+                ? requestedTakeId
+                : variants[0].id,
+            ]}
+          >
             {variants.map((variant) => {
               const isSelected = selectionEnabled
                 ? variant.id === selectedVariantId
@@ -261,7 +373,14 @@ export function VariantList({
                 !!currentContentHash &&
                 !!variant.contentHash &&
                 variant.contentHash !== currentContentHash;
-              const checked = selectedIds.has(variant.id);
+              const checked = effectiveSelectedIds.has(variant.id);
+              const job = variant.autoStampJob ?? null;
+              const jobLive = autoStampInProgress(variant);
+              const showAutoStampsBadge =
+                !jobLive &&
+                variant.tokenSync?.source === "auto" &&
+                job?.status !== "error" &&
+                job?.status !== "cancelled";
               return (
                 <AccordionItem key={variant.id} value={variant.id}>
                   <div className="flex min-w-0 items-center gap-1">
@@ -303,6 +422,24 @@ export function VariantList({
                             Text changed
                           </Badge>
                         )}
+                        {job && <AutoStampJobBadge job={job} nowMs={nowMs} />}
+                        {showAutoStampsBadge && (
+                          <Badge
+                            variant="outline"
+                            className="border-amber-500/50 text-amber-600 dark:text-amber-400"
+                            title="Stamped automatically — review in the Tokens tab, then Mark reviewed"
+                          >
+                            auto stamps
+                          </Badge>
+                        )}
+                        {variant.tokenSync?.source === "reviewed" && (
+                          <Badge
+                            variant="outline"
+                            className="border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
+                          >
+                            reviewed
+                          </Badge>
+                        )}
                         {!!currentContentHash && !variant.contentHash && (
                           <span
                             className="text-xs text-muted-foreground"
@@ -314,7 +451,29 @@ export function VariantList({
                       </span>
                     </AccordionTrigger>
                     {!selectionMode && (
-                      <div className="ml-auto flex shrink-0 items-center">
+                      <div className="ml-auto flex shrink-0 items-center gap-1">
+                        {jobLive && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="min-h-10 touch-manipulation md:min-h-8"
+                            disabled={
+                              abortMutation.isPending &&
+                              abortMutation.variables === variant.id
+                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              abortMutation.mutate(variant.id);
+                            }}
+                            title="Cancel tokenize/align so this take does not write stamps"
+                          >
+                            {abortMutation.isPending &&
+                            abortMutation.variables === variant.id
+                              ? "Aborting…"
+                              : "Abort"}
+                          </Button>
+                        )}
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             render={
@@ -383,6 +542,18 @@ export function VariantList({
                         dialogueLines={dialogueLines}
                         currentContentHash={currentContentHash}
                         hasUnsavedChanges={hasUnsavedChanges}
+                        focusLineIndex={
+                          requestedTakeId === variant.id
+                            ? requestedLineIndex
+                            : null
+                        }
+                        focusTimingMode={
+                          requestedTakeId === variant.id
+                            ? focusTimingMode
+                            : null
+                        }
+                        ambience={ambience}
+                        isSelectedTake={isSelected}
                       />
                     </div>
                   </AccordionPanel>

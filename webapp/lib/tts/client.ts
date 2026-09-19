@@ -1,3 +1,4 @@
+import type { TokenSyncFlag } from "@/lib/dialogue/types";
 import { formatApiError } from "@/lib/api-error";
 import type { VariantTokenSync } from "@/lib/dialogue/types";
 
@@ -61,6 +62,111 @@ export type Variant = {
   provider: string;
   contentHash: string | null;
   tokenSync: VariantTokenSync | null;
+  /** Background generate → tokenize → align chain state; null when idle. */
+  autoStampJob?: AutoStampJob | null;
+};
+
+export type AutoStampJob = {
+  status: "queued" | "running" | "done" | "error" | "cancelled";
+  message?: string;
+  /** ISO time when the job was first queued (stable for elapsed duration). */
+  startedAt: string;
+  updatedAt: string;
+  finishedAt?: string;
+};
+
+export function autoStampInProgress(variant: Pick<Variant, "autoStampJob">): boolean {
+  const status = variant.autoStampJob?.status;
+  return status === "queued" || status === "running";
+}
+
+/** Elapsed ms for a job: startedAt → finishedAt (or now while in flight). */
+export function autoStampElapsedMs(
+  job: Pick<AutoStampJob, "startedAt" | "finishedAt">,
+  nowMs = Date.now()
+): number {
+  const start = new Date(job.startedAt).getTime();
+  const end = job.finishedAt ? new Date(job.finishedAt).getTime() : nowMs;
+  return Math.max(0, end - start);
+}
+
+/** Live label while running (`3.2s…`) or final (`took 8.2s`). */
+export function formatAutoStampDuration(ms: number, opts?: { live?: boolean }): string {
+  const seconds = ms / 1000;
+  const body = seconds < 10 ? `${seconds.toFixed(1)}s` : `${Math.round(seconds)}s`;
+  return opts?.live ? `${body}…` : `took ${body}`;
+}
+
+export type ReviewQueueResult = {
+  takes: Array<{
+    variantId: string;
+    projectId: string;
+    createdAt: string;
+    voice: string;
+    sampleRate: number;
+    audioByteCount: number;
+    dialogueLineSwitchSamples: number[] | null;
+    scenarioId: string | null;
+    collectionId: string | null;
+    slug: string | null;
+    title: string;
+    isPublishedTake: boolean;
+    isSelectedTake: boolean;
+    flagCount: number;
+    flagsByCode: Partial<Record<TokenSyncFlag["code"], number>>;
+    flaggedLines: Array<{
+      lineIndex: number;
+      text: string;
+      /** Seconds to seek when playing this flagged line (first stamped/flagged token). */
+      playFromSeconds: number | null;
+      /** Approximate end of the line for short segment playback. */
+      playUntilSeconds: number | null;
+      tokens: Array<{
+        text: string;
+        codes: TokenSyncFlag["code"][];
+        startSeconds: number | null;
+      }>;
+      lineCodes: TokenSyncFlag["code"][];
+    }>;
+    /** All spoken lines with stamps — used for Play take karaoke follow. */
+    lines: Array<{
+      lineIndex: number;
+      text: string;
+      tokens: Array<{
+        text: string;
+        codes: TokenSyncFlag["code"][];
+        startSeconds: number | null;
+      }>;
+    }>;
+    lineCount: number;
+    tokenCount: number;
+    timing: {
+      autoStampedAt?: string;
+      openedAt?: string;
+      reviewedAt?: string;
+      publishedAt?: string;
+      linesTouched?: number;
+      maxCorrectionMs?: number;
+    } | null;
+  }>;
+  timing: {
+    bySource: Array<{
+      source: "auto" | "human";
+      published: number;
+      medianOpenToPublishMinutes: number | null;
+      withOpenTiming: number;
+      linesUntouchedPct: number | null;
+      correctionsOver200msPct: number | null;
+    }>;
+    since: string | null;
+  };
+};
+
+export type AutoStampResult = {
+  variant: Variant;
+  flags: TokenSyncFlag[];
+  marksDerived: boolean;
+  summary: string;
 };
 
 export type SuggestBreaksResult = {
@@ -74,6 +180,19 @@ export type VoicePreview = {
   voice: string;
   audioObjectKey: string;
   sampleRate: number;
+};
+
+export type AmbienceAsset = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  title: string;
+  kind: string;
+  audioObjectKey: string;
+  contentType: string;
+  durationSeconds: number;
+  sampleRate: number | null;
+  byteCount: number;
 };
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -161,6 +280,27 @@ export const ttsApi = {
         body: JSON.stringify(contentHash ? { contentHash } : {}),
       }
     ),
+  reviewEvent: (projectId: string, variantId: string, event: "opened" | "reviewed") =>
+    request<{ ok: true }>(
+      `/api/tts/projects/${projectId}/variants/${variantId}/review-event`,
+      { method: "POST", body: JSON.stringify({ event }) }
+    ),
+  markReviewed: (projectId: string, variantId: string) =>
+    request<{ variant: Variant; alreadyReviewed: boolean }>(
+      `/api/tts/projects/${projectId}/variants/${variantId}/mark-reviewed`,
+      { method: "POST" }
+    ),
+  reviewQueue: () => request<ReviewQueueResult>("/api/tts/review-queue"),
+  autoStamp: (projectId: string, variantId: string, body?: { force?: boolean }) =>
+    request<AutoStampResult>(
+      `/api/tts/projects/${projectId}/variants/${variantId}/auto-stamp`,
+      { method: "POST", body: JSON.stringify(body ?? {}) }
+    ),
+  cancelAutoStamp: (projectId: string, variantId: string) =>
+    request<{ ok: true; job: AutoStampJob }>(
+      `/api/tts/projects/${projectId}/variants/${variantId}/auto-stamp`,
+      { method: "DELETE" }
+    ),
   suggestBreaks: (projectId: string, variantId: string) =>
     request<SuggestBreaksResult>(
       `/api/tts/projects/${projectId}/variants/${variantId}/suggest-breaks`,
@@ -181,4 +321,33 @@ export const ttsApi = {
     ),
   listVoicePreviews: () =>
     request<{ previews: VoicePreview[] }>("/api/tts/voice-previews"),
+  listAmbience: () => request<{ assets: AmbienceAsset[] }>("/api/tts/ambience"),
+  uploadAmbience: async (params: { file: File; title: string; kind: string }) => {
+    const formData = new FormData();
+    formData.append("file", params.file);
+    formData.append("title", params.title);
+    formData.append("kind", params.kind);
+    const res = await fetch("/api/tts/ambience", { method: "POST", body: formData });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(formatApiError(body, res.status));
+    }
+    return res.json() as Promise<{ asset: AmbienceAsset }>;
+  },
+  updateAmbience: (
+    id: string,
+    body: { title?: string; kind?: string }
+  ) =>
+    request<{ asset: AmbienceAsset }>(`/api/tts/ambience/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteAmbience: (id: string) =>
+    request<{ ok: true }>(`/api/tts/ambience/${id}`, { method: "DELETE" }),
+  ambienceAudioUrl: (id: string) => `/api/tts/ambience/${id}/audio`,
+  /** Studio audio proxy URL for a take (same path the waveform editor uses). */
+  variantAudioUrl: (projectId: string, variantId: string, audioByteCount?: number) =>
+    `/api/tts/projects/${projectId}/variants/${variantId}/audio${
+      audioByteCount != null ? `?v=${audioByteCount}` : ""
+    }`,
 };

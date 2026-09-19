@@ -642,7 +642,7 @@ export function AmbienceMixTab({
             key={layers.map((layer) => layer.id).join("-") || "empty"}
             disabled={!canAdd}
             onValueChange={(value) => {
-              if (value) addAsset(value);
+              if (typeof value === "string" && value) addAsset(value);
             }}
           >
             <SelectTrigger className="w-full">

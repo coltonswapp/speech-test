@@ -30,6 +30,7 @@ import {
 } from "@/lib/tts/client";
 import { WaveformEditor } from "@/components/tts/waveform-editor";
 import type { EditableDialogueLine } from "@/components/tts/dialogue-line-editor";
+import type { AmbienceMixContext } from "@/components/tts/ambience-mix-tab";
 import { cn } from "@/lib/utils";
 
 function useNowMs(active: boolean, intervalMs = 500): number {
@@ -105,6 +106,7 @@ export function VariantList({
   hasUnsavedChanges,
   headerActions,
   emptyHint,
+  ambience,
 }: {
   projectId: string;
   dialogueLines?: EditableDialogueLine[];
@@ -117,6 +119,8 @@ export function VariantList({
   headerActions?: ReactNode;
   /** Empty-state copy when there are no takes yet. */
   emptyHint?: string;
+  /** Scene-level ambience mix; shown as an Ambience tab on each take. */
+  ambience?: AmbienceMixContext;
 }) {
   const queryClient = useQueryClient();
   // Review queue deep-links a specific take (?take=<variantId>), optional line
@@ -548,6 +552,8 @@ export function VariantList({
                             ? focusTimingMode
                             : null
                         }
+                        ambience={ambience}
+                        isSelectedTake={isSelected}
                       />
                     </div>
                   </AccordionPanel>

@@ -111,6 +111,9 @@ export async function GET() {
   for (const { variant, project, scenario } of rows) {
     const sync = parseVariantTokenSync(variant.tokenSync);
     if (!sync) continue;
+    // Already accepted on Audio (Mark reviewed / unflag-all) — flags gone,
+    // even if a race left source as auto. Queue is only remaining flags.
+    if (!(sync.flags?.length)) continue;
     const flags = sync.flags ?? [];
     const flagsByCode: ReviewQueueTake["flagsByCode"] = {};
     for (const f of flags) flagsByCode[f.code] = (flagsByCode[f.code] ?? 0) + 1;
@@ -180,7 +183,7 @@ export async function GET() {
     });
   }
   // Stable order: createdAt only. Do not re-rank by remaining flag count —
-  // per-line approve must not reshuffle the list under the reviewer.
+  // local line checks must not reshuffle the list under the reviewer.
   takes.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return NextResponse.json({ takes, timing: summarizeReviewTiming(timing.values()) });

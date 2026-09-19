@@ -32,6 +32,7 @@ import {
   applyLineStartToFirstTokens,
   clearAllStamps,
   clearFlagsForReviewed,
+  clearFlagsForToken,
   clearLineStamps,
   clearStampsFrom,
   lineDisplayPieces,
@@ -373,12 +374,19 @@ export function TokenSyncEditor({
     commitSync(next, nextUnstamped(next, target.lineIndex, target.tokenIndex));
   }
 
+  function acceptAsReviewed(current: VariantTokenSync, message: string) {
+    commitSync(clearFlagsForReviewed(current), selectedRef.current);
+    reportReviewEvent(variant, "reviewed");
+    toast.success(message);
+  }
+
   function markReviewed() {
     const current = syncRef.current;
     if (!current || current.source !== "auto" || hasUnsavedRef.current) return;
-    commitSync(clearFlagsForReviewed(current), selectedRef.current);
-    reportReviewEvent(variant, "reviewed");
-    toast.success("Marked reviewed. Publish the lesson to ship these times.");
+    acceptAsReviewed(
+      current,
+      "Marked reviewed. This take left the review queue."
+    );
   }
 
   function jumpToFlagged() {
@@ -396,6 +404,16 @@ export function TokenSyncEditor({
     if (seconds != null) {
       onPlayFromSeconds?.(Math.max(0, seconds - 1));
     }
+  }
+
+  function clearAllTokenFlags() {
+    const current = syncRef.current;
+    if (!current || hasUnsavedRef.current) return;
+    if (!current.flags?.length) return;
+    acceptAsReviewed(
+      current,
+      "Accepted stamps. This take left the review queue."
+    );
   }
 
   function undo() {
@@ -419,6 +437,25 @@ export function TokenSyncEditor({
     );
     if (next === current) return;
     commitSync(next, nextUnstamped(next, lineIndex, 0) ?? { lineIndex, tokenIndex: 0 });
+  }
+
+  function unflagToken(lineIndex: number, tokenIndex: number) {
+    const current = syncRef.current;
+    if (!current || hasUnsavedRef.current) return;
+    const next = clearFlagsForToken(current, lineIndex, tokenIndex);
+    if (next === current) {
+      setTokenMenu(null);
+      return;
+    }
+    if (!(next.flags?.length) && next.source === "auto") {
+      acceptAsReviewed(
+        next,
+        "Accepted last flags. This take left the review queue."
+      );
+    } else {
+      commitSync(next, { lineIndex, tokenIndex });
+    }
+    setTokenMenu(null);
   }
 
   function clearFromHere(lineIndex: number, tokenIndex: number) {
@@ -632,16 +669,12 @@ export function TokenSyncEditor({
           </Button>
         )}
         {flaggedTokens.length > 0 && status !== "stale" && (
-          <Button
-            type="button"
-            size="xs"
-            variant="outline"
-            className="border-amber-500/50 text-amber-700 dark:text-amber-300"
-            onClick={jumpToFlagged}
-            title="Cycle through tokens the aligner flagged for review"
-          >
-            {flaggedTokens.length} flagged
-          </Button>
+          <FlaggedCountButton
+            count={flaggedTokens.length}
+            disabled={!!hasUnsavedChanges}
+            onJump={jumpToFlagged}
+            onClearAll={clearAllTokenFlags}
+          />
         )}
       </div>
       <ol className="list-decimal space-y-0.5 pl-4 text-xs text-muted-foreground">
@@ -649,6 +682,8 @@ export function TokenSyncEditor({
           <span className="font-medium text-foreground">Auto-stamp</span>{" "}
           tokenizes, times every word from the audio, and places line marks
           if the take has none. Listen through, fix anything flagged in amber,
+          or right-click / long-press a chip to unflag a stamp that looks right
+          (right-click the flagged count to clear all),
           then <span className="font-medium text-foreground">Mark reviewed</span>.
         </li>
         <li>Or by hand: Tokenize splits each line into tap-sized words. The first word of each line is already timed from the line mark.</li>
@@ -681,10 +716,18 @@ export function TokenSyncEditor({
           x={tokenMenu.x}
           y={tokenMenu.y}
           disabled={!!hasUnsavedChanges}
+          flagged={
+            (sync.flags ?? []).some(
+              (flag) =>
+                flag.lineIndex === tokenMenu.lineIndex &&
+                flag.tokenIndex === tokenMenu.tokenIndex
+            )
+          }
           tokenText={
             sync.lines[tokenMenu.lineIndex]?.tokens[tokenMenu.tokenIndex]
               ?.text ?? ""
           }
+          onUnflag={() => unflagToken(tokenMenu.lineIndex, tokenMenu.tokenIndex)}
           onClearFromHere={() =>
             clearFromHere(tokenMenu.lineIndex, tokenMenu.tokenIndex)
           }
@@ -1087,11 +1130,82 @@ function TokenChip({
   );
 }
 
+function FlaggedCountButton({
+  count,
+  disabled,
+  onJump,
+  onClearAll,
+}: {
+  count: number;
+  disabled: boolean;
+  onJump: () => void;
+  onClearAll: () => void;
+}) {
+  const longPressRef = useRef<number | null>(null);
+  const suppressClickRef = useRef(false);
+
+  function clearLongPress() {
+    if (longPressRef.current != null) {
+      window.clearTimeout(longPressRef.current);
+      longPressRef.current = null;
+    }
+  }
+
+  function clearAll(event: { preventDefault: () => void; stopPropagation: () => void }) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (disabled) return;
+    onClearAll();
+  }
+
+  useEffect(() => () => clearLongPress(), []);
+
+  return (
+    <Button
+      type="button"
+      size="xs"
+      variant="outline"
+      className="border-amber-500/50 text-amber-700 dark:text-amber-300"
+      disabled={disabled}
+      onClick={() => {
+        if (suppressClickRef.current) {
+          suppressClickRef.current = false;
+          return;
+        }
+        onJump();
+      }}
+      onContextMenu={clearAll}
+      onPointerDown={(event) => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        clearLongPress();
+        longPressRef.current = window.setTimeout(() => {
+          longPressRef.current = null;
+          suppressClickRef.current = true;
+          if (!disabled) onClearAll();
+        }, LONG_PRESS_MS);
+      }}
+      onPointerUp={clearLongPress}
+      onPointerCancel={clearLongPress}
+      onPointerMove={(event) => {
+        if (longPressRef.current == null) return;
+        if (Math.abs(event.movementX) + Math.abs(event.movementY) > 6) {
+          clearLongPress();
+        }
+      }}
+      title="Click to cycle flagged stamps. Right-click or long-press to accept all stamps and leave the review queue."
+    >
+      {count} flagged
+    </Button>
+  );
+}
+
 function TokenContextMenu({
   x,
   y,
   disabled,
+  flagged,
   tokenText,
+  onUnflag,
   onClearFromHere,
   onSplitAt,
   onClose,
@@ -1099,7 +1213,9 @@ function TokenContextMenu({
   x: number;
   y: number;
   disabled: boolean;
+  flagged: boolean;
   tokenText: string;
+  onUnflag: () => void;
   onClearFromHere: () => void;
   onSplitAt: (offset: number) => void;
   onClose: () => void;
@@ -1150,6 +1266,17 @@ function TokenContextMenu({
     >
       {mode === "menu" ? (
         <>
+          {flagged && (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={disabled}
+              className="flex w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
+              onClick={onUnflag}
+            >
+              Unflag
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"

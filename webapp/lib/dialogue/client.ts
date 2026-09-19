@@ -13,6 +13,7 @@ import type {
   SanitizeGrammarResult,
   TokenizeLinesResult,
 } from "@/lib/dialogue/types";
+import type { AmbienceLayer } from "@/lib/tts/ambience";
 import type { Project as TtsProject } from "@/lib/tts/client";
 import { formatApiError } from "@/lib/api-error";
 
@@ -33,9 +34,10 @@ export type ScenarioAudioStatus = {
 };
 
 export type ScenarioReadinessSummary = {
-  audio: "published" | "draft";
-  timing: "missing" | "partial" | "done";
-  sync: "missing" | "stale" | "tokens-only" | "complete";
+  audio: "published" | "stale" | "draft";
+  timing: "missing" | "partial" | "ready" | "done";
+  sync: "missing" | "stale" | "tokens-only" | "ready" | "complete";
+  quiz?: "missing" | "ready" | "published";
   quizCount: number;
   quizWithEvidence: number;
 };
@@ -83,6 +85,21 @@ export type UnitSummary = Unit & {
   collections: Array<{ id: string; unitId: string | null; title: string }>;
 };
 
+/** Studio-facing "last published Sep 18, 4:02 PM" label. */
+export function formatPublishedAt(
+  iso: string | Date | null | undefined
+): string | null {
+  if (!iso) return null;
+  const date = iso instanceof Date ? iso : new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export type DialogueScenario = {
   id: string;
   collectionId: string;
@@ -106,6 +123,11 @@ export type DialogueScenario = {
   highlights: DialogueHighlights | null;
   quiz: QuizQuestion[] | null;
   tokenSync: PublishedTokenSync | null;
+  ambienceAssetId: string | null;
+  ambienceGainDb: number | null;
+  ambienceOffsetSeconds: number | null;
+  ambienceLayers: AmbienceLayer[] | null;
+  publishedAmbienceHash: string | null;
   updatedAt: string;
 };
 
@@ -250,7 +272,7 @@ export const dialogueApi = {
       { method: "POST", body: JSON.stringify(body) },
     ),
   getScenario: (collectionId: string, slug: string) =>
-    request<{ scenario: DialogueScenario }>(
+    request<{ scenario: DialogueScenario; ambienceMixHash: string | null }>(
       `/api/content/dialogues/${collectionId}/scenarios/${slug}`,
     ),
   updateScenario: (
@@ -260,6 +282,23 @@ export const dialogueApi = {
   ) =>
     request<{ scenario: DialogueScenario }>(
       `/api/content/dialogues/${collectionId}/scenarios/${slug}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
+  updateScenarioAmbience: (
+    collectionId: string,
+    slug: string,
+    body: {
+      assetId?: string | null;
+      gainDb?: number | null;
+      offsetSeconds?: number | null;
+      layers?: AmbienceLayer[];
+    },
+  ) =>
+    request<{
+      scenario: DialogueScenario;
+      ambienceMixHash: string | null;
+    }>(
+      `/api/content/dialogues/${collectionId}/scenarios/${slug}/ambience`,
       { method: "PATCH", body: JSON.stringify(body) },
     ),
   deleteScenario: (collectionId: string, slug: string) =>

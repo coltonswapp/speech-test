@@ -182,6 +182,19 @@ export type VoicePreview = {
   sampleRate: number;
 };
 
+export type AmbienceAsset = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  title: string;
+  kind: string;
+  audioObjectKey: string;
+  contentType: string;
+  durationSeconds: number;
+  sampleRate: number | null;
+  byteCount: number;
+};
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
@@ -308,6 +321,30 @@ export const ttsApi = {
     ),
   listVoicePreviews: () =>
     request<{ previews: VoicePreview[] }>("/api/tts/voice-previews"),
+  listAmbience: () => request<{ assets: AmbienceAsset[] }>("/api/tts/ambience"),
+  uploadAmbience: async (params: { file: File; title: string; kind: string }) => {
+    const formData = new FormData();
+    formData.append("file", params.file);
+    formData.append("title", params.title);
+    formData.append("kind", params.kind);
+    const res = await fetch("/api/tts/ambience", { method: "POST", body: formData });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(formatApiError(body, res.status));
+    }
+    return res.json() as Promise<{ asset: AmbienceAsset }>;
+  },
+  updateAmbience: (
+    id: string,
+    body: { title?: string; kind?: string }
+  ) =>
+    request<{ asset: AmbienceAsset }>(`/api/tts/ambience/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteAmbience: (id: string) =>
+    request<{ ok: true }>(`/api/tts/ambience/${id}`, { method: "DELETE" }),
+  ambienceAudioUrl: (id: string) => `/api/tts/ambience/${id}/audio`,
   /** Studio audio proxy URL for a take (same path the waveform editor uses). */
   variantAudioUrl: (projectId: string, variantId: string, audioByteCount?: number) =>
     `/api/tts/projects/${projectId}/variants/${variantId}/audio${

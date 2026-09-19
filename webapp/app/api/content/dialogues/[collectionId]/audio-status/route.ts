@@ -7,9 +7,11 @@ import type { DialogueLine } from "@/lib/dialogue/types";
 import { conversationContentHash } from "@/lib/tts/content-hash";
 import { scenarioLinesToConversation } from "@/lib/tts/scenario-conversation";
 import { isPublishStale } from "@/lib/dialogue/publish";
+import { isPublishKaraokeStale } from "@/lib/dialogue/publish-lockstep";
+import { currentAmbienceMixHash } from "@/lib/tts/ambience-mix";
 
 // Per-scenario audio readiness for a collection: whether a take is selected
-// and whether it's stale relative to the current dialogue lines. Drives the
+// and whether the published package (clip + karaoke) is stale. Drives the
 // badges next to scenarios in the collection editor.
 
 export type ScenarioAudioStatus = {
@@ -61,13 +63,26 @@ export async function GET(
     const currentHash = conversationContentHash(
       scenarioLinesToConversation(scenario.lines as DialogueLine[]).lines
     );
+    const mixHash = currentAmbienceMixHash({
+      assetId: scenario.ambienceAssetId,
+      gainDb: scenario.ambienceGainDb,
+      offsetSeconds: scenario.ambienceOffsetSeconds,
+      layers: scenario.ambienceLayers,
+    });
     return {
       id: scenario.id,
       hasProject: !!project,
       hasSelectedTake: !!variant,
       stale: !!variant?.contentHash && variant.contentHash !== currentHash,
       published: !!scenario.publishedAudioUrl,
-      publishStale: isPublishStale(scenario),
+      publishStale:
+        isPublishStale(scenario, mixHash) ||
+        isPublishKaraokeStale({
+          publishedTokenSync: scenario.tokenSync,
+          take: variant,
+          lines: scenario.lines,
+          contentHash: currentHash,
+        }),
     };
   });
 

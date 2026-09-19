@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   applyTokenSelection,
   clearFlagsForReviewed,
+  clearFlagsForToken,
+  clearAllFlags,
   clearStampsFrom,
   midpointSplitOffset,
   publishedTokenSyncFromWorking,
@@ -246,6 +248,44 @@ describe("tokenSync provenance (KA-1)", () => {
     });
     assert.equal(reviewed.source, "reviewed");
     assert.equal("flags" in reviewed, false);
+  });
+
+  it("clearFlagsForToken drops that token's flags and keeps source and line flags", () => {
+    const auto: VariantTokenSync = {
+      ...stamped,
+      source: "auto",
+      flags: [
+        { code: "stamp-in-silence", lineIndex: 0, tokenIndex: 1 },
+        { code: "no-gap", lineIndex: 0, tokenIndex: 1 },
+        { code: "script-mismatch", lineIndex: 0 },
+      ],
+    };
+    const next = clearFlagsForToken(auto, 0, 1);
+    assert.equal(next.source, "auto");
+    assert.deepEqual(next.flags, [{ code: "script-mismatch", lineIndex: 0 }]);
+    assert.equal(clearFlagsForToken(auto, 0, 2), auto);
+    const last = clearFlagsForToken(
+      { ...stamped, source: "auto", flags: [{ code: "no-gap", lineIndex: 0, tokenIndex: 0 }] },
+      0,
+      0
+    );
+    assert.equal(last.source, "auto");
+    assert.equal("flags" in last, false);
+  });
+
+  it("clearAllFlags drops every flag and keeps source", () => {
+    const auto: VariantTokenSync = {
+      ...stamped,
+      source: "auto",
+      flags: [
+        { code: "stamp-in-silence", lineIndex: 0, tokenIndex: 1 },
+        { code: "script-mismatch", lineIndex: 0 },
+      ],
+    };
+    const next = clearAllFlags(auto);
+    assert.equal(next.source, "auto");
+    assert.equal("flags" in next, false);
+    assert.equal(clearAllFlags(stamped), stamped);
   });
 
   it("publish carries source and drops flags, alignerVersion and readings", () => {

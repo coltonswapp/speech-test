@@ -36,6 +36,9 @@ export type ExportableScenario = {
   publishedVariantId: string | null;
   publishedContentHash: string | null;
   publishedAt: string | null;
+  ambienceId?: string | null;
+  ambienceUrl?: string | null;
+  ambienceGainDb?: number | null;
   grammarPointIds: string[];
   setting: string | null;
   thumbnailUrl: string | null;
@@ -147,6 +150,10 @@ export function buildScenarioFile(scenario: ExportableScenario): ScenarioFile {
     publishedVariantId: scenario.publishedVariantId ?? undefined,
     publishedContentHash: scenario.publishedContentHash ?? undefined,
     publishedAt: scenario.publishedAt ?? undefined,
+    ambienceId: scenario.ambienceId ?? undefined,
+    ambienceUrl: scenario.ambienceUrl ?? undefined,
+    ambienceGainDb:
+      scenario.ambienceGainDb == null ? undefined : scenario.ambienceGainDb,
     scenario: {
       setting: scenario.setting ?? undefined,
       lines: lines.map((line, index) => exportLine(line, scenario.id, index)),

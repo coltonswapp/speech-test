@@ -11,12 +11,17 @@ import {
 } from "@/lib/dialogue/types";
 import { scenarioLinesToConversation } from "@/lib/tts/scenario-conversation";
 
-export type TimingReadiness = "missing" | "partial" | "done";
+export type AudioReadiness = "published" | "stale" | "draft";
+export type TimingReadiness = "missing" | "partial" | "ready" | "done";
+export type QuizReadiness = "missing" | "ready" | "published";
+/** Curriculum sync: `ready` = studio complete, not in the last publish. */
+export type CurriculumSyncStatus = TokenSyncStatus | "ready";
 
 export type ScenarioReadiness = {
-  audio: "published" | "draft";
+  audio: AudioReadiness;
   timing: TimingReadiness;
-  sync: TokenSyncStatus;
+  sync: CurriculumSyncStatus;
+  quiz: QuizReadiness;
   quizCount: number;
   quizWithEvidence: number;
 };
@@ -29,7 +34,7 @@ export type ScenarioReadiness = {
 export function lineTimingStatus(
   markSamples: number[] | null | undefined,
   spokenCount: number,
-): TimingReadiness {
+): Exclude<TimingReadiness, "ready"> {
   if (spokenCount <= 0) return "missing";
   if (spokenCount === 1) return "done";
   const marks = (markSamples ?? []).filter((sample) => sample > 0);
@@ -56,43 +61,113 @@ export function quizReadiness(quiz: unknown): {
   return { count, withEvidence };
 }
 
-/** Prefer the published karaoke snapshot; fall back to the take's working sync. */
+function publishedAsWorking(
+  published: NonNullable<ReturnType<typeof parsePublishedTokenSync>>,
+): VariantTokenSync {
+  return {
+    version: 1,
+    contentHash: published.contentHash,
+    lines: published.lines.map((line) => ({
+      text: line.text,
+      tokens: line.tokens.map((token) => ({
+        text: token.text,
+        startSeconds: token.startSeconds,
+      })),
+    })),
+  };
+}
+
+/**
+ * Green only for karaoke that last publish actually shipped and still matches
+ * the current lines. Studio-only complete sync is `ready` (amber) until republish.
+ */
 export function curriculumSyncStatus(params: {
   publishedTokenSync: unknown;
   workingTokenSync: unknown;
   contentHash: string | null | undefined;
   spokenTexts: string[];
-}): TokenSyncStatus {
+  /** Published snapshot ≠ what the current take would write. */
+  karaokeStale?: boolean;
+}): CurriculumSyncStatus {
   const { contentHash, spokenTexts } = params;
   const published = parsePublishedTokenSync(params.publishedTokenSync);
-  if (published) {
-    const asWorking: VariantTokenSync = {
-      version: 1,
-      contentHash: published.contentHash,
-      lines: published.lines.map((line) => ({
-        text: line.text,
-        tokens: line.tokens.map((token) => ({
-          text: token.text,
-          startSeconds: token.startSeconds,
-        })),
-      })),
-    };
-    return tokenSyncStatus(asWorking, contentHash, spokenTexts);
-  }
-  return tokenSyncStatus(
+  const publishedStatus = published
+    ? tokenSyncStatus(publishedAsWorking(published), contentHash, spokenTexts)
+    : "missing";
+  const workingStatus = tokenSyncStatus(
     parseVariantTokenSync(params.workingTokenSync),
     contentHash,
     spokenTexts,
   );
+
+  if (publishedStatus === "complete") {
+    return params.karaokeStale ? "stale" : "complete";
+  }
+  if (publishedStatus === "stale") return "stale";
+  if (workingStatus === "complete") return "ready";
+  if (publishedStatus === "tokens-only" || workingStatus === "tokens-only") {
+    return "tokens-only";
+  }
+  if (workingStatus === "stale") return "stale";
+  return "missing";
+}
+
+export function curriculumTimingStatus(params: {
+  publishedAudio: boolean;
+  audioStale: boolean;
+  publishedMarks: number[] | null | undefined;
+  workingMarks: number[] | null | undefined;
+  spokenCount: number;
+}): TimingReadiness {
+  const publishedTiming = lineTimingStatus(
+    params.publishedMarks,
+    params.spokenCount,
+  );
+  const workingTiming = lineTimingStatus(
+    params.workingMarks,
+    params.spokenCount,
+  );
+  if (
+    params.publishedAudio &&
+    !params.audioStale &&
+    publishedTiming === "done"
+  ) {
+    return "done";
+  }
+  if (workingTiming === "done" || publishedTiming === "done") return "ready";
+  if (workingTiming === "partial" || publishedTiming === "partial") {
+    return "partial";
+  }
+  return "missing";
+}
+
+export function curriculumAudioStatus(params: {
+  publishedAudioUrl: string | null;
+  audioStale: boolean;
+}): AudioReadiness {
+  if (!params.publishedAudioUrl) return "draft";
+  return params.audioStale ? "stale" : "published";
+}
+
+export function curriculumQuizStatus(params: {
+  quizCount: number;
+  publishedAudio: boolean;
+  audioStale: boolean;
+}): QuizReadiness {
+  if (params.quizCount <= 0) return "missing";
+  if (params.publishedAudio && !params.audioStale) return "published";
+  return "ready";
 }
 
 export function buildScenarioReadiness(params: {
   publishedAudioUrl: string | null;
+  audioStale?: boolean;
+  karaokeStale?: boolean;
   lines: unknown;
   quiz: unknown;
   tokenSync: unknown;
-  /** Prefer published take; otherwise selected take. */
-  markSamples: number[] | null | undefined;
+  publishedMarks?: number[] | null;
+  workingMarks?: number[] | null;
   workingTokenSync: unknown;
   contentHash: string | null | undefined;
 }): ScenarioReadiness {
@@ -101,14 +176,34 @@ export function buildScenarioReadiness(params: {
   ).lines;
   const spokenTexts = spoken.map((line) => line.text);
   const quiz = quizReadiness(params.quiz);
+  const audioStale = params.audioStale === true;
+  const publishedAudio = !!params.publishedAudioUrl;
+  const audio = curriculumAudioStatus({
+    publishedAudioUrl: params.publishedAudioUrl,
+    audioStale,
+  });
+  const publishedMarks = params.publishedMarks;
+  const workingMarks = params.workingMarks ?? publishedMarks;
   return {
-    audio: params.publishedAudioUrl ? "published" : "draft",
-    timing: lineTimingStatus(params.markSamples, spoken.length),
+    audio,
+    timing: curriculumTimingStatus({
+      publishedAudio,
+      audioStale,
+      publishedMarks,
+      workingMarks,
+      spokenCount: spoken.length,
+    }),
     sync: curriculumSyncStatus({
       publishedTokenSync: params.tokenSync,
       workingTokenSync: params.workingTokenSync,
       contentHash: params.contentHash,
       spokenTexts,
+      karaokeStale: params.karaokeStale === true,
+    }),
+    quiz: curriculumQuizStatus({
+      quizCount: quiz.count,
+      publishedAudio,
+      audioStale,
     }),
     quizCount: quiz.count,
     quizWithEvidence: quiz.withEvidence,
@@ -134,9 +229,10 @@ export function formatCurriculumUpdatedAt(
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export function syncChipLabel(status: TokenSyncStatus): string {
+export function syncChipLabel(status: CurriculumSyncStatus): string {
   switch (status) {
     case "complete":
+    case "ready":
       return "sync";
     case "tokens-only":
       return "tokens";

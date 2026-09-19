@@ -131,6 +131,25 @@ export const ttsExport = pgTable("tts_export", {
   sourceByteCount: integer("source_byte_count").notNull(),
 });
 
+// Reusable loopable ambience beds. Published as their own CDN object;
+// the learner app plays them as a second looping track under dry dialogue.
+export const ambienceAsset = pgTable("ambience_asset", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  title: text("title").notNull(),
+  kind: text("kind").notNull(), // preset slug or custom kebab-case type
+  audioObjectKey: text("audio_object_key").notNull(),
+  contentType: text("content_type").notNull(),
+  durationSeconds: real("duration_seconds").notNull(),
+  sampleRate: real("sample_rate"),
+  byteCount: integer("byte_count").notNull(),
+});
+
 // --- Content Studio ---
 
 export const grammarPoint = pgTable("grammar_point", {
@@ -261,6 +280,18 @@ export const dialogueScenario = pgTable("dialogue_scenario", {
   // Snapshot of complete token karaoke timing, copied from the published
   // take. Omitted from export when null.
   tokenSync: jsonb("token_sync"),
+  // Optional looping bed attached to the scene. Published dialogue stays dry;
+  // the app plays this bed as a second track. Null = dialogue only.
+  ambienceAssetId: uuid("ambience_asset_id").references(() => ambienceAsset.id, {
+    onDelete: "set null",
+  }),
+  ambienceGainDb: real("ambience_gain_db"),
+  ambienceOffsetSeconds: real("ambience_offset_seconds"),
+  // One or more beds with optional start/end on the take. Empty/null = dry
+  // or fall back to the single-column fields above.
+  ambienceLayers: jsonb("ambience_layers"),
+  // Ambience config fingerprint written at publish (not mixed into the m4a).
+  publishedAmbienceHash: text("published_ambience_hash"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

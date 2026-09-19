@@ -3,7 +3,11 @@
 
 import { getObject } from "@/lib/storage/r2";
 import { wavToPcm16, pcm16ToWav } from "@/lib/tts/wav";
-import { encodeWavToM4a } from "@/lib/tts/audio-encode";
+import {
+  encodeWavToM4a,
+  mixDialogueWithAmbienceBed,
+  type AmbienceMixOptions,
+} from "@/lib/tts/audio-encode";
 import type { ttsVariant } from "@/lib/db/schema";
 
 type Variant = typeof ttsVariant.$inferSelect;
@@ -32,13 +36,19 @@ export function lineSwitchSecondsForExport(variant: Variant): number[] {
     .filter((s) => s > 0);
 }
 
-/** Fetches the take's WAV from R2, applies trim, encodes to m4a with chapter marks. */
-export async function renderVariantM4a(variant: Variant): Promise<Buffer> {
+/** Fetches the take's WAV from R2, applies trim, optionally mixes a bed, encodes to m4a. */
+export async function renderVariantM4a(
+  variant: Variant,
+  mix?: AmbienceMixOptions | AmbienceMixOptions[] | null
+): Promise<Buffer> {
   const sourceWav = await getObject(variant.audioObjectKey);
   const exportWav = trimmedWav(
     sourceWav,
     variant.trimSampleLower,
     variant.trimSampleUpper
   );
-  return encodeWavToM4a(exportWav, lineSwitchSecondsForExport(variant));
+  const mixed = mix
+    ? await mixDialogueWithAmbienceBed(exportWav, mix)
+    : exportWav;
+  return encodeWavToM4a(mixed, lineSwitchSecondsForExport(variant));
 }

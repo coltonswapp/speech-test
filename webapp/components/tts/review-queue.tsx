@@ -172,26 +172,24 @@ function FlaggedLine({
         {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
         <span className="ml-1">L{line.lineIndex + 1}</span>
       </Button>
-      {/* Chips + controls share one group so Check sits right after tokens. */}
-      <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 text-sm leading-relaxed">
-          {line.lineCodes.map((code) => (
-            <span
-              key={code}
-              className="rounded border border-amber-500/50 px-1 text-[10px] font-medium text-amber-700 dark:text-amber-300"
-            >
-              {FLAG_LABEL[code]}
-            </span>
-          ))}
-          {line.tokens.map((token, i) => (
-            <KaraokeTokenChip
-              key={`${i}-${token.text}`}
-              token={token}
-              active={playing && activeTokenIndex === i}
-            />
-          ))}
-        </div>
-        <div className="flex shrink-0 items-center gap-1 pl-2">
+      {/* Same wrap as chips so Check+Jump sit immediately after the last token. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 text-sm leading-relaxed">
+        {line.lineCodes.map((code) => (
+          <span
+            key={code}
+            className="rounded border border-amber-500/50 px-1 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+          >
+            {FLAG_LABEL[code]}
+          </span>
+        ))}
+        {line.tokens.map((token, i) => (
+          <KaraokeTokenChip
+            key={`${i}-${token.text}`}
+            token={token}
+            active={playing && activeTokenIndex === i}
+          />
+        ))}
+        <div className="ml-2 inline-flex shrink-0 items-center gap-1">
           <Button
             type="button"
             size="sm"
@@ -603,7 +601,11 @@ function TakeCard({ take }: { take: Take }) {
             type="button"
             size="sm"
             variant="outline"
-            className="min-h-11 touch-manipulation border-emerald-500/50 md:min-h-8"
+            className={cn(
+              "min-h-11 touch-manipulation md:min-h-8",
+              allLinesChecked &&
+                "border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+            )}
             disabled={approveMutation.isPending || !allLinesChecked}
             onClick={() => approveMutation.mutate()}
             title={
@@ -612,7 +614,7 @@ function TakeCard({ take }: { take: Take }) {
                 : "Check every flagged line first, then Approve the take"
             }
           >
-            {approveMutation.isPending ? "Approving…" : "Approve"}
+            {approveMutation.isPending ? "Approving…" : "Approve take"}
           </Button>
           <Link
             href={href}
@@ -672,8 +674,8 @@ export function ReviewQueue() {
     queryFn: () => ttsApi.reviewQueue(),
     refetchInterval: 30_000,
   });
-  // Freeze first-seen take order for this page session so per-line approve
-  // never reshuffles cards under the reviewer (API also sorts by createdAt).
+  // Freeze first-seen take order for this page session so local line checks
+  // never reshuffle cards under the reviewer (API also sorts by createdAt).
   const orderRef = useRef<string[]>([]);
   const takes = useMemo(() => {
     const incoming = data?.takes ?? [];
@@ -714,9 +716,9 @@ export function ReviewQueue() {
       <div>
         <h1 className="text-xl font-semibold">Review queue</h1>
         <p className="text-sm text-muted-foreground">
-          Auto-stamped takes waiting for review. Check each flagged line locally,
-          then Approve the take when every line is checked — that clears flags and
-          leaves the queue.
+          Auto-stamped takes that still have flags. Check each flagged line
+          locally, then Approve the take — or accept the stamps on Audio.
+          Either one leaves the queue.
         </p>
       </div>
       <TimingSummary timing={data.timing} />

@@ -83,7 +83,7 @@ function audioStatusTooltip(
   if (!status) return undefined;
   if (status.published) {
     return status.publishStale
-      ? "Published audio is stale vs current lines"
+      ? "Published package is stale — audio, mix, or karaoke changed since last publish"
       : "Published audio";
   }
   if (!status.hasSelectedTake) {
@@ -643,9 +643,9 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
           <div className="flex min-w-0 flex-col gap-1">
             <Label>Scenarios</Label>
             <p className="text-xs text-muted-foreground">
-              Publish lesson uploads CDN audio for every scenario with a selected
-              take, then serves the full lesson JSON (all scenarios + accurate
-              audio URLs) to Shizen.
+              Publish lesson uploads dry CDN audio for every scenario with a
+              selected take, copies any attached beds, then serves the full
+              lesson JSON (all scenarios + audio URLs + bed metadata) to Shizen.
             </p>
           </div>
           <Button
@@ -695,7 +695,7 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
                 hrefBase={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
                 audioTitle={audioStatusTooltip(
                   audioStatusById.get(scenario.id),
-                  scenario.readiness.audio === "published",
+                  scenario.readiness.audio !== "draft",
                 )}
               />
             </div>

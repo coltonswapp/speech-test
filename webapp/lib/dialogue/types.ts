@@ -318,6 +318,9 @@ export const scenarioFileSchema = z.object({
   publishedVariantId: z.string().optional(),
   publishedContentHash: z.string().optional(),
   publishedAt: z.string().optional(),
+  ambienceId: z.string().optional(),
+  ambienceUrl: z.string().url().optional(),
+  ambienceGainDb: z.number().optional(),
   grammarPointIDs: z.array(z.string()).optional(),
   // Per-scenario CDN thumbnail; absent → the app uses the collection's.
   thumbnailUrl: z.string().url().optional(),

@@ -81,6 +81,53 @@ enum RemoteAudioCache {
         return destination
     }
 
+    static func cachedBedFileURL(id: String) -> URL? {
+        let destination = bedCacheFileURL(id: id)
+        guard FileManager.default.fileExists(atPath: destination.path) else { return nil }
+        return destination
+    }
+
+    static func ensureLocalBed(
+        id: String,
+        remoteURL: URL,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        let trimmed = sanitizedBedId(id)
+        guard !trimmed.isEmpty else {
+            completion(.failure(CacheError.downloadFailed))
+            return
+        }
+        if let cached = cachedBedFileURL(id: trimmed) {
+            completion(.success(cached))
+            return
+        }
+
+        ioQueue.async {
+            do {
+                let destination = bedCacheFileURL(id: trimmed)
+                try FileManager.default.createDirectory(
+                    at: destination.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                let (tempURL, response) = try syncDownload(from: remoteURL)
+                defer { try? FileManager.default.removeItem(at: tempURL) }
+                guard let http = response as? HTTPURLResponse,
+                      (200 ... 299).contains(http.statusCode) else {
+                    throw CacheError.downloadFailed
+                }
+                try? FileManager.default.removeItem(at: destination)
+                try FileManager.default.moveItem(at: tempURL, to: destination)
+                DispatchQueue.main.async {
+                    completion(.success(destination))
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+
     static func ensureLocalFile(
         for remoteURL: URL,
         metadata: RemoteAudioCacheMetadata? = nil,
@@ -181,6 +228,17 @@ enum RemoteAudioCache {
 
     private static func metadataFileURL(for remoteURL: URL) -> URL {
         cacheFileURL(for: remoteURL).deletingPathExtension().appendingPathExtension("meta.json")
+    }
+
+    private static func sanitizedBedId(_ id: String) -> String {
+        id.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "-")
+    }
+
+    private static func bedCacheFileURL(id: String) -> URL {
+        cacheDirectoryURL()
+            .appendingPathComponent("ambience-\(sanitizedBedId(id))")
+            .appendingPathExtension("m4a")
     }
 
     private static func cacheKey(for remoteURL: URL) -> String {

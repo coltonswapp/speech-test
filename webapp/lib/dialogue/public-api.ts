@@ -10,6 +10,9 @@ import {
   type ExportableCollection,
   type ExportableScenario,
 } from "@/lib/dialogue/export";
+import { isPublishedR2Configured } from "@/lib/storage/published-r2";
+import { clampAmbienceGainDb, layersFromScenario } from "@/lib/tts/ambience";
+import { publishedAmbiencePublicUrl } from "@/lib/tts/published-ambience-url";
 
 export type PublicDialogueCollectionSummary = {
   id: string;
@@ -60,6 +63,27 @@ export async function listPublicCurriculumUnits(): Promise<
     }));
 }
 
+function primaryAmbienceExport(scenario: {
+  ambienceAssetId: string | null;
+  ambienceGainDb: number | null;
+  ambienceOffsetSeconds: number | null;
+  ambienceLayers?: unknown;
+}): Pick<ExportableScenario, "ambienceId" | "ambienceUrl" | "ambienceGainDb"> {
+  const layer = layersFromScenario(scenario)[0];
+  if (!layer || !isPublishedR2Configured()) {
+    return {
+      ambienceId: null,
+      ambienceUrl: null,
+      ambienceGainDb: null,
+    };
+  }
+  return {
+    ambienceId: layer.assetId,
+    ambienceUrl: publishedAmbiencePublicUrl(layer.assetId),
+    ambienceGainDb: clampAmbienceGainDb(layer.gainDb),
+  };
+}
+
 export function toExportableScenario(
   scenario: typeof dialogueScenario.$inferSelect
 ): ExportableScenario {
@@ -77,6 +101,7 @@ export function toExportableScenario(
     publishedVariantId: scenario.publishedVariantId,
     publishedContentHash: scenario.publishedContentHash,
     publishedAt: scenario.publishedAt?.toISOString() ?? null,
+    ...primaryAmbienceExport(scenario),
     grammarPointIds: scenario.grammarPointIds,
     setting: scenario.setting,
     thumbnailUrl: scenario.thumbnailUrl,

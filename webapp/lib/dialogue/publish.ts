@@ -8,19 +8,29 @@ import {
 } from "@/lib/db/schema";
 import type { CollectionFile, DialogueLine } from "@/lib/dialogue/types";
 import { recordPublish } from "@/lib/dialogue/review-timing";
+import { karaokeSnapshotForTake } from "@/lib/dialogue/publish-lockstep";
 import { conversationContentHash } from "@/lib/tts/content-hash";
 import { scenarioLinesToConversation } from "@/lib/tts/scenario-conversation";
-import { renderVariantM4a, lineSwitchSecondsForExport } from "@/lib/tts/variant-audio";
-import {
-  completeTokenSyncForVariant,
-  estimatedWavDurationSeconds,
-} from "@/lib/dialogue/token-sync";
+import { renderVariantM4a } from "@/lib/tts/variant-audio";
 import {
   isPublishedR2Configured,
   publishedObjectPublicUrl,
   putPublishedObject,
 } from "@/lib/storage/published-r2";
 import { getPublicDialogueCollectionFile } from "@/lib/dialogue/public-api";
+import { currentAmbienceMixHash } from "@/lib/tts/ambience-mix";
+import { publishPrimaryAmbienceBed } from "@/lib/tts/published-ambience";
+import {
+  isPublishStale,
+  publishedAudioUrlLooksMixed,
+  publishedDialogueAudioKey,
+} from "@/lib/dialogue/publish-audio";
+
+export {
+  isPublishStale,
+  publishedAudioUrlLooksMixed,
+  publishedDialogueAudioKey,
+} from "@/lib/dialogue/publish-audio";
 
 export function scenarioSlugFromId(scenarioId: string, collectionId: string): string {
   const prefix = `${collectionId}/`;
@@ -28,15 +38,6 @@ export function scenarioSlugFromId(scenarioId: string, collectionId: string): st
     throw new Error(`Scenario id ${scenarioId} does not belong to ${collectionId}`);
   }
   return scenarioId.slice(prefix.length);
-}
-
-export function publishedDialogueAudioKey(
-  collectionId: string,
-  scenarioSlug: string,
-  contentHash: string,
-  variantId: string
-): string {
-  return `dialogue/${collectionId}/${scenarioSlug}/${contentHash}-${variantId}.m4a`;
 }
 
 export type PublishScenarioResult = {
@@ -89,10 +90,28 @@ export async function publishScenarioAudio(
     contentHash,
     variant.id
   );
-  const m4a = await renderVariantM4a(variant);
-  await putPublishedObject(objectKey, m4a, "audio/mp4");
   const publishedAudioUrl = publishedObjectPublicUrl(objectKey);
-  const tokenSync = tokenSyncSnapshot(variant, scenario.lines, contentHash);
+  const canReuseDryDialogue =
+    scenario.publishedAudioUrl === publishedAudioUrl &&
+    scenario.publishedVariantId === variant.id &&
+    scenario.publishedContentHash === contentHash &&
+    !publishedAudioUrlLooksMixed(scenario.publishedAudioUrl);
+  if (!canReuseDryDialogue) {
+    const m4a = await renderVariantM4a(variant);
+    await putPublishedObject(objectKey, m4a, "audio/mp4");
+  }
+  const mixHash = currentAmbienceMixHash({
+    assetId: scenario.ambienceAssetId,
+    gainDb: scenario.ambienceGainDb,
+    offsetSeconds: scenario.ambienceOffsetSeconds,
+    layers: scenario.ambienceLayers,
+  });
+  await publishPrimaryAmbienceBed(scenario);
+  const tokenSync = karaokeSnapshotForTake({
+    take: variant,
+    lines: scenario.lines,
+    contentHash,
+  });
 
   const [updated] = await db
     .update(dialogueScenario)
@@ -100,6 +119,7 @@ export async function publishScenarioAudio(
       publishedAudioUrl,
       publishedVariantId: variant.id,
       publishedContentHash: contentHash,
+      publishedAmbienceHash: mixHash,
       publishedAt: new Date(),
       audioKey: scenarioId,
       tokenSync,
@@ -132,6 +152,7 @@ export async function unpublishScenarioAudio(
       publishedAudioUrl: null,
       publishedVariantId: null,
       publishedContentHash: null,
+      publishedAmbienceHash: null,
       publishedAt: null,
       tokenSync: null,
       updatedAt: new Date(),
@@ -142,41 +163,6 @@ export async function unpublishScenarioAudio(
     throw new Error("Scenario not found");
   }
   return updated;
-}
-
-function tokenSyncSnapshot(
-  variant: typeof ttsVariant.$inferSelect,
-  lines: unknown,
-  contentHash: string
-) {
-  const spokenTexts = scenarioLinesToConversation(
-    lines as DialogueLine[]
-  ).lines.map((line) => line.text);
-  return completeTokenSyncForVariant({
-    tokenSync: variant.tokenSync,
-    variantId: variant.id,
-    contentHash,
-    spokenTexts,
-    lineSwitchSeconds: lineSwitchSecondsForExport(variant),
-    durationSeconds: estimatedWavDurationSeconds(variant),
-    trimSampleLower: variant.trimSampleLower,
-    sampleRate: variant.sampleRate,
-  });
-}
-
-export function isPublishStale(
-  scenario: Pick<
-    typeof dialogueScenario.$inferSelect,
-    "publishedContentHash" | "lines" | "publishedAudioUrl"
-  >
-): boolean {
-  if (!scenario.publishedAudioUrl || !scenario.publishedContentHash) {
-    return false;
-  }
-  const currentHash = conversationContentHash(
-    scenarioLinesToConversation(scenario.lines as DialogueLine[]).lines
-  );
-  return scenario.publishedContentHash !== currentHash;
 }
 
 export type LessonPublishScenarioResult = {
@@ -268,14 +254,24 @@ export async function publishLesson(
       scenarioLinesToConversation(scenario.lines as DialogueLine[]).lines
     );
     const contentHash = variant.contentHash ?? currentHash;
+    const mixHash = currentAmbienceMixHash({
+      assetId: scenario.ambienceAssetId,
+      gainDb: scenario.ambienceGainDb,
+      offsetSeconds: scenario.ambienceOffsetSeconds,
+      layers: scenario.ambienceLayers,
+    });
     const alreadyCurrent =
       scenario.publishedAudioUrl &&
       scenario.publishedVariantId === variant.id &&
       scenario.publishedContentHash === contentHash &&
-      !isPublishStale(scenario);
+      !isPublishStale(scenario, mixHash);
 
     if (alreadyCurrent) {
-      const tokenSync = tokenSyncSnapshot(variant, scenario.lines, contentHash);
+      const tokenSync = karaokeSnapshotForTake({
+        take: variant,
+        lines: scenario.lines,
+        contentHash,
+      });
       if (JSON.stringify(scenario.tokenSync ?? null) !== JSON.stringify(tokenSync)) {
         await db
           .update(dialogueScenario)

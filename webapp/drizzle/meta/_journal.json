@@ -64,6 +64,20 @@
       "when": 1789168808103,
       "tag": "0008_giant_matthew_murdock",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789758000000,
+      "tag": "0009_ambience_beds",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789758600000,
+      "tag": "0010_ambience_layers",
+      "breakpoints": true
     }
   ]
 }

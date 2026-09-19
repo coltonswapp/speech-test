@@ -37,9 +37,42 @@ export function clearFlagsForReviewed(sync: VariantTokenSync): VariantTokenSync 
   return { ...rest, source: "reviewed" };
 }
 
+/** Drop QA flags on one token. Leaves source as-is (take still needs Mark reviewed). */
+export function clearFlagsForToken(
+  sync: VariantTokenSync,
+  lineIndex: number,
+  tokenIndex: number
+): VariantTokenSync {
+  const flags = sync.flags;
+  if (!flags?.length) return sync;
+  const nextFlags = flags.filter(
+    (flag) => !(flag.lineIndex === lineIndex && flag.tokenIndex === tokenIndex)
+  );
+  if (nextFlags.length === flags.length) return sync;
+  if (nextFlags.length === 0) {
+    const { flags: _flags, ...rest } = sync;
+    return rest;
+  }
+  return { ...sync, flags: nextFlags };
+}
+
+/** Drop every QA flag. Leaves source as-is (take still needs Mark reviewed). */
+export function clearAllFlags(sync: VariantTokenSync): VariantTokenSync {
+  if (!sync.flags?.length) return sync;
+  const { flags: _flags, ...rest } = sync;
+  return rest;
+}
+
 export function parsePublishedTokenSync(raw: unknown): PublishedTokenSync | null {
   const parsed = publishedTokenSyncSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
+}
+
+export function isKaraokeSnapshotsEqual(
+  left: PublishedTokenSync,
+  right: PublishedTokenSync,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function textsMatch(sync: VariantTokenSync, spokenTexts: string[]): boolean {
@@ -882,6 +915,20 @@ export function activeTokenAtTime(
   return best
     ? { lineIndex: best.lineIndex, tokenIndex: best.tokenIndex }
     : null;
+}
+
+/** Line-switch marks as export seconds, same rule as publish encode. */
+export function lineSwitchSecondsFromMarks(params: {
+  markSamples: number[] | null | undefined;
+  trimSampleLower?: number | null;
+  sampleRate: number;
+}): number[] {
+  const marks = params.markSamples ?? [];
+  if (marks.length === 0 || params.sampleRate <= 0) return [];
+  const trimLower = params.trimSampleLower ?? 0;
+  return marks
+    .map((sample) => (sample - trimLower) / params.sampleRate)
+    .filter((seconds) => seconds > 0);
 }
 
 export function exportLineWindows(params: {

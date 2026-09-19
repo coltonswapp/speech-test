@@ -161,6 +161,38 @@ struct GrammarScenario: Hashable {
     }
 }
 
+struct AmbienceBedRef: Hashable {
+    let id: String
+    let url: URL
+    let gainDb: Double
+
+    static let defaultGainDb: Double = -22
+    static let minGainDb: Double = -36
+    static let maxGainDb: Double = -6
+
+    var linearVolume: Float {
+        let db = min(Self.maxGainDb, max(Self.minGainDb, gainDb))
+        return Float(pow(10, db / 20))
+    }
+
+    static func fromPublished(id: String?, urlString: String?, gainDb: Double?) -> AmbienceBedRef? {
+        let trimmedId = id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedURL = urlString?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedId.isEmpty,
+              !trimmedURL.isEmpty,
+              let url = URL(string: trimmedURL),
+              url.scheme?.hasPrefix("http") == true
+        else {
+            return nil
+        }
+        return AmbienceBedRef(
+            id: trimmedId,
+            url: url,
+            gainDb: gainDb ?? defaultGainDb
+        )
+    }
+}
+
 struct GrammarExample: Hashable {
     let japanese: String
     let romaji: String
@@ -174,6 +206,7 @@ struct GrammarExample: Hashable {
     let scenario: GrammarScenario?
     let sourceScenarioId: String?
     let tokenSync: DialogueTokenSync?
+    let ambience: AmbienceBedRef?
 
     init(
         japanese: String,
@@ -187,7 +220,8 @@ struct GrammarExample: Hashable {
         publishedAt: String? = nil,
         scenario: GrammarScenario? = nil,
         sourceScenarioId: String? = nil,
-        tokenSync: DialogueTokenSync? = nil
+        tokenSync: DialogueTokenSync? = nil,
+        ambience: AmbienceBedRef? = nil
     ) {
         self.japanese = japanese
         self.romaji = romaji
@@ -201,6 +235,7 @@ struct GrammarExample: Hashable {
         self.scenario = scenario
         self.sourceScenarioId = sourceScenarioId
         self.tokenSync = tokenSync
+        self.ambience = ambience
     }
 
     var reading: String { romaji }
@@ -307,6 +342,7 @@ extension GrammarExample {
         scenario = record.scenario.map(GrammarScenario.init(record:))
         sourceScenarioId = record.sourceScenarioId
         tokenSync = nil
+        ambience = nil
     }
 }
 

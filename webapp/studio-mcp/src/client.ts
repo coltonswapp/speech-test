@@ -38,7 +38,8 @@ export async function studioFetch<T>(
   const { timeoutMs = 30_000, ...rest } = init;
   const url = `${studioBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
   const headers = new Headers(rest.headers);
-  if (rest.body && !headers.has("Content-Type")) {
+  // FormData must keep Content-Type unset so fetch can attach the multipart boundary.
+  if (rest.body && !headers.has("Content-Type") && !(rest.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
   const agentToken = process.env.STUDIO_AGENT_TOKEN?.trim();
@@ -225,4 +226,250 @@ export function isUnpublished(scenario: {
   publishedAt?: string | null;
 }): boolean {
   return !scenario.publishedAudioUrl && !scenario.publishedAt;
+}
+
+const ALLOWED_THUMBNAIL_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
+
+export type ThumbnailImageInput = {
+  imageUrl?: string;
+  imageBase64?: string;
+  contentType?: string;
+  filename?: string;
+};
+
+export type LessonThumbnailResult = {
+  collection: DialogueCollection;
+  thumbnailUrl: string;
+  thumbnailSmallUrl?: string;
+  objectKey?: string;
+};
+
+export type SceneThumbnailResult = {
+  scenario: DialogueScenario;
+  thumbnailUrl: string;
+  thumbnailSmallUrl?: string;
+  objectKey?: string;
+};
+
+function normalizeMime(raw: string): string {
+  return raw.trim().toLowerCase().split(";")[0]?.trim() ?? "";
+}
+
+function mimeFromFilename(filename: string): string | null {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "gif":
+      return "image/gif";
+    default:
+      return null;
+  }
+}
+
+function extensionForMime(mime: string): string {
+  switch (normalizeMime(mime)) {
+    case "image/jpeg":
+    case "image/jpg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "image/gif":
+      return "gif";
+    default:
+      return "bin";
+  }
+}
+
+function assertAllowedMime(mime: string): string {
+  const normalized = normalizeMime(mime);
+  // Studio routes accept image/jpg; normalize to image/jpeg for File.type.
+  const canonical = normalized === "image/jpg" ? "image/jpeg" : normalized;
+  if (!ALLOWED_THUMBNAIL_TYPES.has(normalized) && !ALLOWED_THUMBNAIL_TYPES.has(canonical)) {
+    throw new Error("Use a JPEG, PNG, WebP, or GIF image.");
+  }
+  return canonical;
+}
+
+function assertWithinSize(byteLength: number): void {
+  if (byteLength > MAX_THUMBNAIL_BYTES) {
+    throw new Error("Thumbnail must be 5 MB or smaller.");
+  }
+  if (byteLength <= 0) {
+    throw new Error("Thumbnail image is empty.");
+  }
+}
+
+function parseDataUrl(value: string): { mime: string; base64: string } | null {
+  const match = /^data:([^;,]+);base64,(.+)$/is.exec(value.trim());
+  if (!match) return null;
+  return { mime: match[1], base64: match[2] };
+}
+
+function stripBase64Padding(value: string): string {
+  const trimmed = value.trim();
+  const dataUrl = parseDataUrl(trimmed);
+  return dataUrl?.base64 ?? trimmed.replace(/\s+/g, "");
+}
+
+async function resolveThumbnailFile(input: ThumbnailImageInput): Promise<File> {
+  const hasUrl = typeof input.imageUrl === "string" && input.imageUrl.trim().length > 0;
+  const hasBase64 =
+    typeof input.imageBase64 === "string" && input.imageBase64.trim().length > 0;
+
+  if (hasUrl === hasBase64) {
+    throw new Error("Provide exactly one of imageUrl or imageBase64.");
+  }
+
+  let bytes: Buffer;
+  let contentType: string | undefined =
+    typeof input.contentType === "string" && input.contentType.trim()
+      ? input.contentType
+      : undefined;
+  let filename =
+    typeof input.filename === "string" && input.filename.trim()
+      ? input.filename.trim()
+      : undefined;
+
+  if (hasUrl) {
+    const url = input.imageUrl!.trim();
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error("imageUrl must be a valid HTTP(S) URL.");
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error("imageUrl must be an HTTP(S) URL.");
+    }
+    const res = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch imageUrl (HTTP ${res.status}).`);
+    }
+    const remoteType = res.headers.get("content-type") ?? undefined;
+    const remoteMime = remoteType ? normalizeMime(remoteType) : "";
+    const remoteLooksLikeImage =
+      remoteMime.startsWith("image/") &&
+      (ALLOWED_THUMBNAIL_TYPES.has(remoteMime) ||
+        ALLOWED_THUMBNAIL_TYPES.has(
+          remoteMime === "image/jpg" ? "image/jpeg" : remoteMime
+        ));
+    contentType =
+      contentType ??
+      (remoteLooksLikeImage ? remoteType! : undefined) ??
+      (filename ? mimeFromFilename(filename) ?? undefined : undefined) ??
+      (mimeFromFilename(parsed.pathname) ?? undefined);
+    const arrayBuffer = await res.arrayBuffer();
+    bytes = Buffer.from(arrayBuffer);
+    if (!filename) {
+      const pathName = parsed.pathname.split("/").pop() || "thumbnail";
+      filename = pathName.includes(".") ? pathName : undefined;
+    }
+  } else {
+    const raw = input.imageBase64!.trim();
+    const dataUrl = parseDataUrl(raw);
+    if (dataUrl) {
+      contentType = contentType ?? dataUrl.mime;
+    }
+    if (!contentType && filename) {
+      contentType = mimeFromFilename(filename) ?? undefined;
+    }
+    if (!contentType) {
+      throw new Error(
+        "imageBase64 requires contentType (or a data URL / filename with a known extension)."
+      );
+    }
+    try {
+      bytes = Buffer.from(stripBase64Padding(raw), "base64");
+    } catch {
+      throw new Error("imageBase64 is not valid base64.");
+    }
+  }
+
+  if (!contentType) {
+    throw new Error("Could not determine image content type.");
+  }
+  const mime = assertAllowedMime(contentType);
+  assertWithinSize(bytes.byteLength);
+
+  const finalName =
+    filename && filename.includes(".")
+      ? filename
+      : `thumbnail.${extensionForMime(mime)}`;
+
+  return new File([bytes], finalName, { type: mime });
+}
+
+async function postThumbnailFormData<T>(path: string, file: File): Promise<T> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return studioFetch<T>(path, {
+    method: "POST",
+    body: formData,
+    timeoutMs: 120_000,
+  });
+}
+
+/** Upload a lesson (collection) card thumbnail. Prefer imageUrl when available. */
+export async function setLessonThumbnail(
+  collectionId: string,
+  image: ThumbnailImageInput
+): Promise<LessonThumbnailResult> {
+  const file = await resolveThumbnailFile(image);
+  return postThumbnailFormData(
+    `/api/content/dialogues/${encodeURIComponent(collectionId)}/thumbnail`,
+    file
+  );
+}
+
+/** Clear a lesson (collection) thumbnail. */
+export function clearLessonThumbnail(
+  collectionId: string
+): Promise<{ collection: DialogueCollection }> {
+  return studioFetch<{ collection: DialogueCollection }>(
+    `/api/content/dialogues/${encodeURIComponent(collectionId)}/thumbnail`,
+    { method: "DELETE" }
+  );
+}
+
+/**
+ * Upload a scene (scenario) thumbnail override.
+ * When cleared, the app falls back to the lesson/collection thumbnail.
+ */
+export async function setSceneThumbnail(
+  collectionId: string,
+  slug: string,
+  image: ThumbnailImageInput
+): Promise<SceneThumbnailResult> {
+  const file = await resolveThumbnailFile(image);
+  return postThumbnailFormData(
+    `/api/content/dialogues/${encodeURIComponent(collectionId)}/scenarios/${encodeURIComponent(slug)}/thumbnail`,
+    file
+  );
+}
+
+/** Clear a scene thumbnail so the lesson thumbnail applies again. */
+export function clearSceneThumbnail(
+  collectionId: string,
+  slug: string
+): Promise<{ scenario: DialogueScenario }> {
+  return studioFetch<{ scenario: DialogueScenario }>(
+    `/api/content/dialogues/${encodeURIComponent(collectionId)}/scenarios/${encodeURIComponent(slug)}/thumbnail`,
+    { method: "DELETE" }
+  );
 }

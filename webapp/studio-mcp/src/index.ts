@@ -4,8 +4,12 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   autoStampTake,
+  clearLessonThumbnail,
+  clearSceneThumbnail,
   isUnpublished,
   scenarioSlug,
+  setLessonThumbnail,
+  setSceneThumbnail,
   studioBaseUrl,
   studioFetch,
   type CastVoiceEntry,
@@ -108,6 +112,34 @@ const castVoiceSchema = z.object({
   voice: z.string().min(1),
   provider: z.enum(["gemini", "openai"]).optional(),
 });
+
+/** Shared image args for thumbnail set tools. Prefer imageUrl when available. */
+const thumbnailImageSchema = {
+  imageUrl: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("HTTP(S) URL of the image. Prefer this when the agent already has a URL."),
+  imageBase64: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Raw base64 image bytes, or a data URL (data:image/...;base64,...). Use when no URL is available."
+    ),
+  contentType: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "MIME type (image/jpeg|png|webp|gif). Required with raw imageBase64 unless the value is a data URL or filename has a known extension."
+    ),
+  filename: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Optional filename (e.g. cover.png). Used for MIME inference and the multipart file name."),
+};
 
 function compact<T extends Record<string, unknown>>(obj: T): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -442,6 +474,111 @@ server.registerTool(
         marksDerived: result.marksDerived,
         summary: result.summary,
       });
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "set_lesson_thumbnail",
+  {
+    title: "Set lesson thumbnail",
+    description:
+      "Upload a lesson (collection) card thumbnail to CDN. JPEG/PNG/WebP/GIF ≤5MB. Provide imageUrl OR imageBase64 (+ contentType unless data URL / filename implies MIME). Prefers imageUrl when the agent has a URL. Sets thumbnailUrl and thumbnailSmallUrl on the collection.",
+    inputSchema: {
+      collectionId: z.string().min(1),
+      ...thumbnailImageSchema,
+    },
+  },
+  async ({ collectionId, imageUrl, imageBase64, contentType, filename }) => {
+    try {
+      const result = await setLessonThumbnail(collectionId, {
+        imageUrl,
+        imageBase64,
+        contentType,
+        filename,
+      });
+      return jsonResult({
+        collectionId,
+        thumbnailUrl: result.thumbnailUrl,
+        thumbnailSmallUrl: result.thumbnailSmallUrl ?? null,
+        collection: result.collection,
+      });
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "set_scene_thumbnail",
+  {
+    title: "Set scene thumbnail",
+    description:
+      "Upload a scene (scenario) thumbnail override to CDN. JPEG/PNG/WebP/GIF ≤5MB. Provide imageUrl OR imageBase64 (+ contentType unless data URL / filename implies MIME). Prefers imageUrl when the agent has a URL. Overrides the lesson thumbnail for this scene; clear_scene_thumbnail restores lesson fallback.",
+    inputSchema: {
+      collectionId: z.string().min(1),
+      slug: z.string().min(1),
+      ...thumbnailImageSchema,
+    },
+  },
+  async ({ collectionId, slug, imageUrl, imageBase64, contentType, filename }) => {
+    try {
+      const result = await setSceneThumbnail(collectionId, slug, {
+        imageUrl,
+        imageBase64,
+        contentType,
+        filename,
+      });
+      return jsonResult({
+        collectionId,
+        slug,
+        thumbnailUrl: result.thumbnailUrl,
+        thumbnailSmallUrl: result.thumbnailSmallUrl ?? null,
+        scenario: result.scenario,
+      });
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "clear_lesson_thumbnail",
+  {
+    title: "Clear lesson thumbnail",
+    description:
+      "Remove the lesson (collection) card thumbnail. Scenes that inherit the lesson thumbnail will also lose that image until a new lesson or scene thumbnail is set.",
+    inputSchema: {
+      collectionId: z.string().min(1),
+    },
+  },
+  async ({ collectionId }) => {
+    try {
+      const { collection } = await clearLessonThumbnail(collectionId);
+      return jsonResult({ collectionId, collection });
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "clear_scene_thumbnail",
+  {
+    title: "Clear scene thumbnail",
+    description:
+      "Remove a scene (scenario) thumbnail override so the app falls back to the lesson (collection) thumbnail.",
+    inputSchema: {
+      collectionId: z.string().min(1),
+      slug: z.string().min(1),
+    },
+  },
+  async ({ collectionId, slug }) => {
+    try {
+      const { scenario } = await clearSceneThumbnail(collectionId, slug);
+      return jsonResult({ collectionId, slug, scenario });
     } catch (error) {
       return errorResult(error);
     }

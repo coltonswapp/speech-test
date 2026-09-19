@@ -54,7 +54,10 @@ function requiredEnv(name: string): string {
 }
 
 export function alignerConfigured(): boolean {
-  return Boolean(process.env.ALIGNER_URL && process.env.ALIGNER_TOKEN);
+  // Read at call time (Vercel injects ALIGNER_* at runtime; avoid build-cache false).
+  const url = process.env["ALIGNER_URL"];
+  const token = process.env["ALIGNER_TOKEN"];
+  return Boolean(url && token);
 }
 
 const SIGNED_URL_TTL_SECONDS = 10 * 60;

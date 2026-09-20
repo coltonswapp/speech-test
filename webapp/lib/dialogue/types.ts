@@ -33,10 +33,14 @@ export const spokenLineSchema = z.object({
   english: z.string().optional(),
   // Studio TTS-only Gemini audio tags. Never baked into japanese/romaji/english;
   // public export intentionally omits this field.
-  delivery: z
-    .string()
-    .optional()
-    .transform((value) => normalizeDelivery(value)),
+  // Use preprocess (not optional().transform) so the output type stays
+  // `delivery?: string` — Zod transforms otherwise make the key required
+  // as `string | undefined` and break next build typecheck.
+  delivery: z.preprocess(
+    (value) =>
+      typeof value === "string" ? normalizeDelivery(value) : value,
+    z.string().optional(),
+  ),
   id: z.string().optional(),
   grammarPointIDs: z.array(z.string()).optional(),
 });

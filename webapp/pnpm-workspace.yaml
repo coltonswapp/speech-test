@@ -1,5 +1,8 @@
 allowBuilds:
   '@ffmpeg-installer/darwin-arm64': true
+  # Vercel / CI are linux-x64; without this pnpm 10 fails install with
+  # ERR_PNPM_IGNORED_BUILDS and the deployment errors before Building.
+  '@ffmpeg-installer/linux-x64': true
   esbuild: true
   sharp: true
   unrs-resolver: true

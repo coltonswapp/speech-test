@@ -16,7 +16,10 @@ const DEFAULT_SPEAKER_LABEL: Record<ConversationSpeaker, string> = {
 
 export type ConversationDialogueLine = {
   speaker: ConversationSpeaker;
+  /** Clean Japanese dialogue (no audio tags). */
   text: string;
+  /** Optional Gemini audio tag(s), e.g. "[softly]" — prepended in the TTS prompt only. */
+  delivery?: string;
 };
 
 export class GeminiTTSError extends Error {}
@@ -38,12 +41,18 @@ function resolveSpeakerLabels(params: {
   return { ...DEFAULT_SPEAKER_LABEL };
 }
 
+function spokenTextForPrompt(line: ConversationDialogueLine): string {
+  const text = line.text.trim();
+  const delivery = line.delivery?.trim();
+  return delivery ? `${delivery} ${text}` : text;
+}
+
 function buildTranscript(
   lines: ConversationDialogueLine[],
   labels: Record<ConversationSpeaker, string>
 ): string {
   const body = lines
-    .map((line) => `${labels[line.speaker]}: ${line.text.trim()}`)
+    .map((line) => `${labels[line.speaker]}: ${spokenTextForPrompt(line)}`)
     .join("\n");
   // Brief style cue helps Gemini keep voices attached to the right speaker.
   const cue = `TTS dialogue. ${labels.speaker1} uses voice A; ${labels.speaker2} uses voice B. Keep each speaker's voice consistent for every line.\n\n`;

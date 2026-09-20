@@ -44,7 +44,11 @@ export async function loadConversationLines(
               line.speaker === "speaker1"
                 ? (conversation.speaker1Name ?? "Speaker 1")
                 : (conversation.speaker2Name ?? "Speaker 2");
-            return `${name}: ${line.text}`;
+            const delivery = line.delivery?.trim();
+            const spoken = delivery
+              ? `${delivery} ${line.text}`
+              : line.text;
+            return `${name}: ${spoken}`;
           })
           .join("\n"),
         updatedAt: new Date(),

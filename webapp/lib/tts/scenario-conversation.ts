@@ -3,12 +3,19 @@
 // the Audio tab uses it to label voice pickers, the variants route to build
 // the synthesis input, so both sides agree on the speaker1/speaker2 mapping.
 
-import { isSpokenLine, type DialogueLine } from "@/lib/dialogue/types";
+import {
+  isSpokenLine,
+  normalizeDelivery,
+  type DialogueLine,
+} from "@/lib/dialogue/types";
 import { SpeakerAssigner } from "@/lib/tts/dialogue-import";
 
 export type ConversationLine = {
   speaker: "speaker1" | "speaker2";
+  /** Clean Japanese — content hash, tokenize, and aligner use this only. */
   text: string;
+  /** Gemini TTS audio tag(s); applied in the synthesis prompt only. */
+  delivery?: string;
 };
 
 export type ScenarioConversation = {
@@ -35,9 +42,11 @@ export function scenarioLinesToConversation(
     if (!speakerNames.some((n) => n.toLowerCase() === speakerName.toLowerCase())) {
       speakerNames.push(speakerName);
     }
+    const delivery = normalizeDelivery(line.delivery);
     conversationLines.push({
       speaker: assigner.speakerFor(speakerName),
       text: japanese,
+      ...(delivery ? { delivery } : {}),
     });
   }
 

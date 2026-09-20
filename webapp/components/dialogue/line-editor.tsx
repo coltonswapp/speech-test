@@ -192,7 +192,11 @@ export function LineEditor({
     const line = lines[index];
     if (!isSpokenLine(line)) return;
     const next = lines.slice();
-    next[index] = { ...line, ...patch };
+    const merged: SpokenLine = { ...line, ...patch };
+    if ("delivery" in patch && !patch.delivery) {
+      delete merged.delivery;
+    }
+    next[index] = merged;
     onChange(next);
   }
 
@@ -535,9 +539,10 @@ export function LineEditor({
       </div>
       <p className="-mt-1 text-xs text-muted-foreground">
         Renaming a speaker here updates every line using that name. Assign
-        each line&apos;s speaker from the dropdown below. Stage lines and
-        inline questions sit between spoken lines, skip TTS, and do not
-        consume a line-switch beat.
+        each line&apos;s speaker from the dropdown below. Optional delivery
+        tags (e.g. [softly]) steer Gemini TTS only — not shown in the app.
+        Stage lines and inline questions sit between spoken lines, skip TTS,
+        and do not consume a line-switch beat.
       </p>
 
       {lines.length === 0 && (
@@ -734,6 +739,18 @@ export function LineEditor({
                   ))}
                 </SelectContent>
               </Select>
+              <Input
+                value={line.delivery ?? ""}
+                onChange={(e) =>
+                  updateSpoken(index, {
+                    delivery: e.target.value.trim() || undefined,
+                  })
+                }
+                placeholder="[softly]"
+                className="h-8 w-36 text-xs"
+                aria-label={`Delivery tag for line ${index + 1}`}
+                title="Gemini TTS audio tag — Studio only, not shown in the app"
+              />
               {reviseEnabled && (
                 <Button
                   variant="ghost"

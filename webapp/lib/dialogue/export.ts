@@ -80,6 +80,8 @@ function exportLine(
       id: line.id || `${scenarioId}/inline-question-${index}`,
     };
   }
+  // Intentionally omit `delivery` — Gemini TTS audio tags are Studio-only
+  // and must not appear in /api/public/dialogues/* or the iOS app export.
   return {
     speaker: line.speaker,
     japanese: line.japanese,

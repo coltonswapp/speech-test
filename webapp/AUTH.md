@@ -24,3 +24,7 @@ Set `STUDIO_AGENT_TOKEN` on Vercel and in the Studio MCP env. Requests send `Aut
 ## Local
 
 Leave those unset (or `STUDIO_AUTH_BYPASS=1` in non-production) so localhost MCP keeps working. `APP_PASSPHRASE` remains a fallback login if you still have it on production.
+
+## Deploy notes
+
+- 2026-09-20: Redeploy so prod picks up spoken-line `delivery` (PR #29 / `951a4cd`).

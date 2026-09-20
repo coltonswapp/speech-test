@@ -746,7 +746,7 @@ export function LineEditor({
                     delivery: e.target.value.trim() || undefined,
                   })
                 }
-                placeholder="[softly]"
+                placeholder="optional"
                 className="h-8 w-36 text-xs"
                 aria-label={`Delivery tag for line ${index + 1}`}
                 title="Gemini TTS audio tag — Studio only, not shown in the app"

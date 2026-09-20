@@ -99,6 +99,8 @@ export type SpokenLine = {
   japanese: string;
   romaji?: string;
   english?: string;
+  /** Gemini TTS audio tags (Studio-only; not exported to the app). */
+  delivery?: string;
   id?: string;
   grammarPointIDs?: string[];
 };

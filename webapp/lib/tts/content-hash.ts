@@ -3,6 +3,8 @@
 // stale audio. Hashes the mapped speaker slot (speaker1/speaker2), not the
 // display name — Gemini's transcript uses "Speaker 1:/Speaker 2:" labels, so
 // renaming a speaker doesn't change the audio.
+// Delivery audio tags live on ConversationLine.delivery and are intentionally
+// excluded here (only speaker + clean japanese text are hashed).
 
 import { createHash } from "node:crypto";
 

@@ -97,3 +97,29 @@ describe("buildScenarioFile ambience export", () => {
     assert.equal(json.includes("ambienceGainDb"), false);
   });
 });
+
+describe("buildScenarioFile delivery export", () => {
+  it("omits Studio-only delivery tags from spoken lines", () => {
+    const file = buildScenarioFile(
+      baseScenario({
+        lines: [
+          {
+            speaker: "Aiko",
+            japanese: "すごい！",
+            delivery: "[excited]",
+          },
+        ],
+      })
+    );
+    const line = file.scenario.lines[0] as {
+      speaker: string;
+      japanese: string;
+      delivery?: string;
+    };
+    assert.equal(line.speaker, "Aiko");
+    assert.equal(line.japanese, "すごい！");
+    assert.equal(line.delivery, undefined);
+    assert.equal(JSON.stringify(file).includes("delivery"), false);
+    assert.equal(JSON.stringify(file).includes("[excited]"), false);
+  });
+});

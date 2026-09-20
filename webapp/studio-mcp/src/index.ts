@@ -45,6 +45,8 @@ const dialogueLineSchema = z.object({
   japanese: z.string().optional(),
   romaji: z.string().optional(),
   english: z.string().optional(),
+  // Gemini TTS audio tags; Studio-only (not in public/iOS export).
+  delivery: z.string().optional(),
   text: z.string().optional(),
   visibility: z.enum(["cold", "practice"]).optional(),
   id: z.string().optional(),
@@ -80,6 +82,10 @@ function toPatchLine(line: PatchLineInput, index: number): Record<string, unknow
     japanese: line.japanese,
     romaji: line.romaji,
     english: line.english,
+    delivery:
+      typeof line.delivery === "string" && line.delivery.trim()
+        ? line.delivery.trim()
+        : undefined,
     id: line.id,
     grammarPointIDs: line.grammarPointIDs,
   });
@@ -220,7 +226,7 @@ server.registerTool(
   {
     title: "Get scenario",
     description:
-      "Load a scenario by collectionId + slug (2026-08-25 stage schema). Speakers, spoken rows, and stage/ト書き rows as { type:\"stage\", text, visibility, role:\"stage\" }. Also B-line lengths, grammar tags, unpublished flag. Flags long B lines and a missing opener ト書き.",
+      "Load a scenario by collectionId + slug (2026-08-25 stage schema). Speakers, spoken rows (optional delivery Gemini TTS tags), and stage/ト書き rows as { type:\"stage\", text, visibility, role:\"stage\" }. Also B-line lengths, grammar tags, unpublished flag. Flags long B lines and a missing opener ト書き.",
     inputSchema: {
       collectionId: z.string().min(1),
       slug: z.string().min(1),
@@ -251,6 +257,7 @@ server.registerTool(
           japanese: line.japanese,
           english: line.english ?? "",
           romaji: line.romaji ?? "",
+          delivery: line.delivery ?? "",
           grammarPointIDs: line.grammarPointIDs ?? [],
           jpLength: meta.jpLength,
           togaki: meta.togaki,
@@ -301,7 +308,7 @@ server.registerTool(
   {
     title: "Patch scenario",
     description:
-      "Patch scenario lines and/or metadata via the existing Content Studio PATCH route. Only send fields to change. Each line is a flat object: spoken rows need speaker+japanese; stage/ト書き rows need type:\"stage\", text, and visibility (cold|practice).",
+      "Patch scenario lines and/or metadata via the existing Content Studio PATCH route. Only send fields to change. Each line is a flat object: spoken rows need speaker+japanese (optional delivery for Gemini TTS audio tags, e.g. \"[softly]\"); stage/ト書き rows need type:\"stage\", text, and visibility (cold|practice).",
     inputSchema: {
       collectionId: z.string().min(1),
       slug: z.string().min(1),

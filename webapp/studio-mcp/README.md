@@ -7,8 +7,8 @@ Studio should already be running. STUDIO_BASE_URL defaults to http://localhost:3
 ## Tools
 
 - list_curriculum: units, collections, scenario slugs/titles, unpublished flag
-- get_scenario: speakers, spoken rows, and stage/ト書き rows as { type, text, visibility, role: "stage" }; B-line lengths, grammar tags, unpublished flag; flags long B lines and a missing opener ト書き
-- patch_scenario: patch lines and metadata via existing scenario PATCH. Lines are a flat object: spoken needs speaker+japanese; stage needs type "stage", text, visibility
+- get_scenario: speakers, spoken rows (optional `delivery` Gemini TTS audio tags), and stage/ト書き rows as { type, text, visibility, role: "stage" }; B-line lengths, grammar tags, unpublished flag; flags long B lines and a missing opener ト書き
+- patch_scenario: patch lines and metadata via existing scenario PATCH. Lines are a flat object: spoken needs speaker+japanese (optional `delivery` for Gemini audio tags, e.g. `[softly]`); stage needs type "stage", text, visibility
 - get_cast_voices: collection castVoices (Kaito to Orus, etc.)
 - set_cast_voices: replace collection castVoices
 - generate_take: ensure scenario audio project, then kick a TTS take
@@ -59,5 +59,6 @@ Set STUDIO_BASE_URL if Studio is not at http://localhost:3000
 - B is the learner. Named Kaito is B; otherwise the second speaker in appearance order.
 - Long B line: Japanese length excluding inline parentheticals over 24 characters.
 - Stage / ト書き: `{ type: "stage", text, visibility: "cold" | "practice" }`. Skipped by TTS. An opener (before the first spoken line, typically visibility "cold") may show on cold listen; mid-scene rows use "practice".
+- Spoken `delivery`: optional Gemini TTS audio tags (e.g. `[softly]`, `[curious]`). Steers Generate Take only; never baked into japanese/romaji/english and not exported to the app.
 - Missing togaki flag: no opener stage row before the first spoken line.
 - Inline togaki: fullwidth or ASCII parentheticals in spoken Japanese text (still reported per line).

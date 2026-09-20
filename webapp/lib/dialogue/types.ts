@@ -16,12 +16,27 @@ import { dialogueFormalityLevels } from "@/lib/dialogue/formality";
 export const stageVisibilitySchema = z.enum(["cold", "practice"]);
 export type StageVisibility = z.infer<typeof stageVisibilitySchema>;
 
+// Trim; empty / whitespace-only → omit. Gemini audio tags are open-ended
+// (e.g. "[softly]", "[curious]", "[sarcastically, slowly]") — no enum.
+export function normalizeDelivery(
+  value: string | null | undefined,
+): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 export const spokenLineSchema = z.object({
   type: z.literal("spoken").optional(),
   speaker: z.string(),
   japanese: z.string(),
   romaji: z.string().optional(),
   english: z.string().optional(),
+  // Studio TTS-only Gemini audio tags. Never baked into japanese/romaji/english;
+  // public export intentionally omits this field.
+  delivery: z
+    .string()
+    .optional()
+    .transform((value) => normalizeDelivery(value)),
   id: z.string().optional(),
   grammarPointIDs: z.array(z.string()).optional(),
 });

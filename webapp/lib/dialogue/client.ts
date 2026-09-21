@@ -54,6 +54,8 @@ export type ScenarioSummary = {
   publishedContentHash: string | null;
   publishedAt: string | null;
   updatedAt: string;
+  /** Trimmed published-take length from the variant; null when unpublished. */
+  publishedAudioDurationSeconds: number | null;
   readiness: ScenarioReadinessSummary;
 };
 
@@ -133,6 +135,7 @@ export type DialogueScenario = {
 
 /** Collection GET attaches curriculum-style readiness on each scenario. */
 export type DialogueCollectionScenario = DialogueScenario & {
+  publishedAudioDurationSeconds: number | null;
   readiness: ScenarioReadinessSummary;
 };
 

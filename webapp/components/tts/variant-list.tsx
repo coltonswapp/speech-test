@@ -124,7 +124,7 @@ export function VariantList({
 }) {
   const queryClient = useQueryClient();
   // Review queue deep-links a specific take (?take=<variantId>), optional line
-  // (?line=N) and Token timing tab (?timing=tokens).
+  // (?line=N) and Timing mark kind (?timing=tokens|lines).
   const searchParams = useSearchParams();
   const requestedTakeId = searchParams.get("take");
   const requestedLineRaw = searchParams.get("line");

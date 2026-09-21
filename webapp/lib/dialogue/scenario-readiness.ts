@@ -229,6 +229,41 @@ export function formatCurriculumUpdatedAt(
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+/**
+ * Compact published-dialogue length for curriculum unit/lesson labels.
+ * Returns null for missing/zero so callers can omit the label.
+ */
+export function formatPublishedAudioDuration(
+  totalSeconds: number | null | undefined,
+): string | null {
+  if (
+    totalSeconds == null ||
+    !Number.isFinite(totalSeconds) ||
+    totalSeconds <= 0
+  ) {
+    return null;
+  }
+  const whole = Math.round(totalSeconds);
+  if (whole < 60) return `${whole}s`;
+  const minutes = Math.floor(whole / 60);
+  const seconds = whole % 60;
+  if (seconds === 0) return `${minutes}m`;
+  return `${minutes}m ${seconds}s`;
+}
+
+/** Sum published-take seconds; unpublished / unknown scenes contribute 0. */
+export function sumPublishedAudioDurationSeconds(
+  durations: Array<number | null | undefined>,
+): number {
+  let total = 0;
+  for (const value of durations) {
+    if (value != null && Number.isFinite(value) && value > 0) {
+      total += value;
+    }
+  }
+  return total;
+}
+
 export function syncChipLabel(status: CurriculumSyncStatus): string {
   switch (status) {
     case "complete":

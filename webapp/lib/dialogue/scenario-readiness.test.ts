@@ -8,6 +8,8 @@ import {
   buildScenarioReadiness,
   curriculumSyncStatus,
   curriculumTimingStatus,
+  formatPublishedAudioDuration,
+  sumPublishedAudioDurationSeconds,
 } from "./scenario-readiness";
 import type { PublishedTokenSync, VariantTokenSync } from "./types";
 
@@ -220,5 +222,34 @@ describe("karaokeSnapshotForTake", () => {
     assert.ok(next);
     assert.equal(isKaraokeSnapshotStale(null, next), true);
     assert.equal(isKaraokeSnapshotStale(next, next), false);
+  });
+});
+
+describe("formatPublishedAudioDuration", () => {
+  it("omits empty or non-positive values", () => {
+    assert.equal(formatPublishedAudioDuration(null), null);
+    assert.equal(formatPublishedAudioDuration(undefined), null);
+    assert.equal(formatPublishedAudioDuration(0), null);
+    assert.equal(formatPublishedAudioDuration(-1), null);
+  });
+
+  it("formats seconds under a minute compactly", () => {
+    assert.equal(formatPublishedAudioDuration(42), "42s");
+    assert.equal(formatPublishedAudioDuration(42.4), "42s");
+  });
+
+  it("formats minutes with optional residual seconds", () => {
+    assert.equal(formatPublishedAudioDuration(60), "1m");
+    assert.equal(formatPublishedAudioDuration(1052), "17m 32s");
+    assert.equal(formatPublishedAudioDuration(90.4), "1m 30s");
+  });
+});
+
+describe("sumPublishedAudioDurationSeconds", () => {
+  it("sums only published durations", () => {
+    assert.equal(
+      sumPublishedAudioDurationSeconds([12, null, 8, undefined, 0, -2]),
+      20,
+    );
   });
 });

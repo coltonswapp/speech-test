@@ -8,6 +8,7 @@ import {
   buildScenarioReadiness,
   type ScenarioReadiness,
 } from "@/lib/dialogue/scenario-readiness";
+import { estimatedWavDurationSeconds } from "@/lib/dialogue/token-sync";
 import type { DialogueLine } from "@/lib/dialogue/types";
 import { currentAmbienceMixHash } from "@/lib/tts/ambience-mix";
 import { conversationContentHash } from "@/lib/tts/content-hash";
@@ -29,14 +30,20 @@ export type ScenarioReadinessSource = {
   tokenSync: unknown;
 };
 
+export type ScenarioCurriculumMeta = {
+  readiness: ScenarioReadiness;
+  /** Trimmed published-take length; null when unpublished or take missing. */
+  publishedAudioDurationSeconds: number | null;
+};
+
 /**
- * Compute curriculum-style readiness for a batch of scenarios, sharing the
- * same TTS project/variant lookups as GET /api/content/dialogues.
+ * Curriculum readiness + published-take duration for a batch of scenarios,
+ * sharing the same TTS project/variant lookups as GET /api/content/dialogues.
  */
-export async function loadScenarioReadinessById(
+export async function loadScenarioCurriculumMetaById(
   scenarios: ScenarioReadinessSource[],
-): Promise<Map<string, ScenarioReadiness>> {
-  const result = new Map<string, ScenarioReadiness>();
+): Promise<Map<string, ScenarioCurriculumMeta>> {
+  const result = new Map<string, ScenarioCurriculumMeta>();
   if (scenarios.length === 0) return result;
 
   const scenarioIds = scenarios.map((s) => s.id);
@@ -114,9 +121,12 @@ export async function loadScenarioReadinessById(
       lines: scenario.lines,
       contentHash,
     });
-    result.set(
-      scenario.id,
-      buildScenarioReadiness({
+    const publishedAudioDurationSeconds =
+      scenario.publishedAudioUrl && publishedVariant
+        ? estimatedWavDurationSeconds(publishedVariant)
+        : null;
+    result.set(scenario.id, {
+      readiness: buildScenarioReadiness({
         publishedAudioUrl: scenario.publishedAudioUrl,
         audioStale,
         karaokeStale,
@@ -128,8 +138,21 @@ export async function loadScenarioReadinessById(
         workingTokenSync: take?.tokenSync,
         contentHash,
       }),
-    );
+      publishedAudioDurationSeconds,
+    });
   }
 
+  return result;
+}
+
+/** Readiness-only view of {@link loadScenarioCurriculumMetaById}. */
+export async function loadScenarioReadinessById(
+  scenarios: ScenarioReadinessSource[],
+): Promise<Map<string, ScenarioReadiness>> {
+  const meta = await loadScenarioCurriculumMetaById(scenarios);
+  const result = new Map<string, ScenarioReadiness>();
+  for (const [id, entry] of meta) {
+    result.set(id, entry.readiness);
+  }
   return result;
 }

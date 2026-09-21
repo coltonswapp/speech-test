@@ -5,7 +5,7 @@ import { db } from "@/lib/db/client";
 import { dialogueCollection, dialogueScenario } from "@/lib/db/schema";
 import { collectionFileSchema, updateCollectionSchema } from "@/lib/dialogue/types";
 import { upsertCollectionFile } from "@/lib/dialogue/import";
-import { loadScenarioReadinessById } from "@/lib/dialogue/load-scenario-readiness";
+import { loadScenarioCurriculumMetaById } from "@/lib/dialogue/load-scenario-readiness";
 
 async function loadCollection(collectionId: string) {
   const collection = await db.query.dialogueCollection.findFirst({
@@ -16,15 +16,19 @@ async function loadCollection(collectionId: string) {
     where: eq(dialogueScenario.collectionId, collectionId),
     orderBy: [asc(dialogueScenario.orderIndex)],
   });
-  const readinessById = await loadScenarioReadinessById(scenarios);
+  const metaById = await loadScenarioCurriculumMetaById(scenarios);
   return {
     ...collection,
     scenarios: scenarios.map((scenario) => {
-      const readiness = readinessById.get(scenario.id);
-      if (!readiness) {
+      const meta = metaById.get(scenario.id);
+      if (!meta) {
         throw new Error(`Missing readiness for scenario ${scenario.id}`);
       }
-      return { ...scenario, readiness };
+      return {
+        ...scenario,
+        publishedAudioDurationSeconds: meta.publishedAudioDurationSeconds,
+        readiness: meta.readiness,
+      };
     }),
   };
 }

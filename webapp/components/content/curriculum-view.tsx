@@ -34,6 +34,10 @@ import {
   SortableItem,
   SortableList,
 } from "@/components/content/curriculum-sortable";
+import {
+  formatPublishedAudioDuration,
+  sumPublishedAudioDurationSeconds,
+} from "@/lib/dialogue/scenario-readiness";
 import { cn } from "@/lib/utils";
 
 type EditTarget =
@@ -333,6 +337,17 @@ export function CurriculumView() {
     () => unfiled.map((c) => c.id),
     [unfiled],
   );
+  const unfiledAudioDurationLabel = useMemo(
+    () =>
+      formatPublishedAudioDuration(
+        sumPublishedAudioDurationSeconds(
+          unfiled.flatMap((c) =>
+            c.scenarios.map((s) => s.publishedAudioDurationSeconds),
+          ),
+        ),
+      ),
+    [unfiled],
+  );
   const unfiledSectionOpen = isSectionExpanded(
     UNFILED_KEY,
     unfiledCollectionIds,
@@ -427,6 +442,17 @@ export function CurriculumView() {
                       ).length,
                     0,
                   );
+                  const unitAudioDurationSeconds =
+                    sumPublishedAudioDurationSeconds(
+                      unitCollections.flatMap((c) =>
+                        c.scenarios.map(
+                          (s) => s.publishedAudioDurationSeconds,
+                        ),
+                      ),
+                    );
+                  const unitAudioDurationLabel = formatPublishedAudioDuration(
+                    unitAudioDurationSeconds,
+                  );
 
                   const editingUnit =
                     editTarget?.kind === "unit" && editTarget.id === unit.id;
@@ -505,6 +531,9 @@ export function CurriculumView() {
                                 <span className="text-xs text-muted-foreground">
                                   {unitCollections.length} collections ·{" "}
                                   {scenarioCount} scenarios
+                                  {unitAudioDurationLabel
+                                    ? ` · ${unitAudioDurationLabel} audio`
+                                    : ""}
                                 </span>
                                 <Badge
                                   variant="outline"
@@ -658,6 +687,9 @@ export function CurriculumView() {
                         <span className="ml-2 text-xs font-normal">
                           {unfiled.length} collection
                           {unfiled.length === 1 ? "" : "s"}
+                          {unfiledAudioDurationLabel
+                            ? ` · ${unfiledAudioDurationLabel} audio`
+                            : ""}
                         </span>
                       </h2>
                       <p className="text-xs text-muted-foreground">
@@ -777,6 +809,11 @@ function CurriculumCollectionBlock({
   const publishedInCollection = scenarios.filter((s) =>
     Boolean(s.publishedAudioUrl),
   ).length;
+  const collectionAudioDurationLabel = formatPublishedAudioDuration(
+    sumPublishedAudioDurationSeconds(
+      scenarios.map((s) => s.publishedAudioDurationSeconds),
+    ),
+  );
   const collectionPanelId = `curriculum-collection-${collection.id}`;
 
   const body = (
@@ -835,6 +872,9 @@ function CurriculumCollectionBlock({
           <p className="text-[11px] text-muted-foreground">
             {scenarios.length} scenarios · {publishedInCollection}/
             {scenarios.length} audio
+            {collectionAudioDurationLabel
+              ? ` · ${collectionAudioDurationLabel}`
+              : ""}
           </p>
         </div>
         <CollectionActivationSwitch

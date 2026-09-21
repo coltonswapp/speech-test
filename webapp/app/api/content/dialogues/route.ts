@@ -4,7 +4,7 @@ import { asc } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { dialogueCollection, dialogueScenario } from "@/lib/db/schema";
 import { createCollectionSchema } from "@/lib/dialogue/types";
-import { loadScenarioReadinessById } from "@/lib/dialogue/load-scenario-readiness";
+import { loadScenarioCurriculumMetaById } from "@/lib/dialogue/load-scenario-readiness";
 import type { ScenarioReadiness } from "@/lib/dialogue/scenario-readiness";
 
 type ScenarioListSummary = {
@@ -19,6 +19,7 @@ type ScenarioListSummary = {
   publishedContentHash: string | null;
   publishedAt: Date | null;
   updatedAt: Date;
+  publishedAudioDurationSeconds: number | null;
   readiness: ScenarioReadiness;
 };
 
@@ -53,13 +54,13 @@ export async function GET() {
     }),
   ]);
 
-  const readinessById = await loadScenarioReadinessById(scenarios);
+  const metaById = await loadScenarioCurriculumMetaById(scenarios);
 
   const byCollection = new Map<string, ScenarioListSummary[]>();
 
   for (const scenario of scenarios) {
-    const readiness = readinessById.get(scenario.id);
-    if (!readiness) continue;
+    const meta = metaById.get(scenario.id);
+    if (!meta) continue;
     const summary: ScenarioListSummary = {
       id: scenario.id,
       collectionId: scenario.collectionId,
@@ -72,7 +73,8 @@ export async function GET() {
       publishedContentHash: scenario.publishedContentHash,
       publishedAt: scenario.publishedAt,
       updatedAt: scenario.updatedAt,
-      readiness,
+      publishedAudioDurationSeconds: meta.publishedAudioDurationSeconds,
+      readiness: meta.readiness,
     };
     const list = byCollection.get(scenario.collectionId) ?? [];
     list.push(summary);

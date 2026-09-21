@@ -14,7 +14,7 @@ import {
 } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Play, Pause } from "lucide-react";
+import { Play, Pause, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { dialogueApi } from "@/lib/dialogue/client";
@@ -90,7 +90,7 @@ function flagKey(lineIndex: number, tokenIndex: number): string {
 
 /**
  * Stamp/undo handed up to the host so the shared transport dock (and its
- * M / Backspace hotkeys) can drive token timing without duplicating the logic.
+ * T / Backspace hotkeys) can drive token timing without duplicating the logic.
  */
 export type TokenSyncActions = {
   stamp: () => void;
@@ -166,6 +166,7 @@ export function TokenSyncEditor({
     totalSamples,
   });
 
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [selectedToken, setSelectedToken] = useState<{
     lineIndex: number;
     tokenIndex: number;
@@ -677,40 +678,76 @@ export function TokenSyncEditor({
           />
         )}
       </div>
-      <ol className="list-decimal space-y-0.5 pl-4 text-xs text-muted-foreground">
-        <li>
-          <span className="font-medium text-foreground">Auto-stamp</span>{" "}
-          tokenizes, times every word from the audio, and places line marks
-          if the take has none. Listen through, fix anything flagged in amber,
-          or right-click / long-press a chip to unflag a stamp that looks right
-          (right-click the flagged count to clear all),
-          then <span className="font-medium text-foreground">Mark reviewed</span>.
-        </li>
-        <li>Or by hand: Tokenize splits each line into tap-sized words. The first word of each line is already timed from the line mark.</li>
-        <li>Play the take from the waveform below.</li>
-        <li>
-          Tap <span className="font-medium text-foreground">Mark</span> in the
-          player (or the next highlighted word) as that word starts. On a
-          keyboard press <span className="font-medium text-foreground">M</span>.
-          Timed chips keep a stable layout so the next target does not jump.
-        </li>
-        <li>
-          Tap any other untimed word to make it next. Mark always uses the live
-          playhead — tapping a chip does not jump the take.
-        </li>
-        <li>
-          <span className="font-medium text-foreground">Undo mark</span> (or{" "}
-          <span className="font-medium text-foreground">Backspace</span>) clears
-          the last stamp.{" "}
-          <span className="font-medium text-foreground">Clear times</span>{" "}
-          resets a line but keeps its first-word line mark.{" "}
-          <span className="font-medium text-foreground">Clear all times</span>{" "}
-          does the same for the whole take. Right-click (or long-press) a word
-          to clear from there and resume audio a couple words earlier, or to
-          split a glued token in half / at a chosen character.
-          Drag-select text to split or merge tokens.
-        </li>
-      </ol>
+      <div className="flex flex-col gap-1">
+        <button
+          type="button"
+          aria-expanded={instructionsOpen}
+          aria-controls="token-sync-instructions"
+          onClick={() => setInstructionsOpen((open) => !open)}
+          className="group flex min-h-8 w-full items-center gap-1.5 rounded-md text-left text-xs text-muted-foreground touch-manipulation hover:text-foreground"
+        >
+          <ChevronRight
+            className={cn(
+              "size-3.5 shrink-0 transition-transform",
+              instructionsOpen && "rotate-90",
+            )}
+          />
+          <span className="font-medium text-foreground/80">How to time</span>
+          {!instructionsOpen && (
+            <span className="min-w-0 truncate">
+              T token · L line switch · Auto-stamp
+            </span>
+          )}
+        </button>
+        {instructionsOpen && (
+          <ol
+            id="token-sync-instructions"
+            className="list-decimal space-y-0.5 pl-4 text-xs text-muted-foreground"
+          >
+            <li>
+              <span className="font-medium text-foreground">Auto-stamp</span>{" "}
+              tokenizes, times every word from the audio, and places line marks
+              if the take has none. Listen through, fix anything flagged in amber,
+              or right-click / long-press a chip to unflag a stamp that looks right
+              (right-click the flagged count to clear all),
+              then{" "}
+              <span className="font-medium text-foreground">Mark reviewed</span>.
+            </li>
+            <li>
+              Or by hand: Tokenize splits each line into tap-sized words. The first
+              word of each line is already timed from the line mark.
+            </li>
+            <li>Play the take from the waveform below.</li>
+            <li>
+              Tap{" "}
+              <span className="font-medium text-foreground">Mark token</span> in
+              the player (or the next highlighted word) as that word starts. On a
+              keyboard press{" "}
+              <span className="font-medium text-foreground">T</span>. Use{" "}
+              <span className="font-medium text-foreground">L</span> /{" "}
+              <span className="font-medium text-foreground">Mark line</span> for
+              line switches on the same surface. Timed chips keep a stable layout
+              so the next target does not jump.
+            </li>
+            <li>
+              Tap any other untimed word to make it next. Mark always uses the live
+              playhead — tapping a chip does not jump the take.
+            </li>
+            <li>
+              <span className="font-medium text-foreground">Undo mark</span> (or{" "}
+              <span className="font-medium text-foreground">Backspace</span>) clears
+              the last stamp when token marking is active.{" "}
+              <span className="font-medium text-foreground">Clear times</span>{" "}
+              resets a line but keeps its first-word line mark.{" "}
+              <span className="font-medium text-foreground">Clear all times</span>{" "}
+              does the same for the whole take. Right-click (or long-press) a word
+              to clear from there and resume audio a couple words earlier, or to
+              split a glued token in half / at a chosen character.
+              Drag-select text to split or merge tokens.
+            </li>
+          </ol>
+        )}
+      </div>
       {tokenMenu && sync && (
         <TokenContextMenu
           x={tokenMenu.x}

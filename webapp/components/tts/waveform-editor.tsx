@@ -31,6 +31,7 @@ import {
   Plus,
   SquareSplitHorizontal,
   X,
+  ChevronRight,
 } from "lucide-react";
 import {
   autoStampInProgress,
@@ -252,9 +253,9 @@ export function WaveformEditor({
   dialogueLines?: EditableDialogueLine[];
   currentContentHash?: string;
   hasUnsavedChanges?: boolean;
-  /** Review-queue deep link: scroll/select this spoken line in Token timing. */
+  /** Review-queue deep link: scroll/select this spoken line in Timing. */
   focusLineIndex?: number | null;
-  /** Review-queue deep link: open Line timing or Token timing tab. */
+  /** Review-queue deep link: open Timing and prefer line or token mark kind. */
   focusTimingMode?: "lines" | "tokens" | null;
   /** Scene-level bed; when set, the take editor gains an Ambience tab. */
   ambience?: AmbienceMixContext;
@@ -310,11 +311,14 @@ export function WaveformEditor({
   } | null>(null);
   const [playerBarHeight, setPlayerBarHeight] = useState(0);
   const [sectionHeaderHeight, setSectionHeaderHeight] = useState(0);
-  const [timingMode, setTimingMode] = useState<"lines" | "tokens" | "ambience">(
-    focusTimingMode === "tokens" || focusTimingMode === "lines"
-      ? focusTimingMode
-      : "lines"
+  // Timing = shared line-switch + token surface; Ambience stays its own tab.
+  const [timingMode, setTimingMode] = useState<"timing" | "ambience">("timing");
+  /** Which mark type L/T (and the dock buttons) place next / Undo targets. */
+  const [markKind, setMarkKind] = useState<"line" | "token">(
+    focusTimingMode === "lines" ? "line" : "token"
   );
+  const [timingHelpOpen, setTimingHelpOpen] = useState(false);
+  const [sentenceMapOpen, setSentenceMapOpen] = useState(false);
   const [mixMarried, setMixMarried] = useState(false);
   const mixMarriedRef = useRef(false);
   mixMarriedRef.current = mixMarried;
@@ -408,26 +412,28 @@ export function WaveformEditor({
   // waveform dock at the bottom would otherwise cover rows near the edge.
   // Skipped while Follow is off or the user just scrolled themselves.
   useEffect(() => {
-    if (timingMode !== "lines" || !followPlayhead) return;
+    if (timingMode !== "timing" || !sentenceMapOpen || !followPlayhead) return;
     if (activeRowIndex == null) return;
     if (userScrollHoldRef.current) return;
     scrollRowIntoView(activeRowIndex);
-  }, [activeRowIndex, timingMode, followPlayhead]);
+  }, [activeRowIndex, timingMode, sentenceMapOpen, followPlayhead]);
 
-  // Review-queue deep link: open Token/Line timing and scroll the spoken line.
+  // Review-queue deep link: open Timing and prefer line vs token mark kind.
   useEffect(() => {
     if (focusTimingMode === "tokens" || focusTimingMode === "lines") {
-      setTimingMode(focusTimingMode);
+      setTimingMode("timing");
+      setMarkKind(focusTimingMode === "lines" ? "line" : "token");
     }
   }, [focusTimingMode]);
 
   useEffect(() => {
-    if (focusLineIndex == null || timingMode !== "lines") return;
+    if (focusLineIndex == null || timingMode !== "timing") return;
+    if (!sentenceMapOpen) return;
     const id = window.requestAnimationFrame(() => {
       scrollRowIntoView(focusLineIndex);
     });
     return () => window.cancelAnimationFrame(id);
-  }, [focusLineIndex, timingMode]);
+  }, [focusLineIndex, timingMode, sentenceMapOpen]);
 
   // Track chrome heights for scroll-margin on active sentence rows.
   useEffect(() => {
@@ -896,7 +902,7 @@ export function WaveformEditor({
     );
   }
 
-  function markLineSwitchAtPlayhead() {
+  function placeLineSwitchAtPlayhead() {
     const sample = currentEditSample();
     if (sample <= 0 || sample >= totalSamples) {
       toast.error("Scrub the playhead to where the next line begins.");
@@ -1004,19 +1010,41 @@ export function WaveformEditor({
 
   const timingModeRef = useRef(timingMode);
   timingModeRef.current = timingMode;
+  const markKindRef = useRef(markKind);
+  markKindRef.current = markKind;
 
-  /** Mark in whichever timing mode is active: a line switch, or the next token. */
+  function markLineAtPlayhead() {
+    setMarkKind("line");
+    placeLineSwitchAtPlayhead();
+  }
+
+  function markTokenAtPlayhead() {
+    // Drag-select text to split/merge tokens; don't stamp mid-selection.
+    const selection = window.getSelection();
+    if (
+      selection &&
+      !selection.isCollapsed &&
+      selection.toString().length > 0
+    ) {
+      return;
+    }
+    setMarkKind("token");
+    tokenActionsRef.current?.stamp();
+  }
+
+  /** Mark using the currently selected kind (line switch or next token). */
   function markAtPlayhead() {
     if (timingModeRef.current === "ambience") return;
-    if (timingModeRef.current === "lines") {
-      markLineSwitchAtPlayhead();
+    if (markKindRef.current === "line") {
+      markLineAtPlayhead();
     } else {
-      tokenActionsRef.current?.stamp();
+      markTokenAtPlayhead();
     }
   }
 
   function undoMark() {
-    if (timingModeRef.current === "lines") {
+    if (timingModeRef.current === "ambience") return;
+    if (markKindRef.current === "line") {
       removeLineSwitchMarkNearestPlayhead();
     } else {
       tokenActionsRef.current?.undo();
@@ -1031,29 +1059,22 @@ export function WaveformEditor({
       if (e.code === "Space") {
         e.preventDefault();
         toggleMainPlayback();
-      } else if (e.key === "m" || e.key === "M") {
+      } else if (e.key === "l" || e.key === "L") {
         if (timingModeRef.current === "ambience") return;
-        // Token mode lets you drag-select text to split/merge tokens; don't
-        // stamp while a selection is in progress.
-        const selection = window.getSelection();
-        if (
-          timingModeRef.current === "tokens" &&
-          selection &&
-          !selection.isCollapsed &&
-          selection.toString().length > 0
-        ) {
-          return;
-        }
         e.preventDefault();
-        markAtPlayhead();
+        markLineAtPlayhead();
+      } else if (e.key === "t" || e.key === "T") {
+        if (timingModeRef.current === "ambience") return;
+        e.preventDefault();
+        markTokenAtPlayhead();
       } else if (
         (e.key === "Backspace" || e.key === "Delete") &&
-        timingModeRef.current === "lines" &&
+        markKindRef.current === "line" &&
         selectedMarkIndex != null
       ) {
         e.preventDefault();
         removeLineSwitchMarkAt(selectedMarkIndex);
-      } else if (e.key === "Backspace" && timingModeRef.current === "tokens") {
+      } else if (e.key === "Backspace" && markKindRef.current === "token") {
         e.preventDefault();
         tokenActionsRef.current?.undo();
       } else if (e.key === "Escape") {
@@ -1473,7 +1494,7 @@ export function WaveformEditor({
         )}
         <div className="relative w-full">
         <div ref={containerRef} className="h-[72px] w-full" />
-        {isConversation && timingMode === "lines" && duration > 0 && (
+        {isConversation && timingMode === "timing" && duration > 0 && (
           <div className="pointer-events-none absolute inset-0 z-[1]">
             {marks.map((sample, i) => (
               <div
@@ -1517,7 +1538,7 @@ export function WaveformEditor({
         </div>
       )}
 
-      {isConversation && timingMode === "lines" && duration > 0 && (
+      {isConversation && timingMode === "timing" && duration > 0 && (
         <div
           ref={stripRef}
           className="relative h-4 w-full overflow-visible rounded-sm bg-muted/50"
@@ -1587,7 +1608,7 @@ export function WaveformEditor({
           })}
         </div>
       )}
-      {isConversation && timingMode === "lines" && showDerivedMarks && (
+      {isConversation && timingMode === "timing" && showDerivedMarks && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
           Amber marks were placed by auto-stamp from each speaker&apos;s onset.
           Drag any that clip speech; they turn green once you touch them.
@@ -1595,7 +1616,7 @@ export function WaveformEditor({
       )}
 
       {isConversation &&
-        timingMode === "lines" &&
+        timingMode === "timing" &&
         selectedMarkIndex != null &&
         marks[selectedMarkIndex] != null && (
           <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -1615,7 +1636,7 @@ export function WaveformEditor({
           </div>
         )}
 
-      {isConversation && timingMode === "lines" && activeRow && (
+      {isConversation && timingMode === "timing" && activeRow && (
         <button
           type="button"
           onClick={() => scrollRowIntoView(activeRow.index)}
@@ -1665,16 +1686,28 @@ export function WaveformEditor({
           <>
             <Button
               size="sm"
+              variant={markKind === "line" ? "default" : "outline"}
               className="min-h-11 touch-manipulation px-3 md:min-h-8"
-              onClick={markAtPlayhead}
-              disabled={timingMode === "tokens" && !tokenActionState.canStamp}
-              title={
-                timingMode === "lines"
-                  ? "Mark a line switch at the playhead (M)"
-                  : "Stamp the next word at the playhead (M)"
-              }
+              onClick={markLineAtPlayhead}
+              title="Mark a line switch at the playhead (L)"
             >
-              Mark
+              Mark line
+              <kbd className="ml-1.5 hidden rounded border border-current/25 px-1 py-px text-[10px] font-normal opacity-70 md:inline">
+                L
+              </kbd>
+            </Button>
+            <Button
+              size="sm"
+              variant={markKind === "token" ? "default" : "outline"}
+              className="min-h-11 touch-manipulation px-3 md:min-h-8"
+              onClick={markTokenAtPlayhead}
+              disabled={!tokenActionState.canStamp}
+              title="Stamp the next word at the playhead (T)"
+            >
+              Mark token
+              <kbd className="ml-1.5 hidden rounded border border-current/25 px-1 py-px text-[10px] font-normal opacity-70 md:inline">
+                T
+              </kbd>
             </Button>
             <Button
               size="sm"
@@ -1682,13 +1715,13 @@ export function WaveformEditor({
               className="min-h-11 touch-manipulation px-3 md:min-h-8"
               onClick={undoMark}
               disabled={
-                timingMode === "lines"
+                markKind === "line"
                   ? marks.length === 0
                   : !tokenActionState.canUndo
               }
               title={
-                timingMode === "lines"
-                  ? "Remove the mark nearest the playhead"
+                markKind === "line"
+                  ? "Remove the line-switch mark nearest the playhead"
                   : "Clear the last stamped word (Backspace)"
               }
             >
@@ -1699,7 +1732,7 @@ export function WaveformEditor({
         <span className="text-xs tabular-nums text-muted-foreground">
           {formatTime(currentTime)} / {formatTime(duration)}
         </span>
-        {isConversation && timingMode === "lines" && (
+        {isConversation && timingMode === "timing" && (
           <Button
             size="icon"
             variant={followPlayhead ? "secondary" : "ghost"}
@@ -1744,35 +1777,63 @@ export function WaveformEditor({
         </div>
       </div>
 
-      {isConversation && timingMode === "lines" && (
-        <p className="text-xs text-muted-foreground">
-          Play, then tap <span className="font-medium text-foreground">Mark</span>{" "}
-          (or the active line) the moment the next line starts —{" "}
-          <span className="font-medium text-foreground">Undo mark</span> removes the nearest.
-          Select a green triangle (or long-press / right-click) to delete a specific mark.
-          Keyboard: Space play/pause, M mark, Delete/Backspace removes the selected mark.
-          Drag green triangles to fine-tune.
-          {latencyMs >= 20 && (
-            <>
-              {" "}
-              Marks land ~{Math.round(latencyMs * playbackRate)}ms of media time before the cursor to offset audio output latency (wall delay × rate).
-            </>
+      {isConversation && timingMode === "timing" && (
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            aria-expanded={timingHelpOpen}
+            aria-controls="timing-help-body"
+            onClick={() => setTimingHelpOpen((open) => !open)}
+            className="group flex min-h-8 w-full items-center gap-1.5 rounded-md text-left text-xs text-muted-foreground touch-manipulation hover:text-foreground"
+          >
+            <ChevronRight
+              className={
+                timingHelpOpen
+                  ? "size-3.5 shrink-0 rotate-90 transition-transform"
+                  : "size-3.5 shrink-0 transition-transform"
+              }
+            />
+            <span className="font-medium text-foreground/80">Timing help</span>
+            {!timingHelpOpen && (
+              <span className="min-w-0 truncate">
+                L line switch · T token · Space play/pause
+              </span>
+            )}
+          </button>
+          {timingHelpOpen && (
+            <div
+              id="timing-help-body"
+              className="space-y-1.5 text-xs text-muted-foreground"
+            >
+              <p>
+                Play, then tap{" "}
+                <span className="font-medium text-foreground">Mark line</span>{" "}
+                (or press{" "}
+                <span className="font-medium text-foreground">L</span>) the
+                moment the next line starts — green triangles are line switches.
+                Drag to fine-tune; select or long-press / right-click to delete.
+              </p>
+              <p>
+                Tap{" "}
+                <span className="font-medium text-foreground">Mark token</span>{" "}
+                (or press{" "}
+                <span className="font-medium text-foreground">T</span>) as each
+                word starts.{" "}
+                <span className="font-medium text-foreground">Undo mark</span>{" "}
+                clears the last action of the highlighted mark type. Keyboard:
+                Space play/pause, Delete removes a selected line mark, Backspace
+                undoes the last token when token marking is active.
+              </p>
+              {latencyMs >= 20 && (
+                <p>
+                  Marks land ~
+                  {Math.round(latencyMs * playbackRate)}ms of media time before
+                  the cursor to offset audio output latency (wall delay × rate).
+                </p>
+              )}
+            </div>
           )}
-        </p>
-      )}
-      {isConversation && timingMode === "tokens" && (
-        <p className="text-xs text-muted-foreground">
-          Play, then tap <span className="font-medium text-foreground">Mark</span>{" "}
-          (or the next highlighted word) as that word starts.
-          <span className="font-medium text-foreground"> Undo mark</span> clears the last stamp.
-          Keyboard: Space play/pause, M mark, Backspace undo.
-          {latencyMs >= 20 && (
-            <>
-              {" "}
-              Stamps land ~{Math.round(latencyMs * playbackRate)}ms of media time before the cursor to offset audio output latency (wall delay × rate).
-            </>
-          )}
-        </p>
+        </div>
       )}
       {isConversation && timingMode === "ambience" && !mixMarried && (
         <p className="text-xs text-muted-foreground">
@@ -1781,7 +1842,7 @@ export function WaveformEditor({
         </p>
       )}
 
-      {(timingMode === "lines" || !isConversation) && (
+      {(timingMode === "timing" || !isConversation) && (
         <>
           <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
             <Button
@@ -1830,7 +1891,7 @@ export function WaveformEditor({
                   size="sm"
                   variant="outline"
                   className="min-h-10 touch-manipulation md:min-h-7"
-                  onClick={markLineSwitchAtPlayhead}
+                  onClick={markLineAtPlayhead}
                   title="Mark a line switch at the playhead"
                 >
                   <Flag className="size-3.5" />
@@ -1934,7 +1995,7 @@ export function WaveformEditor({
               <Tabs
                 value={timingMode}
                 onValueChange={(value) => {
-                  if (value === "lines" || value === "tokens" || value === "ambience") {
+                  if (value === "timing" || value === "ambience") {
                     setLoopingRowIndex(null);
                     setIsTrimMode(false);
                     setIsCutMode(false);
@@ -1946,11 +2007,8 @@ export function WaveformEditor({
                 }}
               >
                 <TabsList className="h-auto min-h-10 touch-manipulation">
-                  <TabsTrigger value="lines" className="min-h-9 px-3">
-                    Line timing
-                  </TabsTrigger>
-                  <TabsTrigger value="tokens" className="min-h-9 px-3">
-                    Token timing
+                  <TabsTrigger value="timing" className="min-h-9 px-3">
+                    Timing
                   </TabsTrigger>
                   {ambience ? (
                     <TabsTrigger value="ambience" className="min-h-9 px-3">
@@ -1966,14 +2024,13 @@ export function WaveformEditor({
               />
               )}
             </div>
-            {timingMode === "lines" && (
+            {timingMode === "timing" && (
               <>
-                <p className="text-sm font-medium">Sentence map</p>
+                <p className="text-sm font-medium">Timing</p>
                 {usesMarks ? (
                   <p className="text-xs text-emerald-600 dark:text-emerald-400">
-                    One row per audio segment ({sentenceRows.length} lines, {marks.length}{" "}
-                    breaks). Ranges follow your marks. Playhead highlights the active
-                    sentence for QC.
+                    {sentenceRows.length} lines, {marks.length} line switches. L / Mark
+                    line for switches; T / Mark token for words.
                   </p>
                 ) : spokenLines.length > 1 ? (
                   (() => {
@@ -1982,26 +2039,28 @@ export function WaveformEditor({
                     if (delta > 0) {
                       return (
                         <p className="text-xs text-muted-foreground">
-                          One row per spoken line. Place {delta} more line break
-                          {delta === 1 ? "" : "s"} ({validMarkCount} of {needed} placed) to
-                          align audio with marks.
+                          Place {delta} more line switch
+                          {delta === 1 ? "" : "es"} ({validMarkCount} of {needed} placed) —
+                          L or Mark line. Token stamps work either way.
                         </p>
                       );
                     }
                     return (
                       <p className="text-xs text-amber-600 dark:text-amber-400">
-                        {-delta} extra mark{-delta === 1 ? "" : "s"} for {spokenLines.length}{" "}
-                        lines ({validMarkCount} placed, {needed} needed). Remove the extra
-                        mark{-delta === 1 ? "" : "s"}, or check whether the script changed
-                        since these were placed.
+                        {-delta} extra line switch{-delta === 1 ? "" : "es"} for{" "}
+                        {spokenLines.length} lines ({validMarkCount} placed, {needed}{" "}
+                        needed). Remove the extra mark{-delta === 1 ? "" : "s"}, or check
+                        whether the script changed since these were placed.
                       </p>
                     );
                   })()
-                ) : null}
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Stamp tokens with T / Mark token. Line switches show as green
+                    triangles on the waveform.
+                  </p>
+                )}
               </>
-            )}
-            {timingMode === "tokens" && (
-              <p className="text-sm font-medium">Token karaoke</p>
             )}
             {timingMode === "ambience" && (
               <>
@@ -2016,8 +2075,32 @@ export function WaveformEditor({
               </>
             )}
           </div>
-          {timingMode === "lines" && (
-          <div className="flex flex-col gap-1.5">
+          {timingMode === "timing" && (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  aria-expanded={sentenceMapOpen}
+                  aria-controls="sentence-map-body"
+                  onClick={() => setSentenceMapOpen((open) => !open)}
+                  className="group flex min-h-9 w-full items-center gap-1.5 rounded-md text-left text-sm touch-manipulation"
+                >
+                  <ChevronRight
+                    className={
+                      sentenceMapOpen
+                        ? "size-4 shrink-0 rotate-90 text-muted-foreground transition-transform"
+                        : "size-4 shrink-0 text-muted-foreground transition-transform"
+                    }
+                  />
+                  <span className="font-medium">Sentence map</span>
+                  {!sentenceMapOpen && (
+                    <span className="min-w-0 truncate text-xs text-muted-foreground">
+                      {sentenceRows.length} lines · {marks.length} switches
+                    </span>
+                  )}
+                </button>
+                {sentenceMapOpen && (
+          <div id="sentence-map-body" className="flex flex-col gap-1.5">
             {mapList.map((item, itemIndex) => {
               if (item.type === "stage") {
                 return (
@@ -2065,7 +2148,7 @@ export function WaveformEditor({
                   }}
                   onClick={() => {
                     if (isActive) {
-                      markLineSwitchAtPlayhead();
+                      markLineAtPlayhead();
                       return;
                     }
                     if (usesMarks) playRow(row);
@@ -2157,8 +2240,9 @@ export function WaveformEditor({
               );
             })}
           </div>
-          )}
-          {timingMode === "tokens" && spokenLines.length > 0 && (
+                )}
+              </div>
+          {spokenLines.length > 0 && (
             <TokenSyncEditor
               variant={variant}
               spokenLines={spokenLines.map((line) => ({
@@ -2205,6 +2289,8 @@ export function WaveformEditor({
               autoStampDisabled={autoStampDisabled}
               onAutoStampSuccessRef={autoStampSuccessHandlerRef}
             />
+          )}
+            </div>
           )}
           {/* Holds layout space while the player is fixed to the viewport bottom. */}
           <div ref={playerSpacerRef} aria-hidden />

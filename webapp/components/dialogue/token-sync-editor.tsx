@@ -122,6 +122,8 @@ export function TokenSyncEditor({
   autoStampDisabled: autoStampDisabledProp,
   onAutoStampSuccessRef,
   focusLineIndex = null,
+  /** Mobile Timing: grow/scroll the stamped line list inside a flex parent. */
+  fillViewport = false,
 }: {
   variant: Variant;
   spokenLines: Array<{ speaker: string; text: string }>;
@@ -147,6 +149,7 @@ export function TokenSyncEditor({
   onAutoStampSuccessRef?: RefObject<((result: AutoStampResult) => void) | null>;
   /** Review-queue deep link: scroll this line into view and select a token. */
   focusLineIndex?: number | null;
+  fillViewport?: boolean;
 }) {
   const spokenTexts = useMemo(
     () => spokenLines.map((line) => line.text.trim()).filter(Boolean),
@@ -252,6 +255,24 @@ export function TokenSyncEditor({
       });
     });
   }, [focusLineIndex, sync, flaggedTokens]);
+
+  // Keep the playhead's active stamped line visible in the scrollable list
+  // (mobile Timing flex layout, or whenever the row would otherwise sit under
+  // the sticky player dock).
+  const activePlayLineIndex = useMemo(() => {
+    if (!sync || status === "stale") return null;
+    for (let i = 0; i < sync.lines.length; i++) {
+      if (activeTokenIndexForTime(sync, i, currentTime) != null) return i;
+    }
+    return null;
+  }, [sync, status, currentTime]);
+
+  useEffect(() => {
+    if (activePlayLineIndex == null) return;
+    const el = lineRefs.current[activePlayLineIndex];
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [activePlayLineIndex]);
 
   const unstampedCount = useMemo(() => {
     if (!sync) return 0;
@@ -618,8 +639,13 @@ export function TokenSyncEditor({
   }, [canStamp, canUndo, onAvailabilityChange]);
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div
+      className={cn(
+        "flex flex-col gap-3",
+        fillViewport && "min-h-0 flex-1 overflow-hidden"
+      )}
+    >
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <Badge
           variant="outline"
           className={cn(
@@ -678,7 +704,7 @@ export function TokenSyncEditor({
           />
         )}
       </div>
-      <div className="flex flex-col gap-1">
+      <div className="hidden shrink-0 flex-col gap-1 md:flex">
         <button
           type="button"
           aria-expanded={instructionsOpen}
@@ -790,7 +816,12 @@ export function TokenSyncEditor({
           the lesson to ship these times to the app.
         </p>
       )}
-      <div className="sticky top-28 z-10 -mx-1 flex flex-wrap items-center gap-2 bg-background/95 px-1 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div
+        className={cn(
+          "z-10 -mx-1 flex flex-wrap items-center gap-2 bg-background/95 px-1 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80",
+          fillViewport ? "shrink-0" : "sticky top-28"
+        )}
+      >
         <Button
           size="sm"
           variant="outline"
@@ -833,7 +864,12 @@ export function TokenSyncEditor({
         </Button>
       </div>
       {sync && status !== "stale" && (
-        <div className="flex flex-col gap-2">
+        <div
+          className={cn(
+            "flex flex-col gap-2",
+            fillViewport && "min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          )}
+        >
           {sync.lines.map((line, lineIndex) => {
             const activeToken = activeTokenIndexForTime(sync, lineIndex, currentTime);
             const missingOnLine = line.tokens.filter(

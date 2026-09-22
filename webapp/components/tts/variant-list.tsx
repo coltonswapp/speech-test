@@ -383,15 +383,15 @@ export function VariantList({
                 job?.status !== "cancelled";
               return (
                 <AccordionItem key={variant.id} value={variant.id}>
-                  <div className="flex min-w-0 items-center gap-1">
+                  <div className="flex min-w-0 items-start gap-1">
                     {selectionMode && (
                       <label
-                        className="flex shrink-0 cursor-pointer items-center px-1 py-2"
+                        className="flex shrink-0 cursor-pointer items-start px-1 py-2"
                         onClick={(event) => event.stopPropagation()}
                       >
                         <input
                           type="checkbox"
-                          className="size-4 accent-foreground"
+                          className="mt-1 size-4 accent-foreground"
                           checked={checked}
                           onChange={() => toggleSelected(variant.id)}
                           aria-label={`Select take from ${new Date(variant.createdAt).toLocaleString()}`}
@@ -400,58 +400,64 @@ export function VariantList({
                     )}
                     <AccordionTrigger
                       className={cn(
-                        "min-h-11 flex-1 touch-manipulation justify-start gap-2 py-2 md:min-h-0",
+                        "min-h-11 flex-1 touch-manipulation items-start justify-start gap-2 overflow-visible py-2 md:min-h-0",
                         selectionMode && checked && "opacity-90"
                       )}
                     >
-                      <span className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-                        <span>
-                          {new Date(variant.createdAt).toLocaleString()}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {variant.voice}
-                        </span>
-                        {isSelected && (
-                          <Badge variant="secondary">Selected</Badge>
-                        )}
-                        {isStale && (
-                          <Badge
-                            variant="outline"
-                            className="border-amber-500/50 text-amber-600 dark:text-amber-400"
-                          >
-                            Text changed
-                          </Badge>
-                        )}
-                        {job && <AutoStampJobBadge job={job} nowMs={nowMs} />}
-                        {showAutoStampsBadge && (
-                          <Badge
-                            variant="outline"
-                            className="border-amber-500/50 text-amber-600 dark:text-amber-400"
-                            title="Stamped automatically — review in the Tokens tab, then Mark reviewed"
-                          >
-                            auto stamps
-                          </Badge>
-                        )}
-                        {variant.tokenSync?.source === "reviewed" && (
-                          <Badge
-                            variant="outline"
-                            className="border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
-                          >
-                            reviewed
-                          </Badge>
-                        )}
-                        {!!currentContentHash && !variant.contentHash && (
-                          <span
-                            className="text-xs text-muted-foreground"
-                            title="Generated before change tracking — staleness unknown."
-                          >
-                            untracked
+                      {/* Date/voice on one row; badges wrap on their own strip so
+                          they are never clipped under the meta line on phone. */}
+                      <span className="flex min-w-0 flex-col items-start gap-1 text-sm">
+                        <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <span>
+                            {new Date(variant.createdAt).toLocaleString()}
                           </span>
-                        )}
+                          <span className="text-xs text-muted-foreground">
+                            {variant.voice}
+                          </span>
+                        </span>
+                        <span className="flex min-w-0 flex-wrap items-center gap-1">
+                          {isSelected && (
+                            <Badge variant="secondary">Selected</Badge>
+                          )}
+                          {isStale && (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-500/50 text-amber-600 dark:text-amber-400"
+                            >
+                              Text changed
+                            </Badge>
+                          )}
+                          {job && <AutoStampJobBadge job={job} nowMs={nowMs} />}
+                          {showAutoStampsBadge && (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-500/50 text-amber-600 dark:text-amber-400"
+                              title="Stamped automatically — review in the Tokens tab, then Mark reviewed"
+                            >
+                              auto stamps
+                            </Badge>
+                          )}
+                          {variant.tokenSync?.source === "reviewed" && (
+                            <Badge
+                              variant="outline"
+                              className="border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
+                            >
+                              reviewed
+                            </Badge>
+                          )}
+                          {!!currentContentHash && !variant.contentHash && (
+                            <span
+                              className="text-xs text-muted-foreground"
+                              title="Generated before change tracking — staleness unknown."
+                            >
+                              untracked
+                            </span>
+                          )}
+                        </span>
                       </span>
                     </AccordionTrigger>
                     {!selectionMode && (
-                      <div className="ml-auto flex shrink-0 items-center gap-1">
+                      <div className="ml-auto flex shrink-0 items-start gap-1 pt-1">
                         {jobLive && (
                           <Button
                             type="button"
@@ -524,7 +530,8 @@ export function VariantList({
                     )}
                   </div>
                   <AccordionPanel className="overflow-visible">
-                    <div className="flex flex-col gap-3">
+                    {/* gap-1.5 on phone so Timing tabs sit tight under the take header. */}
+                    <div className="flex flex-col gap-1.5 md:gap-3">
                       {selectionEnabled && !isSelected && (
                         <Button
                           variant="outline"

@@ -35,13 +35,15 @@ function AccordionTrigger({
       <AccordionPrimitive.Trigger
         data-slot="accordion-trigger"
         className={cn(
-          "flex flex-1 items-center justify-between gap-3 py-3 text-left text-sm font-medium transition-all outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 [&[data-panel-open]>svg]:rotate-180",
+          // items-start so multi-line / wrapping trigger content (e.g. take
+          // badge strips) is not vertically clipped against a centered chevron.
+          "flex flex-1 items-start justify-between gap-3 overflow-visible py-3 text-left text-sm font-medium transition-all outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 [&[data-panel-open]>svg]:rotate-180",
           className
         )}
         {...props}
       >
         {children}
-        <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200" />
+        <ChevronDown className="mt-1 size-4 shrink-0 text-muted-foreground transition-transform duration-200" />
       </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
   )
@@ -60,7 +62,8 @@ function AccordionPanel({
       className={cn("overflow-hidden text-sm", className)}
       {...props}
     >
-      <div className="pt-0 pb-4">{children}</div>
+      {/* Tighter bottom pad on phone so Timing chrome sits closer to the trigger. */}
+      <div className="pt-0 pb-2 md:pb-4">{children}</div>
     </AccordionPrimitive.Panel>
   )
 }

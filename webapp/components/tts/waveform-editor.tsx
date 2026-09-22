@@ -2097,8 +2097,19 @@ export function WaveformEditor({
     </>
   );
 
+  // Phone Timing uses an in-flow flex panel (tabs stay above the scrolling
+  // line list). Sticky top-14 would paint over the take badge row when the
+  // page scrolls — keep sticky only on wider viewports / Ambience.
+  const pinTimingChrome =
+    !(isNarrowViewport && timingMode === "timing");
+
   return (
-    <div className="flex min-w-0 flex-col gap-3">
+    <div
+      className={cn(
+        "flex min-w-0 flex-col",
+        isNarrowViewport ? "gap-1.5" : "gap-3"
+      )}
+    >
       {isConversation ? (
         <div
           ref={sectionRef}
@@ -2111,7 +2122,11 @@ export function WaveformEditor({
         >
           <div
             ref={sectionHeaderRef}
-            className="sticky top-14 z-20 flex shrink-0 flex-col gap-2 bg-background pb-2"
+            className={cn(
+              "z-20 flex shrink-0 flex-col bg-background",
+              isNarrowViewport ? "gap-1.5 pb-1" : "gap-2 pb-2",
+              pinTimingChrome ? "sticky top-14" : "relative"
+            )}
           >
             <div className="flex flex-wrap items-center gap-2">
               <Tabs
@@ -2202,17 +2217,20 @@ export function WaveformEditor({
           {timingMode === "timing" && (
             <div
               className={cn(
-                "flex flex-col gap-3",
-                isNarrowViewport && "min-h-0 flex-1 overflow-hidden"
+                "flex flex-col",
+                isNarrowViewport ? "min-h-0 flex-1 gap-1.5 overflow-hidden" : "gap-3"
               )}
             >
-              <div className="flex shrink-0 flex-col gap-1.5">
+              <div className="flex shrink-0 flex-col gap-1">
                 <button
                   type="button"
                   aria-expanded={sentenceMapOpen}
                   aria-controls="sentence-map-body"
                   onClick={() => setSentenceMapOpen((open) => !open)}
-                  className="group flex min-h-9 w-full items-center gap-1.5 rounded-md text-left text-sm touch-manipulation"
+                  className={cn(
+                    "group flex w-full items-center gap-1.5 rounded-md text-left text-sm touch-manipulation",
+                    isNarrowViewport ? "min-h-8" : "min-h-9"
+                  )}
                 >
                   <ChevronRight
                     className={

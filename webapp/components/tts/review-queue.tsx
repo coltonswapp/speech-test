@@ -137,7 +137,7 @@ function FlaggedLine({
   editorHref: string;
   playing: boolean;
   activeTokenIndex: number | null;
-  /** Local UI only — not persisted until whole-take Approve. */
+  /** Optional local QA progress — not required to Approve the take. */
   checked: boolean;
   /** True while audio is loading or take has no bytes. */
   playDisabled: boolean;
@@ -204,7 +204,7 @@ function FlaggedLine({
             title={
               checked
                 ? `Uncheck line ${line.lineIndex + 1}`
-                : `Check line ${line.lineIndex + 1}`
+                : `Optional: check line ${line.lineIndex + 1} after listening`
             }
             aria-pressed={checked}
             aria-label={
@@ -285,7 +285,7 @@ function TakeCard({ take }: { take: Take }) {
   const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [audioLoading, setAudioLoading] = useState(false);
-  // Local-only line checks — nothing hits the server until whole-take Approve.
+  // Optional local line checks for deeper QA — Approve clears flags take-wide.
   const [checkedLines, setCheckedLines] = useState<Set<number>>(() => new Set());
 
   const audioUrl = ttsApi.variantAudioUrl(
@@ -524,12 +524,12 @@ function TakeCard({ take }: { take: Take }) {
   const href = editorHref(take);
   const opened = take.timing?.openedAt;
   const queueLines = take.flaggedLines;
-  const allLinesChecked =
-    queueLines.length === 0 ||
-    queueLines.every((line) => checkedLines.has(line.lineIndex));
-  const uncheckedCount = queueLines.filter(
-    (line) => !checkedLines.has(line.lineIndex)
+  const checkedCount = queueLines.filter((line) =>
+    checkedLines.has(line.lineIndex)
   ).length;
+  const allLinesChecked =
+    queueLines.length === 0 || checkedCount === queueLines.length;
+  const uncheckedCount = queueLines.length - checkedCount;
 
   return (
     <Card>
@@ -544,16 +544,20 @@ function TakeCard({ take }: { take: Take }) {
           <Badge
             variant="outline"
             className={cn(
-              uncheckedCount > 0
-                ? "border-amber-500/50 text-amber-600 dark:text-amber-400"
-                : "border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
+              queueLines.length === 0
+                ? "border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
+                : uncheckedCount > 0
+                  ? "border-amber-500/50 text-amber-600 dark:text-amber-400"
+                  : "border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
             )}
           >
             {queueLines.length === 0
               ? "no flags"
               : allLinesChecked
                 ? "all lines checked"
-                : `${uncheckedCount} unchecked`}
+                : checkedCount === 0
+                  ? `${queueLines.length} flagged`
+                  : `${checkedCount}/${queueLines.length} checked`}
           </Badge>
           {take.isPublishedTake && <Badge variant="secondary">published</Badge>}
           {take.isSelectedTake && !take.isPublishedTake && (
@@ -601,18 +605,10 @@ function TakeCard({ take }: { take: Take }) {
             type="button"
             size="sm"
             variant="outline"
-            className={cn(
-              "min-h-11 touch-manipulation md:min-h-8",
-              allLinesChecked &&
-                "border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-            )}
-            disabled={approveMutation.isPending || !allLinesChecked}
+            className="min-h-11 touch-manipulation border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 md:min-h-8"
+            disabled={approveMutation.isPending}
             onClick={() => approveMutation.mutate()}
-            title={
-              allLinesChecked
-                ? "Mark take reviewed and leave the queue"
-                : "Check every flagged line first, then Approve the take"
-            }
+            title="Mark take reviewed, clear flags, and leave the queue. Per-line checks are optional."
           >
             {approveMutation.isPending ? "Approving…" : "Approve take"}
           </Button>
@@ -716,9 +712,9 @@ export function ReviewQueue() {
       <div>
         <h1 className="text-xl font-semibold">Review queue</h1>
         <p className="text-sm text-muted-foreground">
-          Auto-stamped takes that still have flags. Check each flagged line
-          locally, then Approve the take — or accept the stamps on Audio.
-          Either one leaves the queue.
+          Auto-stamped takes that still have flags. Play a line and Approve the
+          take when it sounds right — per-line checks are optional for deeper
+          QA. Accepting stamps on Audio also leaves the queue.
         </p>
       </div>
       <TimingSummary timing={data.timing} />

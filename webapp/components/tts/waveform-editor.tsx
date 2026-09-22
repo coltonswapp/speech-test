@@ -32,6 +32,8 @@ import {
   SquareSplitHorizontal,
   X,
   ChevronRight,
+  ChevronUp,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   autoStampInProgress,
@@ -132,6 +134,22 @@ function getCoarsePointer() {
   return window.matchMedia(COARSE_POINTER_QUERY).matches;
 }
 function getCoarsePointerServer() {
+  return false;
+}
+
+/** Phone-width Timing layout — compact dock + scrollable stamped line list. */
+const NARROW_VIEWPORT_QUERY = "(max-width: 767px)";
+const WAVEFORM_HEIGHT_DESKTOP = 72;
+const WAVEFORM_HEIGHT_MOBILE = 40;
+function subscribeNarrowViewport(onChange: () => void) {
+  const query = window.matchMedia(NARROW_VIEWPORT_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+function getNarrowViewport() {
+  return window.matchMedia(NARROW_VIEWPORT_QUERY).matches;
+}
+function getNarrowViewportServer() {
   return false;
 }
 
@@ -319,6 +337,8 @@ export function WaveformEditor({
   );
   const [timingHelpOpen, setTimingHelpOpen] = useState(false);
   const [sentenceMapOpen, setSentenceMapOpen] = useState(false);
+  /** Mobile: speed / follow / trim tools fold behind this toggle. */
+  const [moreToolsOpen, setMoreToolsOpen] = useState(false);
   const [mixMarried, setMixMarried] = useState(false);
   const mixMarriedRef = useRef(false);
   mixMarriedRef.current = mixMarried;
@@ -351,8 +371,16 @@ export function WaveformEditor({
     getCoarsePointer,
     getCoarsePointerServer
   );
+  const isNarrowViewport = useSyncExternalStore(
+    subscribeNarrowViewport,
+    getNarrowViewport,
+    getNarrowViewportServer
+  );
   const [followOverride, setFollowOverride] = useState<boolean | null>(null);
-  const followPlayhead = followOverride ?? !isCoarsePointer;
+  // On phone-width Timing the stamped list scrolls inside the panel, so follow
+  // the playhead by default (page-level scroll fighting is not an issue).
+  const followPlayhead =
+    followOverride ?? (isNarrowViewport ? true : !isCoarsePointer);
   // True for USER_SCROLL_HOLDOFF_MS after the user scrolls on their own.
   const userScrollHoldRef = useRef(false);
 
@@ -553,13 +581,16 @@ export function WaveformEditor({
     let cancelled = false;
 
     const regions = RegionsPlugin.create();
+    const initialHeight = window.matchMedia(NARROW_VIEWPORT_QUERY).matches
+      ? WAVEFORM_HEIGHT_MOBILE
+      : WAVEFORM_HEIGHT_DESKTOP;
     const ws = WaveSurfer.create({
       container,
       waveColor: "oklch(0.5 0 0)",
       progressColor: "oklch(0.94 0.19 95)",
       cursorColor: "oklch(0.94 0.19 95)",
       cursorWidth: 1,
-      height: 72,
+      height: initialHeight,
       barWidth: 2,
       barGap: 1,
       url: audioUrl,
@@ -745,6 +776,16 @@ export function WaveformEditor({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl]);
+
+  // Shrink the canvas on phone-width so the sticky dock leaves room for lines.
+  useEffect(() => {
+    const ws = wavesurferRef.current;
+    if (!ws) return;
+    const height = isNarrowViewport
+      ? WAVEFORM_HEIGHT_MOBILE
+      : WAVEFORM_HEIGHT_DESKTOP;
+    ws.setOptions({ height });
+  }, [isNarrowViewport]);
 
   useEffect(() => {
     const trim = trimRegionRef.current;
@@ -1426,8 +1467,22 @@ export function WaveformEditor({
   // Pin the waveform to the viewport bottom only while this section still
   // extends past the viewport. Releases as soon as the section end enters
   // view so the following page content is never covered.
+  // Phone-width Timing uses an in-flow compact dock + flex scroll list instead.
   useLayoutEffect(() => {
     if (!isConversation) return;
+    if (isNarrowViewport && timingMode === "timing") {
+      const playerEl = playerBarRef.current;
+      const spacerEl = playerSpacerRef.current;
+      if (playerEl) {
+        playerEl.style.position = "";
+        playerEl.style.bottom = "";
+        playerEl.style.left = "";
+        playerEl.style.width = "";
+        playerEl.style.zIndex = "";
+      }
+      if (spacerEl) spacerEl.style.height = "0px";
+      return;
+    }
     const sectionEl = sectionRef.current;
     const playerEl = playerBarRef.current;
     const spacerEl = playerSpacerRef.current;
@@ -1477,7 +1532,7 @@ export function WaveformEditor({
       player.style.zIndex = "";
       spacer.style.height = "";
     };
-  }, [isConversation, sentenceRows.length, playerBarHeight, timingMode]);
+  }, [isConversation, sentenceRows.length, playerBarHeight, timingMode, isNarrowViewport]);
 
   const playerTools = (
     <>
@@ -1493,7 +1548,13 @@ export function WaveformEditor({
           </span>
         )}
         <div className="relative w-full">
-        <div ref={containerRef} className="h-[72px] w-full" />
+        <div
+          ref={containerRef}
+          className={cn(
+            "w-full",
+            isNarrowViewport ? "h-10" : "h-[72px]"
+          )}
+        />
         {isConversation && timingMode === "timing" && duration > 0 && (
           <div className="pointer-events-none absolute inset-0 z-[1]">
             {marks.map((sample, i) => (
@@ -1608,7 +1669,7 @@ export function WaveformEditor({
           })}
         </div>
       )}
-      {isConversation && timingMode === "timing" && showDerivedMarks && (
+      {isConversation && timingMode === "timing" && showDerivedMarks && !isNarrowViewport && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
           Amber marks were placed by auto-stamp from each speaker&apos;s onset.
           Drag any that clip speech; they turn green once you touch them.
@@ -1636,7 +1697,7 @@ export function WaveformEditor({
           </div>
         )}
 
-      {isConversation && timingMode === "timing" && activeRow && (
+      {isConversation && timingMode === "timing" && activeRow && !isNarrowViewport && (
         <button
           type="button"
           onClick={() => scrollRowIntoView(activeRow.index)}
@@ -1660,25 +1721,25 @@ export function WaveformEditor({
           <Button
             size="icon"
             variant="outline"
-            className="size-11 touch-manipulation md:size-8"
+            className="size-9 touch-manipulation md:size-8"
             aria-label="Restart from the beginning"
             title="Restart"
             onClick={restartPlayback}
             disabled={duration === 0}
           >
-            <SkipBack className="size-5 md:size-3.5" />
+            <SkipBack className="size-4 md:size-3.5" />
           </Button>
           <Button
             size="icon"
             variant="outline"
-            className="size-11 touch-manipulation md:size-8"
+            className="size-9 touch-manipulation md:size-8"
             aria-label={isPlaying ? "Pause" : "Play"}
             onClick={() => toggleMainPlayback()}
           >
             {isPlaying ? (
-              <Pause className="size-5 md:size-3.5" />
+              <Pause className="size-4 md:size-3.5" />
             ) : (
-              <Play className="size-5 md:size-3.5" />
+              <Play className="size-4 md:size-3.5" />
             )}
           </Button>
         </div>
@@ -1687,7 +1748,7 @@ export function WaveformEditor({
             <Button
               size="sm"
               variant={markKind === "line" ? "default" : "outline"}
-              className="min-h-11 touch-manipulation px-3 md:min-h-8"
+              className="min-h-9 touch-manipulation px-2.5 md:min-h-8 md:px-3"
               onClick={markLineAtPlayhead}
               title="Mark a line switch at the playhead (L)"
             >
@@ -1699,7 +1760,7 @@ export function WaveformEditor({
             <Button
               size="sm"
               variant={markKind === "token" ? "default" : "outline"}
-              className="min-h-11 touch-manipulation px-3 md:min-h-8"
+              className="min-h-9 touch-manipulation px-2.5 md:min-h-8 md:px-3"
               onClick={markTokenAtPlayhead}
               disabled={!tokenActionState.canStamp}
               title="Stamp the next word at the playhead (T)"
@@ -1712,7 +1773,7 @@ export function WaveformEditor({
             <Button
               size="sm"
               variant="outline"
-              className="min-h-11 touch-manipulation px-3 md:min-h-8"
+              className="min-h-9 touch-manipulation px-2.5 md:min-h-8 md:px-3"
               onClick={undoMark}
               disabled={
                 markKind === "line"
@@ -1725,60 +1786,101 @@ export function WaveformEditor({
                   : "Clear the last stamped word (Backspace)"
               }
             >
-              Undo mark
+              Undo
             </Button>
           </>
         )}
         <span className="text-xs tabular-nums text-muted-foreground">
           {formatTime(currentTime)} / {formatTime(duration)}
         </span>
-        {isConversation && timingMode === "timing" && (
-          <Button
-            size="icon"
-            variant={followPlayhead ? "secondary" : "ghost"}
-            className="size-11 touch-manipulation md:size-8"
-            aria-pressed={followPlayhead}
-            aria-label={
-              followPlayhead
-                ? "Stop auto-scrolling to the playing line"
-                : "Auto-scroll to the playing line"
-            }
-            title={followPlayhead ? "Following playhead" : "Follow playhead"}
-            onClick={() => setFollowOverride(!followPlayhead)}
-          >
-            {followPlayhead ? (
-              <LocateFixed className="size-5 md:size-3.5" />
-            ) : (
-              <LocateOff className="size-5 md:size-3.5" />
-            )}
-          </Button>
-        )}
-        <div
-          className="flex items-center rounded-md border border-border/60 p-0.5"
-          title="Playback speed"
-        >
-          {PLAYBACK_RATES.map((rate) => (
+        {isConversation &&
+          timingMode === "timing" &&
+          isNarrowViewport && (
             <Button
-              key={rate}
-              size="xs"
-              variant={playbackRate === rate ? "secondary" : "ghost"}
-              className="h-8 min-w-9 touch-manipulation px-1.5 tabular-nums md:h-6 md:min-w-8"
-              onClick={() => setPlaybackRate(rate)}
+              size="icon"
+              variant={moreToolsOpen ? "secondary" : "ghost"}
+              className="ml-auto size-9 touch-manipulation"
+              aria-expanded={moreToolsOpen}
+              aria-label={
+                moreToolsOpen
+                  ? "Hide speed and secondary tools"
+                  : "More tools: speed, trim, help"
+              }
+              title={moreToolsOpen ? "Hide more tools" : "More tools"}
+              onClick={() => setMoreToolsOpen((open) => !open)}
             >
-              {rate}×
+              {moreToolsOpen ? (
+                <ChevronUp className="size-4" />
+              ) : (
+                <MoreHorizontal className="size-4" />
+              )}
             </Button>
-          ))}
-        </div>
-        <div className="h-2 min-w-[4rem] flex-1 overflow-hidden rounded-full bg-muted">
+          )}
+        <div
+            className={cn(
+              "contents",
+              isConversation &&
+                timingMode === "timing" &&
+                isNarrowViewport &&
+                !moreToolsOpen &&
+                !isTrimMode &&
+                !isCutMode &&
+                "hidden"
+            )}
+          >
+          {isConversation && timingMode === "timing" && (
+            <Button
+              size="icon"
+              variant={followPlayhead ? "secondary" : "ghost"}
+              className="size-9 touch-manipulation md:size-8"
+              aria-pressed={followPlayhead}
+              aria-label={
+                followPlayhead
+                  ? "Stop auto-scrolling to the playing line"
+                  : "Auto-scroll to the playing line"
+              }
+              title={followPlayhead ? "Following playhead" : "Follow playhead"}
+              onClick={() => setFollowOverride(!followPlayhead)}
+            >
+              {followPlayhead ? (
+                <LocateFixed className="size-4 md:size-3.5" />
+              ) : (
+                <LocateOff className="size-4 md:size-3.5" />
+              )}
+            </Button>
+          )}
           <div
-            className="h-full bg-primary transition-[width] duration-75"
-            style={{ width: `${Math.min(100, level * 300)}%` }}
-          />
+            className="flex items-center rounded-md border border-border/60 p-0.5"
+            title="Playback speed"
+          >
+            {PLAYBACK_RATES.map((rate) => (
+              <Button
+                key={rate}
+                size="xs"
+                variant={playbackRate === rate ? "secondary" : "ghost"}
+                className="h-8 min-w-9 touch-manipulation px-1.5 tabular-nums md:h-6 md:min-w-8"
+                onClick={() => setPlaybackRate(rate)}
+              >
+                {rate}×
+              </Button>
+            ))}
+          </div>
+          <div className="hidden h-2 min-w-[4rem] flex-1 overflow-hidden rounded-full bg-muted md:block">
+            <div
+              className="h-full bg-primary transition-[width] duration-75"
+              style={{ width: `${Math.min(100, level * 300)}%` }}
+            />
+          </div>
         </div>
       </div>
 
       {isConversation && timingMode === "timing" && (
-        <div className="flex flex-col gap-1">
+        <div
+          className={cn(
+            "flex flex-col gap-1",
+            isNarrowViewport && !moreToolsOpen && "hidden"
+          )}
+        >
           <button
             type="button"
             aria-expanded={timingHelpOpen}
@@ -1844,11 +1946,22 @@ export function WaveformEditor({
 
       {(timingMode === "timing" || !isConversation) && (
         <>
-          <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
+          <div
+            className={cn(
+              "flex flex-nowrap items-center gap-1.5 overflow-x-auto",
+              isConversation &&
+                timingMode === "timing" &&
+                isNarrowViewport &&
+                !moreToolsOpen &&
+                !isTrimMode &&
+                !isCutMode &&
+                "hidden"
+            )}
+          >
             <Button
               size="sm"
               variant="outline"
-              className="min-h-10 touch-manipulation md:min-h-7"
+              className="min-h-9 touch-manipulation md:min-h-7"
               onClick={() => setIsTrimMode((v) => !v)}
               title={isTrimMode ? "Finish trimming" : "Trim the take"}
             >
@@ -1864,7 +1977,7 @@ export function WaveformEditor({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="min-h-10 touch-manipulation md:min-h-7"
+                  className="min-h-9 touch-manipulation md:min-h-7"
                   onClick={() => saveTrimMutation.mutate()}
                   disabled={saveTrimMutation.isPending}
                   title="Save the current trim region"
@@ -1875,7 +1988,7 @@ export function WaveformEditor({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="min-h-10 touch-manipulation md:min-h-7"
+                  className="min-h-9 touch-manipulation md:min-h-7"
                   onClick={() => commitTrimMutation.mutate()}
                   disabled={commitTrimMutation.isPending}
                   title="Apply trim to take"
@@ -1887,10 +2000,11 @@ export function WaveformEditor({
             )}
             {isConversation && (
               <>
+                {/* Desktop only — Mark/Undo already live in the primary transport. */}
                 <Button
                   size="sm"
                   variant="outline"
-                  className="min-h-10 touch-manipulation md:min-h-7"
+                  className="hidden min-h-9 touch-manipulation md:inline-flex md:min-h-7"
                   onClick={markLineAtPlayhead}
                   title="Mark a line switch at the playhead"
                 >
@@ -1900,7 +2014,7 @@ export function WaveformEditor({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="min-h-10 touch-manipulation md:min-h-7"
+                  className="hidden min-h-9 touch-manipulation md:inline-flex md:min-h-7"
                   onClick={removeLineSwitchMarkNearestPlayhead}
                   disabled={marks.length === 0}
                   title="Remove the mark nearest the playhead"
@@ -1912,7 +2026,7 @@ export function WaveformEditor({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="min-h-10 touch-manipulation md:min-h-7"
+                    className="min-h-9 touch-manipulation md:min-h-7"
                     onClick={clearLineSwitchMarks}
                     title="Clear all line-switch marks"
                   >
@@ -1923,7 +2037,7 @@ export function WaveformEditor({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="min-h-10 touch-manipulation md:min-h-7"
+                  className="min-h-9 touch-manipulation md:min-h-7"
                   onClick={() => insertLineBreak(PLAYHEAD_BREAK_SECONDS)}
                   disabled={insertSilenceMutation.isPending}
                   title="Insert a 0.15s line break at the playhead"
@@ -1934,7 +2048,7 @@ export function WaveformEditor({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="min-h-10 touch-manipulation md:min-h-7"
+                  className="min-h-9 touch-manipulation md:min-h-7"
                   onClick={() => insertLineBreak(PLAYHEAD_BREAK_HALF_SECONDS)}
                   disabled={insertSilenceMutation.isPending}
                   title="Insert a 0.5s line break at the playhead"
@@ -1947,7 +2061,7 @@ export function WaveformEditor({
             <Button
               size="sm"
               variant="outline"
-              className="min-h-10 touch-manipulation md:min-h-7"
+              className="min-h-9 touch-manipulation md:min-h-7"
               onClick={toggleCutMode}
               title={isCutMode ? "Cancel cutting a section" : "Cut a section from the take"}
             >
@@ -1962,7 +2076,7 @@ export function WaveformEditor({
               <Button
                 size="sm"
                 variant="outline"
-                className="min-h-10 touch-manipulation md:min-h-7"
+                className="min-h-9 touch-manipulation md:min-h-7"
                 onClick={removeCutRegion}
                 disabled={!hasCutRegion || removeGapMutation.isPending}
                 title="Remove the selected section"
@@ -1986,10 +2100,18 @@ export function WaveformEditor({
   return (
     <div className="flex min-w-0 flex-col gap-3">
       {isConversation ? (
-        <div ref={sectionRef} className="relative flex flex-col">
+        <div
+          ref={sectionRef}
+          className={cn(
+            "relative flex flex-col",
+            isNarrowViewport &&
+              timingMode === "timing" &&
+              "h-[calc(100dvh-4.5rem)] max-h-[calc(100dvh-4.5rem)] overflow-hidden"
+          )}
+        >
           <div
             ref={sectionHeaderRef}
-            className="sticky top-14 z-20 flex flex-col gap-2 bg-background pb-2"
+            className="sticky top-14 z-20 flex shrink-0 flex-col gap-2 bg-background pb-2"
           >
             <div className="flex flex-wrap items-center gap-2">
               <Tabs
@@ -2018,17 +2140,19 @@ export function WaveformEditor({
                 </TabsList>
               </Tabs>
               {timingMode !== "ambience" && (
-              <AutoStampControls
-                state={autoStampControls}
-                disabled={autoStampDisabled}
-              />
+              <div className="hidden md:block">
+                <AutoStampControls
+                  state={autoStampControls}
+                  disabled={autoStampDisabled}
+                />
+              </div>
               )}
             </div>
             {timingMode === "timing" && (
               <>
-                <p className="text-sm font-medium">Timing</p>
+                <p className="hidden text-sm font-medium md:block">Timing</p>
                 {usesMarks ? (
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                  <p className="hidden text-xs text-emerald-600 dark:text-emerald-400 md:block">
                     {sentenceRows.length} lines, {marks.length} line switches. L / Mark
                     line for switches; T / Mark token for words.
                   </p>
@@ -2038,7 +2162,7 @@ export function WaveformEditor({
                     const delta = needed - validMarkCount;
                     if (delta > 0) {
                       return (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="hidden text-xs text-muted-foreground md:block">
                           Place {delta} more line switch
                           {delta === 1 ? "" : "es"} ({validMarkCount} of {needed} placed) —
                           L or Mark line. Token stamps work either way.
@@ -2046,7 +2170,7 @@ export function WaveformEditor({
                       );
                     }
                     return (
-                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                      <p className="hidden text-xs text-amber-600 dark:text-amber-400 md:block">
                         {-delta} extra line switch{-delta === 1 ? "" : "es"} for{" "}
                         {spokenLines.length} lines ({validMarkCount} placed, {needed}{" "}
                         needed). Remove the extra mark{-delta === 1 ? "" : "s"}, or check
@@ -2055,7 +2179,7 @@ export function WaveformEditor({
                     );
                   })()
                 ) : (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="hidden text-xs text-muted-foreground md:block">
                     Stamp tokens with T / Mark token. Line switches show as green
                     triangles on the waveform.
                   </p>
@@ -2076,8 +2200,13 @@ export function WaveformEditor({
             )}
           </div>
           {timingMode === "timing" && (
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1.5">
+            <div
+              className={cn(
+                "flex flex-col gap-3",
+                isNarrowViewport && "min-h-0 flex-1 overflow-hidden"
+              )}
+            >
+              <div className="flex shrink-0 flex-col gap-1.5">
                 <button
                   type="button"
                   aria-expanded={sentenceMapOpen}
@@ -2100,7 +2229,13 @@ export function WaveformEditor({
                   )}
                 </button>
                 {sentenceMapOpen && (
-          <div id="sentence-map-body" className="flex flex-col gap-1.5">
+          <div
+            id="sentence-map-body"
+            className={cn(
+              "flex flex-col gap-1.5",
+              isNarrowViewport && "max-h-40 overflow-y-auto"
+            )}
+          >
             {mapList.map((item, itemIndex) => {
               if (item.type === "stage") {
                 return (
@@ -2259,6 +2394,7 @@ export function WaveformEditor({
               onAvailabilityChange={setTokenActionState}
               onGetPlayhead={heardPlayheadSeconds}
               focusLineIndex={focusLineIndex}
+              fillViewport={isNarrowViewport}
               onPlayLine={(lineIndex) => {
                 const ws = wavesurferRef.current;
                 if (!ws) return;
@@ -2296,7 +2432,11 @@ export function WaveformEditor({
           <div ref={playerSpacerRef} aria-hidden />
           <div
             ref={playerBarRef}
-            className="flex flex-col gap-3 border-t border-border/60 bg-background pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.35)]"
+            className={cn(
+              "flex shrink-0 flex-col gap-2 border-t border-border/60 bg-background pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:gap-3 md:pt-3 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]",
+              !(isNarrowViewport && timingMode === "timing") &&
+                "shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.35)]"
+            )}
           >
             {playerTools}
           </div>

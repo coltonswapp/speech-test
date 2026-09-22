@@ -32,11 +32,7 @@ final class OnboardingDemoViewController: OnboardingViewController {
     }
 
     private func installConversation() {
-        let lines: [(japanese: String, english: String, side: DialogueSpeakerSide)] = [
-            ("いらっしゃいませ。", "Welcome.", .leading),
-            ("これをください。", "I'll take this, please.", .trailing),
-            ("お釣りは五十円です。", "Your change is 50 yen.", .leading),
-        ]
+        let lines = conversationLines()
 
         let stack = UIStackView()
         stack.axis = .vertical
@@ -103,10 +99,27 @@ final class OnboardingDemoViewController: OnboardingViewController {
         return row
     }
 
+    private func conversationLines() -> [(japanese: String, english: String, side: DialogueSpeakerSide)] {
+        if let lines = config.lines, !lines.isEmpty {
+            return lines.map { line in
+                (
+                    line.japanese,
+                    line.english,
+                    line.side == "trailing" ? .trailing : .leading
+                )
+            }
+        }
+        return [
+            ("いらっしゃいませ。", "Welcome.", .leading),
+            ("これをください。", "I'll take this, please.", .trailing),
+            ("お釣りは五十円です。", "Your change is 50 yen.", .leading),
+        ]
+    }
+
     private func installSentenceScrub() {
         let scrub = SentenceScrubExperimentViewController(
-            sentence: "お釣りは五十円です。",
-            englishTranslation: "Your change is 50 yen."
+            sentence: config.inspectText ?? "お釣りは五十円です。",
+            englishTranslation: config.inspectEnglish ?? "Your change is 50 yen."
         )
         inspectViewController = scrub
         addChild(scrub)

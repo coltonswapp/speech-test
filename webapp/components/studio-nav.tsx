@@ -10,6 +10,7 @@ import {
   BookOpenIcon,
   ChevronDownIcon,
   GraduationCapIcon,
+  ImagesIcon,
   LayersIcon,
   MessagesSquareIcon,
   PieChartIcon,
@@ -42,6 +43,7 @@ type NavLink = {
 const links: NavLink[] = [
   { href: "/content/dialogues", label: "Dialogues", icon: MessagesSquareIcon },
   { href: "/content/curriculum", label: "Curriculum", icon: GraduationCapIcon },
+  { href: "/slides", label: "Slides", icon: ImagesIcon },
   { href: "/content", label: "Grammar", icon: BookOpenIcon },
   { href: "/content/patterns", label: "Patterns", icon: LayersIcon },
   { href: "/content/coverage", label: "Coverage", icon: PieChartIcon },

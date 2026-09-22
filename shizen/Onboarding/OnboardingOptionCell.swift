@@ -3,10 +3,11 @@ import UIKit
 final class OnboardingOptionCell: UICollectionViewCell {
     static let reuseIdentifier = "OnboardingOptionCell"
     static let preferredHeight: CGFloat = 64
+    static let compactHeight: CGFloat = 56
 
     private let titleLabel: UILabel = {
         let label = UILabel()
-        label.font = .systemFont(ofSize: 17, weight: .semibold)
+        label.font = .systemFont(ofSize: 15, weight: .medium)
         label.textColor = .label
         label.numberOfLines = 2
         label.textAlignment = .center
@@ -27,10 +28,10 @@ final class OnboardingOptionCell: UICollectionViewCell {
         contentView.addSubview(titleLabel)
 
         NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            titleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            titleLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
-            titleLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 10),
+            titleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -10),
+            titleLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
+            titleLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
         ])
 
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (cell: OnboardingOptionCell, _) in

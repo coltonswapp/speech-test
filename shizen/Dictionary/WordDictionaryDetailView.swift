@@ -73,6 +73,9 @@ final class WordDictionaryDetailView: UIView {
 #if DEBUG
     /// Invoked when the user taps the kanji decomposition shortcut beside Speak.
     var onRequestKanjiDecomposition: (() -> Void)?
+
+    /// Anchor for the format chooser presented from the decomposition button.
+    var kanjiDecompositionAnchorView: UIView { kanjiDecompositionButton }
 #endif
 
     /// When false, the COMPOUNDS section is never built or shown (e.g. inline in the scrub experiment).

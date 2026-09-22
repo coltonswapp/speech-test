@@ -1,133 +1,89 @@
+import NNKit
+import SwiftUI
 import UIKit
 
 final class AuthLandingViewController: UIViewController {
 
+    enum Entry {
+        case original
+        case journey
+    }
+
     var isPreviewMode = false
+    var entry: Entry = .original
 
     private var onboardingCoordinator: OnboardingCoordinator?
-
+    private var introHost: UIHostingController<IntroPage>?
     private let closeButton = OnboardingChrome.makeCircularIconButton(symbolName: "xmark")
-    private let titleLabel = UILabel()
-    private let subtitleLabel = UILabel()
-    private let appleButton = UIButton(type: .system)
-    private let googleButton = UIButton(type: .system)
-    private let continueButton = PrimaryButton(type: .system)
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = ExperimentPalette.pageBackground
-        setupUI()
+        overrideUserInterfaceStyle = .dark
+        view.backgroundColor = .black
+        embedIntro()
+        setupCloseButton()
     }
 
     func signUpComplete() {
         dismiss(animated: true)
     }
 
-    private func setupUI() {
+    private func embedIntro() {
+        let page = IntroPage(
+            onGetStarted: { [weak self] in
+                guard let self, self.entry == .journey else { return }
+                self.pushOnboarding(provider: nil, flow: .journey)
+            },
+            onAppleSignIn: { [weak self] in self?.appleTapped() },
+            onLogin: { [weak self] in self?.loginTapped() },
+            onSignUp: { [weak self] in self?.signUpTapped() },
+            revealsAuthOnGetStarted: entry == .original
+        )
+        let host = UIHostingController(rootView: page)
+        host.view.backgroundColor = .clear
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(host)
+        view.addSubview(host.view)
+        host.didMove(toParent: self)
+
+        NSLayoutConstraint.activate([
+            host.view.topAnchor.constraint(equalTo: view.topAnchor),
+            host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+        introHost = host
+    }
+
+    private func setupCloseButton() {
         closeButton.accessibilityLabel = "Close"
         closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
-
-        titleLabel.text = "Welcome to Shizen"
-        titleLabel.font = OnboardingChrome.titleFont
-        titleLabel.textColor = .label
-        titleLabel.textAlignment = .center
-        titleLabel.numberOfLines = 0
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        subtitleLabel.text = "Sign in to save progress — or continue and set up your listening profile."
-        subtitleLabel.font = OnboardingChrome.subtitleFont
-        subtitleLabel.textColor = .secondaryLabel
-        subtitleLabel.textAlignment = .center
-        subtitleLabel.numberOfLines = 0
-        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        configureProviderButton(
-            appleButton,
-            title: "Sign in with Apple",
-            symbolName: "apple.logo",
-            background: .label,
-            foreground: .systemBackground
-        )
-        appleButton.addTarget(self, action: #selector(appleTapped), for: .touchUpInside)
-
-        configureProviderButton(
-            googleButton,
-            title: "Continue with Google",
-            symbolName: "g.circle.fill",
-            background: ExperimentPalette.cardSurface,
-            foreground: .label
-        )
-        googleButton.layer.borderWidth = ExperimentCardStroke.normalWidth
-        googleButton.layer.borderColor = ExperimentPalette.cardBorder.cgColor
-        googleButton.addTarget(self, action: #selector(googleTapped), for: .touchUpInside)
-
-        continueButton.primaryStyle = .yellow
-        continueButton.setTitle("Continue", for: .normal)
-        continueButton.addTarget(self, action: #selector(continueTapped), for: .touchUpInside)
-
         view.addSubview(closeButton)
-        view.addSubview(titleLabel)
-        view.addSubview(subtitleLabel)
-        view.addSubview(appleButton)
-        view.addSubview(googleButton)
-        view.addSubview(continueButton)
 
         let guide = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
             closeButton.topAnchor.constraint(equalTo: guide.topAnchor, constant: 8),
             closeButton.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 16),
-
-            titleLabel.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 28),
-            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: OnboardingChrome.horizontalInset),
-            titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -OnboardingChrome.horizontalInset),
-
-            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 10),
-            subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            subtitleLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
-
-            appleButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: PrimaryButton.horizontalInset),
-            appleButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -PrimaryButton.horizontalInset),
-            appleButton.heightAnchor.constraint(equalToConstant: PrimaryButton.preferredHeight),
-
-            googleButton.topAnchor.constraint(equalTo: appleButton.bottomAnchor, constant: 12),
-            googleButton.leadingAnchor.constraint(equalTo: appleButton.leadingAnchor),
-            googleButton.trailingAnchor.constraint(equalTo: appleButton.trailingAnchor),
-            googleButton.heightAnchor.constraint(equalToConstant: PrimaryButton.preferredHeight),
-            googleButton.bottomAnchor.constraint(equalTo: continueButton.topAnchor, constant: -16),
-
-            continueButton.leadingAnchor.constraint(equalTo: appleButton.leadingAnchor),
-            continueButton.trailingAnchor.constraint(equalTo: appleButton.trailingAnchor),
-            continueButton.heightAnchor.constraint(equalToConstant: PrimaryButton.preferredHeight),
-            continueButton.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -12),
         ])
+        updateCloseButtonVisibility()
     }
 
-    private func configureProviderButton(
-        _ button: UIButton,
-        title: String,
-        symbolName: String,
-        background: UIColor,
-        foreground: UIColor
-    ) {
-        var config = UIButton.Configuration.filled()
-        config.cornerStyle = .fixed
-        config.background.cornerRadius = 14
-        config.background.backgroundColor = background
-        config.baseForegroundColor = foreground
-        config.image = UIImage(systemName: symbolName)
-        config.imagePadding = 8
-        config.title = title
-        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
-            var attributes = incoming
-            attributes.font = .systemFont(ofSize: 17, weight: .bold)
-            attributes.foregroundColor = foreground
-            return attributes
-        }
-        button.configuration = config
-        button.translatesAutoresizingMaskIntoConstraints = false
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        view.bringSubviewToFront(closeButton)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        updateCloseButtonVisibility()
+    }
+
+    private func updateCloseButtonVisibility() {
+        closeButton.isHidden = !(isPreviewMode || presentingViewController != nil)
     }
 
     @objc private func closeTapped() {
+        HapticsHelper.lightHaptic()
         dismiss(animated: true)
     }
 
@@ -135,15 +91,16 @@ final class AuthLandingViewController: UIViewController {
         beginOnboarding(provider: .apple, toast: "Apple Sign-In isn’t configured yet")
     }
 
-    @objc private func googleTapped() {
-        beginOnboarding(provider: .google, toast: "Google Sign-In isn’t configured yet")
+    @objc private func loginTapped() {
+        beginOnboarding(provider: .guest, toast: "Log in isn’t configured yet")
     }
 
-    @objc private func continueTapped() {
+    @objc private func signUpTapped() {
         beginOnboarding(provider: .guest, toast: nil)
     }
 
     private func beginOnboarding(provider: AuthProvider, toast: String?) {
+        HapticsHelper.lightHaptic()
         let start: () -> Void = { [weak self] in
             guard let self else { return }
             self.pushOnboarding(provider: provider)
@@ -156,7 +113,11 @@ final class AuthLandingViewController: UIViewController {
     }
 
     private func pushOnboarding(provider: AuthProvider) {
-        let coordinator = OnboardingCoordinator()
+        pushOnboarding(provider: provider, flow: .original)
+    }
+
+    private func pushOnboarding(provider: AuthProvider?, flow: OnboardingCoordinator.Flow) {
+        let coordinator = OnboardingCoordinator(flow: flow)
         if isPreviewMode {
             coordinator.enablePreviewMode()
         }
@@ -185,7 +146,7 @@ final class AuthLandingViewController: UIViewController {
 
         NSLayoutConstraint.activate([
             toast.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            toast.bottomAnchor.constraint(equalTo: continueButton.topAnchor, constant: -20),
+            toast.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -28),
             toast.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 32),
             toast.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -32),
 

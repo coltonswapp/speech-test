@@ -1841,10 +1841,44 @@ class DialogueExperimentViewController: UIViewController {
             }
         }
 
+        // Embedded m4a marks were written at publish and can sit ahead of
+        // token stamps approved later. Follow the stamps when they line up.
+        applyTokenSyncLineWindows()
+
         updateTransportControls()
         if presentationContext == .standalone {
             updateElapsedLabel(currentTime: 0)
         }
+        logKaraokeAlignmentSnapshot()
+    }
+
+    /// Each spoken line stays active until the next line's first token.
+    /// Returns without changing `alignedLines` if the stamps are unusable.
+    private func applyTokenSyncLineWindows() {
+        guard let tokenSync,
+              tokenSync.lines.count == alignedLines.count,
+              clipDuration > 0
+        else { return }
+
+        var ranges: [AlignedTimeLine] = []
+        for index in alignedLines.indices {
+            let tokens = tokenSync.lines[index].tokens
+            guard let start = tokens.first?.startSeconds, start.isFinite, start >= 0 else { return }
+            let end: TimeInterval
+            if index + 1 < tokenSync.lines.count {
+                guard let next = tokenSync.lines[index + 1].tokens.first?.startSeconds,
+                      next.isFinite,
+                      next > start
+                else { return }
+                end = next
+            } else {
+                end = max(start, clipDuration)
+            }
+            ranges.append(AlignedTimeLine(text: alignedLines[index].text, timeRange: start..<end))
+        }
+        alignedLines = ranges
+        let scenario = example.sourceScenarioId ?? "?"
+        print("[karaoke] \(scenario) line windows follow token stamps")
     }
 
     private func playerDuration(for url: URL) -> TimeInterval {
@@ -2452,13 +2486,76 @@ class DialogueExperimentViewController: UIViewController {
     }
 
     private func refreshTokenSync() {
-        tokenSync = DialogueTokenSync.validated(
+        let validated = DialogueTokenSync.validated(
             example.tokenSync,
             spokenTexts: spokenLineTexts,
             publishedContentHash: example.publishedContentHash
         )
+        tokenSync = validated
         activeKaraokeTokenIndex = nil
         appliedKaraokeTokenIndex = Array(repeating: -1, count: japaneseLabels.count)
+        let scenario = example.sourceScenarioId ?? "?"
+        if let validated {
+            print("[karaoke] \(scenario) tokenSync kept lines=\(validated.lines.count) spoken=\(spokenLineTexts.count) hash=\(validated.contentHash.prefix(12))")
+        } else {
+            print("[karaoke] \(scenario) tokenSync dropped raw=\(example.tokenSync == nil ? "absent" : "present") spoken=\(spokenLineTexts.count) publishedHash=\(example.publishedContentHash?.prefix(12) ?? "nil")")
+        }
+    }
+
+    /// Line windows come from the clip; token stamps come from the lesson JSON.
+    /// A line that ends before its last token is the "switched early" symptom.
+    private func logKaraokeAlignmentSnapshot() {
+        let scenario = example.sourceScenarioId ?? "?"
+        guard let tokenSync else {
+            print("[karaoke] \(scenario) aligned=\(alignedLines.count) tokenSync nil")
+            return
+        }
+        let count = min(tokenSync.lines.count, alignedLines.count)
+        print("[karaoke] \(scenario) compare tokenLines=\(tokenSync.lines.count) aligned=\(alignedLines.count)")
+        if tokenSync.lines.count != alignedLines.count {
+            print("[karaoke] \(scenario) WARNING line count mismatch")
+        }
+        for index in 0..<count {
+            let tokens = tokenSync.lines[index].tokens
+            let range = alignedLines[index].timeRange
+            let first = tokens.first
+            let last = tokens.last
+            let stillOpen = tokens.filter { $0.startSeconds > range.upperBound + 0.001 }
+            var line = "[karaoke]   #\(index) window \(karaokeTime(range.lowerBound))–\(karaokeTime(range.upperBound)) tokens \(karaokeTime(first?.startSeconds))–\(karaokeTime(last?.startSeconds)) last=\"\(last?.text ?? "")\""
+            if !stillOpen.isEmpty {
+                let leftover = stillOpen.map { "\($0.text)@\(karaokeTime($0.startSeconds))" }.joined(separator: ", ")
+                line += " OPEN past line end: \(leftover)"
+            }
+            print(line)
+        }
+    }
+
+    private func logKaraokeLineSwitch(to displayIndex: Int?) {
+        let time = audioPlayer?.currentTime ?? 0
+        let scenario = example.sourceScenarioId ?? "?"
+        let fromSpoken = activeLineIndex.flatMap { spokenIndex(forDisplayIndex: $0) }
+        let toSpoken = displayIndex.flatMap { spokenIndex(forDisplayIndex: $0) }
+        var detail = "[karaoke] \(scenario) switch t=\(karaokeTime(time)) spoken \(fromSpoken.map(String.init) ?? "nil") → \(toSpoken.map(String.init) ?? "nil")"
+        if let fromSpoken, let tokenSync, tokenSync.lines.indices.contains(fromSpoken) {
+            let tokens = tokenSync.lines[fromSpoken].tokens
+            if let last = tokens.last {
+                detail += " prevLast=\(last.text)@\(karaokeTime(last.startSeconds))"
+            }
+            let open = tokens.filter { $0.startSeconds > time + 0.001 }
+            if !open.isEmpty {
+                detail += " OPEN \(open.map { "\($0.text)@\(karaokeTime($0.startSeconds))" }.joined(separator: ", "))"
+            }
+        }
+        if let toSpoken, alignedLines.indices.contains(toSpoken) {
+            let range = alignedLines[toSpoken].timeRange
+            detail += " nextWindow≥\(karaokeTime(range.lowerBound))"
+        }
+        print(detail)
+    }
+
+    private func karaokeTime(_ time: TimeInterval?) -> String {
+        guard let time else { return "nil" }
+        return String(format: "%.3f", time)
     }
 
     private func refreshActiveKaraokeFromPlaybackTime(_ time: TimeInterval? = nil) {
@@ -2490,6 +2587,7 @@ class DialogueExperimentViewController: UIViewController {
 
     private func setActiveLine(_ newIndex: Int?, animated: Bool) {
         guard newIndex != activeLineIndex else { return }
+        logKaraokeLineSwitch(to: newIndex)
 
         if let alignmentDebugLog {
             let time = audioPlayer?.currentTime ?? 0

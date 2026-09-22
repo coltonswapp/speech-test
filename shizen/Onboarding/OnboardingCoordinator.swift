@@ -4,9 +4,20 @@ final class OnboardingCoordinator: NSObject {
 
     weak var authenticationDelegate: AuthenticationDelegate?
 
+    enum Flow: String {
+        case original = "onboarding_config"
+        case journey = "onboarding_journey_config"
+    }
+
     private(set) var userInfo = UserOnboardingInfo()
+    private let flow: Flow
     private var isPreviewMode = false
     private var currentStepIndex = 0
+
+    init(flow: Flow = .original) {
+        self.flow = flow
+        super.init()
+    }
 
     private lazy var navigationController = OnboardingNavigationController()
     private lazy var containerViewController: OnboardingContainerViewController = {
@@ -16,7 +27,7 @@ final class OnboardingCoordinator: NSObject {
     }()
 
     private lazy var steps: [OnboardingViewController] = {
-        if let config = OnboardingConfiguration.loadLocal() {
+        if let config = OnboardingConfiguration.loadLocal(named: flow.rawValue) {
             return buildStepsFromConfig(config)
         }
         return buildFallbackSteps()
@@ -65,6 +76,38 @@ final class OnboardingCoordinator: NSObject {
 
     func updateSliderLevel(_ value: String) {
         userInfo.sliderLevel = value
+    }
+
+    func updateDailyGoal(_ value: String) {
+        userInfo.dailyGoal = value
+    }
+
+    func journeySummaryLine() -> String? {
+        let why = userInfo.surveyResponses["why_learning"]?.joined(separator: ", ")
+        let parts = [
+            why,
+            Self.displayAnswer(userInfo.sliderLevel),
+            userInfo.listeningQuizAnswer.first,
+            Self.displayAnswer(userInfo.dailyGoal),
+        ]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func displayAnswer(_ value: String?) -> String? {
+        switch value {
+        case "brand_new": return "Brand New"
+        case "beginner": return "Beginner"
+        case "intermediate": return "Intermediate"
+        case "advanced": return "Advanced"
+        case "1_minute": return "1 minute a day"
+        case "3_minutes": return "3 minutes a day"
+        case "10_minutes": return "10 minutes a day"
+        case "20_minutes": return "20 minutes a day"
+        default: return value
+        }
     }
 
     func updateListeningQuizAnswer(_ answers: [String]) {
@@ -130,6 +173,24 @@ final class OnboardingCoordinator: NSObject {
                 } else {
                     viewController = nil
                 }
+            case .plan:
+                if case .plan(let planConfig) = step.config {
+                    viewController = OnboardingPlanViewController(config: planConfig)
+                } else {
+                    viewController = nil
+                }
+            case .paywall:
+                if case .paywall(let paywallConfig) = step.config {
+                    viewController = OnboardingPaywallViewController(config: paywallConfig)
+                } else {
+                    viewController = nil
+                }
+            case .auth:
+                if case .auth(let authConfig) = step.config {
+                    viewController = OnboardingAuthStepViewController(config: authConfig)
+                } else {
+                    viewController = nil
+                }
             case .finish:
                 if case .finish(let finishConfig) = step.config {
                     viewController = OnboardingFinishViewController(config: finishConfig)
@@ -168,9 +229,20 @@ final class OnboardingCoordinator: NSObject {
             id: "why_learning",
             title: "Why are you learning Japanese?",
             subtitle: "This will help us create better content for you.",
-            options: ["Travel", "Make Friends", "Business"],
-            isMultiSelect: false,
-            layout: .list
+            options: [
+                "Travel ✈️",
+                "Friends 🤝",
+                "Work 💼",
+                "Anime 🎌",
+                "Music 🎵",
+                "School 📚",
+                "Family 👨‍👩‍👧",
+                "Culture 🍵",
+                "Fun ✨",
+                "Move there 🗾",
+            ],
+            isMultiSelect: true,
+            layout: .grid
         )
         return [
             OnboardingSurveyViewController(question: question, ctaText: "Next"),

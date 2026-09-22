@@ -149,6 +149,7 @@ enum ExperimentSettings {
     private static let dialogueMessageLeadingColorKey = "ExperimentDialogueMessageLeadingColor"
     private static let dialogueMessageTrailingColorKey = "ExperimentDialogueMessageTrailingColor"
     private static let kanjiSpotlightHighlightColorKey = "ExperimentKanjiSpotlightHighlightColor"
+    private static let kanjiDecompositionFormatKey = "ExperimentKanjiDecompositionFormat"
     private static let explosionEmojisKey = "ExperimentExplosionEmojis"
 
     /// Palette shown in the explosion playground. Selected subset is persisted.
@@ -333,6 +334,17 @@ enum ExperimentSettings {
     static func applyDialogueMessageColorPreset(_ preset: DialogueMessageColorPreset) {
         dialogueMessageLeadingColor = preset.leading
         dialogueMessageTrailingColor = preset.trailing
+    }
+
+    /// Full breakdown vs the 3-slide kanji decomposition cut.
+    static var kanjiDecompositionFormat: KanjiDecompositionSlideshowFormat {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: kanjiDecompositionFormatKey),
+                  let value = KanjiDecompositionSlideshowFormat(rawValue: raw)
+            else { return .full }
+            return value
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: kanjiDecompositionFormatKey) }
     }
 
     /// Wash behind the subject kanji on Kanji Spotlight example slides.

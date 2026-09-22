@@ -15,6 +15,8 @@ enum KanjiDecompositionBadgeIdentifier: Hashable {
     case character(index: Int)
     /// Hero in the combined reveal preview row.
     case combinedPreview(index: Int)
+    /// Hero in the short-format vertical stack.
+    case stacked(index: Int)
 }
 
 final class KanjiDecompositionBadgeLayoutStore {
@@ -38,4 +40,5 @@ final class KanjiDecompositionBadgeLayoutStore {
 
 protocol KanjiDecompositionBadgeLayoutHost: UIView {
     func characterHeroViews() -> [KanjiDecompositionCharacterHeroView]
+    func setBadgeEditingSelection(_ selectedIdentifier: KanjiDecompositionBadgeIdentifier?)
 }

@@ -13,6 +13,7 @@ enum OnboardingStore {
         let payload = PersistedOnboardingAnswers(
             surveyResponses: info.surveyResponses,
             sliderLevel: info.sliderLevel,
+            dailyGoal: info.dailyGoal,
             listeningQuizAnswer: info.listeningQuizAnswer,
             pendingProvider: info.pendingProvider?.rawValue
         )
@@ -29,6 +30,7 @@ enum OnboardingStore {
 struct PersistedOnboardingAnswers: Codable {
     var surveyResponses: [String: [String]]
     var sliderLevel: String?
+    var dailyGoal: String?
     var listeningQuizAnswer: [String]
     var pendingProvider: String?
 }

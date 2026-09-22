@@ -1,3 +1,4 @@
+import NNKit
 import UIKit
 
 final class OnboardingContainerViewController: UIViewController {
@@ -69,6 +70,7 @@ final class OnboardingContainerViewController: UIViewController {
     }
 
     @objc private func backTapped() {
+        HapticsHelper.lightHaptic()
         coordinator?.back()
     }
 }

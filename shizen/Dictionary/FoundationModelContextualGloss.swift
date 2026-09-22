@@ -10,10 +10,10 @@ import FoundationModels
 
 @Generable
 struct FoundationModelContextualWordGloss {
-    @Guide(description: "Plain English meaning of the selected token in this sentence. 2-8 words. Examples: 何時 → what time; スマホ → smartphone; 行きましょう → let's go. Never use linguistics jargon or word-type labels.")
+    @Guide(description: "Plain English meaning of the selected token in this sentence. 2-8 words. Examples: 何時 → what time; スマホ → smartphone; 行きましょう → let's go; 作ってあげよう → I'll make it for you. For a verb plus auxiliaries, gloss the whole token. Never use linguistics jargon or word-type labels.")
     var meaning: String
 
-    @Guide(description: "Optional note on non-obvious grammar of the token itself (inflection, fused particle, politeness). Plain English for learners. Use an empty string when there is nothing useful to add. Never name word types (compound, loanword, abbreviation, etc.) or describe neighboring words.")
+    @Guide(description: "Optional note on non-obvious grammar of the token itself (inflection, fused particle, politeness). For a verb plus auxiliary chain, one short parts breakdown (作ってあげよう → 作る \"make\" + てあげる \"do for someone\" + よう \"I'll\"). Empty string for ordinary compounds (大学生, 何時, スマホ) and when meaning alone is enough. Never name word types or describe neighboring words.")
     var grammarNote: String
 }
 
@@ -41,15 +41,21 @@ enum FoundationModelContextualGloss {
     - When the word is built from familiar parts, give the natural composed meaning \
     (何時 → what time; 大学生 → university student; スマホ → smartphone).
     - For conjugated forms, reflect the inflection when it changes the sense (行きましょう → let's go).
+    - For a verb built with auxiliaries, give the natural meaning of the whole token \
+    (作ってあげよう → I'll make it for you).
     - NEVER output meta labels such as: transparent compound, opaque compound, loanword, \
     abbreviation, clipping, portmanteau, compound word, katakana word.
 
     grammarNote:
     - Only when the token itself has non-obvious grammar worth a short learner note.
     - OK: inflection, a particle fused to the token, politeness encoded in the form.
-    - Use an empty string when the meaning alone is enough (most nouns, abbreviations, simple compounds).
+    - For a verb plus auxiliary chain, add one short note on how the parts add up \
+    (作ってあげよう → 作る "make" + てあげる "do for someone" + よう "I'll").
+    - Use an empty string when the meaning alone is enough (most nouns, abbreviations, and ordinary \
+    compounds such as 大学生, 何時, スマホ).
     - Do NOT describe neighboring tokens (に, は, を, か, etc.).
-    - Do NOT repeat the meaning or name the word's type.
+    - Do NOT restate the meaning in different words, and do not name the word's type. \
+    A parts breakdown is the note, not a second copy of meaning.
 
     Dictionary hints are optional — prioritize the sentence context.
     """
@@ -171,7 +177,7 @@ enum FoundationModelContextualGloss {
 
     private static func cacheKey(for request: Request) -> String {
         [
-            "gloss-v2",
+            "gloss-v3",
             request.sentence,
             request.surface,
             request.dictionaryForm ?? "",

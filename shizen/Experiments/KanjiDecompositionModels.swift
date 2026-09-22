@@ -8,6 +8,34 @@
 
 import Foundation
 
+/// Full per-character breakdown, or the 3-slide cut (word, parts stacked, meaning).
+enum KanjiDecompositionSlideshowFormat: String, CaseIterable {
+    case full
+    case short
+
+    var title: String {
+        switch self {
+        case .full: return "Full breakdown"
+        case .short: return "3 slides"
+        }
+    }
+
+    /// Nav-bar label on the word list.
+    var shortTitle: String {
+        switch self {
+        case .full: return "Full"
+        case .short: return "3 slides"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .full: return "Kanji, each part, then the meaning"
+        case .short: return "Kanji, parts stacked, then the meaning"
+        }
+    }
+}
+
 struct KanjiDecompositionWord: Hashable {
     let expression: String
     let characters: [Character]

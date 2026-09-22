@@ -80,17 +80,7 @@ private final class RegisterLadderHeroCard: UIView {
 // MARK: - Shared helpers
 
 private func installRegisterLadderWatermark(in host: UIView) {
-    let label = UILabel()
-    label.text = "shizenapp.com"
-    label.font = .systemFont(ofSize: 11, weight: .medium)
-    label.textColor = UIColor.secondaryLabel.withAlphaComponent(0.65)
-    label.textAlignment = .center
-    label.translatesAutoresizingMaskIntoConstraints = false
-    host.addSubview(label)
-    NSLayoutConstraint.activate([
-        label.centerXAnchor.constraint(equalTo: host.centerXAnchor),
-        label.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -14),
-    ])
+    ExperimentSlideWatermark.install(in: host)
 }
 
 /// Eyebrow + title stacked, pinned toward the bottom of the band above `hero`

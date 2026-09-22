@@ -32,6 +32,9 @@ struct OnboardingStep: Codable {
         case slider
         case listeningQuiz = "listening_quiz"
         case demo
+        case plan
+        case paywall
+        case auth
         case finish
     }
 }
@@ -41,6 +44,9 @@ enum StepConfiguration: Codable {
     case slider(SliderStepConfig)
     case listeningQuiz(ListeningQuizStepConfig)
     case demo(DemoStepConfig)
+    case plan(BasicStepConfig)
+    case paywall(BasicStepConfig)
+    case auth(BasicStepConfig)
     case finish(BasicStepConfig)
 
     enum CodingKeys: String, CodingKey {
@@ -60,6 +66,12 @@ enum StepConfiguration: Codable {
             self = .listeningQuiz(try ListeningQuizStepConfig(from: decoder))
         case "demo":
             self = .demo(try DemoStepConfig(from: decoder))
+        case "plan":
+            self = .plan(try BasicStepConfig(from: decoder))
+        case "paywall":
+            self = .paywall(try BasicStepConfig(from: decoder))
+        case "auth":
+            self = .auth(try BasicStepConfig(from: decoder))
         default:
             self = .finish(try BasicStepConfig(from: decoder))
         }
@@ -79,6 +91,15 @@ enum StepConfiguration: Codable {
             try config.encode(to: encoder)
         case .demo(let config):
             try container.encode("demo", forKey: .type)
+            try config.encode(to: encoder)
+        case .plan(let config):
+            try container.encode("plan", forKey: .type)
+            try config.encode(to: encoder)
+        case .paywall(let config):
+            try container.encode("paywall", forKey: .type)
+            try config.encode(to: encoder)
+        case .auth(let config):
+            try container.encode("auth", forKey: .type)
             try config.encode(to: encoder)
         case .finish(let config):
             try container.encode("finish", forKey: .type)
@@ -148,12 +169,14 @@ struct ListeningQuizStepConfig: Codable {
     let title: String
     let subtitle: String?
     let options: [SurveyOptionConfig]
+    let audioText: String?
     let ctaText: String?
 
     enum CodingKeys: String, CodingKey {
         case title
         case subtitle
         case options
+        case audioText = "audio_text"
         case ctaText = "cta_text"
     }
 }
@@ -163,16 +186,28 @@ enum DemoVariant: String, Codable {
     case inspect
 }
 
+struct DemoLineConfig: Codable {
+    let japanese: String
+    let english: String
+    let side: String
+}
+
 struct DemoStepConfig: Codable {
     let title: String
     let subtitle: String?
     let variant: DemoVariant
+    let lines: [DemoLineConfig]?
+    let inspectText: String?
+    let inspectEnglish: String?
     let ctaText: String?
 
     enum CodingKeys: String, CodingKey {
         case title
         case subtitle
         case variant
+        case lines
+        case inspectText = "inspect_text"
+        case inspectEnglish = "inspect_english"
         case ctaText = "cta_text"
     }
 
@@ -181,6 +216,9 @@ struct DemoStepConfig: Codable {
         title = try container.decode(String.self, forKey: .title)
         subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
         variant = try container.decodeIfPresent(DemoVariant.self, forKey: .variant) ?? .bars
+        lines = try container.decodeIfPresent([DemoLineConfig].self, forKey: .lines)
+        inspectText = try container.decodeIfPresent(String.self, forKey: .inspectText)
+        inspectEnglish = try container.decodeIfPresent(String.self, forKey: .inspectEnglish)
         ctaText = try container.decodeIfPresent(String.self, forKey: .ctaText)
     }
 }
@@ -189,10 +227,27 @@ struct BasicStepConfig: Codable {
     let title: String?
     let subtitle: String?
     let ctaText: String?
+    let reflectsAnswers: Bool
 
     enum CodingKeys: String, CodingKey {
         case title
         case subtitle
         case ctaText = "cta_text"
+        case reflectsAnswers = "reflects_answers"
+    }
+
+    init(title: String?, subtitle: String?, ctaText: String?, reflectsAnswers: Bool = false) {
+        self.title = title
+        self.subtitle = subtitle
+        self.ctaText = ctaText
+        self.reflectsAnswers = reflectsAnswers
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
+        ctaText = try container.decodeIfPresent(String.self, forKey: .ctaText)
+        reflectsAnswers = try container.decodeIfPresent(Bool.self, forKey: .reflectsAnswers) ?? false
     }
 }

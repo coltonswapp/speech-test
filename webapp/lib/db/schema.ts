@@ -401,3 +401,41 @@ export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),
   value: jsonb("value").notNull(),
 });
+
+// --- Slideshow studio ---
+
+export const slideshowPhoto = pgTable("slideshow_photo", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  title: text("title").notNull(),
+  tags: text("tags").array().notNull().default([]),
+  objectKey: text("object_key").notNull(),
+  thumbObjectKey: text("thumb_object_key").notNull(),
+  contentType: text("content_type").notNull(),
+  byteCount: integer("byte_count").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+});
+
+export const slideshowDeck = pgTable("slideshow_deck", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  kind: text("kind").notNull(), // spotlight | decomposition
+  status: text("status").notNull().default("draft"), // draft | approved | exported
+  usedSubject: text("used_subject").notNull(),
+  recipeId: text("recipe_id").notNull().default("studio-light"),
+  exportSize: text("export_size").notNull().default("story"),
+  photoSet: text("photo_set").notNull().default("all"),
+  photoSeed: integer("photo_seed").notNull().default(0),
+  payload: jsonb("payload").notNull().default({}),
+});

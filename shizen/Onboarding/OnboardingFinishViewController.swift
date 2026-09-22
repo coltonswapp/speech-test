@@ -20,14 +20,29 @@ final class OnboardingFinishViewController: OnboardingViewController {
             subtitle: config.subtitle
         )
         super.viewDidLoad()
+        if let cta = config.ctaText, !cta.isEmpty {
+            addCTAButton(title: cta)
+        }
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        guard config.reflectsAnswers, let line = coordinator?.journeySummaryLine() else { return }
+        subtitleLabel.text = line
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        let hasCTA = !(config.ctaText ?? "").isEmpty
+        guard !hasCTA else { return }
         guard !hasStartedFinish else { return }
         hasStartedFinish = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
             self?.coordinator?.finishSetup()
         }
+    }
+
+    override func ctaTapped() {
+        coordinator?.finishSetup()
     }
 }

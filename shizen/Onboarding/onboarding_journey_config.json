@@ -1,0 +1,183 @@
+{
+  "version": "1.0",
+  "flow": {
+    "name": "shizen_journey",
+    "steps": [
+      {
+        "id": "why_learning",
+        "type": "survey",
+        "config": {
+          "type": "survey",
+          "title": "Why are you learning Japanese?",
+          "subtitle": "Choose all that apply.",
+          "options": [
+            { "title": "Travel ✈️", "value": "travel" },
+            { "title": "Friends 🤝", "value": "friends" },
+            { "title": "Work 💼", "value": "work" },
+            { "title": "Anime 🎌", "value": "anime" },
+            { "title": "Music 🎵", "value": "music" },
+            { "title": "School 📚", "value": "school" },
+            { "title": "Family 👨‍👩‍👧", "value": "family" },
+            { "title": "Culture 🍵", "value": "culture" },
+            { "title": "Fun ✨", "value": "fun" },
+            { "title": "Move there 🗾", "value": "living" }
+          ],
+          "multi_select": true,
+          "layout": "grid",
+          "cta_text": "Next"
+        }
+      },
+      {
+        "id": "current_level",
+        "type": "slider",
+        "config": {
+          "type": "slider",
+          "title": "How's your Japanese?",
+          "subtitle": "Just so we know where to start you.",
+          "levels": [
+            {
+              "title": "Brand New",
+              "description": "I know a few words, but I can't follow a sentence yet.",
+              "value": "brand_new"
+            },
+            {
+              "title": "Beginner",
+              "description": "I can introduce myself. Real conversations still move too fast.",
+              "value": "beginner"
+            },
+            {
+              "title": "Intermediate",
+              "description": "I catch familiar topics, then lose the thread.",
+              "value": "intermediate"
+            },
+            {
+              "title": "Advanced",
+              "description": "I follow most everyday speech and want it to feel natural.",
+              "value": "advanced"
+            }
+          ],
+          "cta_text": "Next"
+        }
+      },
+      {
+        "id": "ear_test",
+        "type": "listening_quiz",
+        "config": {
+          "type": "listening_quiz",
+          "title": "How much did you catch?",
+          "subtitle": "Play it once, then pick one.",
+          "audio_text": "はじめまして。三〇二のカイトです。",
+          "options": [
+            { "title": "Almost nothing", "value": "nothing" },
+            { "title": "A word or two", "value": "words" },
+            { "title": "The gist", "value": "gist" },
+            { "title": "Most of it", "value": "most" }
+          ],
+          "cta_text": "Next"
+        }
+      },
+      {
+        "id": "guided_listen",
+        "type": "demo",
+        "config": {
+          "type": "demo",
+          "title": "Try it again.",
+          "subtitle": "Same doorway. This time the line stays with you.",
+          "variant": "bars",
+          "lines": [
+            { "japanese": "すみません。", "english": "Excuse me.", "side": "leading" },
+            { "japanese": "はいー。", "english": "Yes?", "side": "trailing" },
+            { "japanese": "はじめまして。三〇二のカイトです。", "english": "I'm Kaito, from 302.", "side": "leading" }
+          ],
+          "cta_text": "Next"
+        }
+      },
+      {
+        "id": "inspect",
+        "type": "demo",
+        "config": {
+          "type": "demo",
+          "title": "Then look closer.",
+          "subtitle": "Scrub a word. The meaning is in the scene.",
+          "variant": "inspect",
+          "inspect_text": "あ、お隣ですね。",
+          "inspect_english": "Oh — you're next door.",
+          "cta_text": "Next"
+        }
+      },
+      {
+        "id": "daily_goal",
+        "type": "slider",
+        "config": {
+          "type": "slider",
+          "title": "Set a daily goal",
+          "subtitle": "A small commitment. You can change it later.",
+          "levels": [
+            {
+              "title": "1 minute",
+              "description": "One minute a day. Enough to hear a line.",
+              "value": "1_minute"
+            },
+            {
+              "title": "3 minutes",
+              "description": "Three minutes a day. A short scene.",
+              "value": "3_minutes"
+            },
+            {
+              "title": "10 minutes",
+              "description": "Ten minutes a day. A real sitting.",
+              "value": "10_minutes"
+            },
+            {
+              "title": "20 minutes",
+              "description": "Twenty minutes a day. Stay in the scene.",
+              "value": "20_minutes"
+            }
+          ],
+          "cta_text": "Next"
+        }
+      },
+      {
+        "id": "plan",
+        "type": "plan",
+        "config": {
+          "type": "plan",
+          "title": "Here's your start.",
+          "subtitle": "From what you just told us.",
+          "cta_text": "Next"
+        }
+      },
+      {
+        "id": "paywall",
+        "type": "paywall",
+        "config": {
+          "type": "paywall",
+          "title": "Listen in the building.",
+          "subtitle": "A trial. Nothing is charged in this preview.",
+          "cta_text": "Start free trial"
+        }
+      },
+      {
+        "id": "auth",
+        "type": "auth",
+        "config": {
+          "type": "auth",
+          "title": "Save your progress.",
+          "subtitle": "Sign in with Apple, or skip for now.",
+          "cta_text": "Continue with Apple"
+        }
+      },
+      {
+        "id": "launch",
+        "type": "finish",
+        "config": {
+          "type": "finish",
+          "title": "You're in.",
+          "subtitle": "The first scene is the doorway.",
+          "cta_text": "Enter the building",
+          "reflects_answers": true
+        }
+      }
+    ]
+  }
+}

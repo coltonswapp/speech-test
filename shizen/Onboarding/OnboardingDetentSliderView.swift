@@ -4,9 +4,9 @@ import UIKit
 final class OnboardingDetentSliderView: UIVisualEffectView {
 
     private static let height: CGFloat = 72
-    private static let knobSize: CGFloat = 72
-    private static let knobInset: CGFloat = 8
-    private static let trackPadding: CGFloat = 5
+    private static let thumbInset: CGFloat = 8
+    private static let knobSize: CGFloat = height - thumbInset * 2
+    private static let trackPadding: CGFloat = thumbInset
 
     var onIndexChanged: ((Int) -> Void)?
 
@@ -96,8 +96,8 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
         ticksContainer.isUserInteractionEnabled = false
         contentView.addSubview(ticksContainer)
 
-        knobView.backgroundColor = .white
-        knobView.layer.cornerRadius = (Self.knobSize - Self.knobInset) / 2
+        knobView.backgroundColor = .secondarySystemBackground
+        knobView.layer.cornerRadius = Self.knobSize / 2
         knobView.translatesAutoresizingMaskIntoConstraints = false
 
         knobContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -126,14 +126,18 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
 
             knobView.centerXAnchor.constraint(equalTo: knobContainer.centerXAnchor),
             knobView.centerYAnchor.constraint(equalTo: knobContainer.centerYAnchor),
-            knobView.widthAnchor.constraint(equalToConstant: Self.knobSize - Self.knobInset),
-            knobView.heightAnchor.constraint(equalToConstant: Self.knobSize - Self.knobInset),
+            knobView.widthAnchor.constraint(equalToConstant: Self.knobSize),
+            knobView.heightAnchor.constraint(equalToConstant: Self.knobSize),
         ])
 
         rebuildTicks()
 
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         knobContainer.addGestureRecognizer(pan)
+
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: OnboardingDetentSliderView, _) in
+            view.knobView.backgroundColor = .secondarySystemBackground
+        }
     }
 
     private func rebuildTicks() {

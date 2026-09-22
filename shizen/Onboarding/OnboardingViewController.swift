@@ -57,14 +57,17 @@ class OnboardingViewController: UIViewController {
             headerContainerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             headerContainerView.bottomAnchor.constraint(equalTo: labelStack.bottomAnchor, constant: 16),
 
-            labelStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 60),
+            labelStack.topAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.topAnchor,
+                constant: OnboardingChrome.titleTopInset
+            ),
             labelStack.leadingAnchor.constraint(
                 equalTo: view.leadingAnchor,
-                constant: OnboardingChrome.horizontalInset
+                constant: OnboardingChrome.titleHorizontalInset
             ),
             labelStack.trailingAnchor.constraint(
                 equalTo: view.trailingAnchor,
-                constant: -OnboardingChrome.horizontalInset
+                constant: -OnboardingChrome.titleHorizontalInset
             ),
         ])
     }
@@ -117,6 +120,10 @@ class OnboardingViewController: UIViewController {
 
     @objc func ctaTapped() {
         coordinator?.next()
+    }
+
+    func playSelectionHaptic() {
+        HapticsHelper.lightHaptic()
     }
 
     func explodeEmoji(from view: UIView, preset: ExplosionPreset = .small) {

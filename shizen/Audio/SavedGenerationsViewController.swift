@@ -80,6 +80,7 @@ final class SavedGenerationsViewController: UIViewController {
 
     private nonisolated enum DebugSettingsRow: Int, CaseIterable, Hashable, Sendable {
         case onboarding
+        case journeyOnboarding
         case textToSpeech
         case kanaLearningFlow
         case kanaProgressPath
@@ -116,6 +117,7 @@ final class SavedGenerationsViewController: UIViewController {
         var title: String {
             switch self {
             case .onboarding: return "Auth + onboarding"
+            case .journeyOnboarding: return "Journey onboarding"
             case .textToSpeech: return "Text to Speech"
             case .kanaLearningFlow: return "Kana learning flow"
             case .kanaProgressPath: return "Kana progress path"
@@ -154,6 +156,7 @@ final class SavedGenerationsViewController: UIViewController {
         var subtitle: String {
             switch self {
             case .onboarding: return "Landing stubs · survey / slider / listening quiz · placeholder demos"
+            case .journeyOnboarding: return "Same landing · questions first · ear test · trial · auth at the end"
             case .textToSpeech: return "Stream OpenAI TTS · sentence chunks · lyrics"
             case .kanaLearningFlow: return "Progress tiles · hiragana & katakana lessons · SRS"
             case .kanaProgressPath: return "Row-by-row hiragana lessons · SRS · chart"
@@ -181,7 +184,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .speechProfileOverlay: return "Liquid-glass capsule · drops in while audio plays"
             case .glassProgressVoiceOverlay: return "Progress chrome in glass container · toggle voice overlay"
             case .dialogueExperimentHarness: return "Scenario audio · UIMenu clip switch · alignment QA"
-            case .kanjiDecomposition: return "Character-by-character compound breakdown · export cards"
+            case .kanjiDecomposition: return "Full or 3-slide compound breakdown · export cards"
             case .kanjiSpotlight: return "One kanji · curated compounds & verbs · export cards"
             case .swiftUIShaders: return "Kris Puckett Metal shaders · playground"
             case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
@@ -192,6 +195,7 @@ final class SavedGenerationsViewController: UIViewController {
         var symbolName: String {
             switch self {
             case .onboarding: return "person.crop.circle.badge.checkmark"
+            case .journeyOnboarding: return "door.left.hand.open"
             case .textToSpeech: return "waveform"
             case .kanaLearningFlow: return "square.grid.2x2"
             case .kanaProgressPath: return "point.topleft.down.curvedto.point.bottomright.up"
@@ -608,6 +612,8 @@ final class SavedGenerationsViewController: UIViewController {
         switch row {
         case .onboarding:
             presentOnboardingPlayground()
+        case .journeyOnboarding:
+            presentOnboardingPlayground(entry: .journey)
         case .textToSpeech:
             navigationController?.pushViewController(
                 TextToSpeechExperimentViewController(),
@@ -737,8 +743,9 @@ final class SavedGenerationsViewController: UIViewController {
         }
     }
 
-    private func presentOnboardingPlayground() {
+    private func presentOnboardingPlayground(entry: AuthLandingViewController.Entry = .original) {
         let landing = AuthLandingViewController()
+        landing.entry = entry
         landing.isPreviewMode = true
         let nav = UINavigationController(rootViewController: landing)
         nav.setNavigationBarHidden(true, animated: false)

@@ -40,15 +40,21 @@ enum GeminiContextualGloss {
     - When the word is built from familiar parts, give the natural composed meaning \
     (何時 → what time; 大学生 → university student; スマホ → smartphone).
     - For conjugated forms, reflect the inflection when it changes the sense (行きましょう → let's go).
+    - For a verb built with auxiliaries, give the natural meaning of the whole token \
+    (作ってあげよう → I'll make it for you).
     - NEVER output meta labels such as: transparent compound, opaque compound, loanword, \
     abbreviation, clipping, portmanteau, compound word, katakana word.
 
     grammarNote:
     - Only when the token itself has non-obvious grammar worth a short learner note.
     - OK: inflection, a particle fused to the token, politeness encoded in the form.
-    - Use an empty string when the meaning alone is enough (most nouns, abbreviations, simple compounds).
+    - For a verb plus auxiliary chain, add one short note on how the parts add up \
+    (作ってあげよう → 作る "make" + てあげる "do for someone" + よう "I'll").
+    - Use an empty string when the meaning alone is enough (most nouns, abbreviations, and ordinary \
+    compounds such as 大学生, 何時, スマホ).
     - Do NOT describe neighboring tokens (に, は, を, か, etc.).
-    - Do NOT repeat the meaning or name the word's type.
+    - Do NOT restate the meaning in different words, and do not name the word's type. \
+    A parts breakdown is the note, not a second copy of meaning.
 
     Dictionary hints are optional — prioritize the sentence context.
 
@@ -318,7 +324,7 @@ enum GeminiContextualGloss {
 
     private static func cacheKey(for request: Request, model: Model) -> String {
         [
-            "gemini-gloss-v1",
+            "gemini-gloss-v2",
             model.rawValue,
             request.sentence,
             request.surface,

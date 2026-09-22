@@ -28,32 +28,11 @@ private enum KanjiSpotlightCardMetrics {
     static let exampleHeroWidth: CGFloat = 200
 }
 
-private enum KanjiSpotlightWatermarkPlacement {
-    case top
-    case bottom
-}
-
 private func installKanjiSpotlightWatermark(
     in host: UIView,
-    placement: KanjiSpotlightWatermarkPlacement
+    placement: ExperimentSlideWatermark.Placement
 ) {
-    let label = UILabel()
-    label.text = "shizenapp.com"
-    label.font = .systemFont(ofSize: 11, weight: .medium)
-    label.textColor = UIColor.secondaryLabel.withAlphaComponent(0.65)
-    label.textAlignment = .center
-    label.translatesAutoresizingMaskIntoConstraints = false
-    host.addSubview(label)
-    var constraints = [
-        label.centerXAnchor.constraint(equalTo: host.centerXAnchor),
-    ]
-    switch placement {
-    case .top:
-        constraints.append(label.topAnchor.constraint(equalTo: host.topAnchor, constant: 16))
-    case .bottom:
-        constraints.append(label.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -14))
-    }
-    NSLayoutConstraint.activate(constraints)
+    ExperimentSlideWatermark.install(in: host, placement: placement)
 }
 
 // MARK: - Subject kanji slide (readings + swipe cue)

@@ -12,11 +12,18 @@
           "subtitle": "This will help us create better content for you.",
           "options": [
             { "title": "Travel ✈️", "value": "travel" },
-            { "title": "Make Friends 🤝💖", "value": "friends" },
-            { "title": "Business 💼", "value": "business" }
+            { "title": "Friends 🤝", "value": "friends" },
+            { "title": "Work 💼", "value": "work" },
+            { "title": "Anime 🎌", "value": "anime" },
+            { "title": "Music 🎵", "value": "music" },
+            { "title": "School 📚", "value": "school" },
+            { "title": "Family 👨‍👩‍👧", "value": "family" },
+            { "title": "Culture 🍵", "value": "culture" },
+            { "title": "Fun ✨", "value": "fun" },
+            { "title": "Move there 🗾", "value": "living" }
           ],
-          "multi_select": false,
-          "layout": "list",
+          "multi_select": true,
+          "layout": "grid",
           "cta_text": "Next"
         }
       },

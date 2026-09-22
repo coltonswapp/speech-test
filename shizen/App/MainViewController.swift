@@ -5,7 +5,6 @@
 //  Root container with swipeable sections and category tab bar.
 //
 
-import TTSCore
 import UIKit
 
 final class MainViewController: UIViewController {
@@ -113,26 +112,7 @@ final class MainViewController: UIViewController {
     }
 
     @objc private func openSettings() {
-        let settings = SettingsViewController(store: .shared)
-        settings.onSelect = { [weak settings] url in
-            guard let settings else { return }
-            let tts = TextToSpeechExperimentViewController()
-            settings.navigationController?.pushViewController(tts, animated: true)
-            DispatchQueue.main.async {
-                do {
-                    try tts.importSavedGeneration(from: url)
-                } catch {
-                    let alert = UIAlertController(
-                        title: "Could not open save",
-                        message: error.localizedDescription,
-                        preferredStyle: .alert
-                    )
-                    alert.addAction(UIAlertAction(title: "OK", style: .default))
-                    tts.present(alert, animated: true)
-                }
-            }
-        }
-        navigationController?.pushViewController(settings, animated: true)
+        navigationController?.pushViewController(SettingsViewController(), animated: true)
     }
 
     // MARK: - Layout

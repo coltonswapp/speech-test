@@ -638,10 +638,10 @@ final class DialogueContentRecordingViewController: UIViewController, DialogueCo
     }
 
     private func presentHashtags() {
-        let picker = DialogueContentHashtagPickerViewController()
-        let nav = UINavigationController(rootViewController: picker)
-        nav.modalPresentationStyle = .pageSheet
-        present(nav, animated: true)
+        ExperimentHashtagPickerViewController.present(
+            hashtags: ExperimentHashtags.dialogue,
+            from: self
+        )
     }
 
     // MARK: - Playback

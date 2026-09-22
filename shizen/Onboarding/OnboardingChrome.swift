@@ -3,7 +3,9 @@ import UIKit
 enum OnboardingChrome {
     static let backButtonSize: CGFloat = 44
     static let horizontalInset: CGFloat = 24
-    static let titleFont = UIFont.systemFont(ofSize: 28, weight: .bold)
+    static let titleHorizontalInset: CGFloat = 28
+    static let titleTopInset: CGFloat = 76
+    static let titleFont = UIFont.systemFont(ofSize: 22, weight: .bold)
     static let subtitleFont = UIFont.preferredFont(forTextStyle: .subheadline)
 
     @discardableResult

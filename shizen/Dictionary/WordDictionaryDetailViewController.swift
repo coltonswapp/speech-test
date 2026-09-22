@@ -91,13 +91,37 @@ final class WordDictionaryDetailViewController: UIViewController {
         let entries = lookup.entries
         let primary = entries.max { ($0.score ?? 0) < ($1.score ?? 0) } ?? entries.first
 
-        let target: UIViewController
         if let primary, let word = KanjiDecompositionWord.make(from: primary) {
-            target = KanjiDecompositionPagerViewController(word: word)
+            presentDecompositionFormatChoice(for: word)
         } else {
-            target = KanjiDecompositionListViewController()
+            showDecomposition(KanjiDecompositionListViewController())
         }
+    }
 
+    private func presentDecompositionFormatChoice(for word: KanjiDecompositionWord) {
+        let sheet = UIAlertController(
+            title: word.expression,
+            message: "Choose a slideshow",
+            preferredStyle: .actionSheet
+        )
+        for format in KanjiDecompositionSlideshowFormat.allCases {
+            sheet.addAction(UIAlertAction(title: format.title, style: .default) { [weak self] _ in
+                ExperimentSettings.kanjiDecompositionFormat = format
+                self?.showDecomposition(KanjiDecompositionPagerViewController(word: word))
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+#if DEBUG
+        if let popover = sheet.popoverPresentationController {
+            let anchor = detailView.kanjiDecompositionAnchorView
+            popover.sourceView = anchor
+            popover.sourceRect = anchor.bounds
+        }
+#endif
+        present(sheet, animated: true)
+    }
+
+    private func showDecomposition(_ target: UIViewController) {
         if let nav = navigationController {
             nav.pushViewController(target, animated: true)
         } else {

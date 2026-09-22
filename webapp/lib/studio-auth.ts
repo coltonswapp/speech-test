@@ -70,14 +70,18 @@ export function authIsEnforced(): boolean {
 }
 
 export function bearerMatches(header: string | null): boolean {
-  const expected = process.env.STUDIO_AGENT_TOKEN?.trim();
-  if (!expected || !header) return false;
-  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token) return false;
-  const a = Buffer.from(token);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  const secrets = [
+    process.env.STUDIO_AGENT_TOKEN?.trim(),
+    process.env.CRON_SECRET?.trim(),
+  ].filter(Boolean);
+  return secrets.some((expected) => {
+    const a = Buffer.from(token);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
+  });
 }
 
 /** Learner-client write token for content QA (parallel to Studio agent bearer). */

@@ -31,6 +31,7 @@ final class OnboardingSurveyViewController: OnboardingViewController {
         collectionView.delegate = self
         collectionView.dataSource = self
         collectionView.allowsMultipleSelection = question.isMultiSelect
+        collectionView.alwaysBounceVertical = true
         collectionView.register(OnboardingOptionCell.self, forCellWithReuseIdentifier: OnboardingOptionCell.reuseIdentifier)
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(collectionView)
@@ -52,34 +53,54 @@ final class OnboardingSurveyViewController: OnboardingViewController {
 
     private func makeLayout() -> UICollectionViewLayout {
         let columns = question.columnCount
-        let itemHeight = OnboardingOptionCell.preferredHeight
-        let itemSize = NSCollectionLayoutSize(
-            widthDimension: .fractionalWidth(1),
-            heightDimension: .absolute(itemHeight)
-        )
-        let item = NSCollectionLayoutItem(layoutSize: itemSize)
+        let itemHeight = columns > 1
+            ? OnboardingOptionCell.compactHeight
+            : OnboardingOptionCell.preferredHeight
+        let interItemSpacing: CGFloat = 12
+        let contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 24, bottom: 120, trailing: 24)
 
-        let groupSize = NSCollectionLayoutSize(
-            widthDimension: .fractionalWidth(1),
-            heightDimension: .absolute(itemHeight)
-        )
-        let group: NSCollectionLayoutGroup
-        if columns > 1 {
-            let horizontal = NSCollectionLayoutGroup.horizontal(
-                layoutSize: groupSize,
-                repeatingSubitem: item,
-                count: columns
+        return UICollectionViewCompositionalLayout { _, environment in
+            let availableWidth = environment.container.effectiveContentSize.width
+                - contentInsets.leading
+                - contentInsets.trailing
+            let itemWidth = columns > 1
+                ? floor((availableWidth - interItemSpacing * CGFloat(columns - 1)) / CGFloat(columns))
+                : availableWidth
+
+            let item = NSCollectionLayoutItem(
+                layoutSize: NSCollectionLayoutSize(
+                    widthDimension: .absolute(max(itemWidth, 1)),
+                    heightDimension: .absolute(itemHeight)
+                )
             )
-            horizontal.interItemSpacing = .fixed(12)
-            group = horizontal
-        } else {
-            group = NSCollectionLayoutGroup.vertical(layoutSize: groupSize, subitems: [item])
-        }
 
-        let section = NSCollectionLayoutSection(group: group)
-        section.interGroupSpacing = 12
-        section.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 24, bottom: 120, trailing: 24)
-        return UICollectionViewCompositionalLayout(section: section)
+            let group: NSCollectionLayoutGroup
+            if columns > 1 {
+                let row = NSCollectionLayoutGroup.horizontal(
+                    layoutSize: NSCollectionLayoutSize(
+                        widthDimension: .fractionalWidth(1),
+                        heightDimension: .absolute(itemHeight)
+                    ),
+                    repeatingSubitem: item,
+                    count: columns
+                )
+                row.interItemSpacing = .fixed(interItemSpacing)
+                group = row
+            } else {
+                group = NSCollectionLayoutGroup.vertical(
+                    layoutSize: NSCollectionLayoutSize(
+                        widthDimension: .fractionalWidth(1),
+                        heightDimension: .absolute(itemHeight)
+                    ),
+                    subitems: [item]
+                )
+            }
+
+            let section = NSCollectionLayoutSection(group: group)
+            section.interGroupSpacing = 12
+            section.contentInsets = contentInsets
+            return section
+        }
     }
 }
 
@@ -108,6 +129,7 @@ extension OnboardingSurveyViewController: UICollectionViewDataSource, UICollecti
             selectedTitles = [title]
         }
         setCTAEnabled(!selectedTitles.isEmpty)
+        playSelectionHaptic()
         if let cell = collectionView.cellForItem(at: indexPath) {
             explodeEmoji(from: cell)
         }
@@ -116,5 +138,6 @@ extension OnboardingSurveyViewController: UICollectionViewDataSource, UICollecti
     func collectionView(_ collectionView: UICollectionView, didDeselectItemAt indexPath: IndexPath) {
         selectedTitles.remove(question.options[indexPath.item])
         setCTAEnabled(!selectedTitles.isEmpty)
+        playSelectionHaptic()
     }
 }

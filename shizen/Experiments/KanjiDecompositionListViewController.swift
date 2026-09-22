@@ -4,7 +4,7 @@
 //
 //  Word picker for the kanji decomposition card experiment: a UICollectionView list,
 //  seeded from JMDict 2- and 3-kanji compounds, refined by search. Tapping a row
-//  pushes the slideshow pager for that word.
+//  pushes the slideshow. The nav-bar menu chooses the full breakdown or the 3-slide cut.
 //
 
 import UIKit
@@ -27,7 +27,35 @@ final class KanjiDecompositionListViewController: UIViewController {
 
         setupSearchController()
         setupCollectionView()
+        updateFormatButton()
         loadSeedWords()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        updateFormatButton()
+    }
+
+    private func updateFormatButton() {
+        let button = UIBarButtonItem(
+            title: ExperimentSettings.kanjiDecompositionFormat.shortTitle,
+            menu: formatMenu()
+        )
+        button.accessibilityLabel = "Slideshow format"
+        navigationItem.rightBarButtonItem = button
+    }
+
+    private func formatMenu() -> UIMenu {
+        UIMenu(children: KanjiDecompositionSlideshowFormat.allCases.map { format in
+            UIAction(
+                title: format.title,
+                subtitle: format.subtitle,
+                state: ExperimentSettings.kanjiDecompositionFormat == format ? .on : .off
+            ) { [weak self] _ in
+                ExperimentSettings.kanjiDecompositionFormat = format
+                self?.updateFormatButton()
+            }
+        })
     }
 
     private func setupSearchController() {

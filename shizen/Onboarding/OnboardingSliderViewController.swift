@@ -8,7 +8,10 @@ final class OnboardingSliderViewController: OnboardingViewController {
     private let levelDescriptionLabel = UILabel()
     private var slider: OnboardingDetentSliderView!
     private var levelBubble: DialogueJapaneseBubbleView!
+    private var descriptionHeightConstraint: NSLayoutConstraint?
+    private var reservedDescriptionWidth: CGFloat = 0
     private var selectedIndex = 0
+    private var hasPresentedInitialLevel = false
 
     private static let levelTitleFont = UIFont.systemFont(ofSize: 22, weight: .bold)
 
@@ -72,6 +75,36 @@ final class OnboardingSliderViewController: OnboardingViewController {
         ])
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        reserveDescriptionHeight()
+    }
+
+    /// Keep the slider put when a shorter description wraps to fewer lines.
+    private func reserveDescriptionHeight() {
+        let width = levelDescriptionLabel.bounds.width
+        guard width > 1, abs(width - reservedDescriptionWidth) > 0.5 else { return }
+        reservedDescriptionWidth = width
+
+        let font = levelDescriptionLabel.font ?? .preferredFont(forTextStyle: .subheadline)
+        let tallest = config.levels.map { level in
+            ceil((level.description as NSString).boundingRect(
+                with: CGSize(width: width, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: font],
+                context: nil
+            ).height)
+        }.max() ?? 0
+
+        if let descriptionHeightConstraint {
+            descriptionHeightConstraint.constant = tallest
+        } else {
+            let constraint = levelDescriptionLabel.heightAnchor.constraint(equalToConstant: tallest)
+            constraint.isActive = true
+            descriptionHeightConstraint = constraint
+        }
+    }
+
     override func ctaTapped() {
         persistCurrentLevel()
         coordinator?.next()
@@ -90,12 +123,36 @@ final class OnboardingSliderViewController: OnboardingViewController {
         levelDescriptionLabel.text = level.description
         levelBubble?.invalidateIntrinsicContentSize()
         levelBubble?.setNeedsLayout()
+        if hasPresentedInitialLevel {
+            bounceLevelTitle()
+        }
+        hasPresentedInitialLevel = true
+    }
+
+    private func bounceLevelTitle() {
+        guard let levelBubble else { return }
+        levelBubble.layer.removeAnimation(forKey: "levelTitleBounce")
+        let bounce = CAKeyframeAnimation(keyPath: "transform.translation.y")
+        bounce.values = [0, -14, 3, 0]
+        bounce.keyTimes = [0, 0.38, 0.72, 1]
+        bounce.duration = 0.42
+        bounce.timingFunctions = [
+            CAMediaTimingFunction(name: .easeOut),
+            CAMediaTimingFunction(name: .easeInEaseOut),
+            CAMediaTimingFunction(name: .easeOut),
+        ]
+        levelBubble.layer.add(bounce, forKey: "levelTitleBounce")
     }
 
     private func persistCurrentLevel() {
         guard config.levels.indices.contains(selectedIndex) else { return }
         let level = config.levels[selectedIndex]
-        coordinator?.updateSliderLevel(level.value ?? level.title)
+        let value = level.value ?? level.title
+        if onboardingStepId == "daily_goal" {
+            coordinator?.updateDailyGoal(value)
+        } else {
+            coordinator?.updateSliderLevel(value)
+        }
     }
 
     private func explodeForSliderDetent(_ index: Int) {
@@ -103,9 +160,9 @@ final class OnboardingSliderViewController: OnboardingViewController {
         ExplosionManager.trigger(Self.explosionPreset(forDetent: index, count: config.levels.count), at: point)
     }
 
-    /// First detent is tiny; later detents step up through small → medium → large.
+    /// First detent is tiny; later detents step up through tiny → small → medium.
     private static func explosionPreset(forDetent index: Int, count: Int) -> ExplosionPreset {
-        let presets: [ExplosionPreset] = [.tiny, .small, .medium, .large]
+        let presets: [ExplosionPreset] = [.tiny, .tiny, .small, .medium]
         guard count > 1 else { return presets[0] }
         let t = Double(min(max(index, 0), count - 1)) / Double(count - 1)
         let mapped = Int((t * Double(presets.count - 1)).rounded())

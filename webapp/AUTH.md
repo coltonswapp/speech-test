@@ -29,6 +29,10 @@ The future iOS/staff review client marks a **scene checked off** via:
 
 (not `/api/public`). Set `CONTENT_QA_CLIENT_TOKEN` on Vercel and in the client; requests send `Authorization: Bearer …`. Studio agent bearer and Google sessions also work for demos. Full contract (body, response, idempotency, dialogue/quiz vs checkedOff): `docs/studio-content-qa-review.md`.
 
+## Cron
+
+`GET /api/cron/slides` drafts the next unused spotlight and decomposition decks. Vercel Cron should send `Authorization: Bearer $CRON_SECRET` (also accepted: `STUDIO_AGENT_TOKEN`).
+
 ## Local
 
 Leave those unset (or `STUDIO_AUTH_BYPASS=1` in non-production) so localhost MCP keeps working. `APP_PASSPHRASE` remains a fallback login if you still have it on production.

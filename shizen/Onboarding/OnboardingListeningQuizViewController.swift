@@ -8,6 +8,7 @@ final class OnboardingListeningQuizViewController: OnboardingViewController {
 
     private let meter = SpeakingMeterPillView()
     private let playButton = OnboardingChrome.makeGlassPlayButton()
+    private let playerRow = UIStackView()
     private let speaker = WordUtteranceSpeaker()
     private var meterLink: CADisplayLink?
     private var playbackEndWork: DispatchWorkItem?
@@ -49,7 +50,7 @@ final class OnboardingListeningQuizViewController: OnboardingViewController {
         view.addSubview(collectionView)
 
         NSLayoutConstraint.activate([
-            collectionView.topAnchor.constraint(equalTo: playButton.bottomAnchor, constant: 24),
+            collectionView.topAnchor.constraint(equalTo: playerRow.bottomAnchor, constant: 24),
             collectionView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             collectionView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             collectionView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -67,33 +68,28 @@ final class OnboardingListeningQuizViewController: OnboardingViewController {
         playButton.addTarget(self, action: #selector(playTapped), for: .touchUpInside)
         playButton.accessibilityHint = "Plays a short Japanese phrase"
 
-        view.addSubview(meter)
-        view.addSubview(playButton)
-
-        let preferredWidth = meter.widthAnchor.constraint(
-            equalTo: view.widthAnchor,
-            multiplier: SpeakingMeterPillView.preferredWidthMultiplier
-        )
-        preferredWidth.priority = .defaultHigh
+        playerRow.axis = .horizontal
+        playerRow.alignment = .center
+        playerRow.spacing = 8
+        playerRow.translatesAutoresizingMaskIntoConstraints = false
+        playerRow.addArrangedSubview(meter)
+        playerRow.addArrangedSubview(playButton)
+        view.addSubview(playerRow)
 
         NSLayoutConstraint.activate([
-            preferredWidth,
-            meter.topAnchor.constraint(equalTo: headerContainerView.bottomAnchor, constant: 20),
-            meter.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
-            meter.heightAnchor.constraint(equalToConstant: SpeakingMeterPillView.pillHeight),
-            meter.widthAnchor.constraint(
-                lessThanOrEqualToConstant: SpeakingMeterPillView.maxWidth
-            ),
+            playerRow.topAnchor.constraint(equalTo: headerContainerView.bottomAnchor, constant: 20),
+            playerRow.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            playerRow.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
+            playerRow.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
 
-            playButton.centerYAnchor.constraint(equalTo: meter.centerYAnchor),
-            playButton.leadingAnchor.constraint(equalTo: meter.trailingAnchor, constant: 12),
-            playButton.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
+            meter.widthAnchor.constraint(equalToConstant: 168),
         ])
     }
 
     @objc private func playTapped() {
+        playSelectionHaptic()
         stopPlaybackPreview()
-        speaker.speak(Self.sampleJapanese)
+        speaker.speak(config.audioText ?? Self.sampleJapanese)
         meter.setMode(.playback)
         startMeterAnimation()
 
@@ -166,6 +162,7 @@ extension OnboardingListeningQuizViewController: UICollectionViewDataSource, UIC
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         selectedTitle = config.options[indexPath.item].title
         setCTAEnabled(true)
+        playSelectionHaptic()
         if let cell = collectionView.cellForItem(at: indexPath) {
             explodeEmoji(from: cell)
         }

@@ -304,6 +304,10 @@ enum KanjiDecompositionBadgePlacement {
     case outsideLeading
     /// Biased to the right / outer edge (right card in A + B reveal).
     case outsideTrailing
+    /// Beside the card on the leading side (stacked parts slide).
+    case stackedLeading
+    /// Beside the card on the trailing side (stacked parts slide).
+    case stackedTrailing
 }
 
 final class KanjiDecompositionCharacterHeroView: UIView {
@@ -365,25 +369,37 @@ final class KanjiDecompositionCharacterHeroView: UIView {
             glyphLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -6),
             glyphLabel.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
 
-            badge.centerYAnchor.constraint(equalTo: heroCard.bottomAnchor),
-
             leadingAnchor.constraint(lessThanOrEqualTo: heroCard.leadingAnchor),
             trailingAnchor.constraint(greaterThanOrEqualTo: heroCard.trailingAnchor),
             leadingAnchor.constraint(lessThanOrEqualTo: badge.leadingAnchor),
             trailingAnchor.constraint(greaterThanOrEqualTo: badge.trailingAnchor),
-
-            bottomAnchor.constraint(equalTo: badge.bottomAnchor),
         ]
 
         switch badgePlacement {
         case .center:
             constraints.append(badge.centerXAnchor.constraint(equalTo: centerXAnchor))
+            constraints.append(badge.centerYAnchor.constraint(equalTo: heroCard.bottomAnchor))
+            constraints.append(bottomAnchor.constraint(equalTo: badge.bottomAnchor))
         case .trailingEdgeCentered:
             constraints.append(badge.centerXAnchor.constraint(equalTo: heroCard.trailingAnchor))
+            constraints.append(badge.centerYAnchor.constraint(equalTo: heroCard.bottomAnchor))
+            constraints.append(bottomAnchor.constraint(equalTo: badge.bottomAnchor))
         case .outsideLeading:
             constraints.append(badge.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: -14))
+            constraints.append(badge.centerYAnchor.constraint(equalTo: heroCard.bottomAnchor))
+            constraints.append(bottomAnchor.constraint(equalTo: badge.bottomAnchor))
         case .outsideTrailing:
             constraints.append(badge.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: 14))
+            constraints.append(badge.centerYAnchor.constraint(equalTo: heroCard.bottomAnchor))
+            constraints.append(bottomAnchor.constraint(equalTo: badge.bottomAnchor))
+        case .stackedLeading:
+            constraints.append(badge.trailingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12))
+            constraints.append(badge.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor))
+            constraints.append(bottomAnchor.constraint(equalTo: heroCard.bottomAnchor))
+        case .stackedTrailing:
+            constraints.append(badge.leadingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12))
+            constraints.append(badge.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor))
+            constraints.append(bottomAnchor.constraint(equalTo: heroCard.bottomAnchor))
         }
 
         NSLayoutConstraint.activate(constraints)
@@ -664,24 +680,8 @@ final class KanjiDecompositionWordHeroCard: UIView {
 
 // MARK: - Watermark
 
-private func kanjiDecompositionWatermarkLabel() -> UILabel {
-    let label = UILabel()
-    label.text = "shizenapp.com"
-    label.font = .systemFont(ofSize: 11, weight: .medium)
-    label.textColor = UIColor.secondaryLabel.withAlphaComponent(0.65)
-    label.textAlignment = .center
-    label.translatesAutoresizingMaskIntoConstraints = false
-    return label
-}
-
-/// Pins a `shizenapp.com` watermark to the bottom center of `host`.
 private func installKanjiDecompositionWatermark(in host: UIView) {
-    let label = kanjiDecompositionWatermarkLabel()
-    host.addSubview(label)
-    NSLayoutConstraint.activate([
-        label.centerXAnchor.constraint(equalTo: host.centerXAnchor),
-        label.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -14),
-    ])
+    ExperimentSlideWatermark.install(in: host)
 }
 
 // MARK: - Readings list cell (On + Kun on one row)
@@ -1252,8 +1252,18 @@ final class KanjiDecompositionCombinedCardView: UIView, KanjiDecompositionBadgeL
         meaningLabel.text = text
     }
 
-    func configure(word: KanjiDecompositionWord, meaningOverride: String? = nil) {
-        kanjiDecompositionPopulatePreviewRow(previewRow, word: word, heroes: &previewHeroes)
+    /// `showsParts` is false on the short format's last slide, which already showed the parts.
+    func configure(word: KanjiDecompositionWord, meaningOverride: String? = nil, showsParts: Bool = true) {
+        previewContainer.isHidden = !showsParts
+        if showsParts {
+            kanjiDecompositionPopulatePreviewRow(previewRow, word: word, heroes: &previewHeroes)
+        } else {
+            previewRow.arrangedSubviews.forEach { view in
+                previewRow.removeArrangedSubview(view)
+                view.removeFromSuperview()
+            }
+            previewHeroes.removeAll()
+        }
         wordHero.configure(expression: word.expression)
         let trimmedOverride = meaningOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
         meaningLabel.text = (trimmedOverride?.isEmpty == false) ? trimmedOverride : word.entry.firstGloss
@@ -1265,6 +1275,93 @@ final class KanjiDecompositionCombinedCardView: UIView, KanjiDecompositionBadgeL
 
     func setBadgeEditingSelection(_ selectedIdentifier: KanjiDecompositionBadgeIdentifier?) {
         for hero in previewHeroes {
+            hero.setEditingSelected(hero.layoutIdentifier == selectedIdentifier)
+        }
+    }
+}
+
+// MARK: - Stacked parts (short format, slide 2)
+
+private enum KanjiDecompositionStackedMetrics {
+    static func layout(for characterCount: Int) -> (
+        cardWidth: CGFloat,
+        glyphFontSize: CGFloat,
+        spacing: CGFloat
+    ) {
+        let isThreeUp = characterCount >= 3
+        return (
+            cardWidth: isThreeUp ? 72 : 100,
+            glyphFontSize: isThreeUp ? 34 : 52,
+            spacing: isThreeUp ? 12 : 20
+        )
+    }
+}
+
+/// Component kanji in a vertical column, each with its meaning badge.
+final class KanjiDecompositionStackedPartsCardView: UIView, KanjiDecompositionBadgeLayoutHost {
+    private var heroes: [KanjiDecompositionCharacterHeroView] = []
+    private let column = UIStackView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        backgroundColor = ExperimentPalette.pageBackground
+
+        column.axis = .vertical
+        column.alignment = .center
+        column.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(column)
+        installKanjiDecompositionWatermark(in: self)
+
+        NSLayoutConstraint.activate([
+            column.centerXAnchor.constraint(equalTo: centerXAnchor),
+            column.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -16),
+            column.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 24),
+            column.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -24),
+        ])
+    }
+
+    func configure(word: KanjiDecompositionWord) {
+        column.arrangedSubviews.forEach { view in
+            column.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        heroes.removeAll()
+
+        let metrics = KanjiDecompositionStackedMetrics.layout(for: word.characters.count)
+        column.spacing = metrics.spacing
+
+        for (index, character) in word.characters.enumerated() {
+            let hero = KanjiDecompositionCharacterHeroView(
+                layoutIdentifier: .stacked(index: index),
+                cardWidth: metrics.cardWidth,
+                glyphFontSize: metrics.glyphFontSize,
+                badgeStyle: .compact,
+                badgePlacement: index.isMultiple(of: 2) ? .stackedLeading : .stackedTrailing
+            )
+            let detail = KanjidicStore.shared.detail(forKanji: String(character))
+            hero.configure(character: character, meaning: detail?.badgeMeaning ?? "")
+            hero.setContentCompressionResistancePriority(.required, for: .horizontal)
+            hero.setContentHuggingPriority(.required, for: .horizontal)
+            heroes.append(hero)
+            column.addArrangedSubview(hero)
+        }
+    }
+
+    func characterHeroViews() -> [KanjiDecompositionCharacterHeroView] {
+        heroes
+    }
+
+    func setBadgeEditingSelection(_ selectedIdentifier: KanjiDecompositionBadgeIdentifier?) {
+        for hero in heroes {
             hero.setEditingSelected(hero.layoutIdentifier == selectedIdentifier)
         }
     }

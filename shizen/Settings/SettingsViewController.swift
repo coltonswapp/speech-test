@@ -2,58 +2,43 @@
 //  SettingsViewController.swift
 //  shizen
 //
-//  Settings screen: saved TTS bundles, tokenizer tools, and debug/experiments.
+//  Settings menu. Debug tools live behind their own list screens.
 //
 
-import TTSCore
+import StoreKit
 import UIKit
 
 final class SettingsViewController: UIViewController {
 
-    private let store: SavedGenerationStore
-    private var entries: [SavedGenerationEntry] = []
+    private static let websiteURL = URL(string: "https://shizenapp.com")!
+
     private var progressiveContainerCoordinator: ProgressiveContainerCoordinator?
-    var onSelect: ((URL) -> Void)?
 
     private var collectionView: UICollectionView!
     private var dataSource: UICollectionViewDiffableDataSource<Section, Item>!
 
-    private nonisolated enum Section: Int, CaseIterable, Sendable {
-        case resources
-        case savedGenerations
-        case tokenizerTools
-        case aiUsage
-        case debug
-
-        var title: String {
-            switch self {
-            case .resources: return "Resources"
-            case .savedGenerations: return "Saved generations"
-            case .tokenizerTools: return "Japanese tokenization"
-            case .aiUsage: return "AI usage"
-            case .debug: return "Debug"
-            }
-        }
+    private nonisolated enum Section: String, Hashable, Sendable, CaseIterable {
+        case general = "General"
+        case learning = "Learning"
+        case support = "Support"
+        case debug = "Debug"
     }
 
-    private nonisolated enum ResourceRow: Int, CaseIterable, Hashable, Sendable {
+    private nonisolated enum LearningRow: Int, CaseIterable, Hashable, Sendable {
         case kana
         case grammar
-        case cmsLessons
 
         var title: String {
             switch self {
             case .kana: return "Kana"
             case .grammar: return "Grammar"
-            case .cmsLessons: return "CMS lessons"
             }
         }
 
         var subtitle: String {
             switch self {
-            case .kana: return "Hiragana & katakana charts, lessons"
-            case .grammar: return "Grammar points, checkpoints"
-            case .cmsLessons: return "Waterfall grid · fetch published dialogue lessons"
+            case .kana: return "Hiragana and katakana charts, lessons"
+            case .grammar: return "Grammar points and checkpoints"
             }
         }
 
@@ -61,25 +46,60 @@ final class SettingsViewController: UIViewController {
             switch self {
             case .kana: return "textformat.characters"
             case .grammar: return "text.book.closed"
-            case .cmsLessons: return "rectangle.grid.2x2"
+            }
+        }
+    }
+
+    private nonisolated enum DebugLink: Int, CaseIterable, Hashable, Sendable {
+        case aiUsage
+        case tokenization
+        case kana
+        case lessons
+        case dialogue
+        case speaking
+        case study
+        case playground
+
+        var title: String {
+            switch self {
+            case .aiUsage: return "AI usage"
+            case .tokenization: return "Tokenization"
+            case .kana: return "Kana"
+            case .lessons: return "Lessons"
+            case .dialogue: return "Dialogue"
+            case .speaking: return "Speaking"
+            case .study: return "Study"
+            case .playground: return "Playground"
+            }
+        }
+
+        var symbolName: String {
+            switch self {
+            case .aiUsage: return "chart.bar.doc.horizontal"
+            case .tokenization: return "character.book.closed"
+            case .kana: return "textformat.characters"
+            case .lessons: return "rectangle.grid.2x2"
+            case .dialogue: return "bubble.left.and.bubble.right"
+            case .speaking: return "waveform"
+            case .study: return "books.vertical"
+            case .playground: return "sparkles"
             }
         }
     }
 
     private nonisolated enum Item: Hashable, Sendable {
-        case resource(ResourceRow)
-        case savedGeneration(id: URL, title: String, subtitle: String)
-        case appTokenizer(subtitle: String?)
-        case tokenizerLab
-        case contextualGlossBackend(subtitle: String?)
-        case aiUsageSummary(subtitle: String?)
-        case soundsEnabled
+        case sounds
+        case permissions
         case clearAudioCache(subtitle: String)
-        case debugDestination(DebugSettingsRow)
+        case learning(LearningRow)
+        case rateApp
+        case website
+        case debugLink(DebugLink, subtitle: String)
     }
 
-    private nonisolated enum DebugSettingsRow: Int, CaseIterable, Hashable, Sendable {
+    private nonisolated enum DebugDestination: Int, CaseIterable, Hashable, Sendable {
         case onboarding
+        case journeyOnboarding
         case textToSpeech
         case kanaLearningFlow
         case kanaProgressPath
@@ -117,6 +137,7 @@ final class SettingsViewController: UIViewController {
         var title: String {
             switch self {
             case .onboarding: return "Auth + onboarding"
+            case .journeyOnboarding: return "Journey onboarding"
             case .textToSpeech: return "Text to Speech"
             case .kanaLearningFlow: return "Kana learning flow"
             case .kanaProgressPath: return "Kana progress path"
@@ -156,11 +177,12 @@ final class SettingsViewController: UIViewController {
         var subtitle: String {
             switch self {
             case .onboarding: return "Landing stubs · survey / slider / listening quiz · placeholder demos"
+            case .journeyOnboarding: return "Same landing · questions first · ear test · trial · auth at the end"
             case .textToSpeech: return "Stream OpenAI TTS · sentence chunks · lyrics"
             case .kanaLearningFlow: return "Progress tiles · hiragana & katakana lessons · SRS"
             case .kanaProgressPath: return "Row-by-row hiragana lessons · SRS · chart"
             case .kanaProgressGrid: return "Hiragana & katakana heatmaps · 92 squares · size slider"
-            case .lessonWaterfallGrid: return "Testing watefall grid style lesson screen"
+            case .lessonWaterfallGrid: return "Testing waterfall grid style lesson screen"
             case .languageProgressSnake: return "Glass stepping stones · sine-wave path · live tuner"
             case .languageProgressSnakeLeft: return "Stones in the left 40% · titles on the right · card covers on select"
             case .hiraganaChart: return "Manual-layout gojūon reference"
@@ -184,7 +206,7 @@ final class SettingsViewController: UIViewController {
             case .speechProfileOverlay: return "Liquid-glass capsule · drops in while audio plays"
             case .glassProgressVoiceOverlay: return "Progress chrome in glass container · toggle voice overlay"
             case .dialogueExperimentHarness: return "Scenario audio · UIMenu clip switch · alignment QA"
-            case .kanjiDecomposition: return "Character-by-character compound breakdown · export cards"
+            case .kanjiDecomposition: return "Full or 3-slide compound breakdown · export cards"
             case .kanjiSpotlight: return "One kanji · curated compounds & verbs · export cards"
             case .swiftUIShaders: return "Kris Puckett Metal shaders · playground"
             case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
@@ -195,6 +217,7 @@ final class SettingsViewController: UIViewController {
         var symbolName: String {
             switch self {
             case .onboarding: return "person.crop.circle.badge.checkmark"
+            case .journeyOnboarding: return "door.left.hand.open"
             case .textToSpeech: return "waveform"
             case .kanaLearningFlow: return "square.grid.2x2"
             case .kanaProgressPath: return "point.topleft.down.curvedto.point.bottomright.up"
@@ -232,42 +255,45 @@ final class SettingsViewController: UIViewController {
         }
     }
 
-    init(store: SavedGenerationStore) {
-        self.store = store
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Settings"
+        navigationItem.largeTitleDisplayMode = .never
         view.backgroundColor = .systemGroupedBackground
         configureCollectionView()
         configureDataSource()
+        applySnapshot()
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        reloadEntries()
+        applySnapshot()
     }
 
     // MARK: - Collection view
 
     private func configureCollectionView() {
-        let layout = UICollectionViewCompositionalLayout { sectionIndex, environment in
-            var listConfiguration = UICollectionLayoutListConfiguration(appearance: .insetGrouped)
-            listConfiguration.headerMode = .supplementary
-            return NSCollectionLayoutSection.list(
-                using: listConfiguration,
-                layoutEnvironment: environment
-            )
+        let layout = UICollectionViewCompositionalLayout { [weak self] _, environment in
+            self?.listSection(environment: environment)
+                ?? Self.plainListSection(environment: environment)
         }
+
+        let footerSize = NSCollectionLayoutSize(
+            widthDimension: .fractionalWidth(1.0),
+            heightDimension: .estimated(44)
+        )
+        let footer = NSCollectionLayoutBoundarySupplementaryItem(
+            layoutSize: footerSize,
+            elementKind: UICollectionView.elementKindSectionFooter,
+            alignment: .bottom
+        )
+        let config = UICollectionViewCompositionalLayoutConfiguration()
+        config.boundarySupplementaryItems = [footer]
+        layout.configuration = config
 
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.translatesAutoresizingMaskIntoConstraints = false
+        collectionView.backgroundColor = .systemGroupedBackground
         collectionView.delegate = self
         view.addSubview(collectionView)
 
@@ -279,178 +305,209 @@ final class SettingsViewController: UIViewController {
         ])
     }
 
+    private func listSection(environment: NSCollectionLayoutEnvironment) -> NSCollectionLayoutSection {
+        var listConfiguration = UICollectionLayoutListConfiguration(appearance: .insetGrouped)
+        listConfiguration.headerMode = .supplementary
+        let section = NSCollectionLayoutSection.list(
+            using: listConfiguration,
+            layoutEnvironment: environment
+        )
+        let headerSize = NSCollectionLayoutSize(
+            widthDimension: .fractionalWidth(1.0),
+            heightDimension: .absolute(32)
+        )
+        let header = NSCollectionLayoutBoundarySupplementaryItem(
+            layoutSize: headerSize,
+            elementKind: UICollectionView.elementKindSectionHeader,
+            alignment: .top
+        )
+        section.boundarySupplementaryItems = [header]
+        return section
+    }
+
+    private static func plainListSection(environment: NSCollectionLayoutEnvironment) -> NSCollectionLayoutSection {
+        let listConfiguration = UICollectionLayoutListConfiguration(appearance: .insetGrouped)
+        return NSCollectionLayoutSection.list(using: listConfiguration, layoutEnvironment: environment)
+    }
+
     private func configureDataSource() {
         let cellRegistration = UICollectionView.CellRegistration<UICollectionViewListCell, Item> {
             [weak self] cell, _, item in
             self?.configure(cell: cell, for: item)
         }
 
-        let headerRegistration = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(
+        let headerRegistration = UICollectionView.SupplementaryRegistration<SettingsSectionHeaderView>(
             elementKind: UICollectionView.elementKindSectionHeader
-        ) { header, _, indexPath in
-            var content = UIListContentConfiguration.groupedHeader()
-            content.text = Section.allCases[indexPath.section].title
-            header.contentConfiguration = content
+        ) { [weak self] header, _, indexPath in
+            guard let section = self?.dataSource.sectionIdentifier(for: indexPath.section) else { return }
+            header.configure(title: section.rawValue)
+        }
+
+        let footerRegistration = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(
+            elementKind: UICollectionView.elementKindSectionFooter
+        ) { footer, _, _ in
+            var content = footer.defaultContentConfiguration()
+            content.text = Self.versionFooterText()
+            content.textProperties.alignment = .center
+            content.textProperties.font = .preferredFont(forTextStyle: .footnote)
+            content.textProperties.color = .secondaryLabel
+            content.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 8, leading: 16, bottom: 24, trailing: 16)
+            footer.contentConfiguration = content
+            footer.backgroundConfiguration = .clear()
         }
 
         dataSource = UICollectionViewDiffableDataSource<Section, Item>(
             collectionView: collectionView
         ) { collectionView, indexPath, item in
-            collectionView.dequeueConfiguredReusableCell(
-                using: cellRegistration,
-                for: indexPath,
-                item: item
-            )
+            collectionView.dequeueConfiguredReusableCell(using: cellRegistration, for: indexPath, item: item)
         }
 
         dataSource.supplementaryViewProvider = { collectionView, kind, indexPath in
-            collectionView.dequeueConfiguredReusableSupplementary(
-                using: headerRegistration,
-                for: indexPath
-            )
+            switch kind {
+            case UICollectionView.elementKindSectionHeader:
+                return collectionView.dequeueConfiguredReusableSupplementary(
+                    using: headerRegistration,
+                    for: indexPath
+                )
+            case UICollectionView.elementKindSectionFooter:
+                return collectionView.dequeueConfiguredReusableSupplementary(
+                    using: footerRegistration,
+                    for: indexPath
+                )
+            default:
+                return nil
+            }
         }
     }
 
     private func configure(cell: UICollectionViewListCell, for item: Item) {
-        var content = UIListContentConfiguration.subtitleCell()
-        content.secondaryTextProperties.color = .secondaryLabel
-        cell.accessories = []
-
         switch item {
-        case .resource(let row):
-            content.text = row.title
-            content.secondaryText = row.subtitle
-            content.image = UIImage(systemName: row.symbolName)
-            content.imageProperties.tintColor = .secondaryLabel
-            cell.accessories = [.disclosureIndicator()]
+        case .sounds:
+            SettingsMenuStyle.apply(
+                to: cell,
+                title: "Sounds",
+                subtitle: "Success chimes and incorrect feedback",
+                symbolName: "speaker.wave.2",
+                accessories: [soundsSwitchAccessory()]
+            )
 
-        case .savedGeneration(_, let title, let subtitle):
-            content.text = title
-            content.secondaryText = subtitle
-            content.textProperties.numberOfLines = 2
-            content.image = UIImage(systemName: "waveform.badge.mic")
-            content.imageProperties.tintColor = .secondaryLabel
-            cell.accessories = [.disclosureIndicator()]
-
-        case .appTokenizer(let subtitle):
-            content.text = "App tokenizer"
-            content.secondaryText = subtitle
-            content.image = UIImage(systemName: "character.book.closed")
-            content.imageProperties.tintColor = .secondaryLabel
-            cell.accessories = [.disclosureIndicator()]
-
-        case .tokenizerLab:
-            content.text = "Tokenizer Lab"
-            content.secondaryText = "NL · MeCab · Foundation model · Gemini Flash · Gemini Flash Lite"
-            content.image = UIImage(systemName: "flask")
-            content.imageProperties.tintColor = .secondaryLabel
-            cell.accessories = [.disclosureIndicator()]
-
-        case .contextualGlossBackend(let subtitle):
-            content.text = "Contextual insights"
-            content.secondaryText = subtitle
-            content.image = UIImage(systemName: "sparkles")
-            content.imageProperties.tintColor = .secondaryLabel
-            cell.accessories = [.disclosureIndicator()]
-
-        case .aiUsageSummary(let subtitle):
-            content.text = "Gemini usage"
-            content.secondaryText = subtitle
-            content.image = UIImage(systemName: "chart.bar.doc.horizontal")
-            content.imageProperties.tintColor = .secondaryLabel
-            cell.accessories = [.disclosureIndicator()]
-
-        case .soundsEnabled:
-            content.text = "Sounds"
-            content.secondaryText = "Success chimes, clicks, and incorrect feedback"
-            content.image = UIImage(systemName: "speaker.wave.2.circle")
-            content.imageProperties.tintColor = .secondaryLabel
-            let toggle = UISwitch()
-            toggle.isOn = ExperimentSettings.soundsEnabled
-            toggle.addAction(UIAction { action in
-                guard let toggle = action.sender as? UISwitch else { return }
-                ExperimentSettings.soundsEnabled = toggle.isOn
-            }, for: .valueChanged)
-            cell.accessories = [.customView(configuration: .init(customView: toggle, placement: .trailing()))]
+        case .permissions:
+            SettingsMenuStyle.apply(
+                to: cell,
+                title: "Permissions",
+                subtitle: "Microphone and speech recognition",
+                symbolName: "hand.raised",
+                accessories: [.disclosureIndicator()]
+            )
 
         case .clearAudioCache(let subtitle):
-            content.text = "Clear audio cache"
-            content.secondaryText = subtitle
-            content.image = UIImage(systemName: "arrow.clockwise.circle")
-            content.imageProperties.tintColor = .secondaryLabel
-            cell.accessories = [.disclosureIndicator()]
+            SettingsMenuStyle.apply(
+                to: cell,
+                title: "Clear Audio Cache",
+                subtitle: subtitle,
+                symbolName: "arrow.clockwise",
+                accessories: [.disclosureIndicator()]
+            )
 
-        case .debugDestination(let row):
-            content.text = row.title
-            content.secondaryText = row.subtitle
-            content.image = UIImage(systemName: row.symbolName)
-            content.imageProperties.tintColor = .secondaryLabel
-            cell.accessories = [.disclosureIndicator()]
+        case .learning(let row):
+            SettingsMenuStyle.apply(
+                to: cell,
+                title: row.title,
+                subtitle: row.subtitle,
+                symbolName: row.symbolName,
+                accessories: [.disclosureIndicator()]
+            )
+
+        case .rateApp:
+            SettingsMenuStyle.apply(
+                to: cell,
+                title: "Rate App",
+                subtitle: nil,
+                symbolName: "star",
+                accessories: [.disclosureIndicator()]
+            )
+
+        case .website:
+            SettingsMenuStyle.apply(
+                to: cell,
+                title: "Website",
+                subtitle: "shizenapp.com",
+                symbolName: "safari",
+                accessories: [.disclosureIndicator()]
+            )
+
+        case .debugLink(let link, let subtitle):
+            SettingsMenuStyle.apply(
+                to: cell,
+                title: link.title,
+                subtitle: subtitle,
+                symbolName: link.symbolName,
+                accessories: [.disclosureIndicator()]
+            )
         }
-
-        cell.contentConfiguration = content
-        cell.backgroundConfiguration = UIBackgroundConfiguration.listGroupedCell()
     }
 
-    private func reloadEntries() {
-        entries = (try? store.listEntries()) ?? []
-        applySnapshot()
-        if entries.isEmpty {
-            collectionView.backgroundView = makeEmptyLabel()
-        } else {
-            collectionView.backgroundView = nil
-        }
+    private func soundsSwitchAccessory() -> UICellAccessory {
+        let toggle = UISwitch()
+        toggle.onTintColor = Colors.brandYellow
+        toggle.isOn = ExperimentSettings.soundsEnabled
+        toggle.addAction(UIAction { action in
+            guard let toggle = action.sender as? UISwitch else { return }
+            ExperimentSettings.soundsEnabled = toggle.isOn
+        }, for: .valueChanged)
+        return .customView(configuration: .init(customView: toggle, placement: .trailing()))
     }
 
     private func applySnapshot() {
         var snapshot = NSDiffableDataSourceSnapshot<Section, Item>()
-        snapshot.appendSections(Section.allCases)
-
-        snapshot.appendItems(
-            ResourceRow.allCases.map(Item.resource),
-            toSection: .resources
-        )
-
-        snapshot.appendItems(
-            entries.map { entry in
-                Item.savedGeneration(
-                    id: entry.directoryURL,
-                    title: entry.utterancePreview.isEmpty ? "Untitled" : entry.utterancePreview,
-                    subtitle: String(
-                        format: "%@ · %d sentences · %.1fs · %@",
-                        Self.dateFormatter.string(from: entry.createdAt),
-                        entry.sentenceCount,
-                        entry.durationSeconds,
-                        entry.voice
-                    )
-                )
-            },
-            toSection: .savedGenerations
-        )
+        var sections: [Section] = [.general, .learning, .support]
+        #if DEBUG
+        sections.append(.debug)
+        #endif
+        snapshot.appendSections(sections)
 
         snapshot.appendItems(
             [
-                .appTokenizer(subtitle: tokenizerSubtitle()),
-                .tokenizerLab,
-                .contextualGlossBackend(subtitle: contextualGlossBackendSubtitle()),
-            ],
-            toSection: .tokenizerTools
-        )
-
-        snapshot.appendItems(
-            [.aiUsageSummary(subtitle: aiUsageSubtitle())],
-            toSection: .aiUsage
-        )
-
-        snapshot.appendItems(
-            [
+                .sounds,
+                .permissions,
                 .clearAudioCache(subtitle: audioCacheSubtitle()),
-                .soundsEnabled,
-            ] + DebugSettingsRow.allCases.map(Item.debugDestination),
+            ],
+            toSection: .general
+        )
+        snapshot.appendItems(LearningRow.allCases.map(Item.learning), toSection: .learning)
+        snapshot.appendItems([.rateApp, .website], toSection: .support)
+
+        #if DEBUG
+        snapshot.appendItems(
+            DebugLink.allCases.map { link in
+                Item.debugLink(link, subtitle: debugLinkSubtitle(link))
+            },
             toSection: .debug
         )
+        #endif
 
         dataSource.apply(snapshot, animatingDifferences: view.window != nil)
+    }
+
+    private func debugLinkSubtitle(_ link: DebugLink) -> String {
+        switch link {
+        case .aiUsage:
+            return aiUsageSubtitle()
+        case .tokenization:
+            return tokenizerSubtitle()
+        case .kana:
+            return "Charts, lessons, and drills"
+        case .lessons:
+            return "CMS lessons and path layouts"
+        case .dialogue:
+            return "Replay, harness, and register"
+        case .speaking:
+            return "Tutor, meters, and speech"
+        case .study:
+            return "Flashcards, vocab, and kanji"
+        case .playground:
+            return "Onboarding, shaders, and effects"
+        }
     }
 
     private func tokenizerSubtitle() -> String {
@@ -488,60 +545,217 @@ final class SettingsViewController: UIViewController {
     private func audioCacheSubtitle() -> String {
         let count = RemoteAudioCache.cachedFileCount()
         if count == 0 {
-            return "No cached CDN clips · progress and saved generations unaffected"
+            return "No cached lesson audio"
         }
         let clipLabel = count == 1 ? "clip" : "clips"
         return "\(count) cached \(clipLabel) · re-downloads on next play"
     }
 
-    private func makeEmptyLabel() -> UILabel {
-        let label = UILabel()
-        label.text = "Nothing saved yet.\n\nAfter Speak finishes, tap Save in the sentences toolbar to store audio and sentence timing."
-        label.textAlignment = .center
-        label.textColor = .secondaryLabel
-        label.font = .preferredFont(forTextStyle: .body)
-        label.numberOfLines = 0
-        return label
+    private static func versionFooterText() -> String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        if version.isEmpty, build.isEmpty { return "Shizen" }
+        if build.isEmpty { return "Shizen \(version)" }
+        return "Shizen \(version) (\(build))"
     }
 
-    private static let dateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .short
-        return f
-    }()
+    // MARK: - Debug lists
 
-    // MARK: - Navigation destinations
+    private func pushDetailList(title: String, makeItems: @escaping () -> [SettingsMenuItem]) {
+        let list = SettingsDetailListViewController(title: title, makeItems: makeItems)
+        list.onSelect = { [weak self] item, source in
+            self?.handleMenuItem(item, sourceView: source)
+        }
+        navigationController?.pushViewController(list, animated: true)
+    }
+
+    private func openDebugLink(_ link: DebugLink) {
+        switch link {
+        case .aiUsage:
+            navigationController?.pushViewController(GeminiUsageHistoryViewController(), animated: true)
+        case .tokenization:
+            pushDetailList(title: link.title) { [weak self] in
+                self?.tokenizationItems() ?? []
+            }
+        case .kana:
+            pushDetailList(title: link.title) { [weak self] in
+                self?.debugItems([
+                    .kanaLearningFlow,
+                    .kanaProgressPath,
+                    .kanaProgressGrid,
+                    .hiraganaChart,
+                    .katakanaChart,
+                    .kanaSpelling,
+                    .kanaListenSpelling,
+                    .kanaSoundMatch,
+                    .kanaPairMatch,
+                    .kanaLessonComplete,
+                    .kanaLessonEncouragementBreak,
+                ]) ?? []
+            }
+        case .lessons:
+            pushDetailList(title: link.title) { [weak self] in
+                guard let self else { return [] }
+                return [self.cmsLessonsItem()] + self.debugItems([
+                    .lessonWaterfallGrid,
+                    .languageProgressSnake,
+                    .languageProgressSnakeLeft,
+                ])
+            }
+        case .dialogue:
+            pushDetailList(title: link.title) { [weak self] in
+                self?.debugItems([
+                    .dialogueContentRecording,
+                    .dialogueExperimentHarness,
+                    .registerLadder,
+                ]) ?? []
+            }
+        case .speaking:
+            pushDetailList(title: link.title) { [weak self] in
+                self?.debugItems([
+                    .textToSpeech,
+                    .vocabSpeaking,
+                    .realtimeTutor,
+                    .tutorConversations,
+                    .characterSpeaking,
+                    .speechProfileOverlay,
+                    .glassProgressVoiceOverlay,
+                ]) ?? []
+            }
+        case .study:
+            pushDetailList(title: link.title) { [weak self] in
+                self?.debugItems([
+                    .flashcards,
+                    .savedVocabulary,
+                    .lemmaResolution,
+                    .kanjiDecomposition,
+                    .kanjiSpotlight,
+                ]) ?? []
+            }
+        case .playground:
+            pushDetailList(title: link.title) { [weak self] in
+                self?.debugItems([
+                    .onboarding,
+                    .journeyOnboarding,
+                    .emojiStickers,
+                    .explosions,
+                    .feedbackSounds,
+                    .swiftUIShaders,
+                ]) ?? []
+            }
+        }
+    }
+
+    private func tokenizationItems() -> [SettingsMenuItem] {
+        [
+            SettingsMenuItem(
+                id: "app-tokenizer",
+                title: "App tokenizer",
+                subtitle: tokenizerSubtitle(),
+                symbolName: "character.book.closed"
+            ),
+            SettingsMenuItem(
+                id: "tokenizer-lab",
+                title: "Tokenizer Lab",
+                subtitle: "NL · MeCab · Foundation model · Gemini Flash · Gemini Flash Lite",
+                symbolName: "flask"
+            ),
+            SettingsMenuItem(
+                id: "contextual-gloss",
+                title: "Contextual insights",
+                subtitle: contextualGlossBackendSubtitle(),
+                symbolName: "sparkles"
+            ),
+        ]
+    }
+
+    private func cmsLessonsItem() -> SettingsMenuItem {
+        SettingsMenuItem(
+            id: "cms-lessons",
+            title: "CMS lessons",
+            subtitle: "Waterfall grid · fetch published dialogue lessons",
+            symbolName: "rectangle.grid.2x2"
+        )
+    }
+
+    private func debugItems(_ rows: [DebugDestination]) -> [SettingsMenuItem] {
+        rows.map { row in
+            SettingsMenuItem(
+                id: "debug-\(row.rawValue)",
+                title: row.title,
+                subtitle: row.subtitle,
+                symbolName: row.symbolName
+            )
+        }
+    }
+
+    private func refreshAfterPreferenceChange() {
+        applySnapshot()
+        if let detail = navigationController?.topViewController as? SettingsDetailListViewController {
+            detail.reload()
+        }
+    }
+
+    // MARK: - Selection
 
     private func handleSelection(_ item: Item) {
         switch item {
-        case .resource(let row):
-            handleResourceSelection(row)
-
-        case .savedGeneration(let id, _, _):
-            onSelect?(id)
-
-        case .appTokenizer:
-            presentAppTokenizerPicker()
-
-        case .tokenizerLab:
-            navigationController?.pushViewController(TokenizerLabViewController(), animated: true)
-
-        case .contextualGlossBackend:
-            presentContextualGlossBackendPicker()
-
-        case .aiUsageSummary:
-            navigationController?.pushViewController(GeminiUsageHistoryViewController(), animated: true)
-
-        case .soundsEnabled:
+        case .sounds:
             break
-
+        case .permissions:
+            openSystemSettings()
         case .clearAudioCache:
             presentClearAudioCacheConfirmation()
+        case .learning(let row):
+            openLearning(row)
+        case .rateApp:
+            requestAppReview()
+        case .website:
+            UIApplication.shared.open(Self.websiteURL)
+        case .debugLink(let link, _):
+            openDebugLink(link)
+        }
+    }
 
-        case .debugDestination(let row):
+    private func handleMenuItem(_ item: SettingsMenuItem, sourceView: UIView) {
+        switch item.id {
+        case "app-tokenizer":
+            presentAppTokenizerPicker(sourceView: sourceView)
+        case "tokenizer-lab":
+            navigationController?.pushViewController(TokenizerLabViewController(), animated: true)
+        case "contextual-gloss":
+            presentContextualGlossBackendPicker(sourceView: sourceView)
+        case "cms-lessons":
+            navigationController?.pushViewController(CMSLessonsViewController(), animated: true)
+        default:
+            guard item.id.hasPrefix("debug-"),
+                  let raw = Int(item.id.dropFirst("debug-".count)),
+                  let row = DebugDestination(rawValue: raw) else { return }
             handleDebugSelection(row)
         }
+    }
+
+    private func openLearning(_ row: LearningRow) {
+        switch row {
+        case .kana:
+            let kana = KanaLearningFlowExperimentViewController()
+            kana.title = row.title
+            navigationController?.pushViewController(kana, animated: true)
+        case .grammar:
+            let grammar = GrammarLearningFlowViewController()
+            grammar.title = row.title
+            navigationController?.pushViewController(grammar, animated: true)
+        }
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private func requestAppReview() {
+        guard let scene = view.window?.windowScene else { return }
+        AppStore.requestReview(in: scene)
     }
 
     private func presentClearAudioCacheConfirmation() {
@@ -551,7 +765,7 @@ final class SettingsViewController: UIViewController {
             message = "There is no cached lesson audio on disk."
         } else {
             let clipLabel = count == 1 ? "clip" : "clips"
-            message = "Remove \(count) cached \(clipLabel)? Lesson audio will be re-downloaded from the CDN the next time you play a scenario. Dialogue progress and saved generations are not affected."
+            message = "Remove \(count) cached \(clipLabel)? Lesson audio will be re-downloaded from the CDN the next time you play a scenario. Dialogue progress is not affected."
         }
 
         let alert = UIAlertController(
@@ -593,21 +807,6 @@ final class SettingsViewController: UIViewController {
         }
     }
 
-    private func handleResourceSelection(_ row: ResourceRow) {
-        switch row {
-        case .kana:
-            let kana = KanaLearningFlowExperimentViewController()
-            kana.title = row.title
-            navigationController?.pushViewController(kana, animated: true)
-        case .grammar:
-            let grammar = GrammarLearningFlowViewController()
-            grammar.title = row.title
-            navigationController?.pushViewController(grammar, animated: true)
-        case .cmsLessons:
-            navigationController?.pushViewController(CMSLessonsViewController(), animated: true)
-        }
-    }
-
     private func pushLessonPath(style: LanguageProgressSnakeExperimentViewController.Style) {
         let snake = LanguageProgressSnakeExperimentViewController(style: style)
         snake.onStartLesson = { [weak self] lesson in
@@ -621,10 +820,12 @@ final class SettingsViewController: UIViewController {
         navigationController?.pushViewController(snake, animated: true)
     }
 
-    private func handleDebugSelection(_ row: DebugSettingsRow) {
+    private func handleDebugSelection(_ row: DebugDestination) {
         switch row {
         case .onboarding:
             presentOnboardingPlayground()
+        case .journeyOnboarding:
+            presentOnboardingPlayground(entry: .journey)
         case .textToSpeech:
             navigationController?.pushViewController(
                 TextToSpeechExperimentViewController(),
@@ -649,14 +850,11 @@ final class SettingsViewController: UIViewController {
         case .languageProgressSnakeLeft:
             pushLessonPath(style: .sineLeftAligned)
         case .hiraganaChart:
-            let chart = HiraganaChartViewController()
-            navigationController?.pushViewController(chart, animated: true)
+            navigationController?.pushViewController(HiraganaChartViewController(), animated: true)
         case .katakanaChart:
-            let chart = KatakanaChartViewController()
-            navigationController?.pushViewController(chart, animated: true)
+            navigationController?.pushViewController(KatakanaChartViewController(), animated: true)
         case .flashcards:
-            let flashcards = FlashcardExperimentViewController()
-            navigationController?.pushViewController(flashcards, animated: true)
+            navigationController?.pushViewController(FlashcardExperimentViewController(), animated: true)
         case .savedVocabulary:
             navigationController?.pushViewController(
                 SavedVocabularyListViewController(folderID: SavedVocabularyStore.inboxID),
@@ -686,8 +884,10 @@ final class SettingsViewController: UIViewController {
         case .kanaLessonEncouragementBreak:
             presentKanaLessonEncouragementBreakFlow()
         case .emojiStickers:
-            let stickers = EmojiStickerExperimentViewController()
-            navigationController?.pushViewController(stickers, animated: true)
+            navigationController?.pushViewController(
+                EmojiStickerExperimentViewController(),
+                animated: true
+            )
         case .explosions:
             navigationController?.pushViewController(
                 ExplosionExperimentViewController(),
@@ -701,8 +901,7 @@ final class SettingsViewController: UIViewController {
         case .vocabSpeaking:
             presentVocabSpeakingFlow()
         case .realtimeTutor:
-            let tutor = RealtimeTutorViewController()
-            navigationController?.pushViewController(tutor, animated: true)
+            navigationController?.pushViewController(RealtimeTutorViewController(), animated: true)
         case .tutorConversations:
             navigationController?.pushViewController(TutorConversationsViewController(), animated: true)
         case .characterSpeaking:
@@ -753,8 +952,9 @@ final class SettingsViewController: UIViewController {
         }
     }
 
-    private func presentOnboardingPlayground() {
+    private func presentOnboardingPlayground(entry: AuthLandingViewController.Entry = .original) {
         let landing = AuthLandingViewController()
+        landing.entry = entry
         landing.isPreviewMode = true
         let nav = UINavigationController(rootViewController: landing)
         nav.setNavigationBarHidden(true, animated: false)
@@ -801,10 +1001,10 @@ final class SettingsViewController: UIViewController {
 
         let container = coordinator.start()
         container.modalPresentationStyle = .fullScreen
-        present(container, animated: true)
+        (navigationController ?? self).present(container, animated: true)
     }
 
-    private func presentAppTokenizerPicker() {
+    private func presentAppTokenizerPicker(sourceView: UIView) {
         let sheet = UIAlertController(
             title: "App tokenizer",
             message: "Used for sentence scrub and other tokenized Japanese UI.",
@@ -815,27 +1015,19 @@ final class SettingsViewController: UIViewController {
             let title = backend == current ? "✓ \(backend.displayName)" : backend.displayName
             sheet.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
                 JapaneseTokenizerBackend.preferred = backend
-                self?.applySnapshot()
+                self?.refreshAfterPreferenceChange()
             })
         }
         sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        if let popover = sheet.popoverPresentationController,
-           let indexPath = indexPathForAppTokenizerRow(),
-           let cell = collectionView.cellForItem(at: indexPath) {
-            popover.sourceView = cell
-            popover.sourceRect = cell.bounds
+        if let popover = sheet.popoverPresentationController {
+            popover.sourceView = sourceView
+            popover.sourceRect = sourceView.bounds
         }
-        present(sheet, animated: true)
+        let presenter = navigationController?.topViewController ?? self
+        presenter.present(sheet, animated: true)
     }
 
-    private func indexPathForAppTokenizerRow() -> IndexPath? {
-        dataSource.snapshot().itemIdentifiers(inSection: .tokenizerTools).firstIndex { item in
-            if case .appTokenizer = item { return true }
-            return false
-        }.map { IndexPath(row: $0, section: Section.tokenizerTools.rawValue) }
-    }
-
-    private func presentContextualGlossBackendPicker() {
+    private func presentContextualGlossBackendPicker(sourceView: UIView) {
         let sheet = UIAlertController(
             title: "Contextual insights",
             message: "How \"in this sentence\" explanations are generated when scrubbing or looking up a word.",
@@ -846,24 +1038,16 @@ final class SettingsViewController: UIViewController {
             let title = backend == current ? "✓ \(backend.displayName)" : backend.displayName
             sheet.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
                 ContextualGlossBackend.preferred = backend
-                self?.applySnapshot()
+                self?.refreshAfterPreferenceChange()
             })
         }
         sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        if let popover = sheet.popoverPresentationController,
-           let indexPath = indexPathForContextualGlossBackendRow(),
-           let cell = collectionView.cellForItem(at: indexPath) {
-            popover.sourceView = cell
-            popover.sourceRect = cell.bounds
+        if let popover = sheet.popoverPresentationController {
+            popover.sourceView = sourceView
+            popover.sourceRect = sourceView.bounds
         }
-        present(sheet, animated: true)
-    }
-
-    private func indexPathForContextualGlossBackendRow() -> IndexPath? {
-        dataSource.snapshot().itemIdentifiers(inSection: .tokenizerTools).firstIndex { item in
-            if case .contextualGlossBackend = item { return true }
-            return false
-        }.map { IndexPath(row: $0, section: Section.tokenizerTools.rawValue) }
+        let presenter = navigationController?.topViewController ?? self
+        presenter.present(sheet, animated: true)
     }
 }
 
@@ -873,39 +1057,16 @@ extension SettingsViewController: UICollectionViewDelegate {
         guard let item = dataSource.itemIdentifier(for: indexPath) else { return }
         handleSelection(item)
     }
-
-    func collectionView(
-        _ collectionView: UICollectionView,
-        trailingSwipeActionsConfigurationForItemAt indexPath: IndexPath
-    ) -> UISwipeActionsConfiguration? {
-        guard let item = dataSource.itemIdentifier(for: indexPath),
-              case .savedGeneration(let url, _, _) = item else { return nil }
-
-        let delete = UIContextualAction(style: .destructive, title: "Delete") { [weak self] _, _, done in
-            guard let self else {
-                done(false)
-                return
-            }
-            do {
-                try self.store.deleteEntry(at: url)
-                self.reloadEntries()
-                done(true)
-            } catch {
-                done(false)
-            }
-        }
-        return UISwipeActionsConfiguration(actions: [delete])
-    }
 }
 
 extension SettingsViewController: ProgressiveContainerCoordinatorDelegate {
     func progressiveContainerCoordinatorDidFinish(_ coordinator: ProgressiveContainerCoordinator) {
-        dismiss(animated: true)
+        (navigationController ?? self).dismiss(animated: true)
         progressiveContainerCoordinator = nil
     }
 
     func progressiveContainerCoordinatorDidCancel(_ coordinator: ProgressiveContainerCoordinator) {
-        dismiss(animated: true)
+        (navigationController ?? self).dismiss(animated: true)
         progressiveContainerCoordinator = nil
     }
 }

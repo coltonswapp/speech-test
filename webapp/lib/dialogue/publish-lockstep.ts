@@ -44,6 +44,41 @@ export function karaokeSnapshotForTake(params: {
   });
 }
 
+/**
+ * Karaoke the learner file should carry for an already-published take.
+ *
+ * `dialogue_scenario.token_sync` is only copied at publish. Approving stamps
+ * later leaves that column null while Studio still shows the take. When the
+ * published variant and content hash still match, use the snapshot publish
+ * would write now. Incomplete or mismatched takes keep the stored snapshot.
+ */
+export function learnerTokenSyncForPublishedTake(params: {
+  storedTokenSync: unknown;
+  publishedVariantId: string | null;
+  publishedContentHash: string | null;
+  take: KaraokeTakeInput | null | undefined;
+  lines: unknown;
+}): PublishedTokenSync | null {
+  const stored = parsePublishedTokenSync(params.storedTokenSync);
+  const take = params.take;
+  if (
+    !take ||
+    !params.publishedVariantId ||
+    !params.publishedContentHash ||
+    take.id !== params.publishedVariantId ||
+    take.contentHash !== params.publishedContentHash
+  ) {
+    return stored;
+  }
+  return (
+    karaokeSnapshotForTake({
+      take,
+      lines: params.lines,
+      contentHash: params.publishedContentHash,
+    }) ?? stored
+  );
+}
+
 /** True when the published karaoke snapshot is not what this take would ship. */
 export function isKaraokeSnapshotStale(
   publishedTokenSync: unknown,

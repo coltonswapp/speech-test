@@ -4,19 +4,13 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>This app records microphone audio to demonstrate English and Japanese speech-to-text.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>This app uses Apple’s on-device speech recognition to transcribe what you say.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Save exported kanji decomposition cards to your photo library.</string>
-	<key>SHIZEN_CMS_BASE_URL</key>
-	<string>https://shizen-studio.vercel.app</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>SHIZEN_CMS_BASE_URL</key>
+	<string>https://shizen-studio.vercel.app</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -16,7 +16,7 @@ enum KanaProgressStorage {
 
     static let subdirectoryName = "KanaProgress"
 
-    /// Pre–Shizen rebranding bundle id (same sandbox as earlier speech-test builds).
+    /// Prior proof-of-concept bundle id (sandbox before com.swappfunc.shizen).
     static let legacyBundleIdentifier = "com.Swappfunc.speech-test"
 
     private static let migrationVersionKey = "KanaProgressStorage.migrationVersion"

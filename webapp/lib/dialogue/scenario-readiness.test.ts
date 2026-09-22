@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   isKaraokeSnapshotStale,
   karaokeSnapshotForTake,
+  learnerTokenSyncForPublishedTake,
 } from "./publish-lockstep";
 import {
   buildScenarioReadiness,
@@ -220,5 +221,61 @@ describe("karaokeSnapshotForTake", () => {
     assert.ok(next);
     assert.equal(isKaraokeSnapshotStale(null, next), true);
     assert.equal(isKaraokeSnapshotStale(next, next), false);
+  });
+});
+
+describe("learnerTokenSyncForPublishedTake", () => {
+  const take = {
+    id: "take-1",
+    tokenSync: workingSync(["ab"], [[0.1, 0.3]]),
+    contentHash: HASH,
+    dialogueLineSwitchSamples: null,
+    sampleRate: 24000,
+    audioByteCount: 44 + 24000 * 2,
+    trimSampleLower: 0,
+    trimSampleUpper: 24000,
+  };
+
+  it("fills a null published column from the matching take", () => {
+    const sync = learnerTokenSyncForPublishedTake({
+      storedTokenSync: null,
+      publishedVariantId: "take-1",
+      publishedContentHash: HASH,
+      take,
+      lines: [spoken("ab")],
+    });
+    assert.equal(sync?.lines[0]?.tokens[1]?.startSeconds, 0.3);
+    assert.equal(sync?.variantId, "take-1");
+  });
+
+  it("keeps the stored snapshot when the published take no longer matches", () => {
+    const stored = publishedSync(["ab"], [[0.1, 0.3]]);
+    const sync = learnerTokenSyncForPublishedTake({
+      storedTokenSync: stored,
+      publishedVariantId: "take-1",
+      publishedContentHash: HASH,
+      take: {
+        ...take,
+        contentHash: "other-hash",
+        tokenSync: workingSync(["ab"], [[0.5, 0.9]]),
+      },
+      lines: [spoken("ab")],
+    });
+    assert.deepEqual(sync, stored);
+  });
+
+  it("keeps the stored snapshot when the working copy is not complete", () => {
+    const stored = publishedSync(["ab"], [[0.1, 0.3]]);
+    const sync = learnerTokenSyncForPublishedTake({
+      storedTokenSync: stored,
+      publishedVariantId: "take-1",
+      publishedContentHash: HASH,
+      take: {
+        ...take,
+        tokenSync: workingSync(["ab"], [[0.1, null]]),
+      },
+      lines: [spoken("ab")],
+    });
+    assert.deepEqual(sync, stored);
   });
 });

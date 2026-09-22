@@ -1,15 +1,17 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   curriculumUnit,
   dialogueCollection,
   dialogueScenario,
+  ttsVariant,
 } from "@/lib/db/schema";
 import {
   buildCollectionFile,
   type ExportableCollection,
   type ExportableScenario,
 } from "@/lib/dialogue/export";
+import { learnerTokenSyncForPublishedTake } from "@/lib/dialogue/publish-lockstep";
 import { isPublishedR2Configured } from "@/lib/storage/published-r2";
 import { clampAmbienceGainDb, layersFromScenario } from "@/lib/tts/ambience";
 import { publishedAmbiencePublicUrl } from "@/lib/tts/published-ambience-url";
@@ -113,6 +115,62 @@ export function toExportableScenario(
   };
 }
 
+/** Learner JSON: fill karaoke from the published take when the column is stale. */
+export async function toLearnerExportableScenarios(
+  scenarios: (typeof dialogueScenario.$inferSelect)[]
+): Promise<ExportableScenario[]> {
+  const publishedVariantIds = [
+    ...new Set(
+      scenarios
+        .map((scenario) => scenario.publishedVariantId)
+        .filter((id): id is string => !!id)
+    ),
+  ];
+  const variants = publishedVariantIds.length
+    ? await db.query.ttsVariant.findMany({
+        where: inArray(ttsVariant.id, publishedVariantIds),
+        columns: {
+          id: true,
+          tokenSync: true,
+          contentHash: true,
+          dialogueLineSwitchSamples: true,
+          sampleRate: true,
+          audioByteCount: true,
+          trimSampleLower: true,
+          trimSampleUpper: true,
+        },
+      })
+    : [];
+  const variantById = new Map(variants.map((variant) => [variant.id, variant]));
+
+  return scenarios.map((scenario) => {
+    const variant = scenario.publishedVariantId
+      ? variantById.get(scenario.publishedVariantId)
+      : undefined;
+    return toExportableScenario({
+      ...scenario,
+      tokenSync: learnerTokenSyncForPublishedTake({
+        storedTokenSync: scenario.tokenSync,
+        publishedVariantId: scenario.publishedVariantId,
+        publishedContentHash: scenario.publishedContentHash,
+        take: variant
+          ? {
+              id: variant.id,
+              tokenSync: variant.tokenSync,
+              contentHash: variant.contentHash,
+              dialogueLineSwitchSamples: variant.dialogueLineSwitchSamples,
+              sampleRate: variant.sampleRate,
+              audioByteCount: variant.audioByteCount,
+              trimSampleLower: variant.trimSampleLower,
+              trimSampleUpper: variant.trimSampleUpper,
+            }
+          : null,
+        lines: scenario.lines,
+      }),
+    });
+  });
+}
+
 export async function listPublicDialogueCollections(): Promise<
   PublicDialogueCollectionSummary[]
 > {
@@ -166,6 +224,6 @@ export async function getPublicDialogueCollectionFile(collectionId: string) {
 
   return buildCollectionFile(
     exportableCollection,
-    scenarios.map(toExportableScenario)
+    await toLearnerExportableScenarios(scenarios)
   );
 }

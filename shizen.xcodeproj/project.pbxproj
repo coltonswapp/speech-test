@@ -9,6 +9,26 @@
 /* Begin PBXBuildFile section */
 		F629EE192FBBBB15006A3F68 /* TTSCore in Frameworks */ = {isa = PBXBuildFile; productRef = F6AA00022F957A880FFF002 /* TTSCore */; };
 		F65E7DFB300B104C0081F120 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F65E7DFA300B104C0081F120 /* NNKit */; };
+		F6713B1630019B3000A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1530019B3000A89257 /* NNKit */; };
+		F6713B1930019E0800A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1830019E0800A89257 /* NNKit */; };
+		F6713B1C30019EC800A89257 /* NNKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6713B1B30019EC800A89257 /* NNKit */; };
+		F6B950A92FB582D0007030C7 /* CharacterFilter in Frameworks */ = {isa = PBXBuildFile; productRef = F6B950A82FB582D0007030C7 /* CharacterFilter */; };
+		F6B950AB2FB582D0007030C7 /* IPADic in Frameworks */ = {isa = PBXBuildFile; productRef = F6B950AA2FB582D0007030C7 /* IPADic */; };
+		F6B950AD2FB582D0007030C7 /* Mecab-Swift in Frameworks */ = {isa = PBXBuildFile; productRef = F6B950AC2FB582D0007030C7 /* Mecab-Swift */; };
+		F6B950AF2FB582D0007030C7 /* StringTools in Frameworks */ = {isa = PBXBuildFile; productRef = F6B950AE2FB582D0007030C7 /* StringTools */; };
+		F6C0FM012FC0A00100000001 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6C0FM022FC0A00100000002 /* FoundationModels.framework */; };
+		F6DE0FAD2F957A8600FFF413 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F6DE0FAC2F957A8600FFF412 /* GRDB */; };
+		F6IK00102FINTERACT010 /* InteractionKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6IK00022FINTERACT002 /* InteractionKit */; };
+		F6SC00102FCONTENT010 /* GrammarContentKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6SC00022FCONTENT002 /* GrammarContentKit */; };
+		F6SUIS01SHADERBF01 /* SwiftUIShaders in Frameworks */ = {isa = PBXBuildFile; productRef = F6SUIS01SHADERPD01 /* SwiftUIShaders */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		F6C0FM022FC0A00100000002 /* FoundationModels.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FoundationModels.framework; path = System/Library/Frameworks/FoundationModels.framework; sourceTree = SDKROOT; };
+		F6DE0F8F2F957A7A00FFF406 /* shizen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = shizen.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
 		F6DE0FA12F957A8600FFF406 /* Exceptions for "shizen" folder in "shizen" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -135,8 +155,6 @@
 				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
-						CreatedOnToolsVersion = 27.0;
-					};
 					F6DE0F8E2F957A7A00FFF406 = {
 						CreatedOnToolsVersion = 26.0.1;
 					};
@@ -203,10 +221,6 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = shizen/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Shizen;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app records microphone audio to demonstrate English and Japanese speech-to-text.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save exported kanji decomposition cards to your photo library.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses Apple’s on-device speech recognition to transcribe what you say.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -240,10 +254,6 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = shizen/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Shizen;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app records microphone audio to demonstrate English and Japanese speech-to-text.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save exported kanji decomposition cards to your photo library.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses Apple’s on-device speech recognition to transcribe what you say.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

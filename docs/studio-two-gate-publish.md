@@ -1,6 +1,6 @@
 # Studio: two-gate curriculum publish (design sketch)
 
-> **Status:** Phase 1 **shipped in Studio UI** (same PR as this doc). Full Staging desk / auto-Gate-A remain Phase 2.  
+> **Status:** Phase 1 **shipped in Studio UI** (same PR as this doc). Follow-ups: Gate B emerald restyle + Curriculum N5/N4/N3 subtabs. Full Staging desk / auto-Gate-A remain Phase 2.  
 > **Audience:** Colton (~15–20 min review of intent; UI is demoable).  
 > **Scope:** product / UX architecture for Shizen Studio curriculum review → publish.  
 > **Non-goals (still):** full Staging tab workbench, risk auto-Gate-A classifier, per-scene Gate B, CDN publish rewrite. Mobile Timing chrome from #36/#37 untouched.
@@ -13,7 +13,8 @@
 | Review queue pipeline | Staged → In database → Client-visible derived from flags / published take / `isActive` | Richer change-set staging |
 | Publish & mark complete | Select → Gate A publish → mark reviewed; never flips `isActive` | Bulk Gate A from Staging desk |
 | Collapsible lessons | Expand opened/first; collapse others with waiting count | Remember preference server-side |
-| Gate B clarity | Curriculum + lesson editor copy/weight for “Visible to learners” | Confirm modal + change summary |
+| Gate B clarity | Curriculum + lesson editor: emerald “Visible to learners” (not white/inverted fill) | Confirm modal + change summary |
+| Curriculum JLPT tracks | N5 / N4 / N3 subtabs (`?jlpt=`), filter by `curriculumUnit.jlptLevel` | — |
 | Staging tab + dual badges | — | Full publish desk |
 | Risk auto-Gate-A | — | Rules table in §5 |
 

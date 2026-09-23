@@ -447,8 +447,8 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
           <div
             className={`mt-3 flex items-start gap-3 rounded-md border p-3 ${
               collection.isActive
-                ? "border-foreground/40 bg-foreground/[0.04]"
-                : "border-border/70"
+                ? "border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-500/15"
+                : "border-border/80 bg-muted/40"
             }`}
           >
             <Switch
@@ -456,9 +456,21 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
               checked={collection.isActive}
               onCheckedChange={(next) => activateMutation.mutate(next)}
               disabled={activateMutation.isPending}
+              className={
+                collection.isActive
+                  ? "data-[checked]:bg-emerald-600 dark:data-[checked]:bg-emerald-500"
+                  : undefined
+              }
             />
             <div className="min-w-0">
-              <Label htmlFor="lesson-in-app">
+              <Label
+                htmlFor="lesson-in-app"
+                className={
+                  collection.isActive
+                    ? "text-emerald-800 dark:text-emerald-300"
+                    : undefined
+                }
+              >
                 {collection.isActive
                   ? "Visible to learners"
                   : "Hidden from learners"}

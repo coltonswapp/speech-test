@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useMutation,
   useQuery,
@@ -17,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   dialogueApi,
   scenarioSlug,
@@ -45,15 +47,42 @@ const UNFILED_KEY = "unfiled";
 const unitKey = (id: string) => `unit:${id}`;
 const collectionKey = (id: string) => `collection:${id}`;
 
+/** Learner-path tracks on Curriculum. Matches `curriculumUnit.jlptLevel`. */
+const JLPT_TRACKS = [
+  { level: 5, label: "N5" },
+  { level: 4, label: "N4" },
+  { level: 3, label: "N3" },
+] as const;
+
+type JlptTrackLevel = (typeof JLPT_TRACKS)[number]["level"];
+
+function parseJlptTrack(raw: string | null): JlptTrackLevel {
+  const n = Number(raw);
+  if (n === 5 || n === 4 || n === 3) return n;
+  return 5;
+}
+
 type UnitsQueryData = { units: UnitSummary[] };
 type CollectionsQueryData = { collections: CollectionSummary[] };
 
 export function CurriculumView() {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const jlptTrack = parseJlptTrack(searchParams.get("jlpt"));
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
   // Everything starts collapsed so the page reads as a table of contents;
   // expand a unit to see its collections, a collection to see its scenarios.
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+
+  function setJlptTrack(level: JlptTrackLevel) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (level === 5) params.delete("jlpt");
+    else params.set("jlpt", String(level));
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
 
   const isExpanded = (key: string) => expanded.has(key);
 
@@ -112,11 +141,29 @@ export function CurriculumView() {
     return list;
   }, [unitsData]);
 
+  const trackUnits = useMemo(
+    () => units.filter((unit) => unit.jlptLevel === jlptTrack),
+    [units, jlptTrack],
+  );
+
+  // Unfiled lessons have no unit/jlpt — show on N5 only so they stay findable
+  // without duplicating across tracks.
   const unfiled = useMemo(() => {
+    if (jlptTrack !== 5) return [];
     return (collectionsData?.collections ?? [])
       .filter((c) => !c.unitId)
       .sort((a, b) => a.orderIndex - b.orderIndex || a.id.localeCompare(b.id));
-  }, [collectionsData]);
+  }, [collectionsData, jlptTrack]);
+
+  const trackCounts = useMemo(() => {
+    const counts: Record<JlptTrackLevel, number> = { 5: 0, 4: 0, 3: 0 };
+    for (const unit of units) {
+      if (unit.jlptLevel === 5 || unit.jlptLevel === 4 || unit.jlptLevel === 3) {
+        counts[unit.jlptLevel] += 1;
+      }
+    }
+    return counts;
+  }, [units]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["curriculum-units"] });
@@ -318,7 +365,7 @@ export function CurriculumView() {
 
   const allKeys = useMemo(() => {
     const keys: string[] = [];
-    for (const unit of units) {
+    for (const unit of trackUnits) {
       keys.push(unitKey(unit.id));
       for (const collection of unit.collections ?? []) {
         keys.push(collectionKey(collection.id));
@@ -329,7 +376,7 @@ export function CurriculumView() {
       for (const collection of unfiled) keys.push(collectionKey(collection.id));
     }
     return keys;
-  }, [units, unfiled]);
+  }, [trackUnits, unfiled]);
   const anyExpanded = allKeys.some((key) => expanded.has(key));
   const unfiledCollectionIds = useMemo(
     () => unfiled.map((c) => c.id),
@@ -339,7 +386,16 @@ export function CurriculumView() {
     UNFILED_KEY,
     unfiledCollectionIds,
   );
-  const unitIds = useMemo(() => units.map((unit) => unit.id), [units]);
+  const unitIds = useMemo(
+    () => trackUnits.map((unit) => unit.id),
+    [trackUnits],
+  );
+  const trackLabel =
+    JLPT_TRACKS.find((track) => track.level === jlptTrack)?.label ?? "N5";
+  const trackHasContent = trackUnits.length > 0 || unfiled.length > 0;
+  const curriculumHasAnyContent =
+    units.length > 0 ||
+    (collectionsData?.collections ?? []).some((c) => !c.unitId);
 
   function toggleUnitEdit(unitId: string) {
     const entering = !(editTarget?.kind === "unit" && editTarget.id === unitId);
@@ -359,11 +415,32 @@ export function CurriculumView() {
   return (
     <div className="flex flex-1 flex-col gap-4 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-2">
+          <Tabs
+            value={String(jlptTrack)}
+            onValueChange={(value) => {
+              if (value == null) return;
+              setJlptTrack(parseJlptTrack(String(value)));
+            }}
+          >
+            <TabsList variant="default" aria-label="JLPT curriculum track">
+              {JLPT_TRACKS.map((track) => (
+                <TabsTrigger
+                  key={track.level}
+                  value={String(track.level)}
+                  className="min-w-12 px-3"
+                >
+                  {track.label}
+                  <span className="ml-1 tabular-nums text-[10px] text-muted-foreground">
+                    {trackCounts[track.level]}
+                  </span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
           <p className="text-sm text-muted-foreground">
-            Scan the learner path. Open a unit or collection title to edit it.
-            Expand a section, then drag the grip to reorder. Reorder expands
-            and highlights that section.
+            Scan the {trackLabel} learner path. Open a unit or collection title
+            to edit it. Expand a section, then drag the grip to reorder.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -391,23 +468,41 @@ export function CurriculumView() {
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
         </div>
-      ) : units.length === 0 && unfiled.length === 0 ? (
+      ) : !curriculumHasAnyContent ? (
         <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed p-10 text-sm text-muted-foreground">
           No units or collections yet. Create them in Dialogues first.
+        </div>
+      ) : !trackHasContent ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-10 text-center">
+          <p className="text-sm font-medium text-foreground/80">
+            No {trackLabel} units yet
+          </p>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            Units with JLPT level {trackLabel} will show up here. Switch tracks
+            above, or assign a unit&apos;s JLPT level in Dialogues.
+          </p>
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto rounded-lg border bg-card/30 p-3">
           <div className="flex flex-col gap-4">
-            {units.length > 0 ? (
+            {trackUnits.length > 0 ? (
               <SortableList
                 items={unitIds}
                 disabled={busy}
-                onReorder={(orderedIds) =>
-                  reorderUnitsMutation.mutate(orderedIds)
-                }
+                onReorder={(orderedTrackIds) => {
+                  // Preserve global spine order for other JLPT tracks; only
+                  // permute this track's subsequence.
+                  let trackIndex = 0;
+                  const nextOrder = units.map((unit) =>
+                    unit.jlptLevel === jlptTrack
+                      ? (orderedTrackIds[trackIndex++] ?? unit.id)
+                      : unit.id,
+                  );
+                  reorderUnitsMutation.mutate(nextOrder);
+                }}
                 className="flex flex-col gap-4"
               >
-                {units.map((unit) => {
+                {trackUnits.map((unit) => {
                   const unitCollections = (unit.collections ?? [])
                     .map((c) => collectionsById.get(c.id))
                     .filter((c): c is CollectionSummary => Boolean(c))
@@ -961,8 +1056,8 @@ function CollectionActivationSwitch({
       className={cn(
         "flex shrink-0 items-center gap-2 rounded-md border px-2 py-1 text-xs",
         isActive
-          ? "border-foreground/30 bg-foreground text-background"
-          : "border-border/70 text-muted-foreground",
+          ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
+          : "border-border/80 bg-muted/50 text-muted-foreground",
       )}
       title="Gate B: makes this lesson visible to learners. Separate from publishing scene audio to the database (Gate A)."
     >
@@ -973,6 +1068,11 @@ function CollectionActivationSwitch({
         checked={isActive}
         disabled={pending}
         onCheckedChange={onToggle}
+        className={
+          isActive
+            ? "data-[checked]:bg-emerald-600 dark:data-[checked]:bg-emerald-500"
+            : undefined
+        }
         aria-label={
           isActive
             ? `Hide ${title} from learners`

@@ -14,9 +14,15 @@ import {
 } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Play, Pause, ChevronRight } from "lucide-react";
+import { Play, Pause, ChevronRight, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { dialogueApi } from "@/lib/dialogue/client";
 import { ttsApi } from "@/lib/tts/client";
 import type { AutoStampResult, Variant } from "@/lib/tts/client";
@@ -641,11 +647,11 @@ export function TokenSyncEditor({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3",
-        fillViewport && "min-h-0 flex-1 overflow-hidden"
+        "flex flex-col",
+        fillViewport ? "min-h-0 flex-1 gap-1.5 overflow-hidden" : "gap-3"
       )}
     >
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5 md:gap-2">
         <Badge
           variant="outline"
           className={cn(
@@ -818,14 +824,21 @@ export function TokenSyncEditor({
       )}
       <div
         className={cn(
-          "z-10 -mx-1 flex flex-wrap items-center gap-2 bg-background/95 px-1 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80",
-          fillViewport ? "shrink-0" : "sticky top-28"
+          "z-10 -mx-1 flex items-center gap-1.5 bg-background/95 px-1 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:gap-2 md:py-2",
+          // Phone: one compact nowrap primary row. Desktop: keep the full wrap row.
+          fillViewport
+            ? "shrink-0 flex-nowrap overflow-x-auto"
+            : "sticky top-28 flex-wrap"
         )}
       >
+        {/* Desktop (≥768 / non-fillViewport): all actions stay visible. */}
         <Button
           size="sm"
           variant="outline"
-          className="min-h-11 touch-manipulation md:min-h-8"
+          className={cn(
+            "min-h-11 touch-manipulation md:min-h-8",
+            fillViewport && "hidden"
+          )}
           onClick={() => tokenizeMutation.mutate()}
           disabled={tokenizeDisabled}
         >
@@ -835,13 +848,19 @@ export function TokenSyncEditor({
           <AutoStampControls
             state={autoStampControls}
             disabled={autoStampDisabled}
+            compact={fillViewport}
           />
         )}
         {sync?.source === "auto" && (
           <Button
             size="sm"
             variant="outline"
-            className="min-h-11 touch-manipulation border-emerald-500/50 md:min-h-8"
+            className={cn(
+              "touch-manipulation border-emerald-500/50",
+              fillViewport
+                ? "min-h-9 shrink-0"
+                : "min-h-11 md:min-h-8"
+            )}
             onClick={markReviewed}
             disabled={!canMarkReviewed}
             title={
@@ -856,12 +875,45 @@ export function TokenSyncEditor({
         <Button
           size="sm"
           variant="outline"
-          className="min-h-11 touch-manipulation md:min-h-8"
+          className={cn(
+            "min-h-11 touch-manipulation md:min-h-8",
+            fillViewport && "hidden"
+          )}
           onClick={clearAllTimes}
           disabled={!canUndo}
         >
           Clear all times
         </Button>
+        {/* Phone: secondary actions fold into ⋯ so the primary row stays one line. */}
+        {fillViewport && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="size-9 shrink-0 touch-manipulation"
+                  aria-label="More timing actions"
+                  title="More timing actions"
+                >
+                  <MoreVertical className="size-4" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => tokenizeMutation.mutate()}
+                disabled={tokenizeDisabled}
+              >
+                {tokenizeMutation.isPending ? "Tokenizing…" : "Tokenize"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={clearAllTimes} disabled={!canUndo}>
+                Clear all times
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
       {sync && status !== "stale" && (
         <div

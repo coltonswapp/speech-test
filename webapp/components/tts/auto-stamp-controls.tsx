@@ -133,19 +133,31 @@ export function AutoStampControls({
   state,
   disabled,
   className,
+  /** Phone Timing chrome: single-row denser buttons. */
+  compact = false,
 }: {
   state: AutoStampControlsState;
   disabled?: boolean;
   className?: string;
+  compact?: boolean;
 }) {
   const aligning = state.isPending || state.jobLive;
   return (
-    <div className={cn("flex flex-wrap items-center gap-2", className)}>
+    <div
+      className={cn(
+        "flex items-center gap-1.5 md:gap-2",
+        compact ? "flex-nowrap" : "flex-wrap",
+        className
+      )}
+    >
       <Button
         type="button"
         size="sm"
         variant="outline"
-        className="min-h-11 touch-manipulation border-amber-500/50 md:min-h-8"
+        className={cn(
+          "touch-manipulation border-amber-500/50",
+          compact ? "min-h-9 shrink-0" : "min-h-11 md:min-h-8"
+        )}
         onClick={() => state.run({})}
         disabled={disabled || aligning}
         title="Time every word from the audio with the aligner"
@@ -157,7 +169,10 @@ export function AutoStampControls({
           type="button"
           size="sm"
           variant="outline"
-          className="min-h-11 touch-manipulation md:min-h-8"
+          className={cn(
+            "touch-manipulation",
+            compact ? "min-h-9 shrink-0" : "min-h-11 md:min-h-8"
+          )}
           disabled={state.isAborting}
           onClick={() => state.abort()}
           title="Cancel tokenize/align so this take does not write stamps"
@@ -166,12 +181,12 @@ export function AutoStampControls({
         </Button>
       )}
       {state.isPending && (
-        <span className="text-xs tabular-nums text-muted-foreground">
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
           {formatAutoStampDuration(state.stampElapsedMs, { live: true })}
         </span>
       )}
       {!state.isPending && state.lastStampDurationMs != null && (
-        <span className="text-xs tabular-nums text-muted-foreground">
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
           {formatAutoStampDuration(state.lastStampDurationMs)}
         </span>
       )}

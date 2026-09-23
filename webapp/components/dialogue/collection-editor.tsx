@@ -182,7 +182,9 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
     onSuccess: (_, isActive) => {
       invalidate();
       toast.success(
-        isActive ? "Lesson is live in the app." : "Lesson hidden from the app.",
+        isActive
+          ? "Visible to learners (Gate B). Publish-to-database is separate."
+          : "Hidden from learners — content stays in the database.",
       );
     },
     onError: (error) => toast.error(error.message),
@@ -442,18 +444,43 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
             {collection.title}
           </h1>
           <p className="text-sm text-muted-foreground">{collection.id}</p>
-          <div className="mt-3 flex items-start gap-3">
+          <div
+            className={`mt-3 flex items-start gap-3 rounded-md border p-3 ${
+              collection.isActive
+                ? "border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-500/15"
+                : "border-border/80 bg-muted/40"
+            }`}
+          >
             <Switch
               id="lesson-in-app"
               checked={collection.isActive}
               onCheckedChange={(next) => activateMutation.mutate(next)}
               disabled={activateMutation.isPending}
+              className={
+                collection.isActive
+                  ? "data-[checked]:bg-emerald-600 dark:data-[checked]:bg-emerald-500"
+                  : undefined
+              }
             />
             <div className="min-w-0">
-              <Label htmlFor="lesson-in-app">In the app</Label>
+              <Label
+                htmlFor="lesson-in-app"
+                className={
+                  collection.isActive
+                    ? "text-emerald-800 dark:text-emerald-300"
+                    : undefined
+                }
+              >
+                {collection.isActive
+                  ? "Visible to learners"
+                  : "Hidden from learners"}
+              </Label>
               <p className="text-xs text-muted-foreground">
-                Inactive lessons stay in studio. The app will not list or fetch
-                them.
+                Gate B — high stakes. Flips whether the learner app lists this
+                lesson. Separate from{" "}
+                <span className="text-foreground/80">Publish lesson</span> /
+                scene audio publish (Gate A), which only lands content in the
+                database.
               </p>
             </div>
           </div>

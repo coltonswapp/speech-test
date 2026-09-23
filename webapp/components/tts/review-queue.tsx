@@ -4,11 +4,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, ExternalLink, Pause, Play } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Pause,
+  Play,
+  Upload,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { dialogueApi } from "@/lib/dialogue/client";
+import { derivePublishPipeline } from "@/lib/dialogue/publish-pipeline";
 import { ttsApi, type ReviewQueueResult } from "@/lib/tts/client";
 import type { TokenSyncFlag } from "@/lib/dialogue/types";
 import { activeTokenIndexInLine } from "@/lib/dialogue/token-sync";
@@ -25,6 +35,14 @@ type Take = ReviewQueueResult["takes"][number];
 type FlaggedLine = Take["flaggedLines"][number];
 type KaraokeLine = Take["lines"][number];
 type KaraokeToken = KaraokeLine["tokens"][number];
+
+type LessonGroup = {
+  key: string;
+  collectionId: string | null;
+  title: string;
+  isActive: boolean | null;
+  takes: Take[];
+};
 
 function minutes(from?: string, to?: string): string | null {
   if (!from || !to) return null;
@@ -44,6 +62,83 @@ function editorHref(take: Take, lineIndex?: number): string {
     return `/content/dialogues/${take.collectionId}/${take.slug}?tab=audio&take=${take.variantId}${lineQs}`;
   }
   return `/tts/${take.projectId}?take=${take.variantId}${lineQs}`;
+}
+
+function groupTakesByLesson(takes: Take[]): LessonGroup[] {
+  const groups: LessonGroup[] = [];
+  const indexByKey = new Map<string, number>();
+  for (const take of takes) {
+    const key = take.collectionId ?? `project:${take.projectId}`;
+    const existing = indexByKey.get(key);
+    if (existing != null) {
+      groups[existing]!.takes.push(take);
+      continue;
+    }
+    indexByKey.set(key, groups.length);
+    groups.push({
+      key,
+      collectionId: take.collectionId,
+      title: take.collectionTitle ?? take.collectionId ?? "Unlinked takes",
+      isActive: take.collectionIsActive,
+      takes: [take],
+    });
+  }
+  return groups;
+}
+
+function PipelineSteps({ take }: { take: Take }) {
+  const pipeline = derivePublishPipeline({
+    hasFlags: take.flagCount > 0,
+    isPublishedTake: take.isPublishedTake,
+    collectionIsActive: take.collectionIsActive,
+  });
+  const steps: Array<{
+    key: keyof typeof pipeline.reached;
+    label: string;
+    reached: boolean;
+  }> = [
+    { key: "staged", label: "Staged", reached: pipeline.reached.staged },
+    {
+      key: "inDatabase",
+      label: "In database",
+      reached: pipeline.reached.inDatabase,
+    },
+    {
+      key: "clientVisible",
+      label: "Client-visible",
+      reached: pipeline.reached.clientVisible,
+    },
+  ];
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1.5 text-[11px]"
+      title="Publish pipeline: Gate A lands in the database; Gate B makes the lesson visible to learners."
+    >
+      <span className="text-muted-foreground">Pipeline</span>
+      {steps.map((step, index) => (
+        <span key={step.key} className="inline-flex items-center gap-1.5">
+          {index > 0 && (
+            <span className="text-muted-foreground/60" aria-hidden>
+              →
+            </span>
+          )}
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded border px-1.5 py-0.5",
+              step.reached
+                ? step.key === "clientVisible"
+                  ? "border-foreground/40 bg-foreground text-background"
+                  : "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                : "border-border/60 text-muted-foreground",
+            )}
+          >
+            <span aria-hidden>{step.reached ? "●" : "○"}</span>
+            {step.label}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function TimingSummary({ timing }: { timing: ReviewQueueResult["timing"] }) {
@@ -78,16 +173,22 @@ function TimingSummary({ timing }: { timing: ReviewQueueResult["timing"] }) {
                     </span>
                   )}
                 </td>
-                <td className="py-1.5 pr-4 tabular-nums">{fmt(row.linesUntouchedPct, "%")}</td>
-                <td className="py-1.5 pr-4 tabular-nums">{fmt(row.correctionsOver200msPct, "%")}</td>
+                <td className="py-1.5 pr-4 tabular-nums">
+                  {fmt(row.linesUntouchedPct, "%")}
+                </td>
+                <td className="py-1.5 pr-4 tabular-nums">
+                  {fmt(row.correctionsOver200msPct, "%")}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
         <p className="mt-2 text-xs text-muted-foreground">
-          Clock starts the first time a take is opened in Token timing and stops at publish.
-          v1 bar: ≥ 80% of lines untouched, ≤ 4 min per scene.
-          {timing.since ? ` Measuring since ${new Date(timing.since).toLocaleDateString()}.` : " No published takes measured yet."}
+          Clock starts the first time a take is opened in Token timing and stops
+          at publish. v1 bar: ≥ 80% of lines untouched, ≤ 4 min per scene.
+          {timing.since
+            ? ` Measuring since ${new Date(timing.since).toLocaleDateString()}.`
+            : " No published takes measured yet."}
         </p>
       </CardContent>
     </Card>
@@ -115,7 +216,7 @@ function KaraokeTokenChip({
         untimed && "border-dashed border-rose-400 bg-rose-500/15",
         !untimed && "border-sky-500/30 bg-sky-500/10",
         flagged && "border-amber-500/70 bg-amber-500/15",
-        active && !untimed && "border-primary bg-primary/15"
+        active && !untimed && "border-primary bg-primary/15",
       )}
     >
       {token.text}
@@ -149,7 +250,7 @@ function FlaggedLine({
     <div
       className={cn(
         "flex flex-wrap items-start gap-2 rounded-md border px-2 py-1.5 transition-colors",
-        playing ? "border-primary/50 bg-primary/5" : "border-transparent"
+        playing ? "border-primary/50 bg-primary/5" : "border-transparent",
       )}
     >
       <Button
@@ -169,7 +270,11 @@ function FlaggedLine({
                 : "No timing on this line yet"
         }
       >
-        {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+        {playing ? (
+          <Pause className="size-3.5" />
+        ) : (
+          <Play className="size-3.5" />
+        )}
         <span className="ml-1">L{line.lineIndex + 1}</span>
       </Button>
       {/* Same wrap as chips so Check+Jump sit immediately after the last token. */}
@@ -198,7 +303,7 @@ function FlaggedLine({
               "min-h-10 touch-manipulation md:min-h-8",
               checked
                 ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                : "border-border/60"
+                : "border-border/60",
             )}
             onClick={onToggleChecked}
             title={
@@ -216,7 +321,7 @@ function FlaggedLine({
             <Check
               className={cn(
                 "size-3.5",
-                checked && "text-emerald-600 dark:text-emerald-400"
+                checked && "text-emerald-600 dark:text-emerald-400",
               )}
             />
           </Button>
@@ -255,7 +360,7 @@ function TakeKaraoke({
             key={line.lineIndex}
             className={cn(
               "flex flex-wrap items-baseline gap-x-1 gap-y-1 rounded px-1 py-0.5 text-sm leading-relaxed transition-colors",
-              activeTokenIndex != null && "bg-primary/5"
+              activeTokenIndex != null && "bg-primary/5",
             )}
           >
             <span className="mr-1 font-mono text-[10px] text-muted-foreground">
@@ -275,7 +380,13 @@ function TakeKaraoke({
   );
 }
 
-function TakeCard({ take }: { take: Take }) {
+function TakeCard({
+  take,
+  onInteract,
+}: {
+  take: Take;
+  onInteract?: () => void;
+}) {
   const queryClient = useQueryClient();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const blobUrlRef = useRef<string | null>(null);
@@ -286,18 +397,27 @@ function TakeCard({ take }: { take: Take }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [audioLoading, setAudioLoading] = useState(false);
   // Optional local line checks for deeper QA — Approve clears flags take-wide.
-  const [checkedLines, setCheckedLines] = useState<Set<number>>(() => new Set());
+  const [checkedLines, setCheckedLines] = useState<Set<number>>(
+    () => new Set(),
+  );
 
   const audioUrl = ttsApi.variantAudioUrl(
     take.projectId,
     take.variantId,
-    take.audioByteCount
+    take.audioByteCount,
   );
   const hasAudioBytes = take.audioByteCount > 0;
+  const canPublishAndComplete = !!(
+    take.collectionId &&
+    take.slug &&
+    hasAudioBytes
+  );
 
   useEffect(() => {
     return () => {
-      if (stopTimerRef.current != null) window.clearTimeout(stopTimerRef.current);
+      if (stopTimerRef.current != null) {
+        window.clearTimeout(stopTimerRef.current);
+      }
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       const audio = audioRef.current;
       if (audio) {
@@ -345,11 +465,51 @@ function TakeCard({ take }: { take: Take }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
       toast.success("Marked reviewed. Flags cleared.");
+      onInteract?.();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  /**
+   * Gate A only: select take → publish scenario audio to DB/CDN → mark reviewed.
+   * Never flips lesson `isActive` (Gate B).
+   * Publish runs before mark-reviewed so a failed Gate A keeps the take in queue.
+   */
+  const publishAndCompleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!take.collectionId || !take.slug) {
+        throw new Error("This take is not linked to a dialogue scene.");
+      }
+      if (!take.isSelectedTake) {
+        await ttsApi.selectVariant(take.projectId, take.variantId);
+      }
+      const published = await dialogueApi.publishScenario(
+        take.collectionId,
+        take.slug,
+      );
+      await ttsApi.markReviewed(take.projectId, take.variantId);
+      return published;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["dialogue-collections"] });
+      queryClient.invalidateQueries({ queryKey: ["dialogue-collection"] });
+      queryClient.invalidateQueries({ queryKey: ["dialogue-scenario"] });
+      queryClient.invalidateQueries({
+        queryKey: ["dialogue-collection-audio-status"],
+      });
+      toast.success(
+        result.hasTokenKaraoke
+          ? "Published to database with karaoke · marked complete. Lesson visibility unchanged."
+          : "Published to database · marked complete. Lesson visibility unchanged.",
+      );
+      onInteract?.();
     },
     onError: (error) => toast.error(error.message),
   });
 
   function toggleLineChecked(lineIndex: number) {
+    onInteract?.();
     setCheckedLines((prev) => {
       const next = new Set(prev);
       if (next.has(lineIndex)) next.delete(lineIndex);
@@ -393,7 +553,7 @@ function TakeCard({ take }: { take: Take }) {
         throw new Error(
           res.status === 404
             ? "Take audio was not found."
-            : `Could not load take audio (${res.status}).`
+            : `Could not load take audio (${res.status}).`,
         );
       }
       const contentType = res.headers.get("content-type") ?? "";
@@ -457,12 +617,16 @@ function TakeCard({ take }: { take: Take }) {
         setAudioLoading(false);
         loadPromiseRef.current = null;
         throw error;
-      }
+      },
     );
     return loadPromiseRef.current;
   }
 
-  async function playSegment(key: string, fromSeconds: number, untilSeconds: number | null) {
+  async function playSegment(
+    key: string,
+    fromSeconds: number,
+    untilSeconds: number | null,
+  ) {
     if (playingKey === key) {
       stopPlayback();
       return;
@@ -473,6 +637,7 @@ function TakeCard({ take }: { take: Take }) {
     }
     clearStopTimer();
     try {
+      onInteract?.();
       const audio = await ensureAudio();
       audio.pause();
       audio.currentTime = fromSeconds;
@@ -512,7 +677,7 @@ function TakeCard({ take }: { take: Take }) {
     await playSegment(
       `${take.variantId}:${line.lineIndex}`,
       line.playFromSeconds,
-      line.playUntilSeconds
+      line.playUntilSeconds,
     );
   }
 
@@ -525,21 +690,25 @@ function TakeCard({ take }: { take: Take }) {
   const opened = take.timing?.openedAt;
   const queueLines = take.flaggedLines;
   const checkedCount = queueLines.filter((line) =>
-    checkedLines.has(line.lineIndex)
+    checkedLines.has(line.lineIndex),
   ).length;
   const allLinesChecked =
     queueLines.length === 0 || checkedCount === queueLines.length;
   const uncheckedCount = queueLines.length - checkedCount;
+  const actionBusy =
+    approveMutation.isPending || publishAndCompleteMutation.isPending;
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="gap-2">
         <CardTitle className="flex flex-wrap items-center gap-2 text-base">
           <Link href={href} className="underline-offset-4 hover:underline">
             {take.title}
           </Link>
           {take.collectionId && (
-            <span className="text-xs font-normal text-muted-foreground">{take.collectionId}</span>
+            <span className="text-xs font-normal text-muted-foreground">
+              {take.collectionId}
+            </span>
           )}
           <Badge
             variant="outline"
@@ -548,7 +717,7 @@ function TakeCard({ take }: { take: Take }) {
                 ? "border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
                 : uncheckedCount > 0
                   ? "border-amber-500/50 text-amber-600 dark:text-amber-400"
-                  : "border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
+                  : "border-emerald-500/50 text-emerald-600 dark:text-emerald-400",
             )}
           >
             {queueLines.length === 0
@@ -566,12 +735,16 @@ function TakeCard({ take }: { take: Take }) {
           <span className="ml-auto text-xs font-normal text-muted-foreground">
             {take.lineCount} lines · {take.tokenCount} tokens · {take.voice} ·{" "}
             {new Date(take.createdAt).toLocaleString()}
-            {opened ? ` · opened ${new Date(opened).toLocaleString()}` : " · not opened yet"}
-            {take.timing?.publishedAt && minutes(opened, take.timing.publishedAt)
+            {opened
+              ? ` · opened ${new Date(opened).toLocaleString()}`
+              : " · not opened yet"}
+            {take.timing?.publishedAt &&
+            minutes(opened, take.timing.publishedAt)
               ? ` · ${minutes(opened, take.timing.publishedAt)} to publish`
               : ""}
           </span>
         </CardTitle>
+        <PipelineSteps take={take} />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -606,11 +779,31 @@ function TakeCard({ take }: { take: Take }) {
             size="sm"
             variant="outline"
             className="min-h-11 touch-manipulation border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 md:min-h-8"
-            disabled={approveMutation.isPending}
+            disabled={actionBusy}
             onClick={() => approveMutation.mutate()}
             title="Mark take reviewed, clear flags, and leave the queue. Per-line checks are optional."
           >
             {approveMutation.isPending ? "Approving…" : "Approve take"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="min-h-11 touch-manipulation md:min-h-8"
+            disabled={actionBusy || !canPublishAndComplete}
+            onClick={() => publishAndCompleteMutation.mutate()}
+            title={
+              canPublishAndComplete
+                ? "Select this take, publish audio to the database (Gate A), then mark reviewed. Does not make the lesson visible to learners."
+                : "Needs a linked dialogue scene and take audio"
+            }
+          >
+            <Upload className="size-3.5" />
+            <span className="ml-1.5">
+              {publishAndCompleteMutation.isPending
+                ? "Publishing…"
+                : "Publish & mark complete"}
+            </span>
           </Button>
           <Link
             href={href}
@@ -651,7 +844,9 @@ function TakeCard({ take }: { take: Take }) {
                   playing={linePlaying}
                   activeTokenIndex={lineActiveToken}
                   checked={checkedLines.has(line.lineIndex)}
-                  playDisabled={!hasAudioBytes || (audioLoading && !linePlaying)}
+                  playDisabled={
+                    !hasAudioBytes || (audioLoading && !linePlaying)
+                  }
                   onPlay={() => playLine(line)}
                   onToggleChecked={() => toggleLineChecked(line.lineIndex)}
                 />
@@ -661,6 +856,64 @@ function TakeCard({ take }: { take: Take }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function LessonGroupSection({
+  group,
+  expanded,
+  onToggle,
+  onInteract,
+}: {
+  group: LessonGroup;
+  expanded: boolean;
+  onToggle: () => void;
+  onInteract: () => void;
+}) {
+  const waiting = group.takes.length;
+  return (
+    <section className="flex flex-col gap-2 rounded-lg border border-border/60 bg-card/30 p-2 sm:p-3">
+      <button
+        type="button"
+        className="flex min-h-11 w-full items-center gap-2 rounded-md px-1 text-left touch-manipulation hover:bg-muted/40 md:min-h-9"
+        onClick={onToggle}
+        aria-expanded={expanded}
+      >
+        {expanded ? (
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">{group.title}</div>
+          <div className="text-[11px] text-muted-foreground">
+            {waiting} waiting
+            {group.collectionId ? ` · ${group.collectionId}` : ""}
+            {group.isActive === true
+              ? " · visible to learners"
+              : group.isActive === false
+                ? " · hidden from learners"
+                : ""}
+          </div>
+        </div>
+        {!expanded && (
+          <Badge variant="secondary" className="shrink-0 tabular-nums">
+            {waiting}
+          </Badge>
+        )}
+      </button>
+      {expanded && (
+        <div className="flex flex-col gap-3">
+          {group.takes.map((take) => (
+            <TakeCard
+              key={take.variantId}
+              take={take}
+              onInteract={onInteract}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -691,6 +944,42 @@ export function ReviewQueue() {
     return nextOrder.map((id) => byId.get(id)!);
   }, [data?.takes]);
 
+  const lessonGroups = useMemo(() => groupTakesByLesson(takes), [takes]);
+
+  // Default expand: lessons with any opened take, else the first lesson only.
+  // Once expanded via interaction, stay open for the session.
+  const [expandedKeys, setExpandedKeys] = useState<Set<string> | null>(null);
+  const defaultExpanded = useMemo(() => {
+    const keys = new Set<string>();
+    for (const group of lessonGroups) {
+      if (group.takes.some((take) => take.timing?.openedAt)) {
+        keys.add(group.key);
+      }
+    }
+    if (keys.size === 0 && lessonGroups[0]) {
+      keys.add(lessonGroups[0].key);
+    }
+    return keys;
+  }, [lessonGroups]);
+  const effectiveExpanded = expandedKeys ?? defaultExpanded;
+
+  function toggleGroup(key: string) {
+    setExpandedKeys((prev) => {
+      const base = new Set(prev ?? defaultExpanded);
+      if (base.has(key)) base.delete(key);
+      else base.add(key);
+      return base;
+    });
+  }
+
+  function keepGroupExpanded(key: string) {
+    setExpandedKeys((prev) => {
+      const base = new Set(prev ?? defaultExpanded);
+      base.add(key);
+      return base;
+    });
+  }
+
   if (isLoading) {
     return (
       <div className="flex flex-col gap-4">
@@ -702,7 +991,9 @@ export function ReviewQueue() {
   if (isError || !data) {
     return (
       <p className="text-sm text-destructive">
-        {error instanceof Error ? error.message : "Could not load the review queue."}
+        {error instanceof Error
+          ? error.message
+          : "Could not load the review queue."}
       </p>
     );
   }
@@ -712,18 +1003,30 @@ export function ReviewQueue() {
       <div>
         <h1 className="text-xl font-semibold">Review queue</h1>
         <p className="text-sm text-muted-foreground">
-          Auto-stamped takes that still have flags. Play a line and Approve the
-          take when it sounds right — per-line checks are optional for deeper
-          QA. Accepting stamps on Audio also leaves the queue.
+          Auto-stamped takes that still have flags. Pipeline shows Staged → In
+          database (Gate A) → Client-visible (Gate B / lesson live).{" "}
+          <span className="font-medium text-foreground">
+            Publish &amp; mark complete
+          </span>{" "}
+          lands audio in the database and clears flags — it never flips lesson
+          visibility. Per-line checks are optional.
         </p>
       </div>
       <TimingSummary timing={data.timing} />
       {takes.length === 0 && (
-        <p className="text-sm text-muted-foreground">Nothing waiting for review.</p>
+        <p className="text-sm text-muted-foreground">
+          Nothing waiting for review.
+        </p>
       )}
       <div className="flex flex-col gap-3">
-        {takes.map((take) => (
-          <TakeCard key={take.variantId} take={take} />
+        {lessonGroups.map((group) => (
+          <LessonGroupSection
+            key={group.key}
+            group={group}
+            expanded={effectiveExpanded.has(group.key)}
+            onToggle={() => toggleGroup(group.key)}
+            onInteract={() => keepGroupExpanded(group.key)}
+          />
         ))}
       </div>
     </div>

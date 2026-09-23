@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { dialogueScenario, ttsProject, ttsVariant } from "@/lib/db/schema";
+import {
+  dialogueCollection,
+  dialogueScenario,
+  ttsProject,
+  ttsVariant,
+} from "@/lib/db/schema";
 import { parseVariantTokenSync } from "@/lib/dialogue/token-sync";
 import {
   listReviewTiming,
@@ -35,6 +40,10 @@ export type ReviewQueueTake = {
   collectionId: string | null;
   slug: string | null;
   title: string;
+  /** Parent lesson title for grouping; falls back to collectionId. */
+  collectionTitle: string | null;
+  /** Gate B: lesson visible in the learner app. */
+  collectionIsActive: boolean | null;
   isPublishedTake: boolean;
   isSelectedTake: boolean;
   flagCount: number;
@@ -99,16 +108,25 @@ function linePlayWindow(
 /** KA-8: every take with source=auto, stable createdAt order, queue lines inline. */
 export async function GET() {
   const rows = await db
-    .select({ variant: ttsVariant, project: ttsProject, scenario: dialogueScenario })
+    .select({
+      variant: ttsVariant,
+      project: ttsProject,
+      scenario: dialogueScenario,
+      collection: dialogueCollection,
+    })
     .from(ttsVariant)
     .innerJoin(ttsProject, eq(ttsVariant.projectId, ttsProject.id))
     .leftJoin(dialogueScenario, eq(ttsProject.sourceScenarioId, dialogueScenario.id))
+    .leftJoin(
+      dialogueCollection,
+      eq(dialogueScenario.collectionId, dialogueCollection.id),
+    )
     .where(sql`${ttsVariant.tokenSync}->>'source' = 'auto'`)
     .orderBy(desc(ttsVariant.createdAt));
   const timing = await listReviewTiming();
 
   const takes: ReviewQueueTake[] = [];
-  for (const { variant, project, scenario } of rows) {
+  for (const { variant, project, scenario, collection } of rows) {
     const sync = parseVariantTokenSync(variant.tokenSync);
     if (!sync) continue;
     // Already accepted on Audio (Mark reviewed / unflag-all) — flags gone,
@@ -171,6 +189,8 @@ export async function GET() {
       collectionId,
       slug: scenario && collectionId ? scenario.id.slice(collectionId.length + 1) : null,
       title: scenario?.menuTitle ?? project.trackName ?? project.id,
+      collectionTitle: collection?.title ?? null,
+      collectionIsActive: collection?.isActive ?? null,
       isPublishedTake: scenario?.publishedVariantId === variant.id,
       isSelectedTake: project.selectedVariantId === variant.id,
       flagCount: flags.length,

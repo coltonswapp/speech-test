@@ -40,6 +40,8 @@ export type ScenarioReadinessSummary = {
   quiz?: "missing" | "ready" | "published";
   quizCount: number;
   quizWithEvidence: number;
+  /** Scene thumb: own override, inherits lesson, or neither set. */
+  thumbnail?: "own" | "inherited" | "missing";
 };
 
 export type ScenarioSummary = {

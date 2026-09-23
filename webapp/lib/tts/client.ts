@@ -110,6 +110,8 @@ export type ReviewQueueResult = {
     collectionId: string | null;
     slug: string | null;
     title: string;
+    collectionTitle: string | null;
+    collectionIsActive: boolean | null;
     isPublishedTake: boolean;
     isSelectedTake: boolean;
     flagCount: number;

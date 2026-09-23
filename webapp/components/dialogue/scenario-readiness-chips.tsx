@@ -90,6 +90,7 @@ export function ScenarioReadinessChips({
   readiness,
   audioTitle,
   hrefBase,
+  className,
 }: {
   readiness: ScenarioReadinessSummary;
   /** Optional override for the audio chip tooltip (e.g. publish-stale detail). */
@@ -100,6 +101,7 @@ export function ScenarioReadinessChips({
    * When set, chips link to `?tab=` sections in the editor.
    */
   hrefBase?: string;
+  className?: string;
 }) {
   const audioTone =
     readiness.audio === "published"
@@ -143,7 +145,12 @@ export function ScenarioReadinessChips({
         : ("muted" as const);
 
   return (
-    <div className="flex max-w-[min(100%,16rem)] flex-wrap items-center justify-end gap-1 sm:max-w-none">
+    <div
+      className={cn(
+        "flex max-w-[min(100%,16rem)] flex-wrap items-center justify-end gap-1 sm:max-w-none",
+        className,
+      )}
+    >
       <ReadinessChip
         hrefBase={hrefBase}
         tab={CHIP_TAB.audio}

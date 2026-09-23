@@ -2,7 +2,11 @@ import "server-only";
 
 import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { ttsProject, ttsVariant } from "@/lib/db/schema";
+import {
+  dialogueCollection,
+  ttsProject,
+  ttsVariant,
+} from "@/lib/db/schema";
 import { isPublishKaraokeStale } from "@/lib/dialogue/publish-lockstep";
 import {
   buildScenarioReadiness,
@@ -16,6 +20,7 @@ import { isPublishStale } from "@/lib/dialogue/publish";
 
 export type ScenarioReadinessSource = {
   id: string;
+  collectionId?: string;
   publishedAudioUrl: string | null;
   publishedVariantId: string | null;
   publishedContentHash?: string | null;
@@ -27,6 +32,9 @@ export type ScenarioReadinessSource = {
   lines: unknown;
   quiz: unknown;
   tokenSync: unknown;
+  thumbnailUrl?: string | null;
+  /** When set, skips a collection lookup for this scenario's lesson thumb. */
+  collectionThumbnailUrl?: string | null;
 };
 
 /**
@@ -40,6 +48,27 @@ export async function loadScenarioReadinessById(
   if (scenarios.length === 0) return result;
 
   const scenarioIds = scenarios.map((s) => s.id);
+  const collectionIds = [
+    ...new Set(
+      scenarios
+        .map((s) => s.collectionId)
+        .filter((id): id is string => !!id),
+    ),
+  ];
+  const needsCollectionThumbLookup = scenarios.some(
+    (s) => s.collectionThumbnailUrl === undefined && !!s.collectionId,
+  );
+  const collectionThumbById = new Map<string, string | null>();
+  if (needsCollectionThumbLookup && collectionIds.length > 0) {
+    const collections = await db.query.dialogueCollection.findMany({
+      where: inArray(dialogueCollection.id, collectionIds),
+      columns: { id: true, thumbnailUrl: true },
+    });
+    for (const collection of collections) {
+      collectionThumbById.set(collection.id, collection.thumbnailUrl);
+    }
+  }
+
   const projects = await db.query.ttsProject.findMany({
     where: inArray(ttsProject.sourceScenarioId, scenarioIds),
     columns: {
@@ -114,6 +143,12 @@ export async function loadScenarioReadinessById(
       lines: scenario.lines,
       contentHash,
     });
+    const collectionThumbnailUrl =
+      scenario.collectionThumbnailUrl !== undefined
+        ? scenario.collectionThumbnailUrl
+        : scenario.collectionId
+          ? (collectionThumbById.get(scenario.collectionId) ?? null)
+          : null;
     result.set(
       scenario.id,
       buildScenarioReadiness({
@@ -127,6 +162,8 @@ export async function loadScenarioReadinessById(
         workingMarks: selectedVariant?.dialogueLineSwitchSamples,
         workingTokenSync: take?.tokenSync,
         contentHash,
+        scenarioThumbnailUrl: scenario.thumbnailUrl ?? null,
+        collectionThumbnailUrl,
       }),
     );
   }

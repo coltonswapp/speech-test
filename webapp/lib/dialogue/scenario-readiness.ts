@@ -14,6 +14,11 @@ import { scenarioLinesToConversation } from "@/lib/tts/scenario-conversation";
 export type AudioReadiness = "published" | "stale" | "draft";
 export type TimingReadiness = "missing" | "partial" | "ready" | "done";
 export type QuizReadiness = "missing" | "ready" | "published";
+/**
+ * Scene thumbnail: optional override. Unset inherits the lesson thumb.
+ * Phase 1 has no separate thumb "stale" — CDN URL lands on upload.
+ */
+export type ThumbnailReadiness = "own" | "inherited" | "missing";
 /** Curriculum sync: `ready` = studio complete, not in the last publish. */
 export type CurriculumSyncStatus = TokenSyncStatus | "ready";
 
@@ -24,6 +29,7 @@ export type ScenarioReadiness = {
   quiz: QuizReadiness;
   quizCount: number;
   quizWithEvidence: number;
+  thumbnail: ThumbnailReadiness;
 };
 
 /**
@@ -159,6 +165,15 @@ export function curriculumQuizStatus(params: {
   return "ready";
 }
 
+export function curriculumThumbnailStatus(params: {
+  scenarioThumbnailUrl: string | null | undefined;
+  collectionThumbnailUrl: string | null | undefined;
+}): ThumbnailReadiness {
+  if (params.scenarioThumbnailUrl) return "own";
+  if (params.collectionThumbnailUrl) return "inherited";
+  return "missing";
+}
+
 export function buildScenarioReadiness(params: {
   publishedAudioUrl: string | null;
   audioStale?: boolean;
@@ -170,6 +185,8 @@ export function buildScenarioReadiness(params: {
   workingMarks?: number[] | null;
   workingTokenSync: unknown;
   contentHash: string | null | undefined;
+  scenarioThumbnailUrl?: string | null;
+  collectionThumbnailUrl?: string | null;
 }): ScenarioReadiness {
   const spoken = scenarioLinesToConversation(
     Array.isArray(params.lines) ? (params.lines as DialogueLine[]) : [],
@@ -207,6 +224,10 @@ export function buildScenarioReadiness(params: {
     }),
     quizCount: quiz.count,
     quizWithEvidence: quiz.withEvidence,
+    thumbnail: curriculumThumbnailStatus({
+      scenarioThumbnailUrl: params.scenarioThumbnailUrl,
+      collectionThumbnailUrl: params.collectionThumbnailUrl,
+    }),
   };
 }
 
@@ -240,5 +261,16 @@ export function syncChipLabel(status: CurriculumSyncStatus): string {
       return "stale";
     case "missing":
       return "—";
+  }
+}
+
+export function thumbnailChipLabel(status: ThumbnailReadiness): string {
+  switch (status) {
+    case "own":
+      return "thumb own";
+    case "inherited":
+      return "thumb ↓";
+    case "missing":
+      return "thumb —";
   }
 }

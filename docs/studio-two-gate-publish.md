@@ -1,9 +1,21 @@
 # Studio: two-gate curriculum publish (design sketch)
 
-> **Status:** sketch only — no production behavior change.  
-> **Audience:** Colton (~15–20 min review).  
+> **Status:** Phase 1 **shipped in Studio UI** (same PR as this doc). Full Staging desk / auto-Gate-A remain Phase 2.  
+> **Audience:** Colton (~15–20 min review of intent; UI is demoable).  
 > **Scope:** product / UX architecture for Shizen Studio curriculum review → publish.  
-> **Non-goals:** chrome polish, mobile Timing tweaks (already in #36/#37), grammar import Staging.
+> **Non-goals (still):** full Staging tab workbench, risk auto-Gate-A classifier, per-scene Gate B, CDN publish rewrite. Mobile Timing chrome from #36/#37 untouched.
+
+### Phase 1 shipped vs Phase 2 still open
+
+| Area | Phase 1 (this PR) | Phase 2 (deferred) |
+|---|---|---|
+| Thumbnail chip on Curriculum | Own / inherited / missing alongside audio·timing·sync·quiz | Thumb “stale” when a future staging model exists |
+| Review queue pipeline | Staged → In database → Client-visible derived from flags / published take / `isActive` | Richer change-set staging |
+| Publish & mark complete | Select → Gate A publish → mark reviewed; never flips `isActive` | Bulk Gate A from Staging desk |
+| Collapsible lessons | Expand opened/first; collapse others with waiting count | Remember preference server-side |
+| Gate B clarity | Curriculum + lesson editor copy/weight for “Visible to learners” | Confirm modal + change summary |
+| Staging tab + dual badges | — | Full publish desk |
+| Risk auto-Gate-A | — | Rules table in §5 |
 
 ---
 
@@ -15,7 +27,7 @@ Today Studio has **three loosely related axes**, not one pipeline:
 |---|---|---|
 | Take review | Auto-stamp flags cleared; `source: reviewed`; `reviewedAt` telemetry | Review queue / Token timing |
 | Scenario “publish” | CDN clip + lockstep snapshot (`publishedAt`, audio/timing/sync/quiz chips go green) | Scenario Audio panel |
-| Lesson live | `dialogueCollection.isActive` — public CMS only serves active lessons | Curriculum “In the app” switch |
+| Lesson live | `dialogueCollection.isActive` — public CMS only serves active lessons | Curriculum “Visible to learners” (Gate B) |
 
 Operators experience “publish” as one word, but **shipping audio to CDN** and **making a lesson consumable in the learner app** are different stakes. Staging (draft work waiting) is also invisible as a first-class queue — Review queue is flag-driven, Curriculum chips are readiness, and `isActive` is a quiet toggle.
 
@@ -350,13 +362,13 @@ Illustrative only — implementation PR would design migrations.
 ## 11. Success criteria for *this* sketch PR
 
 - [x] Pipeline states named and diagrammed
-- [x] Staging tab + badge + second “in DB not live” indicator
-- [x] Both gates same UI; Gate B heavier
-- [x] Thumbnail chip on Curriculum (own vs inherit); no new tab
-- [x] Risk auto-Gate-A table; Gate B always deliberate
-- [x] Review queue pipeline + publish-and-mark-complete + collapsible lessons
+- [x] Staging tab + badge + second “in DB not live” indicator *(Phase 2 — doc only)*
+- [x] Both gates same UI; Gate B heavier *(Phase 1: Gate B copy/weight on existing live toggle; full desk Phase 2)*
+- [x] Thumbnail chip on Curriculum (own vs inherit); no new tab **(Phase 1 shipped)**
+- [x] Risk auto-Gate-A table; Gate B always deliberate *(table in doc; auto Phase 2)*
+- [x] Review queue pipeline + publish-and-mark-complete + collapsible lessons **(Phase 1 shipped)**
 - [x] Open questions listed
-- [ ] Implementation — **out of scope**
+- [x] Phase 1 Studio UI implementation (same PR)
 
 ---
 

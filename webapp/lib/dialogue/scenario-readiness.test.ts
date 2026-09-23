@@ -198,6 +198,49 @@ describe("buildScenarioReadiness lock-step", () => {
     assert.equal(readiness.timing, "ready");
     assert.equal(readiness.sync, "ready");
     assert.equal(readiness.quiz, "ready");
+    assert.equal(readiness.thumbnail, "missing");
+  });
+
+  it("marks scene thumbnail as own, inherited, or missing", () => {
+    assert.equal(
+      buildScenarioReadiness({
+        publishedAudioUrl: null,
+        lines: twoLines,
+        quiz: [],
+        tokenSync: null,
+        workingTokenSync: null,
+        contentHash: HASH,
+        scenarioThumbnailUrl: "https://cdn.example/scene.webp",
+        collectionThumbnailUrl: "https://cdn.example/lesson.webp",
+      }).thumbnail,
+      "own",
+    );
+    assert.equal(
+      buildScenarioReadiness({
+        publishedAudioUrl: null,
+        lines: twoLines,
+        quiz: [],
+        tokenSync: null,
+        workingTokenSync: null,
+        contentHash: HASH,
+        scenarioThumbnailUrl: null,
+        collectionThumbnailUrl: "https://cdn.example/lesson.webp",
+      }).thumbnail,
+      "inherited",
+    );
+    assert.equal(
+      buildScenarioReadiness({
+        publishedAudioUrl: null,
+        lines: twoLines,
+        quiz: [],
+        tokenSync: null,
+        workingTokenSync: null,
+        contentHash: HASH,
+        scenarioThumbnailUrl: null,
+        collectionThumbnailUrl: null,
+      }).thumbnail,
+      "missing",
+    );
   });
 });
 

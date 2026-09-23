@@ -45,6 +45,7 @@ export async function GET() {
         lines: true,
         quiz: true,
         tokenSync: true,
+        thumbnailUrl: true,
         ambienceAssetId: true,
         ambienceGainDb: true,
         ambienceOffsetSeconds: true,

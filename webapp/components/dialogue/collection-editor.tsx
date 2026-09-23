@@ -182,7 +182,9 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
     onSuccess: (_, isActive) => {
       invalidate();
       toast.success(
-        isActive ? "Lesson is live in the app." : "Lesson hidden from the app.",
+        isActive
+          ? "Visible to learners (Gate B). Publish-to-database is separate."
+          : "Hidden from learners — content stays in the database.",
       );
     },
     onError: (error) => toast.error(error.message),
@@ -442,7 +444,13 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
             {collection.title}
           </h1>
           <p className="text-sm text-muted-foreground">{collection.id}</p>
-          <div className="mt-3 flex items-start gap-3">
+          <div
+            className={`mt-3 flex items-start gap-3 rounded-md border p-3 ${
+              collection.isActive
+                ? "border-foreground/40 bg-foreground/[0.04]"
+                : "border-border/70"
+            }`}
+          >
             <Switch
               id="lesson-in-app"
               checked={collection.isActive}
@@ -450,10 +458,17 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
               disabled={activateMutation.isPending}
             />
             <div className="min-w-0">
-              <Label htmlFor="lesson-in-app">In the app</Label>
+              <Label htmlFor="lesson-in-app">
+                {collection.isActive
+                  ? "Visible to learners"
+                  : "Hidden from learners"}
+              </Label>
               <p className="text-xs text-muted-foreground">
-                Inactive lessons stay in studio. The app will not list or fetch
-                them.
+                Gate B — high stakes. Flips whether the learner app lists this
+                lesson. Separate from{" "}
+                <span className="text-foreground/80">Publish lesson</span> /
+                scene audio publish (Gate A), which only lands content in the
+                database.
               </p>
             </div>
           </div>

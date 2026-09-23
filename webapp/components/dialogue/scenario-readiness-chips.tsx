@@ -7,19 +7,23 @@ import type { ScenarioReadinessSummary } from "@/lib/dialogue/client";
 import {
   formatCurriculumUpdatedAt,
   syncChipLabel,
+  thumbnailChipLabel,
 } from "@/lib/dialogue/scenario-readiness";
 import { cn } from "@/lib/utils";
 
 /** Scenario editor section ids used by `?tab=` deep links. */
-export type ReadinessChipTab = "audio" | "quiz";
+export type ReadinessChipTab = "audio" | "quiz" | "overview";
 
-const CHIP_TAB: Record<"audio" | "timing" | "sync" | "quiz", ReadinessChipTab> =
-  {
-    audio: "audio",
-    timing: "audio",
-    sync: "audio",
-    quiz: "quiz",
-  };
+const CHIP_TAB: Record<
+  "audio" | "timing" | "sync" | "quiz" | "thumbnail",
+  ReadinessChipTab
+> = {
+  audio: "audio",
+  timing: "audio",
+  sync: "audio",
+  quiz: "quiz",
+  thumbnail: "overview",
+};
 
 function readinessChipClass(
   tone: "ok" | "warn" | "muted" | "draft",
@@ -130,9 +134,16 @@ export function ScenarioReadinessChips({
         : ("muted" as const);
   const quizLabel =
     readiness.quizCount === 0 ? "—" : `quiz ${readiness.quizCount}`;
+  const thumbnail = readiness.thumbnail ?? "missing";
+  const thumbnailTone =
+    thumbnail === "own"
+      ? ("ok" as const)
+      : thumbnail === "inherited"
+        ? ("draft" as const)
+        : ("muted" as const);
 
   return (
-    <div className="flex max-w-[min(100%,14rem)] flex-wrap items-center justify-end gap-1 sm:max-w-none">
+    <div className="flex max-w-[min(100%,16rem)] flex-wrap items-center justify-end gap-1 sm:max-w-none">
       <ReadinessChip
         hrefBase={hrefBase}
         tab={CHIP_TAB.audio}
@@ -201,6 +212,20 @@ export function ScenarioReadinessChips({
         }
       >
         {quizLabel}
+      </ReadinessChip>
+      <ReadinessChip
+        hrefBase={hrefBase}
+        tab={CHIP_TAB.thumbnail}
+        tone={thumbnailTone}
+        title={
+          thumbnail === "own"
+            ? "Scene has its own thumbnail"
+            : thumbnail === "inherited"
+              ? "No scene thumbnail — inherits the lesson thumbnail"
+              : "No thumbnail on scene or lesson"
+        }
+      >
+        {thumbnailChipLabel(thumbnail)}
       </ReadinessChip>
     </div>
   );

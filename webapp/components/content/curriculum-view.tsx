@@ -294,7 +294,9 @@ export function CurriculumView() {
       invalidate();
       queryClient.invalidateQueries({ queryKey: ["dialogue-collection"] });
       toast.success(
-        isActive ? "Lesson is live in the app." : "Lesson hidden from the app.",
+        isActive
+          ? "Visible to learners (Gate B). Publish-to-database is separate."
+          : "Hidden from learners — content stays in the database.",
       );
     },
     onError: (error: Error) => toast.error(error.message),
@@ -955,14 +957,26 @@ function CollectionActivationSwitch({
   onToggle: (isActive: boolean) => void;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 pr-1 text-xs text-muted-foreground">
-      <span className="hidden sm:inline">In the app</span>
+    <div
+      className={cn(
+        "flex shrink-0 items-center gap-2 rounded-md border px-2 py-1 text-xs",
+        isActive
+          ? "border-foreground/30 bg-foreground text-background"
+          : "border-border/70 text-muted-foreground",
+      )}
+      title="Gate B: makes this lesson visible to learners. Separate from publishing scene audio to the database (Gate A)."
+    >
+      <span className="hidden max-w-[7.5rem] leading-tight sm:inline">
+        {isActive ? "Visible to learners" : "Hidden from learners"}
+      </span>
       <Switch
         checked={isActive}
         disabled={pending}
         onCheckedChange={onToggle}
         aria-label={
-          isActive ? `Hide ${title} from the app` : `Show ${title} in the app`
+          isActive
+            ? `Hide ${title} from learners`
+            : `Make ${title} visible to learners`
         }
       />
     </div>

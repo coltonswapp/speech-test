@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shizen Studio — two-gate publish (wireframe)</title>
+  <style>
+    :root {
+      --ink: #1a1a1a;
+      --mute: #666;
+      --line: #bbb;
+      --paper: #f7f7f5;
+      --gate-a: #e8eef5;
+      --gate-b: #1a1a1a;
+      --gate-b-fg: #f7f7f5;
+      --chip: #fff;
+      --ok: #1b6b3a;
+      --warn: #8a5a00;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.45 "IBM Plex Mono", ui-monospace, monospace;
+      color: var(--ink);
+      background: var(--paper);
+    }
+    header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+    }
+    header h1 { margin: 0 0 0.25rem; font-size: 1.1rem; font-weight: 600; }
+    header p { margin: 0; color: var(--mute); font-size: 0.85rem; }
+    main { padding: 1.5rem; max-width: 960px; margin: 0 auto; display: grid; gap: 1.5rem; }
+    section {
+      border: 1px dashed var(--line);
+      background: #fff;
+      padding: 1rem;
+    }
+    section h2 {
+      margin: 0 0 0.75rem;
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--mute);
+    }
+    .nav {
+      display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;
+      border-bottom: 1px solid var(--line); padding-bottom: 0.75rem; margin-bottom: 1rem;
+    }
+    .nav span { color: var(--mute); }
+    .nav .active { color: var(--ink); font-weight: 600; }
+    .badge {
+      display: inline-block; min-width: 1.25rem; padding: 0 0.35rem;
+      border: 1px solid var(--ink); border-radius: 2px; font-size: 0.7rem;
+      text-align: center; margin-left: 0.25rem;
+    }
+    .badge.secondary { border-style: dashed; color: var(--mute); }
+    .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.5rem 0; }
+    .chip {
+      border: 1px solid var(--line); padding: 0.15rem 0.4rem; font-size: 0.7rem;
+      background: var(--chip);
+    }
+    .chip.ok { border-color: var(--ok); color: var(--ok); }
+    .chip.warn { border-color: var(--warn); color: var(--warn); }
+    .chip.mute { color: var(--mute); }
+    .row {
+      display: grid; grid-template-columns: 1fr auto; gap: 0.5rem;
+      padding: 0.5rem 0; border-bottom: 1px dotted var(--line);
+      align-items: center;
+    }
+    .gate-a {
+      background: var(--gate-a); border: 1px solid #9ab; padding: 0.75rem; margin: 0.75rem 0;
+    }
+    .gate-b {
+      background: var(--gate-b); color: var(--gate-b-fg); padding: 1rem; margin: 0.75rem 0;
+      border: 3px solid var(--ink);
+    }
+    .gate-b label { display: block; margin: 0.75rem 0; font-size: 0.85rem; }
+    .btn {
+      display: inline-block; border: 1px solid currentColor; padding: 0.4rem 0.75rem;
+      font: inherit; background: transparent; cursor: default;
+    }
+    .btn.primary { background: #fff; color: var(--ink); font-weight: 700; }
+    .btn.quiet { opacity: 0.7; margin-left: 0.5rem; }
+    .pipeline { display: flex; gap: 0.5rem; font-size: 0.75rem; margin: 0.35rem 0; }
+    .pipeline .on { font-weight: 700; }
+    .pipeline .off { color: var(--mute); }
+    .collapsed { color: var(--mute); padding: 0.4rem 0; }
+    .note { font-size: 0.75rem; color: var(--mute); margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Two-gate publish — static wireframe</h1>
+    <p>Sketch only. Gate A = staging → DB. Gate B = DB → learners. See docs/studio-two-gate-publish.md</p>
+  </header>
+  <main>
+    <section>
+      <h2>1 · Nav badges</h2>
+      <div class="nav">
+        <span>Dialogues</span>
+        <span>Curriculum</span>
+        <span>Grammar</span>
+        <span>Review</span>
+        <span class="active">Staging<span class="badge">12</span></span>
+        <span>Ambience</span>
+      </div>
+      <div class="chips">
+        <span class="chip">Staged waiting <strong>12</strong></span>
+        <span class="chip warn">In DB · not live <strong>4</strong></span>
+        <span class="chip mute">Live filter</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>2 · Curriculum chips (+ thumbnail, no new tab)</h2>
+      <div class="row">
+        <div>
+          <strong>Platform 1</strong>
+          <div class="chips">
+            <span class="chip ok">audio ✓</span>
+            <span class="chip ok">timing ✓</span>
+            <span class="chip ok">sync ✓</span>
+            <span class="chip ok">quiz 3</span>
+            <span class="chip mute">thumb ↓ inherit</span>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <strong>Ticket booth</strong>
+          <div class="chips">
+            <span class="chip ok">audio ✓</span>
+            <span class="chip warn">timing ready</span>
+            <span class="chip ok">sync ✓</span>
+            <span class="chip mute">quiz —</span>
+            <span class="chip ok">thumb own</span>
+          </div>
+        </div>
+      </div>
+      <p class="note">Unset scene thumb inherits lesson thumb. Badge must show own vs inherited.</p>
+    </section>
+
+    <section>
+      <h2>3 · Staging desk — both gates, Gate B heavier</h2>
+      <p><strong>Lesson · Train station</strong> — 2 staged · currently hidden from learners</p>
+
+      <div class="gate-a">
+        <strong>Gate A — Publish to database</strong>
+        <p class="note" style="margin:0.35rem 0 0.75rem">Low-friction. Auto OK for low-risk (e.g. inherit thumb).</p>
+        <div class="row">
+          <span>Platform 1 · thumb inherit · eligible auto</span>
+          <span class="chip mute">auto</span>
+        </div>
+        <div class="row">
+          <span>Ticket booth · custom thumb + quiz · needs manual</span>
+          <span class="chip warn">manual</span>
+        </div>
+        <p style="margin-top:0.75rem">
+          <span class="btn">Publish eligible</span>
+          <span class="btn quiet">Publish selected</span>
+        </p>
+      </div>
+
+      <div class="gate-b">
+        <strong>Gate B — Ship to learners</strong>
+        <p style="margin:0.5rem 0; opacity:0.9">High stakes. Never auto. Not the same action as Gate A.</p>
+        <p style="margin:0; font-size:0.85rem; opacity:0.85">Diff since last live: 2 scenes, 1 quiz, lesson thumb.</p>
+        <label><input type="checkbox" disabled /> Confirm ship to production learner app</label>
+        <span class="btn primary">SHIP TO LEARNERS</span>
+        <span class="btn quiet">Keep hidden</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>4 · Review queue — pipeline + collapse</h2>
+      <div class="row">
+        <div>
+          <strong>▾ Train station</strong> — reviewing
+          <div>Take · Platform 1 · 4 flagged</div>
+          <div class="pipeline">
+            <span class="on">● Staged</span>
+            <span class="off">○ In DB</span>
+            <span class="off">○ Client-visible</span>
+          </div>
+          <p style="margin:0.5rem 0 0">
+            <span class="btn">Approve</span>
+            <span class="btn">Publish &amp; mark complete</span>
+            <span class="btn quiet">Open</span>
+          </p>
+          <p class="note">Publish &amp; mark complete = Gate A only. Never Gate B.</p>
+        </div>
+      </div>
+      <div class="collapsed">▷ Grocery — 2 waiting (collapsed)</div>
+      <div class="collapsed">▷ Cafe — 0 waiting (collapsed)</div>
+    </section>
+  </main>
+</body>
+</html>

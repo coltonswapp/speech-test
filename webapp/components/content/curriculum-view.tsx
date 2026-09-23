@@ -101,22 +101,6 @@ export function CurriculumView() {
     setKeysExpanded([key], !expanded.has(key));
   }
 
-  function sectionKeys(sectionKey: string, collectionIds: string[]) {
-    return [sectionKey, ...collectionIds.map(collectionKey)];
-  }
-
-  function isSectionExpanded(sectionKey: string, collectionIds: string[]) {
-    return sectionKeys(sectionKey, collectionIds).every((key) =>
-      expanded.has(key),
-    );
-  }
-
-  function toggleSection(sectionKey: string, collectionIds: string[]) {
-    const keys = sectionKeys(sectionKey, collectionIds);
-    const open = !isSectionExpanded(sectionKey, collectionIds);
-    setKeysExpanded(keys, open);
-  }
-
   const { data: unitsData, isLoading: unitsLoading } = useQuery({
     queryKey: ["curriculum-units"],
     queryFn: dialogueApi.listUnits,
@@ -378,14 +362,6 @@ export function CurriculumView() {
     return keys;
   }, [trackUnits, unfiled]);
   const anyExpanded = allKeys.some((key) => expanded.has(key));
-  const unfiledCollectionIds = useMemo(
-    () => unfiled.map((c) => c.id),
-    [unfiled],
-  );
-  const unfiledSectionOpen = isSectionExpanded(
-    UNFILED_KEY,
-    unfiledCollectionIds,
-  );
   const unitIds = useMemo(
     () => trackUnits.map((unit) => unit.id),
     [trackUnits],
@@ -440,7 +416,7 @@ export function CurriculumView() {
           </Tabs>
           <p className="text-sm text-muted-foreground">
             Scan the {trackLabel} learner path. Open a unit or collection title
-            to edit it. Expand a section, then drag the grip to reorder.
+            to edit it. Expand with the chevron, then drag the grip to reorder.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -530,10 +506,6 @@ export function CurriculumView() {
                   const unitOpen = isExpanded(unitKey(unit.id));
                   const unitPanelId = `curriculum-unit-${unit.id}`;
                   const unitCollectionIds = unitCollections.map((c) => c.id);
-                  const unitSectionOpen = isSectionExpanded(
-                    unitKey(unit.id),
-                    unitCollectionIds,
-                  );
 
                   return (
                     <SortableItem key={unit.id} id={unit.id} disabled={busy}>
@@ -548,15 +520,15 @@ export function CurriculumView() {
                           ref={setNodeRef}
                           style={style}
                           className={cn(
-                            "rounded-lg border bg-background/80 shadow-sm",
+                            "rounded-lg border bg-background/80",
                             editingUnit && "ring-1 ring-foreground/15",
                             isDragging && "shadow-md ring-1 ring-foreground/20",
                           )}
                         >
                           <header
                             className={cn(
-                              "flex items-start gap-1 px-2 py-3.5 sm:gap-2 sm:px-3",
-                              unitOpen && "border-b",
+                              "flex items-start gap-1 px-2 py-3 sm:gap-2 sm:px-3",
+                              unitOpen && "border-b border-border/60",
                             )}
                           >
                             <CurriculumDragHandle
@@ -626,27 +598,6 @@ export function CurriculumView() {
                             <div className="flex shrink-0 items-center gap-1">
                               <Button
                                 type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs"
-                                onClick={() =>
-                                  toggleSection(
-                                    unitKey(unit.id),
-                                    unitCollectionIds,
-                                  )
-                                }
-                                title={
-                                  unitSectionOpen
-                                    ? "Collapse this unit and its collections"
-                                    : "Expand this unit and all collections"
-                                }
-                              >
-                                {unitSectionOpen
-                                  ? "Collapse section"
-                                  : "Expand section"}
-                              </Button>
-                              <Button
-                                type="button"
                                 variant={editingUnit ? "secondary" : "ghost"}
                                 size="sm"
                                 className="h-7 px-2 text-xs"
@@ -661,7 +612,7 @@ export function CurriculumView() {
                           {unitOpen ? (
                             <div
                               id={unitPanelId}
-                              className="flex flex-col gap-2 p-2 pl-4 sm:pl-6"
+                              className="flex flex-col gap-1.5 p-2 pl-3 sm:pl-5"
                             >
                               {unitCollections.length === 0 ? (
                                 <p className="px-2 py-3 text-xs text-muted-foreground">
@@ -677,7 +628,7 @@ export function CurriculumView() {
                                       collectionIds,
                                     })
                                   }
-                                  className="flex flex-col gap-2"
+                                  className="flex flex-col gap-1.5"
                                 >
                                   {unitCollections.map((collection) => (
                                     <CurriculumCollectionBlock
@@ -764,31 +715,11 @@ export function CurriculumView() {
                       </p>
                     </div>
                   </button>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() =>
-                        toggleSection(UNFILED_KEY, unfiledCollectionIds)
-                      }
-                      title={
-                        unfiledSectionOpen
-                          ? "Collapse Unfiled and its collections"
-                          : "Expand Unfiled and all collections"
-                      }
-                    >
-                      {unfiledSectionOpen
-                        ? "Collapse section"
-                        : "Expand section"}
-                    </Button>
-                  </div>
                 </header>
                 {isExpanded(UNFILED_KEY) ? (
                   <ul
                     id="curriculum-unfiled"
-                    className="flex flex-col gap-2 p-2"
+                    className="flex flex-col gap-1.5 p-2"
                   >
                     {unfiled.map((collection) => (
                       <li key={collection.id}>
@@ -889,9 +820,9 @@ function CurriculumCollectionBlock({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "rounded-md border bg-muted/20",
+        "rounded-md bg-muted/15",
         editing && "ring-1 ring-foreground/15",
-        isDragging && "bg-muted/40 shadow-sm ring-1 ring-foreground/15",
+        isDragging && "bg-muted/30 shadow-sm ring-1 ring-foreground/15",
       )}
     >
       <div className="flex items-center gap-1 px-1.5 py-1.5">
@@ -958,7 +889,7 @@ function CurriculumCollectionBlock({
           items={scenarioIds}
           disabled={busy}
           onReorder={onReorderScenarios}
-          className="border-t px-2 py-1.5"
+          className="border-t border-border/50 px-1.5 py-1"
         >
           <ol id={collectionPanelId} className="flex flex-col">
             {scenarios.map((scenario, scenarioIndex) => (
@@ -1000,6 +931,8 @@ function CurriculumScenarioRow({
   index: number;
   busy: boolean;
 }) {
+  const editorHref = `/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`;
+
   return (
     <SortableItem id={scenario.id} disabled={busy}>
       {({ setNodeRef, style, attributes, listeners, isDragging }) => (
@@ -1007,31 +940,37 @@ function CurriculumScenarioRow({
           ref={setNodeRef}
           style={style}
           className={cn(
-            "flex items-start gap-1 rounded px-1 py-1.5 hover:bg-background/60 sm:items-center sm:gap-2",
+            "border-b border-border/40 px-1 py-2.5 last:border-b-0 hover:bg-background/50",
             isDragging && "bg-background shadow-sm ring-1 ring-foreground/10",
           )}
         >
-          <CurriculumDragHandle
-            attributes={attributes}
-            listeners={listeners}
-            disabled={busy}
-            className="size-8"
-            label={`Reorder scenario ${scenario.menuTitle}`}
-          />
-          <span className="mt-1.5 w-5 shrink-0 text-right text-[10px] text-muted-foreground sm:mt-0">
-            {index + 1}
-          </span>
-          <Link
-            href={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
-            className="min-w-0 flex-1 truncate text-xs hover:underline"
-          >
-            {scenario.menuTitle}
-          </Link>
-          <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+          {/* Title row: full width for readable names on phone. */}
+          <div className="flex items-center gap-1 sm:gap-2">
+            <CurriculumDragHandle
+              attributes={attributes}
+              listeners={listeners}
+              disabled={busy}
+              className="size-8"
+              label={`Reorder scenario ${scenario.menuTitle}`}
+            />
+            <span className="w-5 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
+              {index + 1}
+            </span>
+            <Link
+              href={editorHref}
+              className="min-w-0 flex-1 truncate text-sm font-medium hover:underline"
+              title={scenario.menuTitle}
+            >
+              {scenario.menuTitle}
+            </Link>
             <ScenarioUpdatedLabel updatedAt={scenario.updatedAt} />
+          </div>
+          {/* Readiness chips on their own line so they never crush the title. */}
+          <div className="mt-1.5 pl-9 sm:pl-11">
             <ScenarioReadinessChips
               readiness={scenario.readiness}
-              hrefBase={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
+              hrefBase={editorHref}
+              className="max-w-none justify-start"
             />
           </div>
         </li>

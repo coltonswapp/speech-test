@@ -242,6 +242,57 @@ describe("buildScenarioReadiness lock-step", () => {
       "missing",
     );
   });
+
+  it("rolls learner-client content QA into readiness chips", () => {
+    assert.equal(
+      buildScenarioReadiness({
+        publishedAudioUrl: null,
+        lines: twoLines,
+        quiz: [],
+        tokenSync: null,
+        workingTokenSync: null,
+        contentHash: HASH,
+      }).contentQa,
+      "pending",
+    );
+    assert.equal(
+      buildScenarioReadiness({
+        publishedAudioUrl: null,
+        lines: twoLines,
+        quiz: [],
+        tokenSync: null,
+        workingTokenSync: null,
+        contentHash: HASH,
+        dialogueReviewedAt: "2026-09-24T00:00:00.000Z",
+      }).contentQa,
+      "dialogue",
+    );
+    assert.equal(
+      buildScenarioReadiness({
+        publishedAudioUrl: null,
+        lines: twoLines,
+        quiz: [],
+        tokenSync: null,
+        workingTokenSync: null,
+        contentHash: HASH,
+        quizReviewedAt: "2026-09-24T00:00:00.000Z",
+      }).contentQa,
+      "quiz",
+    );
+    const done = buildScenarioReadiness({
+      publishedAudioUrl: null,
+      lines: twoLines,
+      quiz: [],
+      tokenSync: null,
+      workingTokenSync: null,
+      contentHash: HASH,
+      dialogueReviewedAt: "2026-09-24T00:00:00.000Z",
+      quizReviewedAt: "2026-09-24T00:00:00.000Z",
+      contentQaHasNote: true,
+    });
+    assert.equal(done.contentQa, "done");
+    assert.equal(done.contentQaHasNote, true);
+  });
 });
 
 describe("karaokeSnapshotForTake", () => {

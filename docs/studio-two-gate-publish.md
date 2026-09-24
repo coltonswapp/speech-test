@@ -29,8 +29,9 @@ Today Studio has **three loosely related axes**, not one pipeline:
 | Take review | Auto-stamp flags cleared; `source: reviewed`; `reviewedAt` telemetry | Review queue / Token timing |
 | Scenario “publish” | CDN clip + lockstep snapshot (`publishedAt`, audio/timing/sync/quiz chips go green) | Scenario Audio panel |
 | Lesson live | `dialogueCollection.isActive` — public CMS only serves active lessons | Curriculum “Visible to learners” (Gate B) |
+| Content QA (learner client) | Dialogue + quiz looked over from the app; freeform note | Readiness `qa` chip — see `docs/studio-content-qa-review.md` |
 
-Operators experience “publish” as one word, but **shipping audio to CDN** and **making a lesson consumable in the learner app** are different stakes. Staging (draft work waiting) is also invisible as a first-class queue — Review queue is flag-driven, Curriculum chips are readiness, and `isActive` is a quiet toggle.
+Operators experience “publish” as one word, but **shipping audio to CDN** and **making a lesson consumable in the learner app** are different stakes. Staging (draft work waiting) is also invisible as a first-class queue — Review queue is flag-driven, Curriculum chips are readiness, and `isActive` is a quiet toggle. **Learner-client content QA** is a fourth axis (scene looked-over in the app); it does not flip Gate A or Gate B.
 
 **Goal:** one explicit **two-gate** pipeline:
 
@@ -148,10 +149,12 @@ Two placement options (prefer A for scanability):
 
 Thumbnails stay on the **existing Curriculum** (and scenario editor) surfaces. **Do not** add a Thumbnails tab.
 
-Today readiness chips: **audio · timing · sync · quiz**  
+Today readiness chips: **audio · timing · sync · quiz · thumb · qa**  
 (`scenario-readiness-chips.tsx` / `scenario-readiness.ts`).
 
-**Add a fifth chip: thumbnail**, with own-vs-inherited semantics (already partially in scenario editor: “own thumbnail” / “inherits lesson”).
+**Thumbnail chip** (Phase 1): own-vs-inherited semantics (already partially in scenario editor: “own thumbnail” / “inherits lesson”).
+
+**Content QA chip** (learner-client review): `qa —` / `qa dial` / `qa quiz` / `qa ✓` (+ `·` when a note exists). Not take review. Contract: `docs/studio-content-qa-review.md`.
 
 | Scene thumbnail state | Chip label (sketch) | Tone | Meaning |
 |---|---|---|---|

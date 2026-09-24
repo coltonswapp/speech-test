@@ -42,6 +42,9 @@ export type ScenarioReadinessSummary = {
   quizWithEvidence: number;
   /** Scene thumb: own override, inherits lesson, or neither set. */
   thumbnail?: "own" | "inherited" | "missing";
+  /** Learner-client content QA (dialogue + quiz looked over). */
+  contentQa?: "pending" | "dialogue" | "quiz" | "done";
+  contentQaHasNote?: boolean;
 };
 
 export type ScenarioSummary = {
@@ -495,6 +498,97 @@ export const dialogueApi = {
     }>(`/api/content/dialogues/${collectionId}/publish`, {
       method: "POST",
     }),
+  listContentQa: (collectionId?: string) =>
+    request<{
+      reviews: Array<{
+        scenarioId: string;
+        collectionId: string;
+        dialogueReviewedAt: string | null;
+        quizReviewedAt: string | null;
+        reviewNote: string | null;
+        reviewedBy: string | null;
+        status: "pending" | "dialogue" | "quiz" | "done";
+        createdAt: string;
+        updatedAt: string;
+      }>;
+      summary: {
+        total: number;
+        pending: number;
+        dialogueOnly: number;
+        quizOnly: number;
+        done: number;
+        withNotes: number;
+      };
+    }>(
+      collectionId
+        ? `/api/content/content-qa?collectionId=${encodeURIComponent(collectionId)}`
+        : "/api/content/content-qa",
+    ),
+  /** Studio-side seed/demo submit for learner-client content QA. */
+  upsertContentQa: (
+    collectionId: string,
+    slug: string,
+    body: {
+      checkedOff?: boolean;
+      dialogueReviewed?: boolean;
+      quizReviewed?: boolean;
+      reviewNote?: string | null;
+      reviewedBy?: string | null;
+    },
+  ) =>
+    request<{
+      review: {
+        scenarioId: string;
+        status: "pending" | "dialogue" | "quiz" | "done";
+        checkedOff: boolean;
+        dialogueReviewedAt: string | null;
+        quizReviewedAt: string | null;
+        reviewNote: string | null;
+      };
+      readiness: {
+        contentQa: "pending" | "dialogue" | "quiz" | "done";
+        contentQaHasNote: boolean;
+        checkedOff: boolean;
+      };
+      created: boolean;
+      alreadyCheckedOff: boolean;
+    }>(
+      `/api/content/content-qa/dialogues/${collectionId}/scenarios/${slug}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
+  /**
+   * Prefer this for demos of the learner-client scene check-off path
+   * (proxied through Studio auth via the content seed route when needed).
+   * Production client calls POST /api/client/.../check-off with bearer token.
+   */
+  checkOffContentQa: (
+    collectionId: string,
+    slug: string,
+    body: { reviewNote?: string | null; reviewedBy?: string | null } = {},
+  ) =>
+    request<{
+      review: {
+        scenarioId: string;
+        status: "done";
+        checkedOff: true;
+        dialogueReviewedAt: string | null;
+        quizReviewedAt: string | null;
+        reviewNote: string | null;
+      };
+      readiness: {
+        contentQa: "done";
+        contentQaHasNote: boolean;
+        checkedOff: true;
+      };
+      created: boolean;
+      alreadyCheckedOff: boolean;
+    }>(
+      `/api/content/content-qa/dialogues/${collectionId}/scenarios/${slug}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ checkedOff: true, ...body }),
+      },
+    ),
   exportUrl: (collectionId: string) =>
     `/api/content/dialogues/${collectionId}/export`,
   exportZipUrl: (collectionId: string) =>

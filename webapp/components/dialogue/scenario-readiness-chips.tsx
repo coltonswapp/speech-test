@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import type { ScenarioReadinessSummary } from "@/lib/dialogue/client";
 import {
+  contentQaChipLabel,
   formatCurriculumUpdatedAt,
   syncChipLabel,
   thumbnailChipLabel,
@@ -15,7 +16,7 @@ import { cn } from "@/lib/utils";
 export type ReadinessChipTab = "audio" | "quiz" | "overview";
 
 const CHIP_TAB: Record<
-  "audio" | "timing" | "sync" | "quiz" | "thumbnail",
+  "audio" | "timing" | "sync" | "quiz" | "thumbnail" | "contentQa",
   ReadinessChipTab
 > = {
   audio: "audio",
@@ -23,6 +24,7 @@ const CHIP_TAB: Record<
   sync: "audio",
   quiz: "quiz",
   thumbnail: "overview",
+  contentQa: "overview",
 };
 
 function readinessChipClass(
@@ -143,6 +145,14 @@ export function ScenarioReadinessChips({
       : thumbnail === "inherited"
         ? ("draft" as const)
         : ("muted" as const);
+  const contentQa = readiness.contentQa ?? "pending";
+  const contentQaHasNote = readiness.contentQaHasNote === true;
+  const contentQaTone =
+    contentQa === "done"
+      ? ("ok" as const)
+      : contentQa === "dialogue" || contentQa === "quiz"
+        ? ("warn" as const)
+        : ("muted" as const);
 
   return (
     <div
@@ -233,6 +243,28 @@ export function ScenarioReadinessChips({
         }
       >
         {thumbnailChipLabel(thumbnail)}
+      </ReadinessChip>
+      <ReadinessChip
+        hrefBase={hrefBase}
+        tab={CHIP_TAB.contentQa}
+        tone={contentQaTone}
+        title={
+          contentQa === "done"
+            ? `Learner-client content QA complete (dialogue + quiz)${
+                contentQaHasNote ? " — has review note" : ""
+              }`
+            : contentQa === "dialogue"
+              ? `Dialogue reviewed from the client; quiz still awaiting${
+                  contentQaHasNote ? " — has review note" : ""
+                }`
+              : contentQa === "quiz"
+                ? `Quiz reviewed from the client; dialogue still awaiting${
+                    contentQaHasNote ? " — has review note" : ""
+                  }`
+                : "No learner-client content QA yet (dialogue + quiz)"
+        }
+      >
+        {contentQaChipLabel(contentQa, contentQaHasNote)}
       </ReadinessChip>
     </div>
   );

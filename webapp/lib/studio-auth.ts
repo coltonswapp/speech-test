@@ -64,6 +64,7 @@ export function authIsEnforced(): boolean {
   return Boolean(
     isGoogleAuthConfigured() ||
       process.env.STUDIO_AGENT_TOKEN?.trim() ||
+      process.env.CONTENT_QA_CLIENT_TOKEN?.trim() ||
       process.env.APP_PASSPHRASE?.trim()
   );
 }
@@ -77,6 +78,23 @@ export function bearerMatches(header: string | null): boolean {
   const b = Buffer.from(expected);
   if (a.length !== b.length) return false;
   return timingSafeEqual(a, b);
+}
+
+/** Learner-client write token for content QA (parallel to Studio agent bearer). */
+export function contentQaClientTokenMatches(header: string | null): boolean {
+  const expected = process.env.CONTENT_QA_CLIENT_TOKEN?.trim();
+  if (!expected || !header) return false;
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  if (!token) return false;
+  const a = Buffer.from(token);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+/** Studio agent token or dedicated content-QA client token. */
+export function apiBearerMatches(header: string | null): boolean {
+  return bearerMatches(header) || contentQaClientTokenMatches(header);
 }
 
 export function passphraseCookieValue(passphrase: string): string {

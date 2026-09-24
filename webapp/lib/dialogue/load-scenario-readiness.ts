@@ -4,6 +4,7 @@ import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   dialogueCollection,
+  dialogueScenarioContentQa,
   ttsProject,
   ttsVariant,
 } from "@/lib/db/schema";
@@ -68,6 +69,22 @@ export async function loadScenarioReadinessById(
       collectionThumbById.set(collection.id, collection.thumbnailUrl);
     }
   }
+
+  const contentQaRows =
+    scenarioIds.length > 0
+      ? await db.query.dialogueScenarioContentQa.findMany({
+          where: inArray(dialogueScenarioContentQa.scenarioId, scenarioIds),
+          columns: {
+            scenarioId: true,
+            dialogueReviewedAt: true,
+            quizReviewedAt: true,
+            reviewNote: true,
+          },
+        })
+      : [];
+  const contentQaByScenarioId = new Map(
+    contentQaRows.map((row) => [row.scenarioId, row]),
+  );
 
   const projects = await db.query.ttsProject.findMany({
     where: inArray(ttsProject.sourceScenarioId, scenarioIds),
@@ -149,6 +166,7 @@ export async function loadScenarioReadinessById(
         : scenario.collectionId
           ? (collectionThumbById.get(scenario.collectionId) ?? null)
           : null;
+    const contentQa = contentQaByScenarioId.get(scenario.id);
     result.set(
       scenario.id,
       buildScenarioReadiness({
@@ -164,6 +182,9 @@ export async function loadScenarioReadinessById(
         contentHash,
         scenarioThumbnailUrl: scenario.thumbnailUrl ?? null,
         collectionThumbnailUrl,
+        dialogueReviewedAt: contentQa?.dialogueReviewedAt ?? null,
+        quizReviewedAt: contentQa?.quizReviewedAt ?? null,
+        contentQaHasNote: !!contentQa?.reviewNote?.trim(),
       }),
     );
   }

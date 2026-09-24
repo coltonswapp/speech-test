@@ -297,6 +297,33 @@ export const dialogueScenario = pgTable("dialogue_scenario", {
     .defaultNow(),
 });
 
+/**
+ * Learner-client content QA for a scenario (dialogue + quiz looked over).
+ * Distinct from Studio take review (`reviewedAt` / flag clear on TTS variants).
+ * One row per scenario; missing row = nothing reviewed yet.
+ */
+export const dialogueScenarioContentQa = pgTable(
+  "dialogue_scenario_content_qa",
+  {
+    scenarioId: text("scenario_id")
+      .primaryKey()
+      .references(() => dialogueScenario.id, { onDelete: "cascade" }),
+    dialogueReviewedAt: timestamp("dialogue_reviewed_at", {
+      withTimezone: true,
+    }),
+    quizReviewedAt: timestamp("quiz_reviewed_at", { withTimezone: true }),
+    reviewNote: text("review_note"),
+    /** Optional reviewer label from the client (staff email, device id, etc.). */
+    reviewedBy: text("reviewed_by"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
 // Teaching patterns — curated curriculum spine (N5 seed first).
 // Distinct from full grammarPoint teaching docs; ids may later align with
 // grammarPoint ids so scenario tags (grammarPointIds) light up coverage counts.

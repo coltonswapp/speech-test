@@ -1,6 +1,6 @@
 # Studio auth
 
-Published iOS JSON (`/api/public/*`) stays open. Everything else is gated when any of Google, `STUDIO_AGENT_TOKEN`, or `APP_PASSPHRASE` is set.
+Published iOS JSON (`/api/public/*`) stays open. Everything else is gated when any of Google, `STUDIO_AGENT_TOKEN`, `CONTENT_QA_CLIENT_TOKEN`, or `APP_PASSPHRASE` is set.
 
 ## Humans (Google)
 
@@ -20,6 +20,10 @@ Off-list Google accounts get AccessDenied.
 ## Agents / MCP
 
 Set `STUDIO_AGENT_TOKEN` on Vercel and in the Studio MCP env. Requests send `Authorization: Bearer …`.
+
+## Learner-client content QA writes
+
+The future iOS/staff review client submits dialogue/quiz QA via `/api/client/content-qa/*` (not `/api/public`). Set `CONTENT_QA_CLIENT_TOKEN` on Vercel and in the client; requests send `Authorization: Bearer …`. Studio agent bearer and Google sessions also work for demos. See `docs/studio-content-qa-review.md`.
 
 ## Local
 

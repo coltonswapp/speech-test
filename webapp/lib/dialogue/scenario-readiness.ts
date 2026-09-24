@@ -21,6 +21,11 @@ export type QuizReadiness = "missing" | "ready" | "published";
 export type ThumbnailReadiness = "own" | "inherited" | "missing";
 /** Curriculum sync: `ready` = studio complete, not in the last publish. */
 export type CurriculumSyncStatus = TokenSyncStatus | "ready";
+/**
+ * Learner-client content QA (dialogue + quiz looked over).
+ * Distinct from Studio take review / Gate A·B.
+ */
+export type ContentQaReadiness = "pending" | "dialogue" | "quiz" | "done";
 
 export type ScenarioReadiness = {
   audio: AudioReadiness;
@@ -30,6 +35,9 @@ export type ScenarioReadiness = {
   quizCount: number;
   quizWithEvidence: number;
   thumbnail: ThumbnailReadiness;
+  /** Learner-client content QA rollup for chips. */
+  contentQa: ContentQaReadiness;
+  contentQaHasNote: boolean;
 };
 
 /**
@@ -174,6 +182,18 @@ export function curriculumThumbnailStatus(params: {
   return "missing";
 }
 
+export function curriculumContentQaStatus(params: {
+  dialogueReviewedAt?: Date | string | null;
+  quizReviewedAt?: Date | string | null;
+}): ContentQaReadiness {
+  const dialogue = !!params.dialogueReviewedAt;
+  const quiz = !!params.quizReviewedAt;
+  if (dialogue && quiz) return "done";
+  if (dialogue) return "dialogue";
+  if (quiz) return "quiz";
+  return "pending";
+}
+
 export function buildScenarioReadiness(params: {
   publishedAudioUrl: string | null;
   audioStale?: boolean;
@@ -187,6 +207,9 @@ export function buildScenarioReadiness(params: {
   contentHash: string | null | undefined;
   scenarioThumbnailUrl?: string | null;
   collectionThumbnailUrl?: string | null;
+  dialogueReviewedAt?: Date | string | null;
+  quizReviewedAt?: Date | string | null;
+  contentQaHasNote?: boolean;
 }): ScenarioReadiness {
   const spoken = scenarioLinesToConversation(
     Array.isArray(params.lines) ? (params.lines as DialogueLine[]) : [],
@@ -228,6 +251,11 @@ export function buildScenarioReadiness(params: {
       scenarioThumbnailUrl: params.scenarioThumbnailUrl,
       collectionThumbnailUrl: params.collectionThumbnailUrl,
     }),
+    contentQa: curriculumContentQaStatus({
+      dialogueReviewedAt: params.dialogueReviewedAt,
+      quizReviewedAt: params.quizReviewedAt,
+    }),
+    contentQaHasNote: params.contentQaHasNote === true,
   };
 }
 
@@ -273,4 +301,19 @@ export function thumbnailChipLabel(status: ThumbnailReadiness): string {
     case "missing":
       return "thumb —";
   }
+}
+
+export function contentQaChipLabel(
+  status: ContentQaReadiness,
+  hasNote: boolean,
+): string {
+  const base =
+    status === "done"
+      ? "qa ✓"
+      : status === "dialogue"
+        ? "qa dial"
+        : status === "quiz"
+          ? "qa quiz"
+          : "qa —";
+  return hasNote ? `${base}·` : base;
 }

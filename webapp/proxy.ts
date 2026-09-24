@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import {
   AUTH_COOKIE,
   authIsEnforced,
-  bearerMatches,
+  apiBearerMatches,
   isPublicPath,
   passphraseCookieMatches,
 } from "@/lib/studio-auth";
@@ -22,7 +22,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (bearerMatches(request.headers.get("authorization"))) {
+  if (apiBearerMatches(request.headers.get("authorization"))) {
     return NextResponse.next();
   }
 

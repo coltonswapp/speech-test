@@ -42,6 +42,9 @@ export type ScenarioReadinessSummary = {
   quizWithEvidence: number;
   /** Scene thumb: own override, inherits lesson, or neither set. */
   thumbnail?: "own" | "inherited" | "missing";
+  /** Learner-client content QA (dialogue + quiz looked over). */
+  contentQa?: "pending" | "dialogue" | "quiz" | "done";
+  contentQaHasNote?: boolean;
 };
 
 export type ScenarioSummary = {
@@ -495,6 +498,56 @@ export const dialogueApi = {
     }>(`/api/content/dialogues/${collectionId}/publish`, {
       method: "POST",
     }),
+  listContentQa: (collectionId?: string) =>
+    request<{
+      reviews: Array<{
+        scenarioId: string;
+        collectionId: string;
+        dialogueReviewedAt: string | null;
+        quizReviewedAt: string | null;
+        reviewNote: string | null;
+        reviewedBy: string | null;
+        status: "pending" | "dialogue" | "quiz" | "done";
+        createdAt: string;
+        updatedAt: string;
+      }>;
+      summary: {
+        total: number;
+        pending: number;
+        dialogueOnly: number;
+        quizOnly: number;
+        done: number;
+        withNotes: number;
+      };
+    }>(
+      collectionId
+        ? `/api/content/content-qa?collectionId=${encodeURIComponent(collectionId)}`
+        : "/api/content/content-qa",
+    ),
+  /** Studio-side seed/demo submit for learner-client content QA. */
+  upsertContentQa: (
+    collectionId: string,
+    slug: string,
+    body: {
+      dialogueReviewed?: boolean;
+      quizReviewed?: boolean;
+      reviewNote?: string | null;
+      reviewedBy?: string | null;
+    },
+  ) =>
+    request<{
+      review: {
+        scenarioId: string;
+        status: "pending" | "dialogue" | "quiz" | "done";
+        dialogueReviewedAt: string | null;
+        quizReviewedAt: string | null;
+        reviewNote: string | null;
+      };
+      created: boolean;
+    }>(
+      `/api/content/content-qa/dialogues/${collectionId}/scenarios/${slug}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
   exportUrl: (collectionId: string) =>
     `/api/content/dialogues/${collectionId}/export`,
   exportZipUrl: (collectionId: string) =>

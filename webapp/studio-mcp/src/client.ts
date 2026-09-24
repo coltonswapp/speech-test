@@ -142,6 +142,8 @@ export type DialogueScenario = {
   lines: DialogueLine[];
   highlights: unknown;
   quiz: unknown;
+  /** Original Claude `.md` brief (Studio-only; not exported to the app). */
+  sourceScript?: string | null;
   updatedAt: string;
 };
 

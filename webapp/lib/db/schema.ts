@@ -292,6 +292,9 @@ export const dialogueScenario = pgTable("dialogue_scenario", {
   ambienceLayers: jsonb("ambience_layers"),
   // Ambience config fingerprint written at publish (not mixed into the m4a).
   publishedAmbienceHash: text("published_ambience_hash"),
+  // Original Claude `.md` brief used to author the scene (Studio-only; never
+  // exported to /api/public/dialogues or the iOS app).
+  sourceScript: text("source_script"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

@@ -54,6 +54,9 @@ export type ExportableScenario = {
 // only for diff-friendliness against the hand-authored files; the Swift
 // decoder ignores order. Absent optionals are left undefined so
 // JSON.stringify omits them.
+//
+// Studio-only fields (spoken `delivery`, scenario `sourceScript`) must never
+// appear here — same strip path as /api/public/dialogues.
 
 function exportLine(
   line: DialogueLine,

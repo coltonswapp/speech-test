@@ -529,6 +529,7 @@ export const dialogueApi = {
     collectionId: string,
     slug: string,
     body: {
+      checkedOff?: boolean;
       dialogueReviewed?: boolean;
       quizReviewed?: boolean;
       reviewNote?: string | null;
@@ -539,14 +540,54 @@ export const dialogueApi = {
       review: {
         scenarioId: string;
         status: "pending" | "dialogue" | "quiz" | "done";
+        checkedOff: boolean;
         dialogueReviewedAt: string | null;
         quizReviewedAt: string | null;
         reviewNote: string | null;
       };
+      readiness: {
+        contentQa: "pending" | "dialogue" | "quiz" | "done";
+        contentQaHasNote: boolean;
+        checkedOff: boolean;
+      };
       created: boolean;
+      alreadyCheckedOff: boolean;
     }>(
       `/api/content/content-qa/dialogues/${collectionId}/scenarios/${slug}`,
       { method: "PUT", body: JSON.stringify(body) },
+    ),
+  /**
+   * Prefer this for demos of the learner-client scene check-off path
+   * (proxied through Studio auth via the content seed route when needed).
+   * Production client calls POST /api/client/.../check-off with bearer token.
+   */
+  checkOffContentQa: (
+    collectionId: string,
+    slug: string,
+    body: { reviewNote?: string | null; reviewedBy?: string | null } = {},
+  ) =>
+    request<{
+      review: {
+        scenarioId: string;
+        status: "done";
+        checkedOff: true;
+        dialogueReviewedAt: string | null;
+        quizReviewedAt: string | null;
+        reviewNote: string | null;
+      };
+      readiness: {
+        contentQa: "done";
+        contentQaHasNote: boolean;
+        checkedOff: true;
+      };
+      created: boolean;
+      alreadyCheckedOff: boolean;
+    }>(
+      `/api/content/content-qa/dialogues/${collectionId}/scenarios/${slug}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ checkedOff: true, ...body }),
+      },
     ),
   exportUrl: (collectionId: string) =>
     `/api/content/dialogues/${collectionId}/export`,

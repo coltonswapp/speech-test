@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
+  checkOffContentQaRequestSchema,
   contentQaReadinessSlice,
-  upsertContentQaRequestSchema,
 } from "@/lib/dialogue/content-qa";
 import {
   ContentQaNotFoundError,
-  upsertContentQa,
+  checkOffContentQa,
 } from "@/lib/dialogue/content-qa-store";
 
 type RouteCtx = {
@@ -14,33 +14,28 @@ type RouteCtx = {
 };
 
 /**
- * Studio-side content QA upsert (same body as the client route).
- * Useful for seeding / demos before the learner client ships.
- * Auth: Studio session / agent token (standard /api/content/* gate).
+ * Scene check-off for the learner client.
  *
- * For the learner-client scene check-off, use
- * POST /api/client/content-qa/dialogues/:collectionId/scenarios/:slug/check-off
+ * Marks the scene as fully reviewed (dialogue + quiz). Idempotent.
+ * Auth: Bearer CONTENT_QA_CLIENT_TOKEN (or STUDIO_AGENT_TOKEN / Studio session).
+ * Contract: docs/studio-content-qa-review.md §3.0
  */
-export async function PUT(request: NextRequest, ctx: RouteCtx) {
-  return upsert(request, ctx);
-}
-
-export async function PATCH(request: NextRequest, ctx: RouteCtx) {
-  return upsert(request, ctx);
-}
-
-async function upsert(request: NextRequest, ctx: RouteCtx) {
+export async function POST(request: NextRequest, ctx: RouteCtx) {
   const { collectionId, slug } = await ctx.params;
   const scenarioId = `${collectionId}/${slug}`;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  let body: unknown = {};
+  const contentType = request.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    try {
+      const parsedJson = await request.json();
+      body = parsedJson === null || parsedJson === undefined ? {} : parsedJson;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    }
   }
 
-  const parsed = upsertContentQaRequestSchema.safeParse(body);
+  const parsed = checkOffContentQaRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.flatten() },
@@ -49,7 +44,7 @@ async function upsert(request: NextRequest, ctx: RouteCtx) {
   }
 
   try {
-    const { record, created, alreadyCheckedOff } = await upsertContentQa(
+    const { record, created, alreadyCheckedOff } = await checkOffContentQa(
       scenarioId,
       parsed.data,
     );

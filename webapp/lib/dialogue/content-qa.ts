@@ -24,6 +24,12 @@ export const contentQaScenarioIdSchema = z
 
 export const upsertContentQaRequestSchema = z
   .object({
+    /**
+     * Scene-level check-off shorthand. `true` sets both dialogueReviewed and
+     * quizReviewed. `false` clears both. Prefer POST …/check-off for the
+     * client “mark scene reviewed” action.
+     */
+    checkedOff: z.boolean().optional(),
     dialogueReviewed: z.boolean().optional(),
     quizReviewed: z.boolean().optional(),
     /** Pass null to clear. Omit to leave unchanged. */
@@ -32,6 +38,7 @@ export const upsertContentQaRequestSchema = z
   })
   .refine(
     (body) =>
+      body.checkedOff !== undefined ||
       body.dialogueReviewed !== undefined ||
       body.quizReviewed !== undefined ||
       body.reviewNote !== undefined ||
@@ -43,6 +50,16 @@ export type UpsertContentQaRequest = z.infer<
   typeof upsertContentQaRequestSchema
 >;
 
+/** Body for POST …/check-off — marks the whole scene reviewed. */
+export const checkOffContentQaRequestSchema = z.object({
+  reviewNote: z.string().max(4000).nullable().optional(),
+  reviewedBy: z.string().max(200).nullable().optional(),
+});
+
+export type CheckOffContentQaRequest = z.infer<
+  typeof checkOffContentQaRequestSchema
+>;
+
 export type ContentQaRecord = {
   scenarioId: string;
   collectionId: string;
@@ -51,9 +68,28 @@ export type ContentQaRecord = {
   reviewNote: string | null;
   reviewedBy: string | null;
   status: ContentQaStatus;
+  /** True when both dialogue + quiz are reviewed (`status === "done"`). */
+  checkedOff: boolean;
   createdAt: string;
   updatedAt: string;
 };
+
+/** Chip-facing slice returned alongside write responses. */
+export type ContentQaReadinessSlice = {
+  contentQa: ContentQaStatus;
+  contentQaHasNote: boolean;
+  checkedOff: boolean;
+};
+
+export function contentQaReadinessSlice(
+  record: Pick<ContentQaRecord, "status" | "reviewNote" | "checkedOff">,
+): ContentQaReadinessSlice {
+  return {
+    contentQa: record.status,
+    contentQaHasNote: !!record.reviewNote?.trim(),
+    checkedOff: record.checkedOff,
+  };
+}
 
 export function contentQaStatusFromFlags(params: {
   dialogueReviewedAt: Date | string | null | undefined;
@@ -79,6 +115,7 @@ export function toContentQaRecord(row: {
   const slash = row.scenarioId.indexOf("/");
   const collectionId =
     slash > 0 ? row.scenarioId.slice(0, slash) : row.scenarioId;
+  const status = contentQaStatusFromFlags(row);
   return {
     scenarioId: row.scenarioId,
     collectionId,
@@ -86,7 +123,8 @@ export function toContentQaRecord(row: {
     quizReviewedAt: row.quizReviewedAt?.toISOString() ?? null,
     reviewNote: row.reviewNote,
     reviewedBy: row.reviewedBy,
-    status: contentQaStatusFromFlags(row),
+    status,
+    checkedOff: status === "done",
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

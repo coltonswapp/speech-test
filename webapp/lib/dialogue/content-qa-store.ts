@@ -33,11 +33,18 @@ export async function listContentQa(params?: {
 /**
  * Upsert content QA for a scenario. Idempotent for flags already true:
  * first-reviewed timestamps are kept unless the flag is explicitly cleared.
+ *
+ * `checkedOff: true` sets both dialogue + quiz reviewed (scene check-off).
+ * `checkedOff: false` clears both.
  */
 export async function upsertContentQa(
   scenarioId: string,
   body: UpsertContentQaRequest,
-): Promise<{ record: ContentQaRecord; created: boolean }> {
+): Promise<{
+  record: ContentQaRecord;
+  created: boolean;
+  alreadyCheckedOff: boolean;
+}> {
   const scenario = await db.query.dialogueScenario.findFirst({
     where: eq(dialogueScenario.id, scenarioId),
     columns: { id: true },
@@ -49,6 +56,9 @@ export async function upsertContentQa(
   const existing = await db.query.dialogueScenarioContentQa.findFirst({
     where: eq(dialogueScenarioContentQa.scenarioId, scenarioId),
   });
+  const alreadyCheckedOff = !!(
+    existing?.dialogueReviewedAt && existing?.quizReviewedAt
+  );
   const now = new Date();
 
   let dialogueReviewedAt = existing?.dialogueReviewedAt ?? null;
@@ -56,15 +66,28 @@ export async function upsertContentQa(
   let reviewNote = existing?.reviewNote ?? null;
   let reviewedBy = existing?.reviewedBy ?? null;
 
-  if (body.dialogueReviewed === true && !dialogueReviewedAt) {
+  const dialogueReviewed =
+    body.checkedOff === true
+      ? true
+      : body.checkedOff === false
+        ? false
+        : body.dialogueReviewed;
+  const quizReviewed =
+    body.checkedOff === true
+      ? true
+      : body.checkedOff === false
+        ? false
+        : body.quizReviewed;
+
+  if (dialogueReviewed === true && !dialogueReviewedAt) {
     dialogueReviewedAt = now;
-  } else if (body.dialogueReviewed === false) {
+  } else if (dialogueReviewed === false) {
     dialogueReviewedAt = null;
   }
 
-  if (body.quizReviewed === true && !quizReviewedAt) {
+  if (quizReviewed === true && !quizReviewedAt) {
     quizReviewedAt = now;
-  } else if (body.quizReviewed === false) {
+  } else if (quizReviewed === false) {
     quizReviewedAt = null;
   }
 
@@ -88,7 +111,11 @@ export async function upsertContentQa(
         updatedAt: now,
       })
       .returning();
-    return { record: toContentQaRecord(inserted), created: true };
+    return {
+      record: toContentQaRecord(inserted),
+      created: true,
+      alreadyCheckedOff: false,
+    };
   }
 
   const [updated] = await db
@@ -103,7 +130,29 @@ export async function upsertContentQa(
     .where(eq(dialogueScenarioContentQa.scenarioId, scenarioId))
     .returning();
 
-  return { record: toContentQaRecord(updated), created: false };
+  return {
+    record: toContentQaRecord(updated),
+    created: false,
+    alreadyCheckedOff,
+  };
+}
+
+/**
+ * Scene check-off: mark dialogue + quiz reviewed. Idempotent when already done.
+ */
+export async function checkOffContentQa(
+  scenarioId: string,
+  body: { reviewNote?: string | null; reviewedBy?: string | null } = {},
+): Promise<{
+  record: ContentQaRecord;
+  created: boolean;
+  alreadyCheckedOff: boolean;
+}> {
+  return upsertContentQa(scenarioId, {
+    checkedOff: true,
+    reviewNote: body.reviewNote,
+    reviewedBy: body.reviewedBy,
+  });
 }
 
 export class ContentQaNotFoundError extends Error {

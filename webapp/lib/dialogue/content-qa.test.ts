@@ -50,5 +50,21 @@ describe("upsertContentQaRequestSchema", () => {
       upsertContentQaRequestSchema.safeParse({ reviewNote: null }).success,
       true,
     );
+    assert.equal(
+      upsertContentQaRequestSchema.safeParse({ checkedOff: true }).success,
+      true,
+    );
+  });
+});
+
+describe("checkedOff vs status", () => {
+  it("maps done to checkedOff via toContentQaRecord fields", () => {
+    assert.equal(
+      contentQaStatusFromFlags({
+        dialogueReviewedAt: new Date(),
+        quizReviewedAt: new Date(),
+      }),
+      "done",
+    );
   });
 });

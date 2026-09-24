@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { ttsProject, ttsVariant } from "@/lib/db/schema";
 import { variantTokenSyncSchema } from "@/lib/dialogue/types";
 import { clearAutoStampJob } from "@/lib/dialogue/auto-stamp";
 import { clearReviewTiming } from "@/lib/dialogue/review-timing";
+import { setProjectSelectedTake } from "@/lib/tts/selected-take";
 
 const updateVariantSchema = z.object({
   trimSampleLower: z.number().int().nullable().optional(),
@@ -71,12 +72,17 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   await Promise.all([clearAutoStampJob(variantId), clearReviewTiming(variantId)]);
-  // Don't leave the project pointing at a deleted take.
-  await db
-    .update(ttsProject)
-    .set({ selectedVariantId: null, updatedAt: new Date() })
-    .where(
-      and(eq(ttsProject.id, id), eq(ttsProject.selectedVariantId, variantId))
-    );
+  // Don't leave the project pointing at a deleted take. Clearing selection
+  // also invalidates Content QA when this was the selected take.
+  const project = await db.query.ttsProject.findFirst({
+    where: eq(ttsProject.id, id),
+    columns: { selectedVariantId: true },
+  });
+  if (project?.selectedVariantId === variantId) {
+    await setProjectSelectedTake({
+      projectId: id,
+      nextSelectedTakeId: null,
+    });
+  }
   return NextResponse.json({ ok: true });
 }

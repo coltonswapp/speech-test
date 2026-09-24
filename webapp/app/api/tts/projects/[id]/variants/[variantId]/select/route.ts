@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { ttsProject, ttsVariant } from "@/lib/db/schema";
+import { ttsVariant } from "@/lib/db/schema";
+import { setProjectSelectedTake } from "@/lib/tts/selected-take";
 
 export async function POST(
   _request: NextRequest,
@@ -17,10 +18,13 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  await db
-    .update(ttsProject)
-    .set({ selectedVariantId: variantId, updatedAt: new Date() })
-    .where(eq(ttsProject.id, id));
+  const result = await setProjectSelectedTake({
+    projectId: id,
+    nextSelectedTakeId: variantId,
+  });
+  if (!result.found) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   return NextResponse.json({ ok: true });
 }

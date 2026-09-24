@@ -54,6 +54,7 @@ export async function POST(
       romaji: "",
       english: "",
       setting: parsed.data.setting ?? null,
+      sourceScript: parsed.data.sourceScript ?? null,
       lines: [],
     })
     .returning();

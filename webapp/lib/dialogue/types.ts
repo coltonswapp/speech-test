@@ -400,6 +400,8 @@ export const createScenarioSchema = z.object({
   menuTitle: z.string().min(1),
   menuSubtitle: z.string().optional(),
   setting: z.string().optional(),
+  // Original Claude `.md` brief (Studio-only; not public/iOS export).
+  sourceScript: z.string().nullable().optional(),
 });
 
 export const castVoiceEntrySchema = z.object({
@@ -444,6 +446,8 @@ export const updateScenarioSchema = z.object({
   lines: z.array(dialogueLineSchema).optional(),
   highlights: highlightsSchema.nullable().optional(),
   quiz: z.array(quizQuestionSchema).nullable().optional(),
+  // Original Claude `.md` brief (Studio-only). null clears; omit = unchanged.
+  sourceScript: z.string().nullable().optional(),
 });
 
 export const generateLinesRequestSchema = z.object({

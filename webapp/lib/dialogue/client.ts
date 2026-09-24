@@ -133,6 +133,8 @@ export type DialogueScenario = {
   ambienceOffsetSeconds: number | null;
   ambienceLayers: AmbienceLayer[] | null;
   publishedAmbienceHash: string | null;
+  /** Original Claude `.md` brief (Studio-only; never exported to the app). */
+  sourceScript: string | null;
   updatedAt: string;
 };
 

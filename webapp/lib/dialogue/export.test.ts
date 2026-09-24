@@ -123,3 +123,28 @@ describe("buildScenarioFile delivery export", () => {
     assert.equal(JSON.stringify(file).includes("[excited]"), false);
   });
 });
+
+describe("buildScenarioFile sourceScript export", () => {
+  it("omits Studio-only sourceScript from public/iOS scenario JSON", () => {
+    // sourceScript is Studio-only (DB / Content API). ExportableScenario and
+    // buildScenarioFile never include it — same rule as spoken `delivery`.
+    const file = buildScenarioFile(baseScenario());
+    assert.equal("sourceScript" in file, false);
+    assert.equal(JSON.stringify(file).includes("sourceScript"), false);
+
+    const collection = collectionFileSchema.parse(
+      buildCollectionFile(
+        {
+          id: "ball-game",
+          title: "Ball game",
+          subtitle: null,
+          sceneImage: null,
+          thumbnailUrl: null,
+          thumbnailSmallUrl: null,
+        },
+        [baseScenario()]
+      )
+    );
+    assert.equal(JSON.stringify(collection).includes("sourceScript"), false);
+  });
+});

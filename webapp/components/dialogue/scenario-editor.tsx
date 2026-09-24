@@ -130,6 +130,7 @@ export function ScenarioEditor({
   const [draft, setDraft] = useState<DialogueScenario | null>(null);
   const [rawText, setRawText] = useState("");
   const [rawError, setRawError] = useState<string | null>(null);
+  const [sourceScriptText, setSourceScriptText] = useState("");
   const [view, setView] = useState("editor");
   const [generateNonce, setGenerateNonce] = useState(0);
   const [auditResult, setAuditResult] = useState<AuditScenarioResult | null>(
@@ -178,14 +179,15 @@ export function ScenarioEditor({
       setDraft(data.scenario);
       setRawText(JSON.stringify(data.scenario, null, 2));
       setRawError(null);
+      setSourceScriptText(data.scenario.sourceScript ?? "");
     }
   }, [data?.scenario]);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
     if (!tab) return;
-    if (tab === "raw") {
-      setView("raw");
+    if (tab === "raw" || tab === "source") {
+      setView(tab);
       return;
     }
     if (SECTION_IDS.includes(tab)) {
@@ -231,10 +233,12 @@ export function ScenarioEditor({
         lines: current.lines,
         highlights: sanitizeHighlightsForSave(current.highlights),
         quiz: current.quiz,
+        sourceScript: sourceScriptText.trim() ? sourceScriptText : null,
       });
     },
     onSuccess: ({ scenario }) => {
       setDraft(scenario);
+      setSourceScriptText(scenario.sourceScript ?? "");
       queryClient.invalidateQueries({
         queryKey: ["dialogue-scenario", collectionId, scenarioSlug],
       });
@@ -249,6 +253,34 @@ export function ScenarioEditor({
     },
     onError: (error) => toast.error(error.message),
   });
+
+  const saveSourceScriptMutation = useMutation({
+    mutationFn: () =>
+      dialogueApi.updateScenario(collectionId, scenarioSlug, {
+        sourceScript: sourceScriptText.trim() ? sourceScriptText : null,
+      }),
+    onSuccess: ({ scenario }) => {
+      setDraft(scenario);
+      setSourceScriptText(scenario.sourceScript ?? "");
+      setRawText(JSON.stringify(scenario, null, 2));
+      queryClient.invalidateQueries({
+        queryKey: ["dialogue-scenario", collectionId, scenarioSlug],
+      });
+      toast.success("Source script saved.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  async function copySourceScript() {
+    try {
+      await navigator.clipboard.writeText(sourceScriptText);
+      toast.success("Copied to clipboard.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not copy to clipboard.",
+      );
+    }
+  }
 
   // Thumbnail changes hit the CDN immediately (not part of the draft), so
   // only the thumbnailUrl is copied back into the draft — other unsaved
@@ -389,6 +421,12 @@ export function ScenarioEditor({
         id: draft!.id,
         collectionId: draft!.collectionId,
       } as DialogueScenario);
+      if (
+        typeof parsed.sourceScript === "string" ||
+        parsed.sourceScript === null
+      ) {
+        setSourceScriptText(parsed.sourceScript ?? "");
+      }
       toast.success("Redecoded into editor. Save to persist.");
     } catch (e) {
       setRawError(e instanceof Error ? e.message : "Invalid JSON.");
@@ -560,6 +598,7 @@ export function ScenarioEditor({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <TabsList>
             <TabsTrigger value="editor">Editor</TabsTrigger>
+            <TabsTrigger value="source">Source script</TabsTrigger>
             <TabsTrigger value="raw">Raw JSON</TabsTrigger>
           </TabsList>
           {view === "editor" && (
@@ -912,6 +951,40 @@ export function ScenarioEditor({
           </div>
 
           <ScenarioMinimap sections={SECTIONS} onSelect={scrollToSection} />
+        </TabsContent>
+
+        <TabsContent value="source" className="flex flex-col gap-3 pt-4">
+          <Textarea
+            rows={24}
+            value={sourceScriptText}
+            onChange={(e) => setSourceScriptText(e.target.value)}
+            className="font-mono text-xs"
+            placeholder="Paste the Claude .md Hana used to populate this scene. Copy it back when you want revisions."
+            spellCheck={false}
+          />
+          {!sourceScriptText.trim() && (
+            <p className="text-sm text-muted-foreground">
+              Paste the Claude `.md` Hana used to populate this scene. Copy it
+              back when you want revisions.
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void copySourceScript()}
+              disabled={!sourceScriptText}
+            >
+              Copy
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => saveSourceScriptMutation.mutate()}
+              disabled={saveSourceScriptMutation.isPending}
+            >
+              Save
+            </Button>
+          </div>
         </TabsContent>
 
         <TabsContent value="raw" className="flex flex-col gap-3 pt-4">

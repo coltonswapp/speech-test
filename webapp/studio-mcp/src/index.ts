@@ -226,7 +226,7 @@ server.registerTool(
   {
     title: "Get scenario",
     description:
-      "Load a scenario by collectionId + slug (2026-08-25 stage schema). Speakers, spoken rows (optional delivery Gemini TTS tags), and stage/ト書き rows as { type:\"stage\", text, visibility, role:\"stage\" }. Also B-line lengths, grammar tags, unpublished flag. Flags long B lines and a missing opener ト書き.",
+      "Load a scenario by collectionId + slug (2026-08-25 stage schema). Speakers, spoken rows (optional delivery Gemini TTS tags), and stage/ト書き rows as { type:\"stage\", text, visibility, role:\"stage\" }. Also B-line lengths, grammar tags, unpublished flag, and sourceScript (original Claude markdown brief, Studio-only). Flags long B lines and a missing opener ト書き.",
     inputSchema: {
       collectionId: z.string().min(1),
       slug: z.string().min(1),
@@ -283,6 +283,8 @@ server.registerTool(
         menuTitle: scenario.menuTitle,
         menuSubtitle: scenario.menuSubtitle,
         setting: scenario.setting,
+        // Original Claude `.md` brief — Studio-only; not in public/iOS export.
+        sourceScript: scenario.sourceScript ?? null,
         unpublished: isUnpublished(scenario),
         publishedAudioUrl: scenario.publishedAudioUrl,
         publishedAt: scenario.publishedAt,
@@ -308,7 +310,7 @@ server.registerTool(
   {
     title: "Patch scenario",
     description:
-      "Patch scenario lines and/or metadata via the existing Content Studio PATCH route. Only send fields to change. Each line is a flat object: spoken rows need speaker+japanese (optional delivery for Gemini TTS audio tags, e.g. \"[softly]\"); stage/ト書き rows need type:\"stage\", text, and visibility (cold|practice).",
+      "Patch scenario lines and/or metadata via the existing Content Studio PATCH route. Only send fields to change. Each line is a flat object: spoken rows need speaker+japanese (optional delivery for Gemini TTS audio tags, e.g. \"[softly]\"); stage/ト書き rows need type:\"stage\", text, and visibility (cold|practice). Optional sourceScript is the original Claude markdown brief (Studio-only; null clears).",
     inputSchema: {
       collectionId: z.string().min(1),
       slug: z.string().min(1),
@@ -324,6 +326,8 @@ server.registerTool(
       lines: z.array(dialogueLineSchema).optional(),
       highlights: highlightsSchema.nullable().optional(),
       quiz: z.array(quizQuestionSchema).nullable().optional(),
+      // Original Claude `.md` brief (Studio-only; not public/iOS export).
+      sourceScript: z.string().nullable().optional(),
     },
   },
   async (args) => {

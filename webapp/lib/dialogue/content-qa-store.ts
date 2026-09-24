@@ -7,6 +7,7 @@ import {
   dialogueScenarioContentQa,
 } from "@/lib/db/schema";
 import {
+  shouldClearContentQaOnSelectedTakeChange,
   toContentQaRecord,
   type ContentQaRecord,
   type UpsertContentQaRequest,
@@ -153,6 +154,42 @@ export async function checkOffContentQa(
     reviewNote: body.reviewNote,
     reviewedBy: body.reviewedBy,
   });
+}
+
+/**
+ * Invalidate Content QA when a scenario’s selected take changes.
+ *
+ * Matches `checkedOff: false`: clears `dialogue_reviewed_at` + `quiz_reviewed_at`
+ * only. Leaves `review_note` / `reviewed_by` unchanged.
+ *
+ * No-ops when:
+ * - `scenarioId` is missing (ad-hoc TTS project, not scenario-backed)
+ * - previous and next take ids are the same (including both null)
+ * - no Content QA row exists yet (nothing to clear)
+ */
+export async function clearContentQaIfSelectedTakeChanged(params: {
+  scenarioId: string | null | undefined;
+  previousSelectedTakeId: string | null | undefined;
+  nextSelectedTakeId: string | null | undefined;
+}): Promise<{ cleared: boolean }> {
+  if (!params.scenarioId) return { cleared: false };
+  if (
+    !shouldClearContentQaOnSelectedTakeChange(
+      params.previousSelectedTakeId,
+      params.nextSelectedTakeId,
+    )
+  ) {
+    return { cleared: false };
+  }
+
+  const existing = await getContentQaByScenarioId(params.scenarioId);
+  if (!existing) return { cleared: false };
+  if (!existing.dialogueReviewedAt && !existing.quizReviewedAt) {
+    return { cleared: false };
+  }
+
+  await upsertContentQa(params.scenarioId, { checkedOff: false });
+  return { cleared: true };
 }
 
 export class ContentQaNotFoundError extends Error {

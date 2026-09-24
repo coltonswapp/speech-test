@@ -103,6 +103,19 @@ export function contentQaStatusFromFlags(params: {
   return "pending";
 }
 
+/**
+ * True when the scenario’s selected take id actually changed.
+ * Same id re-saved (including both null) is a no-op for Content QA.
+ */
+export function shouldClearContentQaOnSelectedTakeChange(
+  previousSelectedTakeId: string | null | undefined,
+  nextSelectedTakeId: string | null | undefined,
+): boolean {
+  const previous = previousSelectedTakeId ?? null;
+  const next = nextSelectedTakeId ?? null;
+  return previous !== next;
+}
+
 export function toContentQaRecord(row: {
   scenarioId: string;
   dialogueReviewedAt: Date | null;

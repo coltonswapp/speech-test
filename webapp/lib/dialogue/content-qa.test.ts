@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   contentQaStatusFromFlags,
+  shouldClearContentQaOnSelectedTakeChange,
   upsertContentQaRequestSchema,
 } from "./content-qa";
 
@@ -65,6 +66,46 @@ describe("checkedOff vs status", () => {
         quizReviewedAt: new Date(),
       }),
       "done",
+    );
+  });
+});
+
+describe("shouldClearContentQaOnSelectedTakeChange", () => {
+  it("clears only when the selected take id actually changes", () => {
+    assert.equal(
+      shouldClearContentQaOnSelectedTakeChange("take-a", "take-b"),
+      true,
+    );
+    assert.equal(
+      shouldClearContentQaOnSelectedTakeChange("take-a", null),
+      true,
+    );
+    assert.equal(
+      shouldClearContentQaOnSelectedTakeChange(null, "take-a"),
+      true,
+    );
+    assert.equal(
+      shouldClearContentQaOnSelectedTakeChange(undefined, "take-a"),
+      true,
+    );
+  });
+
+  it("no-ops when re-selecting the same take (incl. both null)", () => {
+    assert.equal(
+      shouldClearContentQaOnSelectedTakeChange("take-a", "take-a"),
+      false,
+    );
+    assert.equal(
+      shouldClearContentQaOnSelectedTakeChange(null, null),
+      false,
+    );
+    assert.equal(
+      shouldClearContentQaOnSelectedTakeChange(undefined, null),
+      false,
+    );
+    assert.equal(
+      shouldClearContentQaOnSelectedTakeChange(null, undefined),
+      false,
     );
   });
 });

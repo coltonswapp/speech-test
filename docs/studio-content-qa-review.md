@@ -249,6 +249,27 @@ Gate A (CDN publish) and Gate B (`isActive`) are unchanged — see `docs/studio-
 
 ---
 
+## 5a. Auto-clear when selected take changes
+
+Content QA sign-off is for the **current selected audio experience**. When a scenario’s selected take changes, Studio clears Content QA for that scenario so the `qa` chip returns to `qa —` until someone checks the scene off again.
+
+| | |
+|---|---|
+| **Trigger** | Real change of `tts_project.selected_variant_id` for a scenario-backed project (`source_scenario_id` set) |
+| **What clears** | `dialogue_reviewed_at` and `quiz_reviewed_at` only (same as `checkedOff: false`) |
+| **What stays** | `review_note` / `reviewed_by` (unchanged — matches the granular clear API) |
+| **No-op** | Re-selecting the **same** take id; ad-hoc TTS projects with no scenario; no Content QA row yet |
+| **Not this** | Studio take Review (`reviewedAt` / Review queue) — unchanged |
+
+**Write paths that fire the clear:**
+
+1. `POST /api/tts/projects/:id/variants/:variantId/select` — “Use this take” (variant list, Review queue, ambience mix when selecting).
+2. `DELETE /api/tts/projects/:id/variants/:variantId` — only when the deleted take **was** the selected one (selection → `null`).
+
+Both go through `setProjectSelectedTake` → `clearContentQaIfSelectedTakeChanged`. Generating a new take does **not** auto-select and therefore does **not** clear QA until an explicit select (or delete of the selected take).
+
+---
+
 ## 6. Repo anchors
 
 | Area | Path |
@@ -257,6 +278,7 @@ Gate A (CDN publish) and Gate B (`isActive`) are unchanged — see `docs/studio-
 | Schema / migration | `webapp/lib/db/schema.ts`, `webapp/drizzle/0011_dialogue_scenario_content_qa.sql` |
 | Zod + status helpers | `webapp/lib/dialogue/content-qa.ts` |
 | Persistence | `webapp/lib/dialogue/content-qa-store.ts` |
+| Selected-take write + QA invalidate | `webapp/lib/tts/selected-take.ts` (`setProjectSelectedTake`) |
 | Granular client API | `webapp/app/api/client/content-qa/dialogues/.../route.ts` |
 | Studio list + seed | `webapp/app/api/content/content-qa/...` |
 | Chip wiring | `scenario-readiness.ts`, `scenario-readiness-chips.tsx`, `load-scenario-readiness.ts` |

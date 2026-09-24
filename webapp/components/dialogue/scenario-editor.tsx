@@ -34,6 +34,7 @@ import { QuizEditor } from "@/components/dialogue/quiz-editor";
 import { ScenarioAudioPanel } from "@/components/dialogue/scenario-audio-panel";
 import { ScenarioAuditPanel } from "@/components/dialogue/scenario-audit-panel";
 import { ScenarioMinimap } from "@/components/dialogue/scenario-minimap";
+import { SourceScriptPanel } from "@/components/dialogue/source-script-panel";
 import {
   hasSpokenJapanese,
   type AuditScenarioResult,
@@ -953,38 +954,14 @@ export function ScenarioEditor({
           <ScenarioMinimap sections={SECTIONS} onSelect={scrollToSection} />
         </TabsContent>
 
-        <TabsContent value="source" className="flex flex-col gap-3 pt-4">
-          <Textarea
-            rows={24}
+        <TabsContent value="source" className="pt-4">
+          <SourceScriptPanel
             value={sourceScriptText}
-            onChange={(e) => setSourceScriptText(e.target.value)}
-            className="font-mono text-xs"
-            placeholder="Paste the Claude .md Hana used to populate this scene. Copy it back when you want revisions."
-            spellCheck={false}
+            onChange={setSourceScriptText}
+            onCopy={() => void copySourceScript()}
+            onSave={() => saveSourceScriptMutation.mutate()}
+            isSaving={saveSourceScriptMutation.isPending}
           />
-          {!sourceScriptText.trim() && (
-            <p className="text-sm text-muted-foreground">
-              Paste the Claude `.md` Hana used to populate this scene. Copy it
-              back when you want revisions.
-            </p>
-          )}
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void copySourceScript()}
-              disabled={!sourceScriptText}
-            >
-              Copy
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => saveSourceScriptMutation.mutate()}
-              disabled={saveSourceScriptMutation.isPending}
-            >
-              Save
-            </Button>
-          </div>
         </TabsContent>
 
         <TabsContent value="raw" className="flex flex-col gap-3 pt-4">

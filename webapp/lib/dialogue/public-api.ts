@@ -12,6 +12,7 @@ import {
   type ExportableScenario,
 } from "@/lib/dialogue/export";
 import { learnerTokenSyncForPublishedTake } from "@/lib/dialogue/publish-lockstep";
+import { estimatedWavDurationSeconds } from "@/lib/dialogue/token-sync";
 import { isPublishedR2Configured } from "@/lib/storage/published-r2";
 import { clampAmbienceGainDb, layersFromScenario } from "@/lib/tts/ambience";
 import { publishedAmbiencePublicUrl } from "@/lib/tts/published-ambience-url";
@@ -147,7 +148,7 @@ export async function toLearnerExportableScenarios(
     const variant = scenario.publishedVariantId
       ? variantById.get(scenario.publishedVariantId)
       : undefined;
-    return toExportableScenario({
+    const exported = toExportableScenario({
       ...scenario,
       tokenSync: learnerTokenSyncForPublishedTake({
         storedTokenSync: scenario.tokenSync,
@@ -168,6 +169,18 @@ export async function toLearnerExportableScenarios(
         lines: scenario.lines,
       }),
     });
+    // Published-take length (trimmed WAV). Same figure Studio stores on
+    // tts_export.duration_seconds when that take is exported — derived here
+    // so publish does not require a Studio download row. Never use ambience
+    // bed duration_seconds.
+    let durationSeconds: number | null = null;
+    if (scenario.publishedAudioUrl && variant) {
+      const seconds = estimatedWavDurationSeconds(variant);
+      if (Number.isFinite(seconds) && seconds > 0) {
+        durationSeconds = seconds;
+      }
+    }
+    return { ...exported, durationSeconds };
   });
 }
 
@@ -208,15 +221,26 @@ export async function getPublicDialogueCollectionFile(collectionId: string) {
   });
   if (!collection || !collection.isActive) return null;
 
-  const scenarios = await db.query.dialogueScenario.findMany({
-    where: eq(dialogueScenario.collectionId, collectionId),
-    orderBy: [asc(dialogueScenario.orderIndex)],
-  });
+  const [scenarios, unit] = await Promise.all([
+    db.query.dialogueScenario.findMany({
+      where: eq(dialogueScenario.collectionId, collectionId),
+      orderBy: [asc(dialogueScenario.orderIndex)],
+    }),
+    collection.unitId
+      ? db.query.curriculumUnit.findFirst({
+          where: eq(curriculumUnit.id, collection.unitId),
+          columns: { id: true, title: true, jlptLevel: true },
+        })
+      : Promise.resolve(null),
+  ]);
 
   const exportableCollection: ExportableCollection = {
     id: collection.id,
     title: collection.title,
     subtitle: collection.subtitle,
+    unitId: collection.unitId,
+    unitTitle: unit?.title ?? null,
+    jlptLevel: unit?.jlptLevel ?? null,
     sceneImage: collection.sceneImage,
     thumbnailUrl: collection.thumbnailUrl,
     thumbnailSmallUrl: collection.thumbnailSmallUrl,

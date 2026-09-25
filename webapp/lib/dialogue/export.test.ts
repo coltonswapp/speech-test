@@ -148,3 +148,70 @@ describe("buildScenarioFile sourceScript export", () => {
     assert.equal(JSON.stringify(collection).includes("sourceScript"), false);
   });
 });
+
+describe("buildScenarioFile durationSeconds export", () => {
+  it("ships per-scene durationSeconds from the published take", () => {
+    const file = buildScenarioFile(baseScenario({ durationSeconds: 56.2 }));
+    assert.equal(file.durationSeconds, 56.2);
+
+    const parsed = collectionFileSchema.parse(
+      buildCollectionFile(
+        {
+          id: "ball-game",
+          title: "Ball game",
+          subtitle: "A short lesson summary for the iOS lesson screen.",
+          unitId: "settling-in",
+          unitTitle: "Settling In",
+          jlptLevel: 4,
+          sceneImage: null,
+          thumbnailUrl: null,
+          thumbnailSmallUrl: null,
+        },
+        [baseScenario({ durationSeconds: 56.2 })]
+      )
+    );
+    assert.equal(parsed.subtitle, "A short lesson summary for the iOS lesson screen.");
+    assert.equal(parsed.unitId, "settling-in");
+    assert.equal(parsed.unitTitle, "Settling In");
+    assert.equal(parsed.jlptLevel, 4);
+    assert.equal(parsed.scenarios[0]?.durationSeconds, 56.2);
+  });
+
+  it("omits durationSeconds when missing or non-positive", () => {
+    for (const durationSeconds of [null, undefined, 0, -1] as const) {
+      const file = buildScenarioFile(baseScenario({ durationSeconds }));
+      assert.equal(file.durationSeconds, undefined);
+      assert.equal(JSON.stringify(file).includes("durationSeconds"), false);
+    }
+  });
+});
+
+describe("buildCollectionFile subtitle and unit export", () => {
+  it("keeps subtitle and omits unit keys when the lesson is unfiled", () => {
+    const parsed = collectionFileSchema.parse(
+      buildCollectionFile(
+        {
+          id: "ball-game",
+          title: "Ball game",
+          subtitle: "Cheer along at the game.",
+          unitId: null,
+          unitTitle: null,
+          jlptLevel: null,
+          sceneImage: null,
+          thumbnailUrl: null,
+          thumbnailSmallUrl: null,
+        },
+        [baseScenario()]
+      )
+    );
+    assert.equal(parsed.subtitle, "Cheer along at the game.");
+    assert.equal(parsed.unitId, undefined);
+    assert.equal(parsed.unitTitle, undefined);
+    assert.equal(parsed.jlptLevel, undefined);
+    const json = JSON.stringify(parsed);
+    assert.equal(json.includes("unitId"), false);
+    assert.equal(json.includes("unitTitle"), false);
+    assert.equal(json.includes("jlptLevel"), false);
+    assert.equal(json.includes("premise"), false);
+  });
+});

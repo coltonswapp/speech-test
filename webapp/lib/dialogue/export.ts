@@ -17,6 +17,11 @@ export type ExportableCollection = {
   id: string;
   title: string;
   subtitle: string | null;
+  /** Curriculum unit this lesson is filed under; null/absent = unfiled. */
+  unitId?: string | null;
+  unitTitle?: string | null;
+  /** 5 = N5 … 1 = N1; null/absent when unfiled. */
+  jlptLevel?: number | null;
   sceneImage: string | null;
   thumbnailUrl: string | null;
   thumbnailSmallUrl: string | null;
@@ -39,6 +44,13 @@ export type ExportableScenario = {
   ambienceId?: string | null;
   ambienceUrl?: string | null;
   ambienceGainDb?: number | null;
+  /**
+   * Trimmed published-take length in seconds (dialogue audio, not ambience).
+   * Derived from the published variant's WAV byte count + trim bounds — the
+   * same length Studio records on `tts_export.duration_seconds` when exporting
+   * that take. Null/absent when unpublished or the take is missing.
+   */
+  durationSeconds?: number | null;
   grammarPointIds: string[];
   setting: string | null;
   thumbnailUrl: string | null;
@@ -159,6 +171,12 @@ export function buildScenarioFile(scenario: ExportableScenario): ScenarioFile {
     ambienceUrl: scenario.ambienceUrl ?? undefined,
     ambienceGainDb:
       scenario.ambienceGainDb == null ? undefined : scenario.ambienceGainDb,
+    durationSeconds:
+      scenario.durationSeconds != null &&
+      Number.isFinite(scenario.durationSeconds) &&
+      scenario.durationSeconds > 0
+        ? scenario.durationSeconds
+        : undefined,
     scenario: {
       setting: scenario.setting ?? undefined,
       lines: lines.map((line, index) => exportLine(line, scenario.id, index)),
@@ -183,6 +201,10 @@ export function buildCollectionFile(
     id: collection.id,
     title: collection.title,
     subtitle: collection.subtitle ?? undefined,
+    unitId: collection.unitId ?? undefined,
+    unitTitle: collection.unitTitle ?? undefined,
+    jlptLevel:
+      collection.jlptLevel == null ? undefined : collection.jlptLevel,
     sceneImage: collection.sceneImage ?? undefined,
     thumbnailUrl: collection.thumbnailUrl ?? undefined,
     thumbnailSmallUrl: collection.thumbnailSmallUrl ?? undefined,

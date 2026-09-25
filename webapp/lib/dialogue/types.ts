@@ -340,6 +340,8 @@ export const scenarioFileSchema = z.object({
   ambienceId: z.string().optional(),
   ambienceUrl: z.string().url().optional(),
   ambienceGainDb: z.number().optional(),
+  // Trimmed published-take length in seconds (not the looping ambience bed).
+  durationSeconds: z.number().positive().optional(),
   grammarPointIDs: z.array(z.string()).optional(),
   // Per-scenario CDN thumbnail; absent → the app uses the collection's.
   thumbnailUrl: z.string().url().optional(),
@@ -355,6 +357,11 @@ export const collectionFileSchema = z.object({
   id: z.string(),
   title: z.string(),
   subtitle: z.string().optional(),
+  // Curriculum filing — omitted when the lesson is unfiled.
+  unitId: z.string().optional(),
+  unitTitle: z.string().optional(),
+  // 5 = N5 … 1 = N1; omitted when unfiled.
+  jlptLevel: z.number().int().min(1).max(5).optional(),
   sceneImage: z.string().optional(),
   thumbnailUrl: z.string().url().optional(),
   thumbnailSmallUrl: z.string().url().optional(),

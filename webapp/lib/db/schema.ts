@@ -116,6 +116,54 @@ export const voicePreview = pgTable(
   (t) => [uniqueIndex("voice_preview_provider_voice_idx").on(t.provider, t.voice)]
 );
 
+// Studio notes + gender for TTS casting (Gemini-first). Seeded from the
+// voice catalog on list; pitch/breathiness/etc. axes can land later.
+export const ttsVoiceProfile = pgTable(
+  "tts_voice_profile",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    provider: text("provider").notNull(), // gemini
+    voice: text("voice").notNull(),
+    gender: text("gender").notNull().default("unknown"), // female|male|neutral|unknown
+    notes: text("notes").notNull().default(""),
+  },
+  (t) => [
+    uniqueIndex("tts_voice_profile_provider_voice_idx").on(t.provider, t.voice),
+  ]
+);
+
+// Same-gender cast distinguishability. voice_a < voice_b lexicographically.
+export const ttsVoicePairRating = pgTable(
+  "tts_voice_pair_rating",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    provider: text("provider").notNull(), // gemini
+    voiceA: text("voice_a").notNull(),
+    voiceB: text("voice_b").notNull(),
+    rating: text("rating").notNull(), // green|yellow|red
+    notes: text("notes"),
+  },
+  (t) => [
+    uniqueIndex("tts_voice_pair_rating_provider_voices_idx").on(
+      t.provider,
+      t.voiceA,
+      t.voiceB
+    ),
+  ]
+);
+
 export const ttsExport = pgTable("tts_export", {
   id: uuid("id").primaryKey().defaultRandom(),
   variantId: uuid("variant_id")

@@ -184,6 +184,30 @@ export type VoicePreview = {
   sampleRate: number;
 };
 
+export type VoiceGender = "female" | "male" | "neutral" | "unknown";
+export type PairRatingValue = "green" | "yellow" | "red";
+
+export type TtsVoiceProfile = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  provider: string;
+  voice: string;
+  gender: VoiceGender;
+  notes: string;
+};
+
+export type TtsVoicePairRating = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  provider: string;
+  voiceA: string;
+  voiceB: string;
+  rating: PairRatingValue;
+  notes: string | null;
+};
+
 export type AmbienceAsset = {
   id: string;
   createdAt: string;
@@ -323,6 +347,40 @@ export const ttsApi = {
     ),
   listVoicePreviews: () =>
     request<{ previews: VoicePreview[] }>("/api/tts/voice-previews"),
+  listVoiceProfiles: (provider = "gemini") =>
+    request<{ profiles: TtsVoiceProfile[] }>(
+      `/api/tts/voices?provider=${encodeURIComponent(provider)}`
+    ),
+  updateVoiceProfile: (
+    id: string,
+    body: { gender?: VoiceGender; notes?: string }
+  ) =>
+    request<{ profile: TtsVoiceProfile }>(`/api/tts/voices/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  listVoicePairRatings: (opts?: {
+    provider?: string;
+    gender?: VoiceGender;
+  }) => {
+    const params = new URLSearchParams();
+    params.set("provider", opts?.provider ?? "gemini");
+    if (opts?.gender) params.set("gender", opts.gender);
+    return request<{ ratings: TtsVoicePairRating[] }>(
+      `/api/tts/voices/pairs?${params.toString()}`
+    );
+  },
+  upsertVoicePairRating: (body: {
+    provider?: string;
+    voiceA: string;
+    voiceB: string;
+    rating: PairRatingValue | null;
+    notes?: string | null;
+  }) =>
+    request<{ rating: TtsVoicePairRating | null }>("/api/tts/voices/pairs", {
+      method: "PUT",
+      body: JSON.stringify({ provider: "gemini", ...body }),
+    }),
   listAmbience: () => request<{ assets: AmbienceAsset[] }>("/api/tts/ambience"),
   uploadAmbience: async (params: { file: File; title: string; kind: string }) => {
     const formData = new FormData();

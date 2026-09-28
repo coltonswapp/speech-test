@@ -611,10 +611,10 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
             <img
               src={collection.thumbnailUrl}
               alt={`${collection.title} thumbnail`}
-              className="h-40 w-full max-w-sm rounded-md border object-cover"
+              className="h-40 w-full max-w-sm rounded-md border bg-muted/30 object-cover md:h-72 md:max-w-2xl md:object-contain"
             />
           ) : (
-            <div className="flex h-40 max-w-sm items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+            <div className="flex h-40 max-w-sm items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground md:h-72 md:max-w-2xl">
               No thumbnail yet
             </div>
           )}
@@ -701,7 +701,7 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
                 src={scenario.thumbnailUrl}
                 alt=""
                 title="Has its own thumbnail"
-                className="size-9 shrink-0 rounded border object-cover"
+                className="size-9 shrink-0 rounded border object-cover md:size-20 lg:size-24"
               />
             )}
             <div className="flex min-w-0 flex-1 flex-col">

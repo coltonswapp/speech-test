@@ -750,22 +750,22 @@ export function ScenarioEditor({
                   <img
                     src={draft.thumbnailUrl}
                     alt={`${draft.menuTitle} thumbnail`}
-                    className="h-40 w-full max-w-sm rounded-md border object-cover"
+                    className="h-40 w-full max-w-sm rounded-md border bg-muted/30 object-cover md:h-72 md:max-w-2xl md:object-contain"
                   />
                 ) : collectionThumbnailUrl ? (
-                  <div className="flex max-w-sm flex-col gap-1">
+                  <div className="flex max-w-sm flex-col gap-1 md:max-w-2xl">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={collectionThumbnailUrl}
                       alt="Inherited lesson thumbnail"
-                      className="h-40 w-full rounded-md border object-cover opacity-70"
+                      className="h-40 w-full rounded-md border bg-muted/30 object-cover opacity-70 md:h-72 md:object-contain"
                     />
                     <p className="text-xs text-muted-foreground">
                       Showing the lesson thumbnail the app will use.
                     </p>
                   </div>
                 ) : (
-                  <div className="flex h-40 max-w-sm items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+                  <div className="flex h-40 max-w-sm items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground md:h-72 md:max-w-2xl">
                     No thumbnail — the lesson has none either
                   </div>
                 )}

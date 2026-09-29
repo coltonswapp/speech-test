@@ -25,10 +25,13 @@ import {
   dismissReviewTake,
   readReviewDismissals,
   readReviewExpanded,
+  readReviewRetained,
+  retainReviewTake,
   undismissReviewTake,
   writeReviewDismissals,
   writeReviewExpanded,
   type ReviewDismissals,
+  type ReviewRetainedTakes,
 } from "@/lib/studio/nav-persistence";
 import { ttsApi, type ReviewQueueResult } from "@/lib/tts/client";
 import type { TokenSyncFlag } from "@/lib/dialogue/types";
@@ -133,6 +136,42 @@ function groupTakesByLesson(takes: Take[]): LessonGroup[] {
     });
   }
   return groups;
+}
+
+/** Clear amber QA flags on a queue card after Approve / Publish (take stays listed). */
+function withFlagsCleared(
+  take: Take,
+  patch?: Partial<Pick<Take, "isPublishedTake" | "isSelectedTake">>,
+): Take {
+  const reviewedAt =
+    take.timing?.reviewedAt ?? new Date().toISOString();
+  return {
+    ...take,
+    ...patch,
+    flagCount: 0,
+    flagsByCode: {},
+    flaggedLines: [],
+    lines: take.lines.map((line) => ({
+      ...line,
+      tokens: line.tokens.map((token) => ({ ...token, codes: [] })),
+    })),
+    timing: {
+      ...(take.timing ?? {}),
+      reviewedAt,
+    },
+  };
+}
+
+function isRetainedTakeSnapshot(value: unknown): value is Take {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.variantId === "string" &&
+    typeof v.projectId === "string" &&
+    typeof v.title === "string" &&
+    typeof v.flagCount === "number" &&
+    Array.isArray(v.lines)
+  );
 }
 
 function PipelineSteps({ take }: { take: Take }) {
@@ -472,18 +511,15 @@ function SiblingTakeChips({ take }: { take: Take }) {
 
 function TakeCard({
   take,
-  nextTitle,
-  exiting,
   onInteract,
   onDismiss,
-  onLeaveQueue,
+  onKeepInQueue,
 }: {
   take: Take;
-  nextTitle?: string | null;
-  exiting?: boolean;
   onInteract?: () => void;
   onDismiss: (variantId: string) => void;
-  onLeaveQueue: (variantId: string) => void;
+  /** After Approve / Publish: keep the take visible until explicit Remove. */
+  onKeepInQueue: (take: Take) => void;
 }) {
   const queryClient = useQueryClient();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -513,6 +549,7 @@ function TakeCard({
   const path = placementPath(take);
   const scenePos = scenePositionLabel(take);
   const curriculumLink = curriculumHref(take);
+  const alreadyApproved = take.flagCount === 0 && !!take.timing?.reviewedAt;
 
   useEffect(() => {
     return () => {
@@ -564,14 +601,26 @@ function TakeCard({
   const approveMutation = useMutation({
     mutationFn: () => ttsApi.markReviewed(take.projectId, take.variantId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
-      const nextBit = nextTitle ? ` Next: ${nextTitle}.` : "";
-      toast.success(`Approved — flags cleared.${nextBit}`, {
+      const cleared = withFlagsCleared(take);
+      onKeepInQueue(cleared);
+      queryClient.setQueryData<ReviewQueueResult>(
+        ["tts-review-queue"],
+        (prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            takes: prev.takes.map((row) =>
+              row.variantId === cleared.variantId ? cleared : row,
+            ),
+          };
+        },
+      );
+      void queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
+      toast.success("Approved — flags cleared.", {
         description:
-          "Take left the review queue. Does not publish or change lesson visibility.",
+          "Still in the review queue until you Remove it. Does not publish or change lesson visibility.",
         duration: 4500,
       });
-      onLeaveQueue(take.variantId);
       onInteract?.();
     },
     onError: (error) => toast.error(error.message),
@@ -580,7 +629,8 @@ function TakeCard({
   /**
    * Gate A only: select take → publish scenario audio to DB/CDN → mark reviewed.
    * Never flips lesson `isActive` (Gate B).
-   * Publish runs before mark-reviewed so a failed Gate A keeps the take in queue.
+   * Publish runs before mark-reviewed so a failed Gate A keeps flags intact.
+   * Does not remove the take from the queue — use Remove for that.
    */
   const publishAndCompleteMutation = useMutation({
     mutationFn: async () => {
@@ -598,25 +648,40 @@ function TakeCard({
       return published;
     },
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
+      const cleared = withFlagsCleared(take, {
+        isPublishedTake: true,
+        isSelectedTake: true,
+      });
+      onKeepInQueue(cleared);
+      queryClient.setQueryData<ReviewQueueResult>(
+        ["tts-review-queue"],
+        (prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            takes: prev.takes.map((row) =>
+              row.variantId === cleared.variantId ? cleared : row,
+            ),
+          };
+        },
+      );
+      void queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
       queryClient.invalidateQueries({ queryKey: ["dialogue-collections"] });
       queryClient.invalidateQueries({ queryKey: ["dialogue-collection"] });
       queryClient.invalidateQueries({ queryKey: ["dialogue-scenario"] });
       queryClient.invalidateQueries({
         queryKey: ["dialogue-collection-audio-status"],
       });
-      const nextBit = nextTitle ? ` Next: ${nextTitle}.` : "";
       toast.success(
         result.hasTokenKaraoke
-          ? `Published to database with karaoke · complete.${nextBit}`
-          : `Published to database · complete.${nextBit}`,
+          ? "Published to database with karaoke · flags cleared."
+          : "Published to database · flags cleared.",
         {
           description:
-            "Gate A only — lesson visibility (Gate B) unchanged. Flags cleared.",
+            "Gate A only — lesson visibility (Gate B) unchanged. Still in the review queue until you Remove it.",
           duration: 5000,
         },
       );
-      onLeaveQueue(take.variantId);
       onInteract?.();
     },
     onError: (error) => toast.error(error.message),
@@ -813,12 +878,7 @@ function TakeCard({
     approveMutation.isPending || publishAndCompleteMutation.isPending;
 
   return (
-    <Card
-      className={cn(
-        "transition-all duration-300 ease-out",
-        exiting && "pointer-events-none scale-[0.98] opacity-0",
-      )}
-    >
+    <Card>
       <CardHeader className="gap-2">
         <CardTitle className="flex flex-wrap items-center gap-2 text-base">
           <Link href={href} className="underline-offset-4 hover:underline">
@@ -845,7 +905,9 @@ function TakeCard({
             )}
           >
             {queueLines.length === 0
-              ? "no flags"
+              ? alreadyApproved
+                ? "approved"
+                : "no flags"
               : allLinesChecked
                 ? "all lines checked"
                 : checkedCount === 0
@@ -923,11 +985,19 @@ function TakeCard({
             size="sm"
             variant="outline"
             className="min-h-11 touch-manipulation border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 md:min-h-8"
-            disabled={actionBusy}
+            disabled={actionBusy || alreadyApproved}
             onClick={() => approveMutation.mutate()}
-            title="Clear flags and leave the queue. Does not select, publish, or change lesson visibility."
+            title={
+              alreadyApproved
+                ? "Flags already cleared — Remove from queue when you are done with this take"
+                : "Clear flags and mark reviewed. Stays in the queue until you Remove it. Does not select, publish, or change lesson visibility."
+            }
           >
-            {approveMutation.isPending ? "Approving…" : "Approve (clear flags)"}
+            {approveMutation.isPending
+              ? "Approving…"
+              : alreadyApproved
+                ? "Approved"
+                : "Approve (clear flags)"}
           </Button>
           <Button
             type="button"
@@ -938,7 +1008,7 @@ function TakeCard({
             onClick={() => publishAndCompleteMutation.mutate()}
             title={
               canPublishAndComplete
-                ? "Select this take, publish audio to the database (Gate A), then clear flags. Does not make the lesson visible to learners (Gate B)."
+                ? "Select this take, publish audio to the database (Gate A), then clear flags. Stays in the queue until you Remove it. Does not make the lesson visible to learners (Gate B)."
                 : "Needs a linked dialogue scene and take audio"
             }
           >
@@ -956,7 +1026,7 @@ function TakeCard({
             className="min-h-11 touch-manipulation text-muted-foreground md:min-h-8"
             disabled={actionBusy}
             onClick={() => onDismiss(take.variantId)}
-            title="Hide from this queue without approving. Persists in this browser until you undo or clear dismissals."
+            title="Hide from this queue. Persists in this browser until you undo or clear dismissals. Does not change flags, publish, or lesson visibility."
           >
             <EyeOff className="size-3.5" />
             <span className="ml-1.5">Remove from queue</span>
@@ -969,14 +1039,15 @@ function TakeCard({
           </Link>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground/80">Approve</span> only
-          clears flags.{" "}
+          <span className="font-medium text-foreground/80">Approve</span> clears
+          flags only — take stays here until{" "}
+          <span className="font-medium text-foreground/80">Remove</span>.{" "}
           <span className="font-medium text-foreground/80">
             Publish to database
           </span>{" "}
           is Gate A (CDN + DB) — never flips learner visibility.{" "}
-          <span className="font-medium text-foreground/80">Remove</span> hides
-          this take here without approving; undo from the toast.
+          <span className="font-medium text-foreground/80">Remove</span> is the
+          only way to leave this queue; undo from the toast.
         </p>
         {playingTake && take.lines.length > 0 && (
           <TakeKaraoke
@@ -1030,19 +1101,15 @@ function LessonGroupSection({
   expanded,
   onToggle,
   onInteract,
-  exitingIds,
   onDismiss,
-  onLeaveQueue,
-  nextTitleFor,
+  onKeepInQueue,
 }: {
   group: LessonGroup;
   expanded: boolean;
   onToggle: () => void;
   onInteract: () => void;
-  exitingIds: Set<string>;
   onDismiss: (variantId: string) => void;
-  onLeaveQueue: (variantId: string) => void;
-  nextTitleFor: (variantId: string) => string | null;
+  onKeepInQueue: (take: Take) => void;
 }) {
   const waiting = group.takes.length;
   const jlpt = jlptLabel(group.jlptLevel);
@@ -1096,11 +1163,9 @@ function LessonGroupSection({
             <TakeCard
               key={take.variantId}
               take={take}
-              nextTitle={nextTitleFor(take.variantId)}
-              exiting={exitingIds.has(take.variantId)}
               onInteract={onInteract}
               onDismiss={onDismiss}
-              onLeaveQueue={onLeaveQueue}
+              onKeepInQueue={onKeepInQueue}
             />
           ))}
         </div>
@@ -1121,32 +1186,52 @@ export function ReviewQueue() {
   const [dismissals, setDismissals] = useState<ReviewDismissals>(() =>
     readReviewDismissals(),
   );
-  const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
-  const [hiddenAfterExit, setHiddenAfterExit] = useState<Set<string>>(
-    () => new Set(),
+  // Approved/published takes the API drops once flags clear — keep until Remove.
+  const [retained, setRetained] = useState<ReviewRetainedTakes>(() =>
+    readReviewRetained(),
   );
 
+  const apiTakes = data?.takes ?? [];
+
+  // Prefer live API rows; retained approved snapshots fill gaps and win over
+  // a stale flagged API row during the post-approve refetch window.
+  const mergedById = useMemo(() => {
+    const byId = new Map<string, Take>();
+    for (const take of apiTakes) {
+      byId.set(take.variantId, take);
+    }
+    for (const [id, snap] of Object.entries(retained)) {
+      if (!isRetainedTakeSnapshot(snap)) continue;
+      const existing = byId.get(id);
+      if (
+        !existing ||
+        (snap.flagCount === 0 && existing.flagCount > 0)
+      ) {
+        byId.set(id, snap);
+      }
+    }
+    return byId;
+  }, [apiTakes, retained]);
+
   const incomingIds = useMemo(
-    () => (data?.takes ?? []).map((take) => take.variantId).join("\0"),
-    [data?.takes],
+    () => [...mergedById.keys()].sort().join("\0"),
+    [mergedById],
   );
 
   useEffect(() => {
-    const incoming = data?.takes ?? [];
-    if (incoming.length === 0) {
+    if (mergedById.size === 0) {
       // Session order freeze: keep cards stable while flags/local checks change.
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional queue order lock
       setStableOrder([]);
       return;
     }
     setStableOrder((prev) => {
-      const byId = new Set(incoming.map((take) => take.variantId));
       const next: string[] = [];
       for (const id of prev) {
-        if (byId.has(id)) next.push(id);
+        if (mergedById.has(id)) next.push(id);
       }
-      for (const take of incoming) {
-        if (!next.includes(take.variantId)) next.push(take.variantId);
+      for (const id of mergedById.keys()) {
+        if (!next.includes(id)) next.push(id);
       }
       if (
         next.length === prev.length &&
@@ -1161,29 +1246,13 @@ export function ReviewQueue() {
   }, [incomingIds]);
 
   const takes = useMemo(() => {
-    const byId = new Map((data?.takes ?? []).map((take) => [take.variantId, take]));
     return stableOrder
-      .map((id) => byId.get(id))
+      .map((id) => mergedById.get(id))
       .filter((take): take is Take => take != null)
-      .filter(
-        (take) =>
-          !dismissals[take.variantId] && !hiddenAfterExit.has(take.variantId),
-      );
-  }, [data?.takes, stableOrder, dismissals, hiddenAfterExit]);
+      .filter((take) => !dismissals[take.variantId]);
+  }, [mergedById, stableOrder, dismissals]);
 
   const lessonGroups = useMemo(() => groupTakesByLesson(takes), [takes]);
-
-  const flatIds = useMemo(
-    () => takes.map((take) => take.variantId),
-    [takes],
-  );
-
-  function nextTitleFor(variantId: string): string | null {
-    const idx = flatIds.indexOf(variantId);
-    if (idx < 0) return null;
-    const next = takes[idx + 1];
-    return next?.title ?? null;
-  }
 
   // Default expand: lessons with any opened take, else the first lesson only.
   // Remember expand preference across Review ↔ editor navigation.
@@ -1223,12 +1292,16 @@ export function ReviewQueue() {
     persistExpanded(base);
   }
 
+  function handleKeepInQueue(take: Take) {
+    setRetained((prev) => retainReviewTake(take.variantId, take, prev));
+  }
+
   function handleDismiss(variantId: string) {
     const next = dismissReviewTake(variantId, dismissals);
     setDismissals(next);
     toast.message("Removed from review queue", {
       description:
-        "Hidden in this browser only — flags stay. Does not approve or publish.",
+        "Hidden in this browser only. Does not change flags, publish, or lesson visibility.",
       duration: 6000,
       action: {
         label: "Undo",
@@ -1237,18 +1310,6 @@ export function ReviewQueue() {
         },
       },
     });
-  }
-
-  function handleLeaveQueue(variantId: string) {
-    setExitingIds((prev) => new Set(prev).add(variantId));
-    window.setTimeout(() => {
-      setHiddenAfterExit((prev) => new Set(prev).add(variantId));
-      setExitingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(variantId);
-        return next;
-      });
-    }, 320);
   }
 
   function clearDismissals() {
@@ -1283,16 +1344,15 @@ export function ReviewQueue() {
       <div>
         <h1 className="text-xl font-semibold">Review queue</h1>
         <p className="text-sm text-muted-foreground">
-          Auto-stamped takes that still have flags. Pipeline: Staged → In
-          database (Gate A) → Client-visible (Gate B).{" "}
+          Auto-stamped takes awaiting review. Pipeline: Staged → In database
+          (Gate A) → Client-visible (Gate B).{" "}
           <span className="font-medium text-foreground">Approve</span> clears
-          flags only.{" "}
+          flags only — the scene stays here until{" "}
+          <span className="font-medium text-foreground">Remove from queue</span>.{" "}
           <span className="font-medium text-foreground">
             Publish to database
           </span>{" "}
-          lands Gate A and clears flags — never flips lesson visibility.{" "}
-          <span className="font-medium text-foreground">Remove from queue</span>{" "}
-          hides an item here without approving (undo from the toast). Per-line
+          lands Gate A and clears flags — never flips lesson visibility. Per-line
           checks are optional.
         </p>
         {dismissedCount > 0 && (
@@ -1325,10 +1385,8 @@ export function ReviewQueue() {
             expanded={effectiveExpanded.has(group.key)}
             onToggle={() => toggleGroup(group.key)}
             onInteract={() => keepGroupExpanded(group.key)}
-            exitingIds={exitingIds}
             onDismiss={handleDismiss}
-            onLeaveQueue={handleLeaveQueue}
-            nextTitleFor={nextTitleFor}
+            onKeepInQueue={handleKeepInQueue}
           />
         ))}
       </div>

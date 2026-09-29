@@ -7,6 +7,8 @@ const CURRICULUM_EXPANDED_KEY = "studio:curriculum:expanded";
 const CURRICULUM_JLPT_KEY = "studio:curriculum:jlpt";
 const REVIEW_EXPANDED_KEY = "studio:review-queue:expanded";
 const REVIEW_DISMISSED_KEY = "studio:review-queue:dismissed";
+/** Approved/published takes kept in the queue until explicit Remove. */
+const REVIEW_RETAINED_KEY = "studio:review-queue:retained";
 
 function readJson<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -92,5 +94,48 @@ export function undismissReviewTake(
   const next = { ...dismissals };
   delete next[variantId];
   writeReviewDismissals(next);
+  return next;
+}
+
+/**
+ * Takes kept visible after Approve / Publish (API drops them once flags clear).
+ * variantId → opaque take snapshot (ReviewQueueTake JSON). Filtered by dismissals
+ * on Remove; kept so Undo / Show again can restore approved cards.
+ */
+export type ReviewRetainedTakes = Record<string, unknown>;
+
+export function readReviewRetained(): ReviewRetainedTakes {
+  const parsed = readJson<unknown>(REVIEW_RETAINED_KEY, {});
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const out: ReviewRetainedTakes = {};
+  for (const [id, snap] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof id === "string" && snap && typeof snap === "object") {
+      out[id] = snap;
+    }
+  }
+  return out;
+}
+
+export function writeReviewRetained(retained: ReviewRetainedTakes) {
+  writeJson(REVIEW_RETAINED_KEY, retained);
+}
+
+export function retainReviewTake(
+  variantId: string,
+  snapshot: unknown,
+  retained: ReviewRetainedTakes = readReviewRetained(),
+): ReviewRetainedTakes {
+  const next = { ...retained, [variantId]: snapshot };
+  writeReviewRetained(next);
+  return next;
+}
+
+export function dropRetainedReviewTake(
+  variantId: string,
+  retained: ReviewRetainedTakes = readReviewRetained(),
+): ReviewRetainedTakes {
+  const next = { ...retained };
+  delete next[variantId];
+  writeReviewRetained(next);
   return next;
 }

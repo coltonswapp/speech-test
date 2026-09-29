@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
+  EyeOff,
   Pause,
   Play,
   Upload,
@@ -17,8 +18,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LessonPlaythroughButton } from "@/components/dialogue/lesson-playthrough";
 import { dialogueApi } from "@/lib/dialogue/client";
 import { derivePublishPipeline } from "@/lib/dialogue/publish-pipeline";
+import {
+  dismissReviewTake,
+  readReviewDismissals,
+  readReviewExpanded,
+  undismissReviewTake,
+  writeReviewDismissals,
+  writeReviewExpanded,
+  type ReviewDismissals,
+} from "@/lib/studio/nav-persistence";
 import { ttsApi, type ReviewQueueResult } from "@/lib/tts/client";
 import type { TokenSyncFlag } from "@/lib/dialogue/types";
 import { activeTokenIndexInLine } from "@/lib/dialogue/token-sync";
@@ -41,8 +52,36 @@ type LessonGroup = {
   collectionId: string | null;
   title: string;
   isActive: boolean | null;
+  unitTitle: string | null;
+  jlptLevel: number | null;
   takes: Take[];
 };
+
+function jlptLabel(level: number | null | undefined): string | null {
+  if (level === 5) return "N5";
+  if (level === 4) return "N4";
+  if (level === 3) return "N3";
+  if (level == null) return null;
+  return `N${level}`;
+}
+
+function placementPath(take: Take): string {
+  const parts: string[] = [];
+  const jlpt = jlptLabel(take.jlptLevel);
+  if (jlpt) parts.push(jlpt);
+  if (take.unitTitle) parts.push(take.unitTitle);
+  if (take.collectionTitle) parts.push(take.collectionTitle);
+  else if (take.collectionId) parts.push(take.collectionId);
+  return parts.join(" · ");
+}
+
+function scenePositionLabel(take: Take): string | null {
+  if (take.scenarioIndex != null && take.scenarioCount != null) {
+    return `Scene ${take.scenarioIndex} of ${take.scenarioCount}`;
+  }
+  if (take.scenarioIndex != null) return `Scene ${take.scenarioIndex}`;
+  return null;
+}
 
 function minutes(from?: string, to?: string): string | null {
   if (!from || !to) return null;
@@ -64,6 +103,14 @@ function editorHref(take: Take, lineIndex?: number): string {
   return `/tts/${take.projectId}?take=${take.variantId}${lineQs}`;
 }
 
+function curriculumHref(take: Take): string | null {
+  if (take.jlptLevel === 4 || take.jlptLevel === 3) {
+    return `/content/curriculum?jlpt=${take.jlptLevel}`;
+  }
+  if (take.jlptLevel === 5) return "/content/curriculum";
+  return take.unitId || take.collectionId ? "/content/curriculum" : null;
+}
+
 function groupTakesByLesson(takes: Take[]): LessonGroup[] {
   const groups: LessonGroup[] = [];
   const indexByKey = new Map<string, number>();
@@ -80,6 +127,8 @@ function groupTakesByLesson(takes: Take[]): LessonGroup[] {
       collectionId: take.collectionId,
       title: take.collectionTitle ?? take.collectionId ?? "Unlinked takes",
       isActive: take.collectionIsActive,
+      unitTitle: take.unitTitle,
+      jlptLevel: take.jlptLevel,
       takes: [take],
     });
   }
@@ -380,12 +429,61 @@ function TakeKaraoke({
   );
 }
 
+function SiblingTakeChips({ take }: { take: Take }) {
+  const takeCount = take.takeCount ?? 1;
+  const siblings = take.siblings ?? [];
+  if (takeCount <= 1) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] font-medium text-muted-foreground">
+        Take {take.takeIndex ?? 1} of {takeCount}
+      </span>
+      {siblings.map((sib) => {
+        const selected = sib.variantId === take.variantId;
+        const href =
+          take.collectionId && take.slug
+            ? `/content/dialogues/${take.collectionId}/${take.slug}?tab=audio&take=${sib.variantId}`
+            : `/tts/${take.projectId}?take=${sib.variantId}`;
+        const labels: string[] = [`Take ${sib.takeIndex}`];
+        if (sib.isPublishedTake) labels.push("published");
+        else if (sib.isSelectedTake) labels.push("selected");
+        if (sib.inQueue && !selected) labels.push("pending");
+        return (
+          <Link
+            key={sib.variantId}
+            href={href}
+            title={`${labels.join(" · ")} · ${sib.voice} · ${new Date(sib.createdAt).toLocaleString()}`}
+            className={cn(
+              "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] touch-manipulation",
+              selected
+                ? "border-foreground/40 bg-foreground text-background"
+                : sib.inQueue
+                  ? "border-amber-500/50 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                  : "border-border/60 text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {labels.join(" · ")}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 function TakeCard({
   take,
+  nextTitle,
+  exiting,
   onInteract,
+  onDismiss,
+  onLeaveQueue,
 }: {
   take: Take;
+  nextTitle?: string | null;
+  exiting?: boolean;
   onInteract?: () => void;
+  onDismiss: (variantId: string) => void;
+  onLeaveQueue: (variantId: string) => void;
 }) {
   const queryClient = useQueryClient();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -412,6 +510,9 @@ function TakeCard({
     take.slug &&
     hasAudioBytes
   );
+  const path = placementPath(take);
+  const scenePos = scenePositionLabel(take);
+  const curriculumLink = curriculumHref(take);
 
   useEffect(() => {
     return () => {
@@ -464,7 +565,13 @@ function TakeCard({
     mutationFn: () => ttsApi.markReviewed(take.projectId, take.variantId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
-      toast.success("Marked reviewed. Flags cleared.");
+      const nextBit = nextTitle ? ` Next: ${nextTitle}.` : "";
+      toast.success(`Approved — flags cleared.${nextBit}`, {
+        description:
+          "Take left the review queue. Does not publish or change lesson visibility.",
+        duration: 4500,
+      });
+      onLeaveQueue(take.variantId);
       onInteract?.();
     },
     onError: (error) => toast.error(error.message),
@@ -498,11 +605,18 @@ function TakeCard({
       queryClient.invalidateQueries({
         queryKey: ["dialogue-collection-audio-status"],
       });
+      const nextBit = nextTitle ? ` Next: ${nextTitle}.` : "";
       toast.success(
         result.hasTokenKaraoke
-          ? "Published to database with karaoke · marked complete. Lesson visibility unchanged."
-          : "Published to database · marked complete. Lesson visibility unchanged.",
+          ? `Published to database with karaoke · complete.${nextBit}`
+          : `Published to database · complete.${nextBit}`,
+        {
+          description:
+            "Gate A only — lesson visibility (Gate B) unchanged. Flags cleared.",
+          duration: 5000,
+        },
       );
+      onLeaveQueue(take.variantId);
       onInteract?.();
     },
     onError: (error) => toast.error(error.message),
@@ -699,16 +813,26 @@ function TakeCard({
     approveMutation.isPending || publishAndCompleteMutation.isPending;
 
   return (
-    <Card>
+    <Card
+      className={cn(
+        "transition-all duration-300 ease-out",
+        exiting && "pointer-events-none scale-[0.98] opacity-0",
+      )}
+    >
       <CardHeader className="gap-2">
         <CardTitle className="flex flex-wrap items-center gap-2 text-base">
           <Link href={href} className="underline-offset-4 hover:underline">
             {take.title}
           </Link>
-          {take.collectionId && (
-            <span className="text-xs font-normal text-muted-foreground">
-              {take.collectionId}
-            </span>
+          {scenePos && (
+            <Badge variant="outline" className="font-normal tabular-nums">
+              {scenePos}
+            </Badge>
+          )}
+          {take.takeCount > 1 && (
+            <Badge variant="secondary" className="font-normal tabular-nums">
+              Take {take.takeIndex ?? 1}/{take.takeCount}
+            </Badge>
           )}
           <Badge
             variant="outline"
@@ -744,6 +868,26 @@ function TakeCard({
               : ""}
           </span>
         </CardTitle>
+        {(path || curriculumLink) && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span>
+              {path || "Unfiled"}
+              {scenePos ? ` · ${scenePos}` : ""}
+            </span>
+            {curriculumLink && (
+              <Link
+                href={curriculumLink}
+                className="underline-offset-4 hover:underline"
+              >
+                Open Curriculum
+              </Link>
+            )}
+            <Link href={href} className="underline-offset-4 hover:underline">
+              Open in editor
+            </Link>
+          </div>
+        )}
+        <SiblingTakeChips take={take} />
         <PipelineSteps take={take} />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -781,9 +925,9 @@ function TakeCard({
             className="min-h-11 touch-manipulation border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 md:min-h-8"
             disabled={actionBusy}
             onClick={() => approveMutation.mutate()}
-            title="Mark take reviewed, clear flags, and leave the queue. Per-line checks are optional."
+            title="Clear flags and leave the queue. Does not select, publish, or change lesson visibility."
           >
-            {approveMutation.isPending ? "Approving…" : "Approve take"}
+            {approveMutation.isPending ? "Approving…" : "Approve (clear flags)"}
           </Button>
           <Button
             type="button"
@@ -794,7 +938,7 @@ function TakeCard({
             onClick={() => publishAndCompleteMutation.mutate()}
             title={
               canPublishAndComplete
-                ? "Select this take, publish audio to the database (Gate A), then mark reviewed. Does not make the lesson visible to learners."
+                ? "Select this take, publish audio to the database (Gate A), then clear flags. Does not make the lesson visible to learners (Gate B)."
                 : "Needs a linked dialogue scene and take audio"
             }
           >
@@ -802,8 +946,20 @@ function TakeCard({
             <span className="ml-1.5">
               {publishAndCompleteMutation.isPending
                 ? "Publishing…"
-                : "Publish & mark complete"}
+                : "Publish to database"}
             </span>
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="min-h-11 touch-manipulation text-muted-foreground md:min-h-8"
+            disabled={actionBusy}
+            onClick={() => onDismiss(take.variantId)}
+            title="Hide from this queue without approving. Persists in this browser until you undo or clear dismissals."
+          >
+            <EyeOff className="size-3.5" />
+            <span className="ml-1.5">Remove from queue</span>
           </Button>
           <Link
             href={href}
@@ -812,6 +968,16 @@ function TakeCard({
             Open in editor
           </Link>
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground/80">Approve</span> only
+          clears flags.{" "}
+          <span className="font-medium text-foreground/80">
+            Publish to database
+          </span>{" "}
+          is Gate A (CDN + DB) — never flips learner visibility.{" "}
+          <span className="font-medium text-foreground/80">Remove</span> hides
+          this take here without approving; undo from the toast.
+        </p>
         {playingTake && take.lines.length > 0 && (
           <TakeKaraoke
             lines={take.lines}
@@ -864,51 +1030,77 @@ function LessonGroupSection({
   expanded,
   onToggle,
   onInteract,
+  exitingIds,
+  onDismiss,
+  onLeaveQueue,
+  nextTitleFor,
 }: {
   group: LessonGroup;
   expanded: boolean;
   onToggle: () => void;
   onInteract: () => void;
+  exitingIds: Set<string>;
+  onDismiss: (variantId: string) => void;
+  onLeaveQueue: (variantId: string) => void;
+  nextTitleFor: (variantId: string) => string | null;
 }) {
   const waiting = group.takes.length;
+  const jlpt = jlptLabel(group.jlptLevel);
   return (
     <section className="flex flex-col gap-2 rounded-lg border border-border/60 bg-card/30 p-2 sm:p-3">
-      <button
-        type="button"
-        className="flex min-h-11 w-full items-center gap-2 rounded-md px-1 text-left touch-manipulation hover:bg-muted/40 md:min-h-9"
-        onClick={onToggle}
-        aria-expanded={expanded}
-      >
-        {expanded ? (
-          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">{group.title}</div>
-          <div className="text-[11px] text-muted-foreground">
-            {waiting} waiting
-            {group.collectionId ? ` · ${group.collectionId}` : ""}
-            {group.isActive === true
-              ? " · visible to learners"
-              : group.isActive === false
-                ? " · hidden from learners"
-                : ""}
+      <div className="flex items-start gap-1">
+        <button
+          type="button"
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-1 text-left touch-manipulation hover:bg-muted/40 md:min-h-9"
+          onClick={onToggle}
+          aria-expanded={expanded}
+        >
+          {expanded ? (
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">{group.title}</div>
+            <div className="text-[11px] text-muted-foreground">
+              {waiting} waiting
+              {jlpt ? ` · ${jlpt}` : ""}
+              {group.unitTitle ? ` · ${group.unitTitle}` : ""}
+              {group.collectionId ? ` · ${group.collectionId}` : ""}
+              {group.isActive === true
+                ? " · visible to learners"
+                : group.isActive === false
+                  ? " · hidden from learners"
+                  : ""}
+            </div>
           </div>
-        </div>
-        {!expanded && (
-          <Badge variant="secondary" className="shrink-0 tabular-nums">
-            {waiting}
-          </Badge>
+          {!expanded && (
+            <Badge variant="secondary" className="shrink-0 tabular-nums">
+              {waiting}
+            </Badge>
+          )}
+        </button>
+        {group.collectionId && (
+          <LessonPlaythroughButton
+            collectionId={group.collectionId}
+            lessonTitle={group.title}
+            variant="ghost"
+            label="Play lesson"
+            className="shrink-0"
+          />
         )}
-      </button>
+      </div>
       {expanded && (
         <div className="flex flex-col gap-3">
           {group.takes.map((take) => (
             <TakeCard
               key={take.variantId}
               take={take}
+              nextTitle={nextTitleFor(take.variantId)}
+              exiting={exitingIds.has(take.variantId)}
               onInteract={onInteract}
+              onDismiss={onDismiss}
+              onLeaveQueue={onLeaveQueue}
             />
           ))}
         </div>
@@ -925,30 +1117,80 @@ export function ReviewQueue() {
   });
   // Freeze first-seen take order for this page session so local line checks
   // never reshuffle cards under the reviewer (API also sorts by createdAt).
-  const orderRef = useRef<string[]>([]);
-  const takes = useMemo(() => {
+  const [stableOrder, setStableOrder] = useState<string[]>([]);
+  const [dismissals, setDismissals] = useState<ReviewDismissals>(() =>
+    readReviewDismissals(),
+  );
+  const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
+  const [hiddenAfterExit, setHiddenAfterExit] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const incomingIds = useMemo(
+    () => (data?.takes ?? []).map((take) => take.variantId).join("\0"),
+    [data?.takes],
+  );
+
+  useEffect(() => {
     const incoming = data?.takes ?? [];
     if (incoming.length === 0) {
-      orderRef.current = [];
-      return [];
+      // Session order freeze: keep cards stable while flags/local checks change.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional queue order lock
+      setStableOrder([]);
+      return;
     }
-    const byId = new Map(incoming.map((take) => [take.variantId, take]));
-    const nextOrder: string[] = [];
-    for (const id of orderRef.current) {
-      if (byId.has(id)) nextOrder.push(id);
-    }
-    for (const take of incoming) {
-      if (!nextOrder.includes(take.variantId)) nextOrder.push(take.variantId);
-    }
-    orderRef.current = nextOrder;
-    return nextOrder.map((id) => byId.get(id)!);
-  }, [data?.takes]);
+    setStableOrder((prev) => {
+      const byId = new Set(incoming.map((take) => take.variantId));
+      const next: string[] = [];
+      for (const id of prev) {
+        if (byId.has(id)) next.push(id);
+      }
+      for (const take of incoming) {
+        if (!next.includes(take.variantId)) next.push(take.variantId);
+      }
+      if (
+        next.length === prev.length &&
+        next.every((id, index) => id === prev[index])
+      ) {
+        return prev;
+      }
+      return next;
+    });
+    // Only recompute when the set of variant ids changes (not flag churn).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incomingIds]);
+
+  const takes = useMemo(() => {
+    const byId = new Map((data?.takes ?? []).map((take) => [take.variantId, take]));
+    return stableOrder
+      .map((id) => byId.get(id))
+      .filter((take): take is Take => take != null)
+      .filter(
+        (take) =>
+          !dismissals[take.variantId] && !hiddenAfterExit.has(take.variantId),
+      );
+  }, [data?.takes, stableOrder, dismissals, hiddenAfterExit]);
 
   const lessonGroups = useMemo(() => groupTakesByLesson(takes), [takes]);
 
+  const flatIds = useMemo(
+    () => takes.map((take) => take.variantId),
+    [takes],
+  );
+
+  function nextTitleFor(variantId: string): string | null {
+    const idx = flatIds.indexOf(variantId);
+    if (idx < 0) return null;
+    const next = takes[idx + 1];
+    return next?.title ?? null;
+  }
+
   // Default expand: lessons with any opened take, else the first lesson only.
-  // Once expanded via interaction, stay open for the session.
-  const [expandedKeys, setExpandedKeys] = useState<Set<string> | null>(null);
+  // Remember expand preference across Review ↔ editor navigation.
+  const savedExpanded = useMemo(() => readReviewExpanded(), []);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string> | null>(
+    () => savedExpanded,
+  );
   const defaultExpanded = useMemo(() => {
     const keys = new Set<string>();
     for (const group of lessonGroups) {
@@ -963,22 +1205,60 @@ export function ReviewQueue() {
   }, [lessonGroups]);
   const effectiveExpanded = expandedKeys ?? defaultExpanded;
 
+  function persistExpanded(next: Set<string>) {
+    writeReviewExpanded(next);
+    setExpandedKeys(next);
+  }
+
   function toggleGroup(key: string) {
-    setExpandedKeys((prev) => {
-      const base = new Set(prev ?? defaultExpanded);
-      if (base.has(key)) base.delete(key);
-      else base.add(key);
-      return base;
-    });
+    const base = new Set(expandedKeys ?? defaultExpanded);
+    if (base.has(key)) base.delete(key);
+    else base.add(key);
+    persistExpanded(base);
   }
 
   function keepGroupExpanded(key: string) {
-    setExpandedKeys((prev) => {
-      const base = new Set(prev ?? defaultExpanded);
-      base.add(key);
-      return base;
+    const base = new Set(expandedKeys ?? defaultExpanded);
+    base.add(key);
+    persistExpanded(base);
+  }
+
+  function handleDismiss(variantId: string) {
+    const next = dismissReviewTake(variantId, dismissals);
+    setDismissals(next);
+    toast.message("Removed from review queue", {
+      description:
+        "Hidden in this browser only — flags stay. Does not approve or publish.",
+      duration: 6000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          setDismissals(undismissReviewTake(variantId, readReviewDismissals()));
+        },
+      },
     });
   }
+
+  function handleLeaveQueue(variantId: string) {
+    setExitingIds((prev) => new Set(prev).add(variantId));
+    window.setTimeout(() => {
+      setHiddenAfterExit((prev) => new Set(prev).add(variantId));
+      setExitingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(variantId);
+        return next;
+      });
+    }, 320);
+  }
+
+  function clearDismissals() {
+    const cleared: ReviewDismissals = {};
+    writeReviewDismissals(cleared);
+    setDismissals(cleared);
+    toast.success("Dismissed takes restored to the queue.");
+  }
+
+  const dismissedCount = Object.keys(dismissals).length;
 
   if (isLoading) {
     return (
@@ -1003,19 +1283,38 @@ export function ReviewQueue() {
       <div>
         <h1 className="text-xl font-semibold">Review queue</h1>
         <p className="text-sm text-muted-foreground">
-          Auto-stamped takes that still have flags. Pipeline shows Staged → In
-          database (Gate A) → Client-visible (Gate B / lesson live).{" "}
+          Auto-stamped takes that still have flags. Pipeline: Staged → In
+          database (Gate A) → Client-visible (Gate B).{" "}
+          <span className="font-medium text-foreground">Approve</span> clears
+          flags only.{" "}
           <span className="font-medium text-foreground">
-            Publish &amp; mark complete
+            Publish to database
           </span>{" "}
-          lands audio in the database and clears flags — it never flips lesson
-          visibility. Per-line checks are optional.
+          lands Gate A and clears flags — never flips lesson visibility.{" "}
+          <span className="font-medium text-foreground">Remove from queue</span>{" "}
+          hides an item here without approving (undo from the toast). Per-line
+          checks are optional.
         </p>
+        {dismissedCount > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {dismissedCount} take{dismissedCount === 1 ? "" : "s"} hidden via
+            Remove.{" "}
+            <button
+              type="button"
+              className="underline-offset-4 hover:underline"
+              onClick={clearDismissals}
+            >
+              Show again
+            </button>
+          </p>
+        )}
       </div>
       <TimingSummary timing={data.timing} />
       {takes.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          Nothing waiting for review.
+          {dismissedCount > 0
+            ? "Nothing visible — all waiting takes are hidden via Remove."
+            : "Nothing waiting for review."}
         </p>
       )}
       <div className="flex flex-col gap-3">
@@ -1026,6 +1325,10 @@ export function ReviewQueue() {
             expanded={effectiveExpanded.has(group.key)}
             onToggle={() => toggleGroup(group.key)}
             onInteract={() => keepGroupExpanded(group.key)}
+            exitingIds={exitingIds}
+            onDismiss={handleDismiss}
+            onLeaveQueue={handleLeaveQueue}
+            nextTitleFor={nextTitleFor}
           />
         ))}
       </div>

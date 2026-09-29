@@ -17,6 +17,7 @@ import {
 import { GrammarPointPicker } from "@/components/content/grammar-point-picker";
 import { DifficultyLevelPicker } from "@/components/dialogue/difficulty-level-picker";
 import { FormalityLevelPicker } from "@/components/dialogue/formality-level-picker";
+import { LessonPlaythroughButton } from "@/components/dialogue/lesson-playthrough";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -486,6 +487,10 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <LessonPlaythroughButton
+            collectionId={collectionId}
+            lessonTitle={collection.title}
+          />
           <Button
             onClick={() => publishLessonMutation.mutate()}
             disabled={publishLessonMutation.isPending || scenarios.length === 0}

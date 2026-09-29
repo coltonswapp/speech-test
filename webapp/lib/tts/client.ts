@@ -112,6 +112,24 @@ export type ReviewQueueResult = {
     title: string;
     collectionTitle: string | null;
     collectionIsActive: boolean | null;
+    unitId: string | null;
+    unitTitle: string | null;
+    jlptLevel: number | null;
+    scenarioOrderIndex: number | null;
+    scenarioIndex: number | null;
+    scenarioCount: number | null;
+    takeIndex: number;
+    takeCount: number;
+    siblings: Array<{
+      variantId: string;
+      createdAt: string;
+      takeIndex: number;
+      voice: string;
+      audioByteCount: number;
+      isPublishedTake: boolean;
+      isSelectedTake: boolean;
+      inQueue: boolean;
+    }>;
     isPublishedTake: boolean;
     isSelectedTake: boolean;
     flagCount: number;

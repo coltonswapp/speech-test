@@ -6,7 +6,6 @@ import { Loader2, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -34,12 +33,39 @@ const GENDER_OPTIONS: { value: VoiceGender; label: string }[] = [
   { value: "unknown", label: "Unknown" },
 ];
 
-const RATING_CYCLE: Array<PairRatingValue | null> = [
-  null,
-  "green",
-  "yellow",
-  "red",
+/**
+ * Operator score 1–4 for a voice pairing.
+ * Higher = more distinguishable. Maps onto existing green/yellow/red storage
+ * (plus unset). Color treatment stays identical to the prior click-cycle UI.
+ */
+const PAIR_SCORES = [
+  {
+    score: 1 as const,
+    rating: null,
+    label: "Unset",
+    hint: "No rating yet",
+  },
+  {
+    score: 2 as const,
+    rating: "red" as const,
+    label: "Confuse",
+    hint: "Hard to tell apart",
+  },
+  {
+    score: 3 as const,
+    rating: "yellow" as const,
+    label: "Close",
+    hint: "Borderline — similar",
+  },
+  {
+    score: 4 as const,
+    rating: "green" as const,
+    label: "Clear",
+    hint: "Easy to distinguish",
+  },
 ];
+
+type PairScore = (typeof PAIR_SCORES)[number]["score"];
 
 const RATING_CLASS: Record<PairRatingValue, string> = {
   green: "bg-emerald-500/85 hover:bg-emerald-500 text-white",
@@ -47,13 +73,26 @@ const RATING_CLASS: Record<PairRatingValue, string> = {
   red: "bg-rose-500/85 hover:bg-rose-500 text-white",
 };
 
+const SCORE_BUTTON_CLASS: Record<PairScore, string> = {
+  1: "bg-background hover:bg-muted text-muted-foreground border-border",
+  2: "bg-rose-500/85 hover:bg-rose-500 text-white border-rose-600/40",
+  3: "bg-amber-400/90 hover:bg-amber-400 text-amber-950 border-amber-500/40",
+  4: "bg-emerald-500/85 hover:bg-emerald-500 text-white border-emerald-600/40",
+};
+
 function sortedPairKey(a: string, b: string): string {
   return a < b ? `${a}::${b}` : `${b}::${a}`;
 }
 
-function nextRating(current: PairRatingValue | null): PairRatingValue | null {
-  const idx = RATING_CYCLE.indexOf(current);
-  return RATING_CYCLE[(idx + 1) % RATING_CYCLE.length] ?? null;
+function scoreForRating(rating: PairRatingValue | null): PairScore {
+  if (rating === "green") return 4;
+  if (rating === "yellow") return 3;
+  if (rating === "red") return 2;
+  return 1;
+}
+
+function ratingForScore(score: PairScore): PairRatingValue | null {
+  return PAIR_SCORES.find((option) => option.score === score)?.rating ?? null;
 }
 
 function previewFor(
@@ -67,6 +106,7 @@ function usePreviewPlayer() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const queueRef = useRef<Array<{ url: string; label: string }>>([]);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
+  const [playingPairKey, setPlayingPairKey] = useState<string | null>(null);
   const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
 
   const stop = () => {
@@ -76,6 +116,7 @@ function usePreviewPlayer() {
     }
     queueRef.current = [];
     setPlayingVoice(null);
+    setPlayingPairKey(null);
     setLoadingVoice(null);
   };
 
@@ -83,6 +124,7 @@ function usePreviewPlayer() {
     const next = queueRef.current.shift();
     if (!next || !audioRef.current) {
       setPlayingVoice(null);
+      setPlayingPairKey(null);
       setLoadingVoice(null);
       return;
     }
@@ -108,15 +150,24 @@ function usePreviewPlayer() {
     }
     const audio = ensureAudio();
     queueRef.current = [];
+    setPlayingPairKey(null);
     setLoadingVoice(voiceLabel);
     setPlayingVoice(voiceLabel);
     audio.src = url;
     audio.play().catch(() => stop());
   };
 
-  const playSequence = (items: Array<{ url: string; label: string }>) => {
+  const playSequence = (
+    items: Array<{ url: string; label: string }>,
+    pairKey?: string
+  ) => {
     if (items.length === 0) return;
+    if (pairKey && playingPairKey === pairKey) {
+      stop();
+      return;
+    }
     if (
+      !pairKey &&
       playingVoice &&
       items.some((item) => item.label === playingVoice)
     ) {
@@ -126,6 +177,7 @@ function usePreviewPlayer() {
     const audio = ensureAudio();
     const [first, ...rest] = items;
     queueRef.current = rest;
+    setPlayingPairKey(pairKey ?? null);
     setLoadingVoice(first.label);
     setPlayingVoice(first.label);
     audio.src = first.url;
@@ -134,7 +186,14 @@ function usePreviewPlayer() {
 
   useEffect(() => () => stop(), []);
 
-  return { playUrl, playSequence, stop, playingVoice, loadingVoice };
+  return {
+    playUrl,
+    playSequence,
+    stop,
+    playingVoice,
+    playingPairKey,
+    loadingVoice,
+  };
 }
 
 function VoiceNotesCell({
@@ -263,227 +322,286 @@ function VoiceTable({
 function PairingMatrix({
   voices,
   ratings,
-  onCycle,
+  previews,
+  onScore,
   pendingKey,
+  player,
 }: {
   voices: string[];
   ratings: Map<string, PairRatingValue>;
-  onCycle: (voiceA: string, voiceB: string, next: PairRatingValue | null) => void;
+  previews: VoicePreview[] | undefined;
+  onScore: (
+    voiceA: string,
+    voiceB: string,
+    rating: PairRatingValue | null
+  ) => void;
   pendingKey: string | null;
+  player: ReturnType<typeof usePreviewPlayer>;
 }) {
+  const [selected, setSelected] = useState<{
+    voiceA: string;
+    voiceB: string;
+  } | null>(null);
+
+  // Ignore a stale selection when the gender matrix no longer includes it.
+  const activeSelection =
+    selected &&
+    voices.includes(selected.voiceA) &&
+    voices.includes(selected.voiceB)
+      ? selected
+      : null;
+
+  const selectedKey = activeSelection
+    ? sortedPairKey(activeSelection.voiceA, activeSelection.voiceB)
+    : null;
+  const selectedRating = selectedKey
+    ? (ratings.get(selectedKey) ?? null)
+    : null;
+  const selectedScore = scoreForRating(selectedRating);
+
+  const playPair = (voiceA: string, voiceB: string) => {
+    const previewA = previewFor(previews, voiceA);
+    const previewB = previewFor(previews, voiceB);
+    const key = sortedPairKey(voiceA, voiceB);
+
+    if (!previewA || !previewB) {
+      toast.error("Both voices need a preview clip to listen.");
+      return;
+    }
+
+    if (player.playingPairKey === key) {
+      player.stop();
+      return;
+    }
+
+    const clip = (preview: VoicePreview, label: string) => ({
+      url: `/api/tts/voice-previews/${preview.id}/audio`,
+      label,
+    });
+
+    // A → B → A → B so operators hear them going back and forth.
+    player.playSequence(
+      [
+        clip(previewA, voiceA),
+        clip(previewB, voiceB),
+        clip(previewA, voiceA),
+        clip(previewB, voiceB),
+      ],
+      key
+    );
+  };
+
   if (voices.length < 2) {
     return (
       <p className="text-sm text-muted-foreground">
-        Tag at least two voices with this gender to build a pairing matrix.
+        Tag at least two voices with this gender to build a pairing grid.
       </p>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="border-collapse text-xs">
-        <thead>
-          <tr>
-            <th className="sticky left-0 z-10 bg-background p-1" />
-            {voices.map((voice) => (
-              <th
-                key={voice}
-                className="max-w-16 truncate p-1 font-medium text-muted-foreground"
-                title={voice}
-              >
-                <span className="inline-block max-w-16 rotate-[-35deg] origin-bottom-left translate-y-2">
-                  {voice}
-                </span>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {voices.map((rowVoice, rowIdx) => (
-            <tr key={rowVoice}>
-              <th className="sticky left-0 z-10 bg-background px-2 py-1 text-left font-medium whitespace-nowrap">
-                {rowVoice}
-              </th>
-              {voices.map((colVoice, colIdx) => {
-                if (colIdx <= rowIdx) {
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        Tap a square to hear the two voices alternate. Then score the pairing
+        1–4 — colors match the casting legend below.
+      </p>
+
+      <div className="overflow-x-auto">
+        <table className="border-collapse text-xs">
+          <thead>
+            <tr>
+              <th className="sticky left-0 z-10 bg-background p-1" />
+              {voices.map((voice) => (
+                <th
+                  key={voice}
+                  className="max-w-20 truncate p-1 font-medium text-muted-foreground"
+                  title={voice}
+                >
+                  <span className="inline-block max-w-20 rotate-[-35deg] origin-bottom-left translate-y-2">
+                    {voice}
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {voices.map((rowVoice, rowIdx) => (
+              <tr key={rowVoice}>
+                <th className="sticky left-0 z-10 bg-background px-2 py-1 text-left font-medium whitespace-nowrap">
+                  {rowVoice}
+                </th>
+                {voices.map((colVoice, colIdx) => {
+                  if (colIdx <= rowIdx) {
+                    return (
+                      <td key={colVoice} className="p-0.5">
+                        <div className="size-11 rounded-md bg-muted/40" />
+                      </td>
+                    );
+                  }
+                  const key = sortedPairKey(rowVoice, colVoice);
+                  const rating = ratings.get(key) ?? null;
+                  const score = scoreForRating(rating);
+                  const busy = pendingKey === key;
+                  const isSelected = selectedKey === key;
+                  const isPlaying = player.playingPairKey === key;
+                  const canListen = Boolean(
+                    previewFor(previews, rowVoice) &&
+                      previewFor(previews, colVoice)
+                  );
                   return (
                     <td key={colVoice} className="p-0.5">
-                      <div className="size-8 rounded-sm bg-muted/40" />
+                      <button
+                        type="button"
+                        disabled={busy}
+                        title={
+                          canListen
+                            ? `${rowVoice} × ${colVoice}: score ${score} (${rating ?? "unset"}) — tap to listen`
+                            : `${rowVoice} × ${colVoice}: score ${score} (${rating ?? "unset"}) — previews missing`
+                        }
+                        aria-label={`${rowVoice} and ${colVoice} pair, score ${score}, ${rating ?? "unset"}`}
+                        aria-pressed={isSelected}
+                        className={cn(
+                          "relative flex size-11 items-center justify-center rounded-md border transition-colors",
+                          rating
+                            ? RATING_CLASS[rating]
+                            : "bg-background hover:bg-muted text-muted-foreground",
+                          isSelected &&
+                            "ring-2 ring-foreground/80 ring-offset-1 ring-offset-background",
+                          isPlaying && "animate-pulse"
+                        )}
+                        onClick={() => {
+                          setSelected({ voiceA: rowVoice, voiceB: colVoice });
+                          if (canListen) {
+                            playPair(rowVoice, colVoice);
+                          }
+                        }}
+                      >
+                        {busy ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : isPlaying ? (
+                          <Pause className="size-3.5" />
+                        ) : (
+                          <span className="text-[11px] font-semibold tabular-nums opacity-90">
+                            {score === 1 ? "·" : score}
+                          </span>
+                        )}
+                      </button>
                     </td>
                   );
-                }
-                const key = sortedPairKey(rowVoice, colVoice);
-                const rating = ratings.get(key) ?? null;
-                const busy = pendingKey === key;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {activeSelection ? (
+        <div className="flex flex-col gap-3 rounded-md border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">
+              {activeSelection.voiceA}{" "}
+              <span className="text-muted-foreground">×</span>{" "}
+              {activeSelection.voiceB}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {player.playingPairKey === selectedKey
+                ? `Playing ${player.playingVoice ?? "…"}…`
+                : selectedRating
+                  ? `Current score ${selectedScore} — ${PAIR_SCORES.find((o) => o.score === selectedScore)?.label}`
+                  : "Listen, then pick a score"}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={
+                !previewFor(previews, activeSelection.voiceA) ||
+                !previewFor(previews, activeSelection.voiceB)
+              }
+              onClick={() =>
+                playPair(activeSelection.voiceA, activeSelection.voiceB)
+              }
+            >
+              {player.playingPairKey === selectedKey ? (
+                <>
+                  <Pause className="size-3.5" />
+                  Stop
+                </>
+              ) : (
+                <>
+                  <Play className="size-3.5" />
+                  Replay A ↔ B
+                </>
+              )}
+            </Button>
+            <div
+              className="flex items-center gap-1"
+              role="group"
+              aria-label="Pairing score"
+            >
+              {PAIR_SCORES.map((option) => {
+                const active = selectedScore === option.score;
                 return (
-                  <td key={colVoice} className="p-0.5">
-                    <button
-                      type="button"
-                      disabled={busy}
-                      title={`${rowVoice} × ${colVoice}: ${rating ?? "unset"} (click to cycle)`}
-                      aria-label={`${rowVoice} and ${colVoice} pair rating ${rating ?? "unset"}`}
-                      className={cn(
-                        "flex size-8 items-center justify-center rounded-sm border border-border/50 transition-colors",
-                        rating
-                          ? RATING_CLASS[rating]
-                          : "bg-background hover:bg-muted text-muted-foreground"
-                      )}
-                      onClick={() =>
-                        onCycle(rowVoice, colVoice, nextRating(rating))
-                      }
-                    >
-                      {busy ? (
-                        <Loader2 className="size-3 animate-spin" />
-                      ) : rating ? (
-                        <span className="sr-only">{rating}</span>
-                      ) : (
-                        <span className="text-[10px] opacity-40">·</span>
-                      )}
-                    </button>
-                  </td>
+                  <button
+                    key={option.score}
+                    type="button"
+                    title={`${option.score} — ${option.label}: ${option.hint}`}
+                    aria-label={`Score ${option.score}, ${option.label}`}
+                    aria-pressed={active}
+                    disabled={pendingKey === selectedKey}
+                    className={cn(
+                      "flex size-9 items-center justify-center rounded-md border text-sm font-semibold tabular-nums transition-colors",
+                      SCORE_BUTTON_CLASS[option.score],
+                      active &&
+                        "ring-2 ring-foreground/80 ring-offset-1 ring-offset-background"
+                    )}
+                    onClick={() =>
+                      onScore(
+                        activeSelection.voiceA,
+                        activeSelection.voiceB,
+                        ratingForScore(option.score)
+                      )
+                    }
+                  >
+                    {option.score}
+                  </button>
                 );
               })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        <span>Click a cell to cycle:</span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-3 rounded-sm border border-border/50 bg-background" />
-          unset
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className={cn("size-3 rounded-sm", RATING_CLASS.green)} />
-          green — clear
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className={cn("size-3 rounded-sm", RATING_CLASS.yellow)} />
-          yellow — close
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className={cn("size-3 rounded-sm", RATING_CLASS.red)} />
-          red — confuse
-        </span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Select a square to listen and score that pairing.
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+        <span>Scores:</span>
+        {PAIR_SCORES.map((option) => (
+          <span
+            key={option.score}
+            className="inline-flex items-center gap-1.5"
+          >
+            <span
+              className={cn(
+                "inline-flex size-5 items-center justify-center rounded-sm border text-[10px] font-semibold",
+                option.rating
+                  ? RATING_CLASS[option.rating]
+                  : "border-border/50 bg-background"
+              )}
+            >
+              {option.score}
+            </span>
+            {option.label.toLowerCase()}
+            {option.rating ? (
+              <span className="opacity-60">({option.rating})</span>
+            ) : null}
+          </span>
+        ))}
       </div>
-    </div>
-  );
-}
-
-function AbListen({
-  profiles,
-  previews,
-  player,
-}: {
-  profiles: TtsVoiceProfile[];
-  previews: VoicePreview[] | undefined;
-  player: ReturnType<typeof usePreviewPlayer>;
-}) {
-  const voices = profiles.map((p) => p.voice);
-  const [voiceA, setVoiceA] = useState<string | null>(null);
-  const [voiceB, setVoiceB] = useState<string | null>(null);
-
-  const selectedA =
-    voiceA && voices.includes(voiceA) ? voiceA : (voices[0] ?? "");
-  const selectedB =
-    voiceB && voices.includes(voiceB)
-      ? voiceB
-      : (voices[1] ?? voices[0] ?? "");
-
-  const previewA = previewFor(previews, selectedA);
-  const previewB = previewFor(previews, selectedB);
-  const canPlay = Boolean(
-    previewA && previewB && selectedA && selectedB && selectedA !== selectedB
-  );
-  const isPlayingAb =
-    player.playingVoice === selectedA || player.playingVoice === selectedB;
-
-  return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <Label>Voice A</Label>
-        <Select
-          value={selectedA}
-          onValueChange={(value) => {
-            if (value) setVoiceA(value);
-          }}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {voices.map((voice) => (
-                <SelectItem key={voice} value={voice}>
-                  {voice}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <Label>Voice B</Label>
-        <Select
-          value={selectedB}
-          onValueChange={(value) => {
-            if (value) setVoiceB(value);
-          }}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {voices.map((voice) => (
-                <SelectItem key={voice} value={voice}>
-                  {voice}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </div>
-      <Button
-        type="button"
-        disabled={!canPlay && !isPlayingAb}
-        title={
-          !previewA || !previewB
-            ? "Both voices need a preview clip"
-            : selectedA === selectedB
-              ? "Pick two different voices"
-              : `Play ${selectedA} then ${selectedB}`
-        }
-        onClick={() => {
-          if (isPlayingAb) {
-            player.stop();
-            return;
-          }
-          if (!previewA || !previewB) return;
-          player.playSequence([
-            {
-              url: `/api/tts/voice-previews/${previewA.id}/audio`,
-              label: selectedA,
-            },
-            {
-              url: `/api/tts/voice-previews/${previewB.id}/audio`,
-              label: selectedB,
-            },
-          ]);
-        }}
-      >
-        {isPlayingAb ? (
-          <>
-            <Pause className="size-4" />
-            Stop
-          </>
-        ) : (
-          <>
-            <Play className="size-4" />
-            Play A → B
-          </>
-        )}
-      </Button>
     </div>
   );
 }
@@ -683,7 +801,7 @@ export function VoicesSettings() {
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
           <CardTitle className="text-base font-medium">
-            Pairing matrix
+            Voice pairings
           </CardTitle>
           <div className="flex items-center gap-1 rounded-lg bg-muted p-[3px]">
             {(["female", "male"] as const).map((gender) => (
@@ -707,27 +825,12 @@ export function VoicesSettings() {
           <PairingMatrix
             voices={matrixVoices}
             ratings={ratingMap}
+            previews={previewsQuery.data?.previews}
             pendingKey={pendingPairKey}
-            onCycle={(voiceA, voiceB, rating) =>
+            player={player}
+            onScore={(voiceA, voiceB, rating) =>
               pairMutation.mutate({ voiceA, voiceB, rating })
             }
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-medium">A/B listen</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            Play the same preview line for two voices back-to-back when both
-            clips exist.
-          </p>
-          <AbListen
-            profiles={profiles}
-            previews={previewsQuery.data?.previews}
-            player={player}
           />
         </CardContent>
       </Card>

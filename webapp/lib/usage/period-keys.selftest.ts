@@ -24,8 +24,17 @@ const parts = isoWeekPartsUTC(weekStart);
 assert(parts.year === 2026 && parts.week === 1, `iso week got ${parts.year}-W${parts.week}`);
 assert(usagePeriodDocId("week", weekStart) === "week_2026-W01", "week doc id");
 
-// 2025-12-29 is Monday → still ISO week 1 of 2026
+// 2025-12-29 is Monday → still ISO week 1 of 2026 (Mon–Sun UTC week)
 const prevYearMon = new Date(Date.UTC(2025, 11, 29));
 assert(usagePeriodDocId("week", prevYearMon) === "week_2026-W01", "week year boundary");
+
+// Same ISO week: Monday 2026-03-23 through Sunday 2026-03-29 → week_2026-W13
+const week13Mon = new Date(Date.UTC(2026, 2, 23));
+const week13Sun = new Date(Date.UTC(2026, 2, 29));
+assert(usagePeriodDocId("week", week13Mon) === "week_2026-W13", "ISO week Mon");
+assert(usagePeriodDocId("week", week13Sun) === "week_2026-W13", "ISO week Sun");
+// Adjacent Sunday/Monday cross the week boundary
+assert(usagePeriodDocId("week", new Date(Date.UTC(2026, 2, 22))) === "week_2026-W12", "prior Sun");
+assert(usagePeriodDocId("week", new Date(Date.UTC(2026, 2, 30))) === "week_2026-W14", "next Mon");
 
 console.log("period-keys.selftest: ok");

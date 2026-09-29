@@ -49,11 +49,23 @@ function formatUsd(value: number | null): string {
 }
 
 function TotalsGrid({ snapshot }: { snapshot: UsagePeriodSnapshot }) {
+  const unpriced = snapshot.unpricedCalls ?? 0;
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      <Metric label="Calls" value={formatCount(snapshot.calls)} />
-      <Metric label="Tokens" value={formatCount(snapshot.tokens)} />
-      <Metric label="Estimated USD" value={formatUsd(snapshot.estimatedUsd)} />
+    <div className="flex flex-col gap-2">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Metric label="Calls" value={formatCount(snapshot.calls)} />
+        <Metric label="Tokens" value={formatCount(snapshot.tokens)} />
+        <Metric
+          label="Estimated USD"
+          value={formatUsd(snapshot.estimatedUsd)}
+        />
+      </div>
+      {unpriced > 0 && (
+        <Badge variant="secondary" className="w-fit">
+          {formatCount(unpriced)} unpriced call
+          {unpriced === 1 ? "" : "s"}
+        </Badge>
+      )}
     </div>
   );
 }
@@ -249,7 +261,7 @@ export function UsageView() {
             title="Product totals"
             description="Aggregates for all callers in this period."
             snapshot={data.product}
-            emptyHint="No product period document for this window yet. Empty is expected until the llm-gateway writers land."
+            emptyHint="No product period document for this window yet."
           />
 
           <Card>

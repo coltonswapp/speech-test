@@ -1,11 +1,10 @@
 /**
  * Period document IDs for `llmUsage/{scope}/periods/{periodId}`.
  *
- * Writers are not in this repo yet. Studio and any future llm-gateway must
- * agree on these formats (UTC):
+ * Must match `services/llm-gateway/FIRESTORE_USAGE_CONTRACT.md` (UTC):
  *
  * - day:   `day_YYYY-MM-DD`   (ISO calendar date)
- * - week:  `week_YYYY-Www`    (ISO week-numbering year + week, e.g. `week_2026-W13`)
+ * - week:  `week_YYYY-Www`    (ISO-8601 week Mon–Sun UTC, e.g. `week_2026-W13`)
  * - month: `month_YYYY-MM`    (calendar month)
  */
 

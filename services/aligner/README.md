@@ -22,7 +22,7 @@ the eval harness stays comparable. Ticket KA-2.
 
 ```json
 {
-  "alignerVersion": "mms-fa-v1",
+  "alignerVersion": "mms-fa-v1.1",
   "durationSeconds": 39.4,
   "sampleRate": 24000,
   "lines": [ { "score": 0.81, "tokens": [
@@ -36,8 +36,12 @@ the eval harness stays comparable. Ticket KA-2.
 - `reading` is a kana reading of the surface. When present and kana it is
   used verbatim; otherwise the override table then pykakasi on the surface
   are used and `readingFallback` is `true`.
+- Exact surface/reading 「ふふ」 is omitted from CTC targets (giggle audio ≠
+  phonemic `fufu`) and timed by neighbor/RMS interpolation; the Studio token
+  is kept. Other laughter markers are unchanged.
 - `score` is the mean CTC posterior per token. It does **not** predict error
   (see the design doc) — use it only for `script-mismatch` style line checks.
+  Skipped 「ふふ」 tokens report `score` 0.
 - Errors: `401` bad token, `413` audio over 64 MiB, `422` undecodable audio
   or script longer than the audio, `502` audio fetch failed.
 

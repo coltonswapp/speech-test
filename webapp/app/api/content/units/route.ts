@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
       subtitle: parsed.data.subtitle ?? null,
       jlptLevel: parsed.data.jlptLevel,
       orderIndex: parsed.data.orderIndex ?? 0,
+      notes: parsed.data.notes ?? null,
     })
     .returning();
 

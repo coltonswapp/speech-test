@@ -6,7 +6,8 @@ Studio should already be running. STUDIO_BASE_URL defaults to http://localhost:3
 
 ## Tools
 
-- list_curriculum: units, collections, scenario slugs/titles, unpublished flag
+- list_curriculum: units (including Studio-only `notes`), collections, scenario slugs/titles, unpublished flag
+- patch_unit_notes: update unit writer notes (`storyboard` / `characters` / `background` / `freeform`); partial sections; `clear:true` wipes all. Studio-only — not public/iOS export
 - get_scenario: speakers, spoken rows (optional `delivery` Gemini TTS audio tags), and stage/ト書き rows as { type, text, visibility, role: "stage" }; B-line lengths, grammar tags, unpublished flag; `sourceScript` (original Claude markdown brief, Studio-only); flags long B lines and a missing opener ト書き
 - patch_scenario: patch lines and metadata via existing scenario PATCH. Lines are a flat object: spoken needs speaker+japanese (optional `delivery` for Gemini audio tags, e.g. `[softly]`); stage needs type "stage", text, visibility; optional `sourceScript` (Claude `.md` brief, Studio-only; null clears)
 - get_cast_voices: collection castVoices (Kaito to Orus, etc.)
@@ -43,6 +44,7 @@ Set STUDIO_BASE_URL if Studio is not at http://localhost:3000
 ## APIs each tool hits
 
 - list_curriculum: GET /api/content/units and GET /api/content/dialogues
+- patch_unit_notes: GET /api/content/units then PATCH /api/content/units/:unitId (`notes`)
 - get_scenario: GET /api/content/dialogues/:collectionId/scenarios/:slug
 - patch_scenario: PATCH /api/content/dialogues/:collectionId/scenarios/:slug
 - get_cast_voices: GET /api/content/dialogues/:collectionId

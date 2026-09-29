@@ -18,8 +18,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { dialogueApi } from "@/lib/dialogue/client";
+import { dialogueApi, type UnitNotes } from "@/lib/dialogue/client";
 import { CreateCollectionDialog } from "@/components/dialogue/create-collection-dialog";
+
+/** Build a notes doc from form fields; empty sections omitted; all-empty → null. */
+function notesFromForm(sections: {
+  storyboard: string;
+  characters: string;
+  background: string;
+  freeform: string;
+}): UnitNotes | null {
+  const notes: UnitNotes = {};
+  const storyboard = sections.storyboard.trim();
+  const characters = sections.characters.trim();
+  const background = sections.background.trim();
+  const freeform = sections.freeform.trim();
+  if (storyboard) notes.storyboard = storyboard;
+  if (characters) notes.characters = characters;
+  if (background) notes.background = background;
+  if (freeform) notes.freeform = freeform;
+  return Object.keys(notes).length > 0 ? notes : null;
+}
 
 export function UnitEditor({ unitId }: { unitId: string }) {
   const router = useRouter();
@@ -42,6 +61,10 @@ export function UnitEditor({ unitId }: { unitId: string }) {
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [jlptLevel, setJlptLevel] = useState("5");
+  const [storyboard, setStoryboard] = useState("");
+  const [characters, setCharacters] = useState("");
+  const [background, setBackground] = useState("");
+  const [freeform, setFreeform] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
@@ -49,6 +72,10 @@ export function UnitEditor({ unitId }: { unitId: string }) {
       setTitle(unit.title);
       setSubtitle(unit.subtitle ?? "");
       setJlptLevel(String(unit.jlptLevel));
+      setStoryboard(unit.notes?.storyboard ?? "");
+      setCharacters(unit.notes?.characters ?? "");
+      setBackground(unit.notes?.background ?? "");
+      setFreeform(unit.notes?.freeform ?? "");
     }
   }, [unit]);
 
@@ -58,6 +85,12 @@ export function UnitEditor({ unitId }: { unitId: string }) {
         title: title.trim(),
         subtitle: subtitle.trim() || null,
         jlptLevel: Number(jlptLevel),
+        notes: notesFromForm({
+          storyboard,
+          characters,
+          background,
+          freeform,
+        }),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["curriculum-units"] });
@@ -143,6 +176,53 @@ export function UnitEditor({ unitId }: { unitId: string }) {
             rows={2}
             value={subtitle}
             onChange={(e) => setSubtitle(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="flex max-w-2xl flex-col gap-4 border-t border-border/60 pt-4">
+        <div>
+          <Label className="text-base">Writer notes</Label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Studio-only drafting space for storyboard, cast, and backstory.
+            Sections save together on the unit; they never ship in public
+            dialogue export or the app.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label>Storyboard</Label>
+          <Textarea
+            rows={4}
+            value={storyboard}
+            onChange={(e) => setStoryboard(e.target.value)}
+            placeholder="Beat outline for the unit — lesson flow, scene sequence, teaching beats…"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label>Characters</Label>
+          <Textarea
+            rows={3}
+            value={characters}
+            onChange={(e) => setCharacters(e.target.value)}
+            placeholder="Recurring cast notes — names, relationship, tone, voice direction…"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label>Background</Label>
+          <Textarea
+            rows={3}
+            value={background}
+            onChange={(e) => setBackground(e.target.value)}
+            placeholder="Setting and backstory that lessons in this unit share…"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label>Freeform</Label>
+          <Textarea
+            rows={3}
+            value={freeform}
+            onChange={(e) => setFreeform(e.target.value)}
+            placeholder="Anything else — open paste space for drafts and scratch notes…"
           />
         </div>
       </div>

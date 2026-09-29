@@ -16,7 +16,10 @@ import { getFirestore } from "firebase-admin/firestore";
  * - `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY` — split fields
  *   (`FIREBASE_PRIVATE_KEY` may contain escaped `\n`)
  *
- * The service account only needs Firestore **read** on `llmUsage/**`.
+ * The service account only needs Firestore **read** on `llmUsage/**` and
+ * `llmFeedbackStats/**` (configure in Firestore rules / IAM for the Studio
+ * service account). Do not grant or rely on client SDK access — security
+ * rules deny the iOS app for these aggregates.
  */
 
 const DEFAULT_PROJECT_ID = "shizen-b453f";

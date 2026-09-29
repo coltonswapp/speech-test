@@ -16,20 +16,30 @@ export type UsageFeatureRow = {
   tokens: number;
   estimatedUsd: number;
   unpricedCalls: number;
+  /** Thumbs-up count from `llmFeedbackStats` (0 until merged). */
+  up: number;
+  /** Thumbs-down count from `llmFeedbackStats` (0 until merged). */
+  down: number;
 };
 
 export type UsagePeriodSnapshot = {
-  /** Firestore path that was read. */
+  /** Firestore path that was read (`llmUsage/...`). */
   path: string;
+  /** Feedback stats path when loaded (`llmFeedbackStats/...`); null if not merged. */
+  feedbackPath: string | null;
   periodDocId: string;
   exists: boolean;
   calls: number | null;
   tokens: number | null;
   estimatedUsd: number | null;
   unpricedCalls: number | null;
+  /** Product/user thumbs-up for the period; null when feedback doc missing. */
+  up: number | null;
+  /** Product/user thumbs-down for the period; null when feedback doc missing. */
+  down: number | null;
   /** Ranked by calls (desc); ties broken by feature name. */
   features: UsageFeatureRow[];
-  /** Raw top-level keys present on the doc (for sparse-schema debugging). */
+  /** Raw top-level keys present on the usage doc (for sparse-schema debugging). */
   rawKeys: string[];
 };
 
@@ -106,6 +116,8 @@ function parseFlatByFeature(data: Record<string, unknown>): UsageFeatureRow[] {
       tokens: tokensFromParts(accum.promptTokens, accum.outputTokens),
       estimatedUsd: usdFromMicros(accum.estimatedCostMicros),
       unpricedCalls: accum.unpricedCalls,
+      up: 0,
+      down: 0,
     }))
     .sort((a, b) => {
       if (b.calls !== a.calls) return b.calls - a.calls;
@@ -123,12 +135,15 @@ export function parseUsagePeriodDoc(args: {
   if (!data) {
     return {
       path,
+      feedbackPath: null,
       periodDocId,
       exists: false,
       calls: null,
       tokens: null,
       estimatedUsd: null,
       unpricedCalls: null,
+      up: null,
+      down: null,
       features: [],
       rawKeys: [],
     };
@@ -140,13 +155,73 @@ export function parseUsagePeriodDoc(args: {
 
   return {
     path,
+    feedbackPath: null,
     periodDocId,
     exists: true,
     calls: numberOrZero(data.calls),
     tokens: tokensFromParts(promptTokens, outputTokens),
     estimatedUsd: usdFromMicros(estimatedCostMicros),
     unpricedCalls: numberOrZero(data.unpricedCalls),
+    up: null,
+    down: null,
     features: parseFlatByFeature(data),
     rawKeys: Object.keys(data).sort(),
+  };
+}
+
+/**
+ * Merge vote rollups from `llmFeedbackStats` onto a usage snapshot.
+ * Usage call/token parsing stays unchanged; feedback uses its own dotted-key parser.
+ */
+export function mergeUsageWithFeedback(
+  usage: UsagePeriodSnapshot,
+  feedback: {
+    path: string;
+    exists: boolean;
+    up: number | null;
+    down: number | null;
+    features: { feature: string; up: number; down: number }[];
+  },
+): UsagePeriodSnapshot {
+  const votesByFeature = new Map(
+    feedback.features.map((row) => [row.feature, row] as const),
+  );
+
+  const mergedFeatures = new Map<string, UsageFeatureRow>();
+
+  for (const row of usage.features) {
+    const votes = votesByFeature.get(row.feature);
+    mergedFeatures.set(row.feature, {
+      ...row,
+      up: votes?.up ?? 0,
+      down: votes?.down ?? 0,
+    });
+  }
+
+  for (const votes of feedback.features) {
+    if (mergedFeatures.has(votes.feature)) continue;
+    mergedFeatures.set(votes.feature, {
+      feature: votes.feature,
+      calls: 0,
+      tokens: 0,
+      estimatedUsd: 0,
+      unpricedCalls: 0,
+      up: votes.up,
+      down: votes.down,
+    });
+  }
+
+  const features = [...mergedFeatures.values()].sort((a, b) => {
+    if (b.calls !== a.calls) return b.calls - a.calls;
+    return a.feature.localeCompare(b.feature);
+  });
+
+  return {
+    ...usage,
+    feedbackPath: feedback.path,
+    exists: usage.exists || feedback.exists,
+    up: feedback.exists ? (feedback.up ?? 0) : null,
+    down: feedback.exists ? (feedback.down ?? 0) : null,
+    features,
   };
 }

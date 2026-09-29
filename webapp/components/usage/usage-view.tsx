@@ -50,6 +50,7 @@ function formatUsd(value: number | null): string {
 
 function TotalsGrid({ snapshot }: { snapshot: UsagePeriodSnapshot }) {
   const unpriced = snapshot.unpricedCalls ?? 0;
+  const showVotes = snapshot.up != null || snapshot.down != null;
   return (
     <div className="flex flex-col gap-2">
       <div className="grid gap-3 sm:grid-cols-3">
@@ -60,6 +61,12 @@ function TotalsGrid({ snapshot }: { snapshot: UsagePeriodSnapshot }) {
           value={formatUsd(snapshot.estimatedUsd)}
         />
       </div>
+      {showVotes && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Metric label="Thumbs up" value={formatCount(snapshot.up)} />
+          <Metric label="Thumbs down" value={formatCount(snapshot.down)} />
+        </div>
+      )}
       {unpriced > 0 && (
         <Badge variant="secondary" className="w-fit">
           {formatCount(unpriced)} unpriced call
@@ -92,13 +99,15 @@ function FeatureTable({ features }: { features: UsageFeatureRow[] }) {
 
   return (
     <div className="overflow-x-auto rounded-md border border-border/60">
-      <table className="w-full min-w-[28rem] text-left text-sm">
+      <table className="w-full min-w-[36rem] text-left text-sm">
         <thead className="border-b border-border/60 bg-muted/40 text-muted-foreground">
           <tr>
             <th className="px-3 py-2 font-medium">Feature</th>
             <th className="px-3 py-2 font-medium text-right">Calls</th>
             <th className="px-3 py-2 font-medium text-right">Tokens</th>
             <th className="px-3 py-2 font-medium text-right">Est. USD</th>
+            <th className="px-3 py-2 font-medium text-right">Up</th>
+            <th className="px-3 py-2 font-medium text-right">Down</th>
           </tr>
         </thead>
         <tbody>
@@ -116,6 +125,12 @@ function FeatureTable({ features }: { features: UsageFeatureRow[] }) {
               </td>
               <td className="px-3 py-2 text-right tabular-nums">
                 {formatUsd(row.estimatedUsd)}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {formatCount(row.up)}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {formatCount(row.down)}
               </td>
             </tr>
           ))}
@@ -152,6 +167,11 @@ function PeriodPanel({
           <span className="mt-1 block font-mono text-xs">
             {snapshot.path}
           </span>
+          {snapshot.feedbackPath && (
+            <span className="mt-0.5 block font-mono text-xs">
+              {snapshot.feedbackPath}
+            </span>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -200,8 +220,9 @@ export function UsageView() {
           <h1 className="text-2xl font-semibold tracking-tight">Usage</h1>
           <p className="text-sm text-muted-foreground">
             Read-only Gemini / LLM aggregates from Firestore (
-            <code className="text-xs">llmUsage</code>). Product totals and
-            optional per-uid lookup for Studio operators.
+            <code className="text-xs">llmUsage</code> +{" "}
+            <code className="text-xs">llmFeedbackStats</code>). Product totals
+            and optional per-uid lookup for Studio operators.
           </p>
         </div>
         <Tabs
@@ -342,6 +363,11 @@ export function UsageView() {
                   <p className="font-mono text-xs text-muted-foreground">
                     {data.user.path}
                   </p>
+                  {data.user.feedbackPath && (
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {data.user.feedbackPath}
+                    </p>
+                  )}
                   {!data.user.exists ? (
                     <p className="text-sm text-muted-foreground">
                       No period document for this uid and window.

@@ -1,16 +1,21 @@
 /**
  * Normalized shape for a usage period document.
  *
- * No in-repo writer defines the Firestore schema yet. The parser only surfaces
- * fields that are actually present (never invents metrics). Accepted aliases
- * mirror common gateway / iOS naming so sparse docs still render.
+ * Authoritative writer contract:
+ * `services/llm-gateway/FIRESTORE_USAGE_CONTRACT.md`
+ *
+ * Top-level metrics use prompt/output token split and cost in micros.
+ * Feature breakdown is stored as **literal dotted field names**
+ * (`byFeature.<id>.<metric>`), not a nested `byFeature` map — Firestore
+ * `set(merge)` with those keys does not create `doc.byFeature`.
  */
 
 export type UsageFeatureRow = {
   feature: string;
-  calls: number | null;
-  tokens: number | null;
-  estimatedUsd: number | null;
+  calls: number;
+  tokens: number;
+  estimatedUsd: number;
+  unpricedCalls: number;
 };
 
 export type UsagePeriodSnapshot = {
@@ -21,11 +26,27 @@ export type UsagePeriodSnapshot = {
   calls: number | null;
   tokens: number | null;
   estimatedUsd: number | null;
-  /** Ranked by calls (desc); ties broken by feature name. Missing calls sort last. */
+  unpricedCalls: number | null;
+  /** Ranked by calls (desc); ties broken by feature name. */
   features: UsageFeatureRow[];
   /** Raw top-level keys present on the doc (for sparse-schema debugging). */
   rawKeys: string[];
 };
+
+const MICROS_PER_USD = 1_000_000;
+
+/** Literal dotted keys written by llm-gateway `set(merge)`. */
+const BY_FEATURE_FIELD_RE =
+  /^byFeature\.(.+)\.(calls|promptTokens|outputTokens|estimatedCostMicros|unpricedCalls)$/;
+
+type FeatureMetric =
+  | "calls"
+  | "promptTokens"
+  | "outputTokens"
+  | "estimatedCostMicros"
+  | "unpricedCalls";
+
+type FeatureAccum = Record<FeatureMetric, number>;
 
 function asFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -36,94 +57,60 @@ function asFiniteNumber(value: unknown): number | null {
   return null;
 }
 
-function firstNumber(
-  record: Record<string, unknown>,
-  keys: string[],
-): number | null {
-  for (const key of keys) {
-    if (!(key in record)) continue;
-    const n = asFiniteNumber(record[key]);
-    if (n != null) return n;
-  }
-  return null;
+/** Missing / non-numeric → 0 (contract display math). */
+function numberOrZero(value: unknown): number {
+  return asFiniteNumber(value) ?? 0;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value != null && !Array.isArray(value);
-}
-
-function parseFeatureEntry(
-  feature: string,
-  value: unknown,
-): UsageFeatureRow | null {
-  if (feature.trim() === "") return null;
-
-  if (typeof value === "number" && Number.isFinite(value)) {
-    // Map-of-counts: treat as tokens when only a number is stored (iOS-style).
-    return { feature, calls: null, tokens: value, estimatedUsd: null };
-  }
-
-  if (!isPlainObject(value)) return null;
-
+function emptyFeatureAccum(): FeatureAccum {
   return {
-    feature,
-    calls: firstNumber(value, [
-      "calls",
-      "callCount",
-      "requestCount",
-      "requests",
-      "count",
-    ]),
-    tokens: firstNumber(value, [
-      "tokens",
-      "totalTokens",
-      "tokenCount",
-      "totalTokenCount",
-    ]),
-    estimatedUsd: firstNumber(value, [
-      "estimatedUsd",
-      "estimatedUSD",
-      "costUSD",
-      "totalCostUSD",
-      "usd",
-    ]),
+    calls: 0,
+    promptTokens: 0,
+    outputTokens: 0,
+    estimatedCostMicros: 0,
+    unpricedCalls: 0,
   };
 }
 
-function parseFeatures(data: Record<string, unknown>): UsageFeatureRow[] {
-  const rows: UsageFeatureRow[] = [];
+function tokensFromParts(promptTokens: number, outputTokens: number): number {
+  return promptTokens + outputTokens;
+}
 
-  const mapCandidates = [data.features, data.byFeature, data.breakdown];
-  for (const candidate of mapCandidates) {
-    if (isPlainObject(candidate)) {
-      for (const [feature, value] of Object.entries(candidate)) {
-        const row = parseFeatureEntry(feature, value);
-        if (row) rows.push(row);
-      }
-      break;
+function usdFromMicros(estimatedCostMicros: number): number {
+  return estimatedCostMicros / MICROS_PER_USD;
+}
+
+function parseFlatByFeature(data: Record<string, unknown>): UsageFeatureRow[] {
+  const byId = new Map<string, FeatureAccum>();
+
+  for (const [key, value] of Object.entries(data)) {
+    const match = BY_FEATURE_FIELD_RE.exec(key);
+    if (!match) continue;
+
+    const featureId = match[1]!;
+    const metric = match[2] as FeatureMetric;
+    if (featureId.trim() === "") continue;
+
+    let accum = byId.get(featureId);
+    if (!accum) {
+      accum = emptyFeatureAccum();
+      byId.set(featureId, accum);
     }
-    if (Array.isArray(candidate)) {
-      for (const item of candidate) {
-        if (!isPlainObject(item)) continue;
-        const feature = String(
-          item.feature ?? item.name ?? item.id ?? "",
-        ).trim();
-        const row = parseFeatureEntry(feature, item);
-        if (row) rows.push(row);
-      }
-      break;
-    }
+    accum[metric] = numberOrZero(value);
   }
 
-  return rows.sort((a, b) => {
-    const ac = a.calls;
-    const bc = b.calls;
-    if (ac == null && bc == null) return a.feature.localeCompare(b.feature);
-    if (ac == null) return 1;
-    if (bc == null) return -1;
-    if (bc !== ac) return bc - ac;
-    return a.feature.localeCompare(b.feature);
-  });
+  return [...byId.entries()]
+    .map(([feature, accum]) => ({
+      feature,
+      calls: accum.calls,
+      tokens: tokensFromParts(accum.promptTokens, accum.outputTokens),
+      estimatedUsd: usdFromMicros(accum.estimatedCostMicros),
+      unpricedCalls: accum.unpricedCalls,
+    }))
+    .sort((a, b) => {
+      if (b.calls !== a.calls) return b.calls - a.calls;
+      return a.feature.localeCompare(b.feature);
+    });
 }
 
 /** Normalize a Firestore period document (or null when missing). */
@@ -141,36 +128,25 @@ export function parseUsagePeriodDoc(args: {
       calls: null,
       tokens: null,
       estimatedUsd: null,
+      unpricedCalls: null,
       features: [],
       rawKeys: [],
     };
   }
 
+  const promptTokens = numberOrZero(data.promptTokens);
+  const outputTokens = numberOrZero(data.outputTokens);
+  const estimatedCostMicros = numberOrZero(data.estimatedCostMicros);
+
   return {
     path,
     periodDocId,
     exists: true,
-    calls: firstNumber(data, [
-      "calls",
-      "callCount",
-      "requestCount",
-      "requests",
-      "count",
-    ]),
-    tokens: firstNumber(data, [
-      "tokens",
-      "totalTokens",
-      "tokenCount",
-      "totalTokenCount",
-    ]),
-    estimatedUsd: firstNumber(data, [
-      "estimatedUsd",
-      "estimatedUSD",
-      "costUSD",
-      "totalCostUSD",
-      "usd",
-    ]),
-    features: parseFeatures(data),
+    calls: numberOrZero(data.calls),
+    tokens: tokensFromParts(promptTokens, outputTokens),
+    estimatedUsd: usdFromMicros(estimatedCostMicros),
+    unpricedCalls: numberOrZero(data.unpricedCalls),
+    features: parseFlatByFeature(data),
     rawKeys: Object.keys(data).sort(),
   };
 }

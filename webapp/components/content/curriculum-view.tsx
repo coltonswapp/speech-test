@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -36,6 +36,13 @@ import {
   SortableItem,
   SortableList,
 } from "@/components/content/curriculum-sortable";
+import { LessonPlaythroughButton } from "@/components/dialogue/lesson-playthrough";
+import {
+  readCurriculumExpanded,
+  readCurriculumJlpt,
+  writeCurriculumExpanded,
+  writeCurriculumJlpt,
+} from "@/lib/studio/nav-persistence";
 import { cn } from "@/lib/utils";
 
 type EditTarget =
@@ -70,13 +77,29 @@ export function CurriculumView() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const jlptTrack = parseJlptTrack(searchParams.get("jlpt"));
+  const jlptParam = searchParams.get("jlpt");
+  const jlptTrack = parseJlptTrack(jlptParam);
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
-  // Everything starts collapsed so the page reads as a table of contents;
-  // expand a unit to see its collections, a collection to see its scenarios.
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  // Remember unit/lesson expand state across Review ↔ editor ↔ Curriculum.
+  const [expanded, setExpanded] = useState<Set<string>>(() =>
+    readCurriculumExpanded(),
+  );
+
+  // Restore last JLPT track when landing without `?jlpt=` (e.g. Studio nav).
+  useEffect(() => {
+    if (jlptParam != null) {
+      writeCurriculumJlpt(parseJlptTrack(jlptParam));
+      return;
+    }
+    const saved = readCurriculumJlpt();
+    if (saved == null || saved === 5) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("jlpt", String(saved));
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [jlptParam, pathname, router, searchParams]);
 
   function setJlptTrack(level: JlptTrackLevel) {
+    writeCurriculumJlpt(level);
     const params = new URLSearchParams(searchParams.toString());
     if (level === 5) params.delete("jlpt");
     else params.set("jlpt", String(level));
@@ -93,6 +116,7 @@ export function CurriculumView() {
         if (open) next.add(key);
         else next.delete(key);
       }
+      writeCurriculumExpanded(next);
       return next;
     });
   }
@@ -870,6 +894,14 @@ function CurriculumCollectionBlock({
           isActive={collection.isActive}
           pending={activationPending}
           onToggle={onToggleActive}
+        />
+        <LessonPlaythroughButton
+          collectionId={collection.id}
+          lessonTitle={collection.title}
+          variant="ghost"
+          size="sm"
+          label="Play"
+          className="h-7 min-h-7 shrink-0 px-2 text-xs md:min-h-7"
         />
         <div className="flex shrink-0 items-center gap-1">
           <Button

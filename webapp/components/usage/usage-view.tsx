@@ -28,6 +28,11 @@ const periodLabels: Record<UsagePeriod, string> = {
   month: "Month",
 };
 
+/** Built-in Studio operator quick-selects for per-user lookup. */
+const USAGE_UID_BOOKMARKS = [
+  { label: "Me", uid: "kYqKbEEc5FUmN2vLEWL3x9NRSVe2" },
+] as const;
+
 function formatCount(value: number | null): string {
   if (value == null) return "—";
   return new Intl.NumberFormat("en-US").format(value);
@@ -276,7 +281,22 @@ export function UsageView() {
                     spellCheck={false}
                   />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {USAGE_UID_BOOKMARKS.map((bookmark) => (
+                    <Button
+                      key={bookmark.uid}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={query.isFetching}
+                      onClick={() => {
+                        setUidDraft(bookmark.uid);
+                        setLoadedUid(bookmark.uid);
+                      }}
+                    >
+                      {bookmark.label}
+                    </Button>
+                  ))}
                   <Button
                     type="button"
                     onClick={() => setLoadedUid(uidDraft.trim() || undefined)}

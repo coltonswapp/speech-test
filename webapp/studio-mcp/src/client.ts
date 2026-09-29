@@ -70,6 +70,13 @@ export type UnitSummary = {
   subtitle: string | null;
   jlptLevel: number;
   orderIndex: number;
+  /** Studio-only writer notes; never exported to the learner app. */
+  notes: {
+    storyboard?: string;
+    characters?: string;
+    background?: string;
+    freeform?: string;
+  } | null;
   collections: Array<{ id: string; unitId: string | null; title: string }>;
 };
 

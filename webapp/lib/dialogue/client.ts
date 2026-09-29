@@ -12,10 +12,13 @@ import type {
   ReviseLinesResult,
   SanitizeGrammarResult,
   TokenizeLinesResult,
+  UnitNotes,
 } from "@/lib/dialogue/types";
 import type { AmbienceLayer } from "@/lib/tts/ambience";
 import type { Project as TtsProject } from "@/lib/tts/client";
 import { formatApiError } from "@/lib/api-error";
+
+export type { UnitNotes };
 
 export type ScenarioAudio = {
   project: TtsProject | null;
@@ -83,6 +86,8 @@ export type Unit = {
   subtitle: string | null;
   jlptLevel: number;
   orderIndex: number;
+  /** Studio-only writer notes; never exported to the learner app. */
+  notes: UnitNotes | null;
   updatedAt: string;
 };
 
@@ -174,6 +179,7 @@ export const dialogueApi = {
     subtitle?: string;
     jlptLevel?: number;
     orderIndex?: number;
+    notes?: UnitNotes | null;
   }) =>
     request<{ unit: Unit }>("/api/content/units", {
       method: "POST",
@@ -186,6 +192,7 @@ export const dialogueApi = {
       subtitle?: string | null;
       jlptLevel?: number;
       orderIndex?: number;
+      notes?: UnitNotes | null;
       collectionOrder?: string[];
     },
   ) =>

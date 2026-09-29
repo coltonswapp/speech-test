@@ -214,4 +214,32 @@ describe("buildCollectionFile subtitle and unit export", () => {
     assert.equal(json.includes("jlptLevel"), false);
     assert.equal(json.includes("premise"), false);
   });
+
+  it("omits Studio-only unit notes from public/iOS collection JSON", () => {
+    // curriculum_unit.notes is Studio-only (same rule as collection premise /
+    // scenario sourceScript). ExportableCollection never carries notes.
+    const parsed = collectionFileSchema.parse(
+      buildCollectionFile(
+        {
+          id: "ball-game",
+          title: "Ball game",
+          subtitle: null,
+          unitId: "n5-greetings",
+          unitTitle: "Greetings",
+          jlptLevel: 5,
+          sceneImage: null,
+          thumbnailUrl: null,
+          thumbnailSmallUrl: null,
+        },
+        [baseScenario()]
+      )
+    );
+    assert.equal(parsed.unitId, "n5-greetings");
+    assert.equal(parsed.unitTitle, "Greetings");
+    assert.equal(parsed.jlptLevel, 5);
+    const json = JSON.stringify(parsed);
+    assert.equal(json.includes("notes"), false);
+    assert.equal(json.includes("storyboard"), false);
+    assert.equal(json.includes("freeform"), false);
+  });
 });

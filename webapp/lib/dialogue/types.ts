@@ -386,12 +386,24 @@ export const createCollectionSchema = z.object({
   unitId: z.string().optional(),
 });
 
+// Studio-only unit writer notes. Optional sections so authors can update one
+// without wiping others (send the full object on PATCH; omit unused keys).
+// Never exported to /api/public/dialogues or the iOS app.
+export const unitNotesSchema = z.object({
+  storyboard: z.string().optional(),
+  characters: z.string().optional(),
+  background: z.string().optional(),
+  freeform: z.string().optional(),
+});
+export type UnitNotes = z.infer<typeof unitNotesSchema>;
+
 export const createUnitSchema = z.object({
   id: slugSchema,
   title: z.string().min(1),
   subtitle: z.string().optional(),
   jlptLevel: z.number().int().min(1).max(5).default(5),
   orderIndex: z.number().int().optional(),
+  notes: unitNotesSchema.nullable().optional(),
 });
 
 export const updateUnitSchema = z.object({
@@ -399,6 +411,8 @@ export const updateUnitSchema = z.object({
   subtitle: z.string().nullable().optional(),
   jlptLevel: z.number().int().min(1).max(5).optional(),
   orderIndex: z.number().int().optional(),
+  // null clears all notes; omit = unchanged. Replace (not deep-merge) the doc.
+  notes: unitNotesSchema.nullable().optional(),
   collectionOrder: z.array(z.string()).optional(),
 });
 

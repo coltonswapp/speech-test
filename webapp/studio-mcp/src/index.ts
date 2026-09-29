@@ -198,6 +198,7 @@ server.registerTool(
         subtitle: unit.subtitle,
         jlptLevel: unit.jlptLevel,
         orderIndex: unit.orderIndex,
+        notes: unit.notes ?? null,
         collections: (unit.collections ?? []).map((c) =>
           mapCollection(c.id, c.title)
         ),
@@ -215,6 +216,70 @@ server.registerTool(
         units,
         unfiledCollections,
       });
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "patch_unit_notes",
+  {
+    title: "Patch unit notes",
+    description:
+      "Update Studio-only writer notes on a curriculum unit. Sections: storyboard, characters, background, freeform (markdown/plain text). Partial — only send sections to change; omitted keys are kept. Pass clear:true to wipe all notes. Never exported to public/iOS dialogue JSON.",
+    inputSchema: {
+      unitId: z.string().min(1),
+      storyboard: z.string().optional(),
+      characters: z.string().optional(),
+      background: z.string().optional(),
+      freeform: z.string().optional(),
+      clear: z.boolean().optional(),
+    },
+  },
+  async ({ unitId, clear, storyboard, characters, background, freeform }) => {
+    try {
+      if (clear) {
+        const { unit } = await studioFetch<{ unit: UnitSummary }>(
+          `/api/content/units/${encodeURIComponent(unitId)}`,
+          { method: "PATCH", body: JSON.stringify({ notes: null }) }
+        );
+        return jsonResult({ unit });
+      }
+
+      const { units } = await studioFetch<{ units: UnitSummary[] }>(
+        "/api/content/units"
+      );
+      const existing = units.find((u) => u.id === unitId);
+      if (!existing) {
+        return errorResult(new Error(`Unit "${unitId}" not found.`));
+      }
+
+      const notes: NonNullable<UnitSummary["notes"]> = {
+        ...(existing.notes ?? {}),
+      };
+      const patch: Record<string, string | undefined> = {
+        storyboard,
+        characters,
+        background,
+        freeform,
+      };
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === undefined) continue;
+        const trimmed = value.trim();
+        if (!trimmed) {
+          delete notes[key as keyof typeof notes];
+        } else {
+          notes[key as keyof typeof notes] = trimmed;
+        }
+      }
+
+      const nextNotes = Object.keys(notes).length > 0 ? notes : null;
+      const { unit } = await studioFetch<{ unit: UnitSummary }>(
+        `/api/content/units/${encodeURIComponent(unitId)}`,
+        { method: "PATCH", body: JSON.stringify({ notes: nextNotes }) }
+      );
+      return jsonResult({ unit });
     } catch (error) {
       return errorResult(error);
     }

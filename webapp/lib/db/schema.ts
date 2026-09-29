@@ -267,6 +267,9 @@ export const curriculumUnit = pgTable("curriculum_unit", {
   subtitle: text("subtitle"),
   jlptLevel: integer("jlpt_level").notNull().default(5),
   orderIndex: integer("order_index").notNull().default(0),
+  // Studio-only writer notes (storyboard / characters / background / freeform).
+  // Never exported to /api/public/dialogues or the iOS app.
+  notes: jsonb("notes"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

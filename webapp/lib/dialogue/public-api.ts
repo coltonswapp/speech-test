@@ -58,6 +58,7 @@ export async function listPublicCurriculumUnits(): Promise<
   return units
     .filter((unit) => unitIdsWithActiveLessons.has(unit.id))
     .map((unit) => ({
+      // Explicit allowlist — Studio-only fields (e.g. notes) must stay out.
       id: unit.id,
       title: unit.title,
       subtitle: unit.subtitle,

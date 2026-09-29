@@ -62,3 +62,11 @@ export const PRODUCT_USAGE_SCOPE = "_product";
 export function usagePeriodDocPath(scope: string, periodDocId: string): string {
   return `llmUsage/${scope}/periods/${periodDocId}`;
 }
+
+/** Same period ids as usage; collection is `llmFeedbackStats`. */
+export function feedbackPeriodDocPath(
+  scope: string,
+  periodDocId: string,
+): string {
+  return `llmFeedbackStats/${scope}/periods/${periodDocId}`;
+}

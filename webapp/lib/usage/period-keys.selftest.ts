@@ -3,8 +3,10 @@
  * Run: pnpm exec tsx lib/usage/period-keys.selftest.ts
  */
 import {
+  feedbackPeriodDocPath,
   isoWeekPartsUTC,
   usagePeriodDocId,
+  usagePeriodDocPath,
   usagePeriodKey,
 } from "./period-keys";
 
@@ -36,5 +38,21 @@ assert(usagePeriodDocId("week", week13Sun) === "week_2026-W13", "ISO week Sun");
 // Adjacent Sunday/Monday cross the week boundary
 assert(usagePeriodDocId("week", new Date(Date.UTC(2026, 2, 22))) === "week_2026-W12", "prior Sun");
 assert(usagePeriodDocId("week", new Date(Date.UTC(2026, 2, 30))) === "week_2026-W14", "next Mon");
+
+assert(
+  usagePeriodDocPath("_product", "day_2026-03-25") ===
+    "llmUsage/_product/periods/day_2026-03-25",
+  "usage path",
+);
+assert(
+  feedbackPeriodDocPath("_product", "day_2026-03-25") ===
+    "llmFeedbackStats/_product/periods/day_2026-03-25",
+  "feedback path",
+);
+assert(
+  feedbackPeriodDocPath("kYqKbEEc5FUmN2vLEWL3x9NRSVe2", "week_2026-W13") ===
+    "llmFeedbackStats/kYqKbEEc5FUmN2vLEWL3x9NRSVe2/periods/week_2026-W13",
+  "feedback per-uid path",
+);
 
 console.log("period-keys.selftest: ok");

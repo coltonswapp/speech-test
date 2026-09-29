@@ -901,7 +901,7 @@ function CurriculumCollectionBlock({
           variant="ghost"
           size="sm"
           label="Play"
-          className="h-7 shrink-0 px-2 text-xs"
+          className="h-7 min-h-7 shrink-0 px-2 text-xs md:min-h-7"
         />
         <div className="flex shrink-0 items-center gap-1">
           <Button

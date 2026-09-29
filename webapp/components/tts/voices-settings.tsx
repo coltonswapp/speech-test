@@ -319,7 +319,28 @@ function VoiceTable({
   );
 }
 
-function PairingMatrix({
+/** Every unordered same-gender pair — scored and unscored alike. */
+function buildAllPairings(voices: string[]): Array<{
+  voiceA: string;
+  voiceB: string;
+  key: string;
+}> {
+  const pairs: Array<{ voiceA: string; voiceB: string; key: string }> = [];
+  for (let i = 0; i < voices.length; i++) {
+    for (let j = i + 1; j < voices.length; j++) {
+      const voiceA = voices[i]!;
+      const voiceB = voices[j]!;
+      pairs.push({
+        voiceA,
+        voiceB,
+        key: sortedPairKey(voiceA, voiceB),
+      });
+    }
+  }
+  return pairs;
+}
+
+function PairingGrid({
   voices,
   ratings,
   previews,
@@ -343,7 +364,14 @@ function PairingMatrix({
     voiceB: string;
   } | null>(null);
 
-  // Ignore a stale selection when the gender matrix no longer includes it.
+  // Full grid: every same-gender pairing, including ones already scored.
+  const pairings = useMemo(() => buildAllPairings(voices), [voices]);
+  const scoredCount = useMemo(
+    () => pairings.filter((pair) => ratings.has(pair.key)).length,
+    [pairings, ratings]
+  );
+
+  // Ignore a stale selection when the gender filter no longer includes it.
   const activeSelection =
     selected &&
     voices.includes(selected.voiceA) &&
@@ -402,97 +430,67 @@ function PairingMatrix({
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        Tap a square to hear the two voices alternate. Then score the pairing
-        1–4 — colors match the casting legend below.
+        Every same-gender pairing is shown — including the{" "}
+        {scoredCount > 0 ? `${scoredCount} already scored` : "ones you score"}{" "}
+        — so you can re-score anytime. Tap a square to hear the voices alternate,
+        then pick 1–4.
       </p>
 
-      <div className="overflow-x-auto">
-        <table className="border-collapse text-xs">
-          <thead>
-            <tr>
-              <th className="sticky left-0 z-10 bg-background p-1" />
-              {voices.map((voice) => (
-                <th
-                  key={voice}
-                  className="max-w-20 truncate p-1 font-medium text-muted-foreground"
-                  title={voice}
-                >
-                  <span className="inline-block max-w-20 rotate-[-35deg] origin-bottom-left translate-y-2">
-                    {voice}
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {voices.map((rowVoice, rowIdx) => (
-              <tr key={rowVoice}>
-                <th className="sticky left-0 z-10 bg-background px-2 py-1 text-left font-medium whitespace-nowrap">
-                  {rowVoice}
-                </th>
-                {voices.map((colVoice, colIdx) => {
-                  if (colIdx <= rowIdx) {
-                    return (
-                      <td key={colVoice} className="p-0.5">
-                        <div className="size-11 rounded-md bg-muted/40" />
-                      </td>
-                    );
-                  }
-                  const key = sortedPairKey(rowVoice, colVoice);
-                  const rating = ratings.get(key) ?? null;
-                  const score = scoreForRating(rating);
-                  const busy = pendingKey === key;
-                  const isSelected = selectedKey === key;
-                  const isPlaying = player.playingPairKey === key;
-                  const canListen = Boolean(
-                    previewFor(previews, rowVoice) &&
-                      previewFor(previews, colVoice)
-                  );
-                  return (
-                    <td key={colVoice} className="p-0.5">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        title={
-                          canListen
-                            ? `${rowVoice} × ${colVoice}: score ${score} (${rating ?? "unset"}) — tap to listen`
-                            : `${rowVoice} × ${colVoice}: score ${score} (${rating ?? "unset"}) — previews missing`
-                        }
-                        aria-label={`${rowVoice} and ${colVoice} pair, score ${score}, ${rating ?? "unset"}`}
-                        aria-pressed={isSelected}
-                        className={cn(
-                          "relative flex size-11 items-center justify-center rounded-md border transition-colors",
-                          rating
-                            ? RATING_CLASS[rating]
-                            : "bg-background hover:bg-muted text-muted-foreground",
-                          isSelected &&
-                            "ring-2 ring-foreground/80 ring-offset-1 ring-offset-background",
-                          isPlaying && "animate-pulse"
-                        )}
-                        onClick={() => {
-                          setSelected({ voiceA: rowVoice, voiceB: colVoice });
-                          if (canListen) {
-                            playPair(rowVoice, colVoice);
-                          }
-                        }}
-                      >
-                        {busy ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : isPlaying ? (
-                          <Pause className="size-3.5" />
-                        ) : (
-                          <span className="text-[11px] font-semibold tabular-nums opacity-90">
-                            {score === 1 ? "·" : score}
-                          </span>
-                        )}
-                      </button>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        {pairings.map(({ voiceA, voiceB, key }) => {
+          const rating = ratings.get(key) ?? null;
+          const score = scoreForRating(rating);
+          const busy = pendingKey === key;
+          const isSelected = selectedKey === key;
+          const isPlaying = player.playingPairKey === key;
+          const canListen = Boolean(
+            previewFor(previews, voiceA) && previewFor(previews, voiceB)
+          );
+          return (
+            <button
+              key={key}
+              type="button"
+              disabled={busy}
+              title={
+                canListen
+                  ? `${voiceA} × ${voiceB}: score ${score} (${rating ?? "unset"}) — tap to listen`
+                  : `${voiceA} × ${voiceB}: score ${score} (${rating ?? "unset"}) — previews missing`
+              }
+              aria-label={`${voiceA} and ${voiceB} pair, score ${score}, ${rating ?? "unset"}`}
+              aria-pressed={isSelected}
+              className={cn(
+                "relative flex aspect-square min-h-24 flex-col items-center justify-center gap-1 rounded-md border p-2 text-center transition-colors",
+                rating
+                  ? RATING_CLASS[rating]
+                  : "bg-background hover:bg-muted text-muted-foreground",
+                isSelected &&
+                  "ring-2 ring-foreground/80 ring-offset-1 ring-offset-background",
+                isPlaying && "animate-pulse"
+              )}
+              onClick={() => {
+                setSelected({ voiceA, voiceB });
+                if (canListen) {
+                  playPair(voiceA, voiceB);
+                }
+              }}
+            >
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : isPlaying ? (
+                <Pause className="size-4" />
+              ) : (
+                <span className="text-lg font-semibold tabular-nums leading-none">
+                  {score === 1 ? "·" : score}
+                </span>
+              )}
+              <span className="line-clamp-2 w-full text-[11px] font-medium leading-tight">
+                {voiceA}
+                <span className="mx-0.5 opacity-70">×</span>
+                {voiceB}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {activeSelection ? (
@@ -507,7 +505,7 @@ function PairingMatrix({
               {player.playingPairKey === selectedKey
                 ? `Playing ${player.playingVoice ?? "…"}…`
                 : selectedRating
-                  ? `Current score ${selectedScore} — ${PAIR_SCORES.find((o) => o.score === selectedScore)?.label}`
+                  ? `Current score ${selectedScore} — ${PAIR_SCORES.find((o) => o.score === selectedScore)?.label} (tap a score to change)`
                   : "Listen, then pick a score"}
             </p>
           </div>
@@ -822,7 +820,7 @@ export function VoicesSettings() {
           </div>
         </CardHeader>
         <CardContent>
-          <PairingMatrix
+          <PairingGrid
             voices={matrixVoices}
             ratings={ratingMap}
             previews={previewsQuery.data?.previews}

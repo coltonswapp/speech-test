@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AudioLinesIcon,
+  ChartNoAxesColumnIcon,
   ListChecksIcon,
   BookOpenIcon,
   ChevronDownIcon,
@@ -47,6 +48,7 @@ const links: NavLink[] = [
   { href: "/tts/review", label: "Review queue", icon: ListChecksIcon },
   { href: "/tts/ambience", label: "Ambience", icon: WindIcon },
   { href: "/tts", label: "TTS Studio", icon: AudioLinesIcon },
+  { href: "/usage", label: "Usage", icon: ChartNoAxesColumnIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 

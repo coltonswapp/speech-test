@@ -158,7 +158,7 @@ function DialoguePlaybackPanel({
           return (
             <div
               key={`stage-${index}`}
-              className="rounded-md border border-dashed border-border/70 bg-background/60 px-3 py-2 text-center text-xs italic text-muted-foreground"
+              className="shrink-0 rounded-md border border-dashed border-border/70 bg-background/60 px-3 py-2 text-center text-xs italic text-muted-foreground"
             >
               {line.text.trim() || "(stage)"}
               {line.visibility ? (
@@ -171,7 +171,7 @@ function DialoguePlaybackPanel({
           return (
             <div
               key={`other-${index}`}
-              className="px-2 py-1 text-xs text-muted-foreground"
+              className="shrink-0 px-2 py-1 text-xs text-muted-foreground"
             >
               {line.type === "inline-question"
                 ? `Checkpoint: ${line.prompt}`
@@ -207,8 +207,10 @@ function DialoguePlaybackPanel({
               }
             }}
             className={cn(
-              "cursor-pointer rounded-md border px-3 py-2 text-left transition-colors",
-              "min-h-11 touch-manipulation md:min-h-0",
+              // shrink-0: rows must keep content height inside the max-h flex
+              // column (md:min-h-0 from touch-target patterns collapses them).
+              "shrink-0 cursor-pointer rounded-md border px-3 py-2 text-left transition-colors",
+              "min-h-11 touch-manipulation",
               isActive
                 ? "border-primary/40 bg-primary/5"
                 : "border-border/50 bg-background/80 hover:border-border",
@@ -217,7 +219,7 @@ function DialoguePlaybackPanel({
             <div className="text-[11px] font-medium text-muted-foreground">
               {line.speaker || "Speaker"}
             </div>
-            <div className="text-sm leading-snug">
+            <div className="block text-sm leading-snug">
               {hasTokenKaraoke && syncLine ? (
                 <span className="inline">
                   {syncLine.tokens.map((token, ti) => (
@@ -506,8 +508,13 @@ function LessonPlaythroughSession({
     async (item: PlaylistItem, startSeconds?: number | null) => {
       try {
         const audio = await ensureAudio(item);
+        // Only seek when explicitly requested (line click). Fresh loads start
+        // at 0 naturally; a pause→Play resume must not pass through here with
+        // a forced seek, and must not reset currentTime when reusing the clip.
         if (startSeconds != null && Number.isFinite(startSeconds)) {
           audio.currentTime = Math.max(0, startSeconds);
+          setCurrentTime(audio.currentTime);
+        } else {
           setCurrentTime(audio.currentTime);
         }
         await audio.play();
@@ -526,22 +533,39 @@ function LessonPlaythroughSession({
   );
 
   function togglePlay() {
-    const audio = audioRef.current;
     if (!current) return;
-    if (!audio || loadedScenarioIdRef.current !== current.scenarioId) {
-      void playFrom(current);
+    const audio = audioRef.current;
+    const loadedHere =
+      audio != null && loadedScenarioIdRef.current === current.scenarioId;
+
+    // Same scene already loaded: pause or resume in place — never reload.
+    if (loadedHere) {
+      if (!audio.paused) {
+        audio.pause();
+        setPlaying(false);
+        stopRaf();
+        setCurrentTime(audio.currentTime);
+        return;
+      }
+      // Resume from audio.currentTime (RAF ticker only; no seek / no reload).
+      setCurrentTime(audio.currentTime);
+      void audio
+        .play()
+        .then(() => {
+          setPlaying(true);
+          startRaf();
+        })
+        .catch((err: unknown) => {
+          const message =
+            err instanceof Error ? err.message : "Could not play scene audio.";
+          toast.error(message);
+          setPlaying(false);
+        });
       return;
     }
-    if (playing) {
-      audio.pause();
-      setPlaying(false);
-      stopRaf();
-    } else {
-      void audio.play().then(() => {
-        setPlaying(true);
-        startRaf();
-      });
-    }
+
+    // Unloaded / different scene: load and start (clip begins at 0).
+    void playFrom(current);
   }
 
   function goTo(index: number) {
@@ -738,7 +762,7 @@ export function LessonPlaythroughButton({
         <span className="ml-1.5">{label}</span>
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Lesson playthrough</DialogTitle>
           </DialogHeader>

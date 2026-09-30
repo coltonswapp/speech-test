@@ -187,6 +187,11 @@ async function resolveAudioUrl(
   }
 }
 
+/** Published CDN URLs are absolute; Studio take proxies are same-origin paths. */
+function isCrossOriginAudioUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
 async function buildPlaylist(
   collection: DialogueCollection,
 ): Promise<{ items: PlaylistItem[]; skipped: number }> {
@@ -313,29 +318,35 @@ function LessonPlaythroughSession({
       if (!autoplay) return;
       setLoadingAudio(true);
       try {
-        const res = await fetch(item.audioUrl, { credentials: "same-origin" });
-        if (!res.ok) {
-          throw new Error(
-            res.status === 404
-              ? "Scene audio was not found."
-              : `Could not load audio (${res.status}).`,
-          );
+        let src = item.audioUrl;
+        // Published CDN audio is cross-origin without CORS for fetch(); media
+        // elements can play it directly. Same-origin Studio take URLs still go
+        // through blob fetch for Safari (HTMLAudioElement.src on /api can fail).
+        if (!isCrossOriginAudioUrl(item.audioUrl)) {
+          const res = await fetch(item.audioUrl, { credentials: "same-origin" });
+          if (!res.ok) {
+            throw new Error(
+              res.status === 404
+                ? "Scene audio was not found."
+                : `Could not load audio (${res.status}).`,
+            );
+          }
+          const contentType = res.headers.get("content-type") ?? "";
+          const buffer = await res.arrayBuffer();
+          if (buffer.byteLength === 0) throw new Error("Scene has no audio.");
+          const mime = contentType.startsWith("audio/")
+            ? contentType.split(";")[0]!.trim()
+            : item.audioUrl.includes(".m4a")
+              ? "audio/mp4"
+              : "audio/wav";
+          const blob = new Blob([buffer], { type: mime });
+          const objectUrl = URL.createObjectURL(blob);
+          blobUrlRef.current = objectUrl;
+          src = objectUrl;
         }
-        const contentType = res.headers.get("content-type") ?? "";
-        // CDN m4a may not need blob; still use blob for consistent play() on Safari.
-        const buffer = await res.arrayBuffer();
-        if (buffer.byteLength === 0) throw new Error("Scene has no audio.");
-        const mime = contentType.startsWith("audio/")
-          ? contentType.split(";")[0]!.trim()
-          : item.audioUrl.includes(".m4a")
-            ? "audio/mp4"
-            : "audio/wav";
-        const blob = new Blob([buffer], { type: mime });
-        const objectUrl = URL.createObjectURL(blob);
-        blobUrlRef.current = objectUrl;
         const audio = new Audio();
         audio.preload = "auto";
-        audio.src = objectUrl;
+        audio.src = src;
         audio.onended = () => {
           setPlaying(false);
           stopRaf();

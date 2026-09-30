@@ -75,7 +75,7 @@ export function bearerMatches(header: string | null): boolean {
   const secrets = [
     process.env.STUDIO_AGENT_TOKEN?.trim(),
     process.env.CRON_SECRET?.trim(),
-  ].filter(Boolean);
+  ].filter((value): value is string => Boolean(value));
   return secrets.some((expected) => {
     const a = Buffer.from(token);
     const b = Buffer.from(expected);

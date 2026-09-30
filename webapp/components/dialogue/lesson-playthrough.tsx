@@ -25,10 +25,12 @@ import {
   type DialogueCollection,
   type DialogueCollectionScenario,
 } from "@/lib/dialogue/client";
+import { activeTokenIndexInLine } from "@/lib/dialogue/token-sync";
 import {
   isSpokenLine,
   isStageLine,
   type DialogueLine,
+  type PublishedToken,
   type PublishedTokenSync,
 } from "@/lib/dialogue/types";
 import { ttsApi } from "@/lib/tts/client";
@@ -43,6 +45,8 @@ type PlaylistItem = {
   audioUrl: string;
   lines: DialogueLine[];
   tokenSync: PublishedTokenSync | null;
+  /** Scenario thumb, else collection; null when neither has a URL. */
+  thumbnailUrl: string | null;
 };
 
 function spokenStartSeconds(
@@ -83,19 +87,63 @@ function spokenIndexByDialogueIndex(lines: DialogueLine[]): Map<number, number> 
   return map;
 }
 
+function resolveThumbnailUrl(
+  scenario: DialogueCollectionScenario,
+  collection: DialogueCollection,
+): string | null {
+  return (
+    scenario.thumbnailSmallUrl ??
+    scenario.thumbnailUrl ??
+    collection.thumbnailSmallUrl ??
+    collection.thumbnailUrl ??
+    null
+  );
+}
+
+function PlaythroughTokenSpan({
+  token,
+  active,
+}: {
+  token: PublishedToken;
+  active: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "rounded-sm px-0.5 transition-colors",
+        active && "bg-primary text-primary-foreground",
+      )}
+    >
+      {token.text}
+    </span>
+  );
+}
+
 function DialoguePlaybackPanel({
   lines,
   tokenSync,
   currentTime,
   playing,
+  highlightedSpoken,
+  onSpokenClick,
 }: {
   lines: DialogueLine[];
   tokenSync: PublishedTokenSync | null;
   currentTime: number;
   playing: boolean;
+  highlightedSpoken: number | null;
+  onSpokenClick: (spokenIndex: number) => void;
 }) {
   const spokenMap = useMemo(() => spokenIndexByDialogueIndex(lines), [lines]);
-  const activeSpoken = playing ? activeSpokenIndex(tokenSync, currentTime) : null;
+  const activeRowRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!playing || highlightedSpoken == null) return;
+    activeRowRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    });
+  }, [playing, highlightedSpoken]);
 
   if (lines.length === 0) {
     return (
@@ -132,33 +180,60 @@ function DialoguePlaybackPanel({
           );
         }
         const spokenIdx = spokenMap.get(index);
-        const isActive = spokenIdx != null && spokenIdx === activeSpoken;
+        const isActive =
+          spokenIdx != null && spokenIdx === highlightedSpoken;
+        const syncLine =
+          spokenIdx != null ? (tokenSync?.lines[spokenIdx] ?? null) : null;
+        const hasTokenKaraoke = Boolean(syncLine?.tokens.length);
+        const activeToken =
+          isActive && playing && syncLine
+            ? activeTokenIndexInLine(syncLine.tokens, currentTime)
+            : null;
+
         return (
           <div
             key={`spoken-${index}`}
+            ref={isActive ? activeRowRef : undefined}
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              if (spokenIdx != null) onSpokenClick(spokenIdx);
+            }}
+            onKeyDown={(event) => {
+              if (spokenIdx == null) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSpokenClick(spokenIdx);
+              }
+            }}
             className={cn(
-              "rounded-md border px-3 py-2 transition-colors",
+              "cursor-pointer rounded-md border px-3 py-2 text-left transition-colors",
+              "min-h-11 touch-manipulation md:min-h-0",
               isActive
-                ? "border-foreground/40 bg-foreground text-background"
-                : "border-border/50 bg-background/80",
+                ? "border-primary/40 bg-primary/5"
+                : "border-border/50 bg-background/80 hover:border-border",
             )}
           >
-            <div
-              className={cn(
-                "text-[11px] font-medium",
-                isActive ? "text-background/70" : "text-muted-foreground",
-              )}
-            >
+            <div className="text-[11px] font-medium text-muted-foreground">
               {line.speaker || "Speaker"}
             </div>
-            <div className="text-sm leading-snug">{line.japanese}</div>
+            <div className="text-sm leading-snug">
+              {hasTokenKaraoke && syncLine ? (
+                <span className="inline">
+                  {syncLine.tokens.map((token, ti) => (
+                    <PlaythroughTokenSpan
+                      key={`${ti}-${token.text}`}
+                      token={token}
+                      active={activeToken === ti}
+                    />
+                  ))}
+                </span>
+              ) : (
+                line.japanese
+              )}
+            </div>
             {line.english ? (
-              <div
-                className={cn(
-                  "mt-0.5 text-xs",
-                  isActive ? "text-background/65" : "text-muted-foreground",
-                )}
-              >
+              <div className="mt-0.5 text-xs text-muted-foreground">
                 {line.english}
               </div>
             ) : null}
@@ -210,6 +285,7 @@ async function buildPlaylist(
           audioUrl,
           lines: scenario.lines,
           tokenSync: scenario.tokenSync,
+          thumbnailUrl: resolveThumbnailUrl(scenario, collection),
         };
       }),
     );
@@ -243,11 +319,13 @@ function LessonPlaythroughSession({
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [loadingAudio, setLoadingAudio] = useState(false);
+  const [selectedSpoken, setSelectedSpoken] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const blobUrlRef = useRef<string | null>(null);
-  const autoplayRef = useRef(true);
+  const loadedScenarioIdRef = useRef<string | null>(null);
   const playlistRef = useRef<PlaylistItem[] | null>(null);
+  const sceneIndexRef = useRef(0);
 
   const collection = data?.collection;
   const playlistQuery = useQuery({
@@ -272,6 +350,10 @@ function LessonPlaythroughSession({
     playlistRef.current = playlist;
   }, [playlist]);
 
+  useEffect(() => {
+    sceneIndexRef.current = sceneIndex;
+  }, [sceneIndex]);
+
   const current = playlist?.[sceneIndex] ?? null;
 
   const stopRaf = useCallback(() => {
@@ -286,10 +368,12 @@ function LessonPlaythroughSession({
     const audio = audioRef.current;
     if (audio) {
       audio.pause();
+      audio.onended = null;
       audio.removeAttribute("src");
       audio.load();
     }
     audioRef.current = null;
+    loadedScenarioIdRef.current = null;
     if (blobUrlRef.current) {
       URL.revokeObjectURL(blobUrlRef.current);
       blobUrlRef.current = null;
@@ -312,10 +396,16 @@ function LessonPlaythroughSession({
     rafRef.current = requestAnimationFrame(tick);
   }, [stopRaf]);
 
-  const loadAndPlay = useCallback(
-    async (item: PlaylistItem, autoplay: boolean) => {
+  const ensureAudio = useCallback(
+    async (item: PlaylistItem): Promise<HTMLAudioElement> => {
+      if (
+        audioRef.current &&
+        loadedScenarioIdRef.current === item.scenarioId
+      ) {
+        return audioRef.current;
+      }
+
       cleanupAudio();
-      if (!autoplay) return;
       setLoadingAudio(true);
       try {
         let src = item.audioUrl;
@@ -350,14 +440,31 @@ function LessonPlaythroughSession({
         audio.onended = () => {
           setPlaying(false);
           stopRaf();
-          setSceneIndex((prev) => {
-            const list = playlistRef.current;
-            const next = prev + 1;
-            if (list && next < list.length) return next;
-            return prev;
-          });
+          const list = playlistRef.current;
+          const prev = sceneIndexRef.current;
+          const next = prev + 1;
+          if (list && next < list.length) {
+            // Advance without autoplay — tear down clip; wait for Play.
+            audio.onended = null;
+            audio.removeAttribute("src");
+            audio.load();
+            audioRef.current = null;
+            loadedScenarioIdRef.current = null;
+            if (blobUrlRef.current) {
+              URL.revokeObjectURL(blobUrlRef.current);
+              blobUrlRef.current = null;
+            }
+            setCurrentTime(0);
+            setSelectedSpoken(null);
+            setSceneIndex(next);
+            return;
+          }
+          // Last scene: rewind so Play restarts from the beginning.
+          audio.currentTime = 0;
+          setCurrentTime(0);
         };
         audioRef.current = audio;
+        loadedScenarioIdRef.current = item.scenarioId;
         if (audio.readyState < HTMLMediaElement.HAVE_METADATA) {
           await new Promise<void>((resolve, reject) => {
             const onReady = () => {
@@ -376,36 +483,53 @@ function LessonPlaythroughSession({
             audio.addEventListener("error", onError);
           });
         }
-        await audio.play();
-        setPlaying(true);
-        setCurrentTime(0);
-        startRaf();
+        // Scene may have changed while we were loading.
+        if (
+          playlistRef.current?.[sceneIndexRef.current]?.scenarioId !==
+          item.scenarioId
+        ) {
+          cleanupAudio();
+          throw new Error("Scene changed before audio was ready.");
+        }
+        return audio;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Could not play scene audio.";
-        toast.error(message);
-        setPlaying(false);
+        cleanupAudio();
+        throw err;
       } finally {
         setLoadingAudio(false);
       }
     },
-    [cleanupAudio, startRaf, stopRaf],
+    [cleanupAudio, stopRaf],
   );
 
-  // Auto-play when the active scene changes (including first load / next after end).
-  useEffect(() => {
-    if (!playlist?.[sceneIndex] || !autoplayRef.current) return;
-    void loadAndPlay(playlist[sceneIndex]!, true);
-    // Intentionally only sceneIndex + playlist identity — not loadAndPlay.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sceneIndex, playlist]);
+  const playFrom = useCallback(
+    async (item: PlaylistItem, startSeconds?: number | null) => {
+      try {
+        const audio = await ensureAudio(item);
+        if (startSeconds != null && Number.isFinite(startSeconds)) {
+          audio.currentTime = Math.max(0, startSeconds);
+          setCurrentTime(audio.currentTime);
+        }
+        await audio.play();
+        setPlaying(true);
+        startRaf();
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Could not play scene audio.";
+        // Scene-change abort is expected; don't toast.
+        if (message.includes("Scene changed")) return;
+        toast.error(message);
+        setPlaying(false);
+      }
+    },
+    [ensureAudio, startRaf],
+  );
 
   function togglePlay() {
     const audio = audioRef.current;
     if (!current) return;
-    if (!audio) {
-      autoplayRef.current = true;
-      void loadAndPlay(current, true);
+    if (!audio || loadedScenarioIdRef.current !== current.scenarioId) {
+      void playFrom(current);
       return;
     }
     if (playing) {
@@ -422,10 +546,26 @@ function LessonPlaythroughSession({
 
   function goTo(index: number) {
     if (!playlist || index < 0 || index >= playlist.length) return;
-    autoplayRef.current = true;
+    if (index === sceneIndex) return;
     cleanupAudio();
+    setSelectedSpoken(null);
     setSceneIndex(index);
   }
+
+  function handleSpokenClick(spokenIndex: number) {
+    setSelectedSpoken(spokenIndex);
+    if (!current) return;
+    const start = spokenStartSeconds(current.tokenSync, spokenIndex);
+    if (start == null) return;
+    void playFrom(current, start);
+  }
+
+  const timingActive =
+    playing && current
+      ? activeSpokenIndex(current.tokenSync, currentTime)
+      : null;
+  const highlightedSpoken =
+    timingActive != null ? timingActive : selectedSpoken;
 
   if (isLoading || building) {
     return (
@@ -473,12 +613,22 @@ function LessonPlaythroughSession({
           </span>
         )}
       </div>
-      <div className="min-w-0">
-        <div className="truncate text-base font-medium">
-          {current?.title ?? "—"}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {lessonTitle ?? data.collection.title}
+      <div className="flex items-start gap-3">
+        {current?.thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- CDN lesson thumbs; arbitrary host
+          <img
+            src={current.thumbnailUrl}
+            alt=""
+            className="size-14 shrink-0 rounded-md border border-border/60 object-cover md:size-16"
+          />
+        ) : null}
+        <div className="min-w-0">
+          <div className="truncate text-base font-medium">
+            {current?.title ?? "—"}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {lessonTitle ?? data.collection.title}
+          </div>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -526,7 +676,6 @@ function LessonPlaythroughSession({
           variant="ghost"
           className="ml-auto min-h-11 touch-manipulation md:min-h-8"
           onClick={() => {
-            autoplayRef.current = false;
             cleanupAudio();
             onClose();
           }}
@@ -541,12 +690,14 @@ function LessonPlaythroughSession({
           tokenSync={current.tokenSync}
           currentTime={currentTime}
           playing={playing}
+          highlightedSpoken={highlightedSpoken}
+          onSpokenClick={handleSpokenClick}
         />
       )}
       <p className="text-[11px] text-muted-foreground">
-        Continuous listen plays published audio when available, otherwise the
-        selected Studio take. Stage lines are shown between spoken lines —
-        karaoke highlight follows published stamps when present.
+        Press Play to start each scene. Click a spoken line to seek when
+        stamps exist. Stage lines are shown between spoken lines — karaoke
+        follows published token stamps when present.
       </p>
     </div>
   );

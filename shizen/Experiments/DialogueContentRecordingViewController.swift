@@ -805,6 +805,7 @@ final class DialogueContentRecordingViewController: UIViewController, DialogueCo
             cacheMetadata: session.example.remoteAudioCacheMetadata,
             dialogueLines: session.spokenTextsForClip,
             fallbackText: line.japanese,
+            tokenSync: session.example.tokenSync,
             onTime: { [weak self] time in
                 self?.applyTokenKaraoke(at: time, spokenIndex: line.spokenIndex)
             }
@@ -837,6 +838,7 @@ final class DialogueContentRecordingViewController: UIViewController, DialogueCo
             dialogueLines: session.spokenTextsForClip,
             fallbackText: lines.first(where: { !$0.isStageLine })?.japanese ?? session.example.japanese,
             rate: conversationPlaybackRate,
+            tokenSync: session.example.tokenSync,
             onSpokenIndexStart: { [weak self] spokenIndex in
                 guard let self, self.audioGeneration == generation else { return }
                 guard let lineIndex = catalog.firstIndex(where: {

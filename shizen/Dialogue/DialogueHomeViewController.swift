@@ -15,8 +15,20 @@ final class DialogueHomeViewController: UIViewController, MainTabScrollable {
     private let lessonPathController: LanguageProgressSnakeExperimentViewController
     private var latestIndex: CMSDialogueLessonIndex?
     private var progressObserver: NSObjectProtocol?
+    private var trackObserver: NSObjectProtocol?
     private var didScrollToRealCurriculum = false
     private var pendingAnimatedScrollToCurrent = false
+
+    private let emptyTrackLabel: UILabel = {
+        let label = UILabel()
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = .preferredFont(forTextStyle: .body)
+        label.textColor = .secondaryLabel
+        label.textAlignment = .center
+        label.numberOfLines = 0
+        label.isHidden = true
+        return label
+    }()
 
     init(progressStore: LessonProgressProviding = DialogueProgressStore.shared) {
         self.progressStore = progressStore
@@ -39,6 +51,7 @@ final class DialogueHomeViewController: UIViewController, MainTabScrollable {
         view.backgroundColor = ExperimentPalette.pageBackground
         configureLessonPath()
         observeProgressChanges()
+        observeTrackChanges()
         if let cached = ContentCMSClient.cachedDialogueLessonIndex(), !cached.lessons.isEmpty {
             latestIndex = cached
             rebuildPathUnits()
@@ -52,6 +65,9 @@ final class DialogueHomeViewController: UIViewController, MainTabScrollable {
     deinit {
         if let progressObserver {
             NotificationCenter.default.removeObserver(progressObserver)
+        }
+        if let trackObserver {
+            NotificationCenter.default.removeObserver(trackObserver)
         }
     }
 
@@ -88,6 +104,14 @@ final class DialogueHomeViewController: UIViewController, MainTabScrollable {
             pathView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
         lessonPathController.didMove(toParent: self)
+
+        view.addSubview(emptyTrackLabel)
+        NSLayoutConstraint.activate([
+            emptyTrackLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            emptyTrackLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            emptyTrackLabel.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 32),
+            emptyTrackLabel.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -32),
+        ])
     }
 
     private func fetchCMSLessons() {
@@ -106,17 +130,43 @@ final class DialogueHomeViewController: UIViewController, MainTabScrollable {
 
     // MARK: - Data
 
-    private func rebuildPathUnits() {
+    private func rebuildPathUnits(scrollToCurrent: Bool = false) {
         guard let latestIndex else { return }
-        let units = LessonUnitSectionBuilder.pathUnits(from: latestIndex, progress: progressStore)
+        let units = LessonUnitSectionBuilder.pathUnits(
+            from: latestIndex,
+            progress: progressStore,
+            track: .current
+        )
+        let hasLessons = units.contains { !$0.lessons.isEmpty }
+        emptyTrackLabel.text = "No \(DialogueLessonTrack.current.title) lessons yet"
+        emptyTrackLabel.isHidden = hasLessons
+        guard hasLessons else {
+            lessonPathController.setUnits([])
+            return
+        }
         let nextTarget = PathUnit.initialIndexPath(in: units)
-        if didScrollToRealCurriculum, nextTarget != lessonPathController.lastScrollTarget {
+        if !scrollToCurrent, didScrollToRealCurriculum, nextTarget != lessonPathController.lastScrollTarget {
             pendingAnimatedScrollToCurrent = true
         }
         lessonPathController.setUnits(units)
+        if scrollToCurrent {
+            didScrollToRealCurriculum = true
+            lessonPathController.scrollToCurrentLesson(animated: true)
+            return
+        }
         guard !didScrollToRealCurriculum else { return }
         didScrollToRealCurriculum = true
         lessonPathController.scrollToCurrentLesson(animated: false)
+    }
+
+    private func observeTrackChanges() {
+        trackObserver = NotificationCenter.default.addObserver(
+            forName: DialogueLessonTrack.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.rebuildPathUnits(scrollToCurrent: true)
+        }
     }
 
     private func observeProgressChanges() {

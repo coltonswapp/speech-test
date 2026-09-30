@@ -3,93 +3,41 @@
 //  shizen
 //
 
+import FirebaseFirestore
 import Foundation
 
-struct GrammarMasterySnapshot: Codable, Equatable {
+struct GrammarMasterySnapshot: Equatable {
     var records: [String: GrammarMasteryRecord] = [:]
-
-    private enum CodingKeys: String, CodingKey {
-        case records
-        case completedPointIDs
-    }
-
-    init(records: [String: GrammarMasteryRecord] = [:]) {
-        self.records = records
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        if let records = try container.decodeIfPresent([String: GrammarMasteryRecord].self, forKey: .records) {
-            self.records = records
-            return
-        }
-        let legacyCompleted = try container.decodeIfPresent(Set<String>.self, forKey: .completedPointIDs) ?? []
-        records = Dictionary(
-            uniqueKeysWithValues: legacyCompleted.map { id in
-                var record = GrammarMasteryRecord.fresh(grammarId: id)
-                record.masteryState = .known
-                return (id, record)
-            }
-        )
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(records, forKey: .records)
-    }
 }
 
 final class GrammarMasteryStore {
 
     static let shared = GrammarMasteryStore()
 
-    private let fileURL: URL
-    private var snapshot: GrammarMasterySnapshot
+    static let didChange = Notification.Name("GrammarMasteryStore.didChange")
 
-    init(
-        fileManager: FileManager = .default,
-        progressFileName: String = "grammar-mastery.json",
-        legacyProgressFileName: String = "grammar-progress.json"
-    ) {
-        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = base.appendingPathComponent("shizen", isDirectory: true)
-        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
-        fileURL = dir.appendingPathComponent(progressFileName)
-        let legacyURL = dir.appendingPathComponent(legacyProgressFileName)
+    private var snapshot = GrammarMasterySnapshot()
+    private let connection: LearnerProgressConnection
+    private var pendingRecords: [String: GrammarMasteryRecord] = [:]
 
-        if let data = try? Data(contentsOf: fileURL),
-           let decoded = try? JSONDecoder().decode(GrammarMasterySnapshot.self, from: data) {
-            snapshot = decoded
-        } else if let legacyData = try? Data(contentsOf: legacyURL),
-                  let legacy = try? JSONDecoder().decode(LegacyGrammarProgressFile.self, from: legacyData) {
-            snapshot = GrammarMasterySnapshot(
-                records: Dictionary(
-                    uniqueKeysWithValues: legacy.completedPointIDs.map { id in
-                        var record = GrammarMasteryRecord.fresh(grammarId: id)
-                        record.masteryState = .known
-                        return (id, record)
-                    }
-                )
-            )
-            if let migrated = try? JSONEncoder().encode(snapshot) {
-                try? migrated.write(to: fileURL, options: .atomic)
-            }
-        } else {
-            snapshot = GrammarMasterySnapshot()
+    init() {
+        let callbacks = LearnerProgressCallbacks()
+        connection = LearnerProgressConnection(
+            documentID: LearnerFirestore.progressGrammar,
+            shell: Self.emptyShell(),
+            onSnapshot: { callbacks.onSnapshot?($0) },
+            onSignedOut: { callbacks.onSignedOut?() }
+        )
+        callbacks.onSnapshot = { [weak self] snapshot in
+            self?.apply(snapshot)
         }
+        callbacks.onSignedOut = { [weak self] in
+            self?.clearLocal()
+        }
+        connection.start()
     }
 
-    func reload() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let decoded = try? JSONDecoder().decode(GrammarMasterySnapshot.self, from: data)
-        else { return }
-        snapshot = decoded
-    }
-
-    private func persist() {
-        guard let data = try? JSONEncoder().encode(snapshot) else { return }
-        try? data.write(to: fileURL, options: [.atomic])
-    }
+    func reload() {}
 
     func record(for grammarID: String) -> GrammarMasteryRecord {
         snapshot.records[grammarID] ?? .fresh(grammarId: grammarID)
@@ -116,8 +64,7 @@ final class GrammarMasteryStore {
         if record.masteryState == .new {
             record.masteryState = .seen
         }
-        snapshot.records[grammarID] = record
-        persist()
+        store(record)
     }
 
     func recordEncounter(grammarIDs: [String], scenarioID: String?) {
@@ -139,8 +86,7 @@ final class GrammarMasteryStore {
         } else {
             record.correctStreak = 0
         }
-        snapshot.records[grammarID] = record
-        persist()
+        store(record)
     }
 
     func finalizePracticeSession(grammarID: String, correctCount: Int, totalCount: Int, at date: Date = Date()) {
@@ -152,25 +98,109 @@ final class GrammarMasteryStore {
         } else if record.masteryState == .new, correctCount > 0 {
             record.masteryState = .seen
         }
-        snapshot.records[grammarID] = record
-        persist()
+        store(record)
     }
 
     func resetAll() {
-        snapshot = GrammarMasterySnapshot()
-        persist()
+        clearLocal()
     }
 
     /// Legacy lesson completion hook — marks a pattern as known.
     func markKnown(grammarID: String) {
         var record = record(for: grammarID)
         record.masteryState = .known
-        snapshot.records[grammarID] = record
-        persist()
+        store(record)
     }
-}
 
-/// Decodes the pre-mastery `grammar-progress.json` file for one-time migration.
-private struct LegacyGrammarProgressFile: Codable, Equatable {
-    var completedPointIDs: Set<String> = []
+    private func store(_ record: GrammarMasteryRecord) {
+        snapshot.records[record.grammarId] = record
+        pendingRecords[record.grammarId] = record
+        connection.enqueue([
+            "lastGrammarId": record.grammarId,
+            "records.\(record.grammarId)": payload(record),
+        ])
+        notify()
+    }
+
+    private func clearLocal() {
+        pendingRecords.removeAll()
+        guard !snapshot.records.isEmpty else { return }
+        snapshot = GrammarMasterySnapshot()
+        notify()
+    }
+
+    private func apply(_ document: DocumentSnapshot?) {
+        if document == nil, !snapshot.records.isEmpty { return }
+        var remote = decode(document?.data())
+        for (grammarID, local) in pendingRecords {
+            if let remoteRecord = remote[grammarID], sameProgress(remoteRecord, local) {
+                pendingRecords[grammarID] = nil
+                remote[grammarID] = remoteRecord
+            } else {
+                remote[grammarID] = local
+            }
+        }
+        guard remote != snapshot.records else { return }
+        snapshot.records = remote
+        notify()
+    }
+
+    private func sameProgress(_ lhs: GrammarMasteryRecord, _ rhs: GrammarMasteryRecord) -> Bool {
+        lhs.masteryState == rhs.masteryState
+            && lhs.timesEncountered == rhs.timesEncountered
+            && lhs.correctStreak == rhs.correctStreak
+            && lhs.firstSeenScenarioId == rhs.firstSeenScenarioId
+    }
+
+    private func decode(_ data: [String: Any]?) -> [String: GrammarMasteryRecord] {
+        guard let data else { return [:] }
+        var records: [String: GrammarMasteryRecord] = [:]
+        for (key, value) in LearnerSnapshotValue.map(data["records"]) {
+            guard let record = record(from: value, grammarID: key) else { continue }
+            records[key] = record
+        }
+        return records
+    }
+
+    private func record(from value: Any, grammarID: String) -> GrammarMasteryRecord? {
+        let map = LearnerSnapshotValue.map(value)
+        guard let stateRaw = LearnerSnapshotValue.string(map["masteryState"]),
+              let state = GrammarMasteryState(rawValue: stateRaw),
+              let timesEncountered = LearnerSnapshotValue.int(map["timesEncountered"]),
+              let correctStreak = LearnerSnapshotValue.int(map["correctStreak"])
+        else { return nil }
+        let grammarId = LearnerSnapshotValue.string(map["grammarId"]) ?? grammarID
+        return GrammarMasteryRecord(
+            grammarId: grammarId,
+            masteryState: state,
+            timesEncountered: timesEncountered,
+            firstSeenScenarioId: LearnerSnapshotValue.string(map["firstSeenScenarioId"]),
+            lastPracticedAt: LearnerSnapshotValue.date(map["lastPracticedAt"]),
+            correctStreak: correctStreak
+        )
+    }
+
+    private func payload(_ record: GrammarMasteryRecord) -> [String: Any] {
+        [
+            "grammarId": record.grammarId,
+            "masteryState": record.masteryState.rawValue,
+            "timesEncountered": record.timesEncountered,
+            "firstSeenScenarioId": record.firstSeenScenarioId ?? NSNull(),
+            "lastPracticedAt": record.lastPracticedAt.map { Timestamp(date: $0) } ?? NSNull(),
+            "correctStreak": record.correctStreak,
+        ]
+    }
+
+    private func notify() {
+        NotificationCenter.default.post(name: Self.didChange, object: self)
+    }
+
+    private static func emptyShell() -> [String: Any] {
+        [
+            "schemaVersion": 1,
+            "updatedAt": FieldValue.serverTimestamp(),
+            "records": [:],
+            "lastGrammarId": NSNull(),
+        ]
+    }
 }

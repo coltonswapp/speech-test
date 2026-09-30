@@ -90,6 +90,21 @@ final class KanaProgressPathViewController: UIViewController {
         configureCollectionView()
         configureDataSource()
         reloadContent()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(storedProgressDidChange),
+            name: KanaProgressStore.didChange,
+            object: progressStore
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func storedProgressDidChange() {
+        reloadContent()
+        onProgressDidChange?()
     }
 
     override func viewWillAppear(_ animated: Bool) {

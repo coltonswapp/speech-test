@@ -2,7 +2,7 @@
 //  DialogueNuanceCardView.swift
 //  shizen
 //
-//  Rounded “IN THIS SENTENCE”-style card for dialogue-line nuances.
+//  Rounded card for a dialogue line’s deeper meaning.
 //
 
 import InteractionKit
@@ -12,7 +12,7 @@ final class DialogueNuanceCardView: UIView {
 
     enum State {
         case loading
-        case result(GeminiDialogueNuance.Result)
+        case result(GeminiDialogueNuance.Result, feedback: LLMFeedbackReceipt?)
         case unavailable(String)
         case failed(String)
     }
@@ -25,11 +25,16 @@ final class DialogueNuanceCardView: UIView {
     private let loadingLabel = UILabel()
     private let headlineLabel = UILabel()
     private let noteLabel = UILabel()
+    private let feedbackRow = LLMFeedbackRow()
     private let messageLabel = UILabel()
 
     private static let contentInsets = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
     private static let shadowBleed: CGFloat = 12
     private static let accentColor = UIColor.systemYellow
+    private static let edgeControlLift: CGFloat = 8
+    private static let thumbsOverlap: CGFloat = 18
+
+    private var sectionBottomConstraint: NSLayoutConstraint?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -49,35 +54,37 @@ final class DialogueNuanceCardView: UIView {
             loadingSpinner.reset()
             headlineLabel.isHidden = true
             noteLabel.isHidden = true
+            feedbackRow.dismiss()
             messageLabel.isHidden = true
             headlineLabel.text = nil
             noteLabel.text = nil
             messageLabel.text = nil
-        case .result(let result):
+        case .result(let result, let feedback):
             loadingRow.isHidden = true
             loadingSpinner.isHidden = true
             messageLabel.isHidden = true
             messageLabel.text = nil
 
             let headline = result.impliedMeaning.trimmingCharacters(in: .whitespacesAndNewlines)
-            let fallback = result.naturalMeaning.trimmingCharacters(in: .whitespacesAndNewlines)
-            let shownHeadline = headline.isEmpty ? fallback : headline
-            headlineLabel.text = shownHeadline.isEmpty ? nil : shownHeadline
-            headlineLabel.isHidden = shownHeadline.isEmpty
+            headlineLabel.text = headline.isEmpty ? nil : headline
+            headlineLabel.isHidden = headline.isEmpty
 
             let note = result.notes.trimmingCharacters(in: .whitespacesAndNewlines)
             noteLabel.text = note.isEmpty ? nil : note
             noteLabel.isHidden = note.isEmpty
+            feedbackRow.present(feedback)
         case .unavailable(let message), .failed(let message):
             loadingRow.isHidden = true
             loadingSpinner.isHidden = true
             headlineLabel.isHidden = true
             noteLabel.isHidden = true
+            feedbackRow.dismiss()
             headlineLabel.text = nil
             noteLabel.text = nil
             messageLabel.text = message
             messageLabel.isHidden = message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
+        updateEdgeChrome()
         setNeedsLayout()
     }
 
@@ -93,7 +100,7 @@ final class DialogueNuanceCardView: UIView {
         clipsToBounds = false
         translatesAutoresizingMaskIntoConstraints = false
 
-        sectionTitle.text = "IMPLIED MEANING"
+        sectionTitle.text = "DEEPER MEANING"
         sectionTitle.font = UIFont.preferredFont(forTextStyle: .caption1)
         sectionTitle.textColor = .secondaryLabel
 
@@ -159,8 +166,17 @@ final class DialogueNuanceCardView: UIView {
         surface.translatesAutoresizingMaskIntoConstraints = false
         surface.addSubview(sectionStack)
         addSubview(surface)
+        addSubview(feedbackRow)
+        feedbackRow.onVisibilityChange = { [weak self] in
+            self?.updateEdgeChrome()
+        }
 
         let insets = Self.contentInsets
+        let sectionBottom = sectionStack.bottomAnchor.constraint(
+            equalTo: surface.bottomAnchor,
+            constant: -insets.bottom
+        )
+        sectionBottomConstraint = sectionBottom
         NSLayoutConstraint.activate([
             surface.topAnchor.constraint(equalTo: topAnchor),
             surface.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -170,9 +186,25 @@ final class DialogueNuanceCardView: UIView {
             sectionStack.topAnchor.constraint(equalTo: surface.topAnchor, constant: insets.top),
             sectionStack.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: insets.left),
             sectionStack.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -insets.right),
-            sectionStack.bottomAnchor.constraint(equalTo: surface.bottomAnchor, constant: -insets.bottom),
+            sectionBottom,
+
+            feedbackRow.bottomAnchor.constraint(
+                equalTo: surface.bottomAnchor,
+                constant: LLMFeedbackRow.diameter / 2 - Self.edgeControlLift
+            ),
+            feedbackRow.trailingAnchor.constraint(
+                equalTo: surface.trailingAnchor,
+                constant: -insets.right
+            ),
         ])
 
         apply(.loading)
+    }
+
+    private func updateEdgeChrome() {
+        let showingThumbs = !feedbackRow.isHidden
+        let overlap = showingThumbs ? Self.thumbsOverlap + Self.edgeControlLift : 0
+        sectionBottomConstraint?.constant = -(Self.contentInsets.bottom + overlap)
+        bringSubviewToFront(feedbackRow)
     }
 }

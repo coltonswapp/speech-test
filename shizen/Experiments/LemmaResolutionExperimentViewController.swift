@@ -95,6 +95,17 @@ final class LemmaResolutionExperimentViewController: UIViewController {
             Fixture(surface: "書きそう", expectedLemma: "書く", expectedReading: "かきそう", note: "godan stem + そう"),
             Fixture(surface: "見たい", expectedLemma: "見る", expectedReading: "みたい", note: "ichidan + たい"),
         ]),
+        Section(title: "てみる · 行く not 行う", fixtures: [
+            Fixture(surface: "行ってみたい", expectedLemma: "行く", expectedReading: "いってみたい", note: "てみたい is 行く"),
+            Fixture(surface: "行ってみる", expectedLemma: "行く", expectedReading: "いってみる", note: "てみる is 行く"),
+            Fixture(surface: "行ってみて", expectedLemma: "行く", expectedReading: "いってみて", note: "てみて is 行く"),
+        ]),
+        Section(title: "られる · れ", fixtures: [
+            Fixture(surface: "立てられなくて", expectedLemma: "立てる", expectedReading: "たてられなくて", note: "ichidan passive + なくて"),
+            Fixture(surface: "立てられる", expectedLemma: "立てる", expectedReading: "たてられる", note: "ichidan potential/passive"),
+            Fixture(surface: "食べられなくて", expectedLemma: "食べる", expectedReading: "たべられなくて", note: "ichidan + られなくて"),
+            Fixture(surface: "書かれなくて", expectedLemma: "書く", expectedReading: "かかれなくて", note: "godan passive + なくて"),
+        ]),
     ]
 
     private var filter: Filter = .all

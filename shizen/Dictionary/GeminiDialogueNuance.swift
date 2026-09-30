@@ -4,7 +4,8 @@
 //
 //  Cloud Gemini notes for what a dialogue line really means — implied
 //  refusals, unasked offers, cultural quirks — using surrounding lines
-//  as context. Defaults to gemini-2.5-flash.
+//  as context. Served by the LLM gateway (feature `dialogue_nuance`);
+//  the prompt lives server-side.
 //
 
 import Foundation
@@ -48,73 +49,36 @@ struct DialogueNuanceContext: Equatable {
 
 enum GeminiDialogueNuance {
 
-    enum Model: String {
-        case flash = "gemini-2.5-flash"
-        case flashLite = "gemini-2.5-flash-lite"
-    }
-
     struct Result: Equatable {
         let naturalMeaning: String
         let impliedMeaning: String
         let notes: String
     }
 
+    struct Explanation {
+        let result: Result
+        let feedback: LLMFeedbackReceipt?
+    }
+
     struct Request: Equatable {
         let context: DialogueNuanceContext
     }
 
-    private static let endpointBase = "https://generativelanguage.googleapis.com/v1beta/models"
-    private static let deterministicSeed = 42
-    private static let defaultModel: Model = .flash
-
-    private static let instructionsText = """
-    You help English-speaking Japanese learners notice what one dialogue line \
-    really means — especially anything hidden in context.
-
-    Surrounding lines (up to two before and two after) are for context only. \
-    Explain the focused line, not the whole conversation.
-
-    Keep it light. One idea per field. Short sentences. No linguistics jargon, \
-    no lectures, no stacked interpretations, no cultural essays.
-
-    The learner is looking at this line alone and usually does not know who \
-    said what. Write about what the line is doing, not who is doing it. Do not \
-    name speakers, roles, or characters, and do not use he/she or other \
-    identity details, unless the implication is otherwise unclear.
-
-    Japanese often hides the real move in a light way:
-    - Naming something can be an offer (麦茶です。冷たいですよ。).
-    - Stating a circumstance and trailing off can be a polite no \
-    (今から駅なんですけど → can’t take the tea; heading to the station).
-
-    naturalMeaning: the real move, in natural English. A short phrase. \
-    No speaker or character attribution unless necessary.
-
-    impliedMeaning: one short sentence on what was left unsaid. Empty if nothing \
-    is hidden. Infer only from the given lines. No speaker or character \
-    attribution unless necessary.
-
-    notes: at most one short sentence on a single tell (trailing けど, ですよ). \
-    Empty if impliedMeaning already covers it. Do not repeat naturalMeaning.
-
-    Return a JSON object with "naturalMeaning", "impliedMeaning", and "notes" string fields.
-    """
-
     private actor Cache {
         static let shared = Cache()
-        private var storage: [String: Result] = [:]
+        private var storage: [String: Explanation] = [:]
 
-        func result(for key: String) -> Result? {
+        func result(for key: String) -> Explanation? {
             storage[key]
         }
 
-        func store(_ result: Result, for key: String) {
+        func store(_ result: Explanation, for key: String) {
             storage[key] = result
         }
     }
 
     static var isConfigured: Bool {
-        !GeminiAppKey.resolved.isEmpty
+        LLMGatewayClient.isConfigured && LLMGatewayClient.hasSignedInUser
     }
 
     static var isAvailable: Bool {
@@ -122,99 +86,85 @@ enum GeminiDialogueNuance {
     }
 
     static var unavailabilityMessage: String {
-        isConfigured ? "" : "Gemini API key is not configured."
+        if !LLMGatewayClient.isConfigured {
+            return LLMGatewayError.notConfigured.errorDescription ?? ""
+        }
+        if !LLMGatewayClient.hasSignedInUser {
+            return "Sign in to see dialogue nuance."
+        }
+        return ""
     }
 
-    static func cachedResult(for request: Request, model: Model = defaultModel) async -> Result? {
-        await Cache.shared.result(for: cacheKey(for: request, model: model))
+    static func cachedResult(for request: Request) async -> Explanation? {
+        await Cache.shared.result(for: cacheKey(for: request))
     }
 
-    static func explain(_ request: Request, model: Model = defaultModel) async throws -> Result {
+    static func explain(_ request: Request) async throws -> Explanation {
         let focused = request.context.focused.japanese.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !focused.isEmpty else {
             throw NuanceError.invalidInput
         }
 
-        let cacheKey = Self.cacheKey(for: request, model: model)
+        let cacheKey = Self.cacheKey(for: request)
         if let cached = await Cache.shared.result(for: cacheKey) {
             return cached
         }
 
         guard isConfigured else {
-            throw NuanceError.missingAPIKey
+            throw NuanceError.unavailable(unavailabilityMessage)
         }
 
-        print("[GeminiDialogueNuance] explaining focused line: \"\(focused)\"")
+        print("[GeminiDialogueNuance] explaining focused line: \"\(focused)\" via gateway")
 
-        let payload = try await fetchNuance(for: request, model: model)
-        let result = sanitizedResult(
-            naturalMeaning: payload.naturalMeaning,
-            impliedMeaning: payload.impliedMeaning,
-            notes: payload.notes
+        let context = request.context
+        let response = try await LLMGatewayClient.postGenerate(
+            "v1/generate",
+            body: GatewayRequest(
+                preceding: Array(gatewayLines(context.preceding).suffix(DialogueNuanceContext.neighborRadius)),
+                focused: GatewayLine(context.focused),
+                following: Array(gatewayLines(context.following).prefix(DialogueNuanceContext.neighborRadius))
+            ),
+            as: NuancePayload.self
         )
-        guard !result.naturalMeaning.isEmpty else {
+        if let usage = response.usage {
+            GeminiUsageTracker.shared.record(feature: .dialogueNuance, model: response.model, usage: usage)
+        }
+
+        let payload = response.result
+        let result = Result(
+            naturalMeaning: payload.naturalMeaning.trimmingCharacters(in: .whitespacesAndNewlines),
+            impliedMeaning: payload.impliedMeaning.trimmingCharacters(in: .whitespacesAndNewlines),
+            notes: payload.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        guard !result.impliedMeaning.isEmpty else {
             throw NuanceError.emptyResponse
         }
-        await Cache.shared.store(result, for: cacheKey)
-        return result
+        let explanation = Explanation(result: result, feedback: response.feedback)
+        await Cache.shared.store(explanation, for: cacheKey)
+        return explanation
     }
 
-    // MARK: - API
+    // MARK: - Gateway
 
-    private struct GenerateContentRequest: Encodable {
-        struct Content: Encodable {
-            struct Part: Encodable {
-                let text: String
-            }
+    private struct GatewayLine: Encodable {
+        let speaker: String?
+        let japanese: String
+        let english: String?
 
-            let parts: [Part]
+        init(_ line: DialogueNuanceContext.Line) {
+            let speaker = line.speaker.trimmingCharacters(in: .whitespacesAndNewlines)
+            let english = line.english?.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.speaker = speaker.isEmpty ? nil : speaker
+            japanese = line.japanese.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.english = english?.isEmpty == false ? english : nil
         }
-
-        struct GenerationConfig: Encodable {
-            struct Schema: Encodable {
-                struct Property: Encodable {
-                    let type: String
-                }
-
-                let type: String
-                let properties: [String: Property]
-                let required: [String]
-            }
-
-            let responseMimeType: String
-            let responseSchema: Schema
-            let temperature: Double
-            let topP: Double
-            let topK: Int
-            let seed: Int
-            let candidateCount: Int
-        }
-
-        let contents: [Content]
-        let generationConfig: GenerationConfig
     }
 
-    private struct GenerateContentResponse: Decodable {
-        struct Candidate: Decodable {
-            struct Content: Decodable {
-                struct Part: Decodable {
-                    let text: String?
-                }
-
-                let parts: [Part]?
-            }
-
-            let content: Content?
-        }
-
-        struct APIError: Decodable {
-            let message: String?
-            let status: String?
-        }
-
-        let candidates: [Candidate]?
-        let error: APIError?
-        let usageMetadata: GeminiUsageMetadata?
+    private struct GatewayRequest: Encodable {
+        let feature = "dialogue_nuance"
+        let preceding: [GatewayLine]
+        let focused: GatewayLine
+        let following: [GatewayLine]
     }
 
     private struct NuancePayload: Decodable {
@@ -223,86 +173,12 @@ enum GeminiDialogueNuance {
         let notes: String
     }
 
-    private static func fetchNuance(for request: Request, model: Model) async throws -> NuancePayload {
-        let prompt = prompt(for: request)
-        print("[GeminiDialogueNuance] prompt:\n\(prompt)")
-
-        let requestBody = GenerateContentRequest(
-            contents: [
-                .init(parts: [.init(text: "\(instructionsText)\n\n\(prompt)")]),
-            ],
-            generationConfig: .init(
-                responseMimeType: "application/json",
-                responseSchema: .init(
-                    type: "object",
-                    properties: [
-                        "naturalMeaning": .init(type: "string"),
-                        "impliedMeaning": .init(type: "string"),
-                        "notes": .init(type: "string"),
-                    ],
-                    required: ["naturalMeaning", "impliedMeaning", "notes"]
-                ),
-                temperature: 0,
-                topP: 1,
-                topK: 1,
-                seed: deterministicSeed,
-                candidateCount: 1
-            )
-        )
-
-        guard let url = URL(string: "\(endpointBase)/\(model.rawValue):generateContent") else {
-            throw NuanceError.invalidConfiguration
-        }
-
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(GeminiAppKey.resolved, forHTTPHeaderField: "x-goog-api-key")
-        urlRequest.httpBody = try JSONEncoder().encode(requestBody)
-
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        guard let http = response as? HTTPURLResponse else {
-            throw NuanceError.invalidResponse
-        }
-
-        let rawBody = String(data: data, encoding: .utf8) ?? "<non-utf8 body, \(data.count) bytes>"
-        print("[GeminiDialogueNuance] response (status \(http.statusCode)) raw body:\n\(rawBody)")
-
-        let decoded = try JSONDecoder().decode(GenerateContentResponse.self, from: data)
-        if let usage = decoded.usageMetadata {
-            GeminiUsageTracker.shared.record(feature: .dialogueNuance, model: model.rawValue, usage: usage)
-        }
-        if let apiError = decoded.error {
-            throw NuanceError.api(apiError.message ?? apiError.status ?? "Gemini API error")
-        }
-        guard (200...299).contains(http.statusCode) else {
-            throw NuanceError.api(rawBody)
-        }
-
-        guard
-            let jsonText = decoded.candidates?.first?.content?.parts?.first?.text,
-            let jsonData = jsonText.data(using: .utf8)
-        else {
-            throw NuanceError.invalidResponse
-        }
-
-        print("[GeminiDialogueNuance] response candidate text:\n\(jsonText)")
-        return try JSONDecoder().decode(NuancePayload.self, from: jsonData)
+    /// The gateway takes at most `neighborRadius` non-empty neighbors on each side.
+    private static func gatewayLines(_ lines: [DialogueNuanceContext.Line]) -> [GatewayLine] {
+        lines.map(GatewayLine.init).filter { !$0.japanese.isEmpty }
     }
 
-    private static func sanitizedResult(
-        naturalMeaning: String,
-        impliedMeaning: String,
-        notes: String
-    ) -> Result {
-        Result(
-            naturalMeaning: naturalMeaning.trimmingCharacters(in: .whitespacesAndNewlines),
-            impliedMeaning: impliedMeaning.trimmingCharacters(in: .whitespacesAndNewlines),
-            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-    }
-
-    private static func cacheKey(for request: Request, model: Model) -> String {
+    private static func cacheKey(for request: Request) -> String {
         func lineKey(_ line: DialogueNuanceContext.Line) -> String {
             [
                 line.speaker,
@@ -311,78 +187,23 @@ enum GeminiDialogueNuance {
             ].joined(separator: "\u{1E}")
         }
         return [
-            "gemini-nuance-v3",
-            model.rawValue,
+            "gemini-nuance-v5-gateway",
             request.context.preceding.map(lineKey).joined(separator: "\u{1D}"),
             lineKey(request.context.focused),
             request.context.following.map(lineKey).joined(separator: "\u{1D}"),
         ].joined(separator: "\u{1F}")
     }
 
-    private static func prompt(for request: Request) -> String {
-        let context = request.context
-        var lines: [String] = []
-
-        let hasNeighbors = !context.preceding.isEmpty || !context.following.isEmpty
-        if hasNeighbors {
-            lines.append("Dialogue (context; the line marked → is the focus):")
-            for line in context.preceding {
-                lines.append(formatDialogueLine(line, focused: false))
-            }
-            lines.append(formatDialogueLine(context.focused, focused: true))
-            for line in context.following {
-                lines.append(formatDialogueLine(line, focused: false))
-            }
-            lines.append("")
-        }
-
-        lines.append("Focused Japanese: \(context.focused.japanese)")
-        if let english = context.focused.english?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !english.isEmpty {
-            lines.append("English hint (may be approximate): \(english)")
-        }
-        lines.append("")
-        lines.append("Stay brief. One idea per field. Do not over-explain.")
-        lines.append("Do not mention who spoke unless that identity is required to understand the line.")
-        lines.append("")
-        lines.append("Return for the focused line only:")
-        lines.append("• naturalMeaning — short natural English of the real move")
-        lines.append("• impliedMeaning — one sentence on what is unsaid, or empty")
-        lines.append("• notes — one short tell, or empty")
-        return lines.joined(separator: "\n")
-    }
-
-    private static func formatDialogueLine(_ line: DialogueNuanceContext.Line, focused: Bool) -> String {
-        let marker = focused ? "→ " : "  "
-        let japanese = line.japanese.trimmingCharacters(in: .whitespacesAndNewlines)
-        let head = "\(marker)\(japanese)"
-        guard !focused,
-              let english = line.english?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !english.isEmpty else {
-            return head
-        }
-        return "\(head)\n     (\(english))"
-    }
-
     enum NuanceError: LocalizedError {
         case invalidInput
-        case missingAPIKey
-        case invalidConfiguration
-        case invalidResponse
-        case api(String)
+        case unavailable(String)
         case emptyResponse
 
         var errorDescription: String? {
             switch self {
             case .invalidInput:
                 return "Missing dialogue line."
-            case .missingAPIKey:
-                return "Gemini API key is not configured."
-            case .invalidConfiguration:
-                return "Gemini dialogue nuance is misconfigured."
-            case .invalidResponse:
-                return "Gemini returned an unexpected response."
-            case .api(let message):
+            case .unavailable(let message):
                 return message
             case .emptyResponse:
                 return "Gemini returned an empty explanation."

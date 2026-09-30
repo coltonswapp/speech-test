@@ -158,6 +158,7 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
     private struct PreparedClip {
         let url: URL
         let lines: [AlignedTimeLine]
+        let tokenSyncHash: String?
     }
 
     private let fallbackSpeaker = WordUtteranceSpeaker()
@@ -180,6 +181,8 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
         cacheMetadata: RemoteAudioCacheMetadata? = nil,
         dialogueLines: [String] = [],
         playLineIndex: Int? = nil,
+        lineTimeRange: Range<TimeInterval>? = nil,
+        tokenSync: DialogueTokenSync? = nil,
         fallbackText: String,
         languageIdentifier: String = "ja-JP",
         onTime: ((TimeInterval) -> Void)? = nil,
@@ -192,7 +195,8 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
             publishedAudioUrl: publishedAudioUrl,
             audioKey: audioKey,
             cacheMetadata: cacheMetadata,
-            dialogueLines: dialogueLines
+            dialogueLines: dialogueLines,
+            tokenSync: tokenSync
         ) { [weak self] url, cacheKey in
             guard let self else { return }
             guard let url else {
@@ -200,8 +204,18 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
                 return
             }
 
+            if let lineTimeRange {
+                self.playTimeRange(lineTimeRange, url: url)
+                return
+            }
+
             if !dialogueLines.isEmpty,
-               self.prepareClipIfNeeded(cacheKey: cacheKey, url: url, dialogueLines: dialogueLines),
+               self.prepareClipIfNeeded(
+                cacheKey: cacheKey,
+                url: url,
+                dialogueLines: dialogueLines,
+                tokenSync: tokenSync
+               ),
                let clip = self.preparedClip {
                 if let playLineIndex, clip.lines.indices.contains(playLineIndex) {
                     self.playTimeRange(clip.lines[playLineIndex].timeRange, url: url)
@@ -226,6 +240,8 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
         cacheMetadata: RemoteAudioCacheMetadata? = nil,
         dialogueLines: [String],
         fallbackText: String,
+        lineTimeRange: Range<TimeInterval>? = nil,
+        tokenSync: DialogueTokenSync? = nil,
         onTime: ((TimeInterval) -> Void)? = nil,
         onFinished: (() -> Void)? = nil
     ) {
@@ -235,6 +251,8 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
             cacheMetadata: cacheMetadata,
             dialogueLines: dialogueLines,
             playLineIndex: index,
+            lineTimeRange: lineTimeRange,
+            tokenSync: tokenSync,
             fallbackText: fallbackText,
             onTime: onTime,
             onFinished: onFinished
@@ -251,6 +269,7 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
         dialogueLines: [String],
         fallbackText: String,
         rate: Float = 1,
+        tokenSync: DialogueTokenSync? = nil,
         onSpokenIndexStart: @escaping (Int) -> Void,
         onTime: ((TimeInterval) -> Void)? = nil,
         onFinished: (() -> Void)? = nil
@@ -262,7 +281,8 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
             publishedAudioUrl: publishedAudioUrl,
             audioKey: audioKey,
             cacheMetadata: cacheMetadata,
-            dialogueLines: dialogueLines
+            dialogueLines: dialogueLines,
+            tokenSync: tokenSync
         ) { [weak self] url, cacheKey in
             guard let self else { return }
             guard let url else {
@@ -271,7 +291,12 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
                 return
             }
             guard !dialogueLines.isEmpty,
-                  self.prepareClipIfNeeded(cacheKey: cacheKey, url: url, dialogueLines: dialogueLines),
+                  self.prepareClipIfNeeded(
+                    cacheKey: cacheKey,
+                    url: url,
+                    dialogueLines: dialogueLines,
+                    tokenSync: tokenSync
+                  ),
                   let clip = self.preparedClip
             else {
                 onSpokenIndexStart(spokenIndices.first ?? 0)
@@ -367,6 +392,7 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
         audioKey: String?,
         cacheMetadata: RemoteAudioCacheMetadata?,
         dialogueLines: [String],
+        tokenSync: DialogueTokenSync? = nil,
         body: @escaping (_ url: URL?, _ cacheKey: String) -> Void
     ) {
         clipPrepareGeneration += 1
@@ -391,7 +417,12 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
                 }
 
                 guard let url, !dialogueLines.isEmpty,
-                      !self.isClipPrepared(cacheKey: cacheKey, url: url, dialogueLines: dialogueLines)
+                      !self.isClipPrepared(
+                        cacheKey: cacheKey,
+                        url: url,
+                        dialogueLines: dialogueLines,
+                        tokenSync: tokenSync
+                      )
                 else {
                     finish()
                     return
@@ -404,25 +435,41 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
         }
     }
 
-    private func isClipPrepared(cacheKey: String, url: URL, dialogueLines: [String]) -> Bool {
+    private func isClipPrepared(
+        cacheKey: String,
+        url: URL,
+        dialogueLines: [String],
+        tokenSync: DialogueTokenSync?
+    ) -> Bool {
         let normalizedDialogue = dialogueLines
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         return preparedCacheKey == cacheKey
             && preparedClip?.url == url
             && preparedClip?.lines.map(\.text) == normalizedDialogue
+            && preparedClip?.tokenSyncHash == tokenSync?.contentHash
     }
 
     @discardableResult
-    private func prepareClipIfNeeded(cacheKey: String, url: URL, dialogueLines: [String]) -> Bool {
-        if isClipPrepared(cacheKey: cacheKey, url: url, dialogueLines: dialogueLines) {
+    private func prepareClipIfNeeded(
+        cacheKey: String,
+        url: URL,
+        dialogueLines: [String],
+        tokenSync: DialogueTokenSync?
+    ) -> Bool {
+        if isClipPrepared(
+            cacheKey: cacheKey,
+            url: url,
+            dialogueLines: dialogueLines,
+            tokenSync: tokenSync
+        ) {
             return true
         }
 
         let duration = playerDuration(for: url)
         guard duration > 0 else { return false }
 
-        let aligned: [AlignedTimeLine]
+        var aligned: [AlignedTimeLine]
         if let embedded = DialogueAlignmentMetadata.readLineSwitchSeconds(from: url),
            let fromMetadata = DialogueAlignmentMetadata.segmentTimeRanges(
                lineTexts: dialogueLines,
@@ -441,8 +488,22 @@ final class GrammarAudioPlayer: NSObject, AVAudioPlayerDelegate {
         }
         guard !aligned.isEmpty else { return false }
 
+        // Embedded m4a marks were written at publish and can sit ahead of
+        // token stamps approved later. Follow the stamps when they line up.
+        if let tokenSync,
+           tokenSync.lines.count == aligned.count,
+           let ranges = tokenSync.lineTimeRanges(clipDuration: duration) {
+            aligned = zip(aligned, ranges).map { line, range in
+                AlignedTimeLine(text: line.text, timeRange: range)
+            }
+        }
+
         preparedCacheKey = cacheKey
-        preparedClip = PreparedClip(url: url, lines: aligned)
+        preparedClip = PreparedClip(
+            url: url,
+            lines: aligned,
+            tokenSyncHash: tokenSync?.contentHash
+        )
         return true
     }
 

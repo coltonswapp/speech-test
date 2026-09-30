@@ -2,9 +2,10 @@
 //  KanaProgressStore.swift
 //  shizen
 //
-//  Persists kana lesson progress, row unlock state, and SRS mastery.
+//  Kana lesson progress, row unlock state, and SRS mastery for the signed-in user.
 //
 
+import FirebaseFirestore
 import Foundation
 
 enum KanaRowProgressState: Equatable, Hashable, Sendable {
@@ -39,71 +40,50 @@ enum KanaStudyProgress {
     }
 }
 
-extension KanaProgressSnapshot {
-    fileprivate static let currentFormatVersion = 2
-
-    fileprivate struct FileEnvelope: Codable {
-        var formatVersion: Int
-        var snapshot: KanaProgressSnapshot
-    }
-}
-
 final class KanaProgressStore {
 
     /// Maximum rows with a completed lesson but no completed review before further rows stay locked.
     static let maxRowsAheadWithoutReview = 3
 
-    static let shared = KanaProgressStore()
+    static let shared = KanaProgressStore(
+        documentID: LearnerFirestore.progressKanaHiragana,
+        rows: KanaCurriculum.hiraganaSeionRows
+    )
 
     static let katakanaShared = KanaProgressStore(
-        rows: KanaCurriculum.katakanaSeionRows,
-        progressFileName: "progress-katakana.json"
+        documentID: LearnerFirestore.progressKanaKatakana,
+        rows: KanaCurriculum.katakanaSeionRows
     )
+
+    static let didChange = Notification.Name("KanaProgressStore.didChange")
 
     private(set) var snapshot: KanaProgressSnapshot
 
-    private let fileURL: URL
-    private let fileManager: FileManager
     private let rows: [KanaRow]
+    private let connection: LearnerProgressConnection
+    private var pendingGlyphs: [String: KanaGlyphMastery] = [:]
+    private var pendingOpenedRowID: String?
 
-    init(
-        fileManager: FileManager = .default,
-        rows: [KanaRow] = KanaCurriculum.hiraganaSeionRows,
-        progressFileName: String = "progress.json"
-    ) {
-        self.fileManager = fileManager
+    init(documentID: String, rows: [KanaRow]) {
         self.rows = rows
-
-        KanaProgressLegacyMigration.performIfNeeded(
-            progressFileName: progressFileName,
-            fileManager: fileManager,
-            load: Self.load(from:),
-            save: { snapshot, url in Self.persist(snapshot, to: url) }
+        snapshot = .empty
+        let callbacks = LearnerProgressCallbacks()
+        connection = LearnerProgressConnection(
+            documentID: documentID,
+            shell: Self.emptyShell(),
+            onSnapshot: { callbacks.onSnapshot?($0) },
+            onSignedOut: { callbacks.onSignedOut?() }
         )
-
-        fileURL = KanaProgressStorage.primaryFileURL(
-            fileName: progressFileName,
-            fileManager: fileManager
-        )
-        snapshot = Self.load(from: fileURL) ?? .empty
+        callbacks.onSnapshot = { [weak self] snapshot in
+            self?.apply(snapshot)
+        }
+        callbacks.onSignedOut = { [weak self] in
+            self?.clearLocal()
+        }
+        connection.start()
     }
 
-    func reload() {
-        snapshot = Self.load(from: fileURL) ?? .empty
-    }
-
-    func save() {
-        Self.persist(snapshot, to: fileURL)
-    }
-
-    private static func persist(_ snapshot: KanaProgressSnapshot, to url: URL) {
-        let envelope = KanaProgressSnapshot.FileEnvelope(
-            formatVersion: KanaProgressSnapshot.currentFormatVersion,
-            snapshot: snapshot
-        )
-        guard let data = try? JSONEncoder().encode(envelope) else { return }
-        try? data.write(to: url, options: .atomic)
-    }
+    func reload() {}
 
     // MARK: - Row progress
 
@@ -144,19 +124,42 @@ final class KanaProgressStore {
     }
 
     func markLessonCompleted(for row: KanaRow) {
-        snapshot.completedLessonRowIDs.insert(row.id)
+        let inserted = snapshot.completedLessonRowIDs.insert(row.id).inserted
         snapshot.lastOpenedRowID = row.id
+        if inserted {
+            pendingOpenedRowID = row.id
+        }
         for glyph in row.glyphs {
             ensureMastery(for: glyph.kana)
             KanaSRSEngine.recordExposure(&snapshot.glyphMastery[glyph.kana]!)
         }
-        save()
+        if inserted {
+            connection.enqueue([
+                "completedLessonRowIDs": FieldValue.arrayUnion([row.id]),
+                "lastLessonRowId": row.id,
+                "lastOpenedRowID": row.id,
+            ])
+        }
+        for glyph in row.glyphs {
+            enqueueGlyph(glyph.kana)
+        }
+        notify()
     }
 
     func markReviewCompleted(for row: KanaRow) {
-        snapshot.completedReviewRowIDs.insert(row.id)
+        let inserted = snapshot.completedReviewRowIDs.insert(row.id).inserted
         snapshot.lastOpenedRowID = row.id
-        save()
+        guard inserted else {
+            notify()
+            return
+        }
+        pendingOpenedRowID = row.id
+        connection.enqueue([
+            "completedReviewRowIDs": FieldValue.arrayUnion([row.id]),
+            "lastReviewRowId": row.id,
+            "lastOpenedRowID": row.id,
+        ])
+        notify()
     }
 
     /// Glyphs visible on the learning chart (lesson completed for their row).
@@ -197,31 +200,36 @@ final class KanaProgressStore {
     func recordExposure(for kana: String) {
         ensureMastery(for: kana)
         KanaSRSEngine.recordExposure(&snapshot.glyphMastery[kana]!)
-        save()
+        enqueueGlyph(kana)
+        notify()
     }
 
     func recordPracticeSuccess(for kana: String) {
         ensureMastery(for: kana)
         KanaSRSEngine.recordPracticeSuccess(&snapshot.glyphMastery[kana]!)
-        save()
+        enqueueGlyph(kana)
+        notify()
     }
 
     func recordPracticeFailure(for kana: String) {
         ensureMastery(for: kana)
         KanaSRSEngine.recordPracticeFailure(&snapshot.glyphMastery[kana]!)
-        save()
+        enqueueGlyph(kana)
+        notify()
     }
 
     func recordSuccess(for kana: String) {
         ensureMastery(for: kana)
         KanaSRSEngine.recordSuccess(&snapshot.glyphMastery[kana]!)
-        save()
+        enqueueGlyph(kana)
+        notify()
     }
 
     func recordFailure(for kana: String) {
         ensureMastery(for: kana)
         KanaSRSEngine.recordFailure(&snapshot.glyphMastery[kana]!)
-        save()
+        enqueueGlyph(kana)
+        notify()
     }
 
     /// Successful lesson, review, and SRS recalls tracked for tile/chart progress.
@@ -258,11 +266,120 @@ final class KanaProgressStore {
         }
     }
 
-    private static func load(from url: URL) -> KanaProgressSnapshot? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        if let envelope = try? JSONDecoder().decode(KanaProgressSnapshot.FileEnvelope.self, from: data) {
-            return envelope.snapshot
+    private func enqueueGlyph(_ kana: String) {
+        guard let mastery = snapshot.glyphMastery[kana] else { return }
+        pendingGlyphs[kana] = mastery
+        connection.enqueue([
+            "lastGlyph": kana,
+            "glyphMastery.\(kana)": glyphPayload(mastery),
+        ])
+    }
+
+    private func clearLocal() {
+        pendingGlyphs.removeAll()
+        pendingOpenedRowID = nil
+        guard snapshot != .empty else { return }
+        snapshot = .empty
+        notify()
+    }
+
+    private func apply(_ document: DocumentSnapshot?) {
+        if document == nil, snapshot != .empty { return }
+        let remote = decode(document?.data())
+        var next = remote
+        next.completedLessonRowIDs.formUnion(snapshot.completedLessonRowIDs)
+        next.completedReviewRowIDs.formUnion(snapshot.completedReviewRowIDs)
+
+        var glyphs = remote.glyphMastery
+        for (kana, local) in pendingGlyphs {
+            if let remoteGlyph = remote.glyphMastery[kana], sameProgress(remoteGlyph, local) {
+                pendingGlyphs[kana] = nil
+                glyphs[kana] = remoteGlyph
+            } else {
+                glyphs[kana] = local
+            }
         }
-        return try? JSONDecoder().decode(KanaProgressSnapshot.self, from: data)
+        next.glyphMastery = glyphs
+
+        if let pendingOpenedRowID {
+            if remote.lastOpenedRowID == pendingOpenedRowID {
+                self.pendingOpenedRowID = nil
+            } else {
+                next.lastOpenedRowID = pendingOpenedRowID
+            }
+        }
+
+        guard next != snapshot else { return }
+        snapshot = next
+        notify()
+    }
+
+    private func sameProgress(_ lhs: KanaGlyphMastery, _ rhs: KanaGlyphMastery) -> Bool {
+        lhs.easeFactor == rhs.easeFactor
+            && lhs.intervalDays == rhs.intervalDays
+            && lhs.repetitions == rhs.repetitions
+            && lhs.practiceCorrectCount == rhs.practiceCorrectCount
+    }
+
+    private func decode(_ data: [String: Any]?) -> KanaProgressSnapshot {
+        guard let data else { return .empty }
+        var glyphs: [String: KanaGlyphMastery] = [:]
+        for (kana, value) in LearnerSnapshotValue.map(data["glyphMastery"]) {
+            guard let mastery = glyph(from: value) else { continue }
+            glyphs[kana] = mastery
+        }
+        return KanaProgressSnapshot(
+            glyphMastery: glyphs,
+            completedLessonRowIDs: Set(LearnerSnapshotValue.stringList(data["completedLessonRowIDs"])),
+            completedReviewRowIDs: Set(LearnerSnapshotValue.stringList(data["completedReviewRowIDs"])),
+            lastOpenedRowID: LearnerSnapshotValue.string(data["lastOpenedRowID"])
+        )
+    }
+
+    private func glyph(from value: Any) -> KanaGlyphMastery? {
+        let map = LearnerSnapshotValue.map(value)
+        guard let easeFactor = LearnerSnapshotValue.double(map["easeFactor"]),
+              let intervalDays = LearnerSnapshotValue.int(map["intervalDays"]),
+              let repetitions = LearnerSnapshotValue.int(map["repetitions"]),
+              let practiceCorrectCount = LearnerSnapshotValue.int(map["practiceCorrectCount"]),
+              let nextReviewDate = LearnerSnapshotValue.date(map["nextReviewDate"])
+        else { return nil }
+        return KanaGlyphMastery(
+            easeFactor: easeFactor,
+            intervalDays: intervalDays,
+            repetitions: repetitions,
+            practiceCorrectCount: practiceCorrectCount,
+            nextReviewDate: nextReviewDate,
+            lastReviewDate: LearnerSnapshotValue.date(map["lastReviewDate"])
+        )
+    }
+
+    private func glyphPayload(_ mastery: KanaGlyphMastery) -> [String: Any] {
+        [
+            "easeFactor": mastery.easeFactor,
+            "intervalDays": mastery.intervalDays,
+            "repetitions": mastery.repetitions,
+            "practiceCorrectCount": mastery.practiceCorrectCount,
+            "nextReviewDate": Timestamp(date: mastery.nextReviewDate),
+            "lastReviewDate": mastery.lastReviewDate.map { Timestamp(date: $0) } ?? NSNull(),
+        ]
+    }
+
+    private func notify() {
+        NotificationCenter.default.post(name: Self.didChange, object: self)
+    }
+
+    private static func emptyShell() -> [String: Any] {
+        [
+            "schemaVersion": 1,
+            "updatedAt": FieldValue.serverTimestamp(),
+            "glyphMastery": [:],
+            "completedLessonRowIDs": [],
+            "completedReviewRowIDs": [],
+            "lastOpenedRowID": NSNull(),
+            "lastGlyph": NSNull(),
+            "lastLessonRowId": NSNull(),
+            "lastReviewRowId": NSNull(),
+        ]
     }
 }

@@ -118,11 +118,81 @@ final class OnboardingCoordinator: NSObject {
     func rebuildStepsIfNeeded() {}
 
     func finishSetup() {
-        performUnlessPreviewMode {
-            OnboardingStore.save(userInfo)
-            OnboardingStore.hasCompletedOnboarding = true
+        if isPreviewMode {
+            authenticationDelegate?.signUpComplete()
+            return
         }
+
+        OnboardingStore.save(userInfo)
+        guard AuthService.shared.hasSignedInUserId else {
+            requestSignInThenFinish()
+            return
+        }
+        completeSignedInOnboarding()
+    }
+
+    func authenticate(provider: AuthProvider, from viewController: UIViewController) async throws {
+        if isPreviewMode {
+            userInfo.pendingProvider = provider
+            return
+        }
+        try await AuthService.shared.signIn(with: provider, presenting: viewController)
+        userInfo.pendingProvider = provider
+    }
+
+    private func completeSignedInOnboarding() {
+        guard AuthService.shared.hasSignedInUserId else { return }
+        OnboardingStore.save(userInfo)
+        OnboardingStore.markCompletedForCurrentUser()
+        Task { await UserProfileStore.shared.flushSavedBufferIfNeeded() }
         authenticationDelegate?.signUpComplete()
+    }
+
+    private func requestSignInThenFinish() {
+        guard let presenter = navigationController.topViewController else { return }
+        let sheet = UIAlertController(
+            title: "Sign in to continue",
+            message: "Apple or Google is required before an account can be created.",
+            preferredStyle: .actionSheet
+        )
+        sheet.addAction(UIAlertAction(title: "Continue with Apple", style: .default) { [weak self] _ in
+            self?.signInThenFinish(provider: .apple, from: presenter)
+        })
+        sheet.addAction(UIAlertAction(title: "Continue with Google", style: .default) { [weak self] _ in
+            self?.signInThenFinish(provider: .google, from: presenter)
+        })
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        if let popover = sheet.popoverPresentationController {
+            popover.sourceView = presenter.view
+            popover.sourceRect = CGRect(
+                x: presenter.view.bounds.midX,
+                y: presenter.view.bounds.midY,
+                width: 0,
+                height: 0
+            )
+            popover.permittedArrowDirections = []
+        }
+        presenter.present(sheet, animated: true)
+    }
+
+    private func signInThenFinish(provider: AuthProvider, from viewController: UIViewController) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.authenticate(provider: provider, from: viewController)
+                self.completeSignedInOnboarding()
+            } catch AuthServiceError.canceled {
+                return
+            } catch {
+                let alert = UIAlertController(
+                    title: "Sign-in failed",
+                    message: error.localizedDescription,
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                viewController.present(alert, animated: true)
+            }
+        }
     }
 
     private func configureInitialStep() {
@@ -136,11 +206,7 @@ final class OnboardingCoordinator: NSObject {
         viewController.coordinator = self
         let hideBack = viewController is OnboardingFinishViewController
         containerViewController.setBackButtonHidden(hideBack)
-    }
-
-    private func performUnlessPreviewMode(_ work: () -> Void) {
-        guard !isPreviewMode else { return }
-        work()
+        containerViewController.updateProgress(step: currentStepIndex, totalSteps: steps.count)
     }
 
     private func buildStepsFromConfig(_ config: OnboardingConfiguration) -> [OnboardingViewController] {
@@ -263,6 +329,7 @@ extension OnboardingCoordinator: UINavigationControllerDelegate {
     ) {
         if let index = steps.firstIndex(where: { $0 === viewController }) {
             currentStepIndex = index
+            containerViewController.updateProgress(step: index, totalSteps: steps.count)
         }
     }
 }

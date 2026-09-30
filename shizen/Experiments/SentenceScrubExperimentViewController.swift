@@ -16,6 +16,12 @@ struct DialogueLineAudioReference {
     let cacheMetadata: RemoteAudioCacheMetadata?
     let lineIndex: Int
     let dialogueLines: [String]
+    /// Clip window the dialogue already used for this line. Token-stamp bounds
+    /// when those replaced the file's line marks. Playback seeks here.
+    var timeRange: Range<TimeInterval>? = nil
+    /// Used when `timeRange` is missing so clip-slice play can still follow
+    /// stamp windows instead of published m4a marks.
+    var tokenSync: DialogueTokenSync? = nil
 }
 
 final class SentenceScrubExperimentViewController: UIViewController {
@@ -97,11 +103,30 @@ final class SentenceScrubExperimentViewController: UIViewController {
     private let sentenceSectionRowStack = UIStackView()
     private let sentenceContentStack = UIStackView()
     private let translationSectionRowStack = UIStackView()
-    private let nuanceButton = UIButton(type: .system)
-    private let nuanceGlyphView = UIImageView()
+    private let nuanceButton = GlassIconButton(
+        symbolName: "sparkle.magnifyingglass",
+        pointSize: 22,
+        tintColor: .systemYellow,
+        accessibilityLabel: "Deeper meaning"
+    )
     private let nuanceCardView = DialogueNuanceCardView()
+    private var nuanceCardIsShown = false
+    private var nuanceCardAnimator: UIViewPropertyAnimator?
+    /// The animator's forward direction leaves the card visible when this is true.
+    private var nuanceAnimatorEndsShown = false
+    /// Reversing the active reveal animator runs the card all the way back to the button.
+    private var reversingNuanceAnimatorReachesButton = false
+    /// Pixels of the card while it flies back to the button and the stack gap closes.
+    private var nuanceDismissSnapshot: UIView?
     private var nuanceLoadTask: Task<Void, Never>?
     private var nuanceLoadRequest: GeminiDialogueNuance.Request?
+
+    private static let nuanceSymbol = "sparkle.magnifyingglass"
+    private static let nuanceDismissSymbol = "arrow.down.left"
+    private static let nuanceSymbolPointSize: CGFloat = 22
+    private static let nuanceRevealDuration: TimeInterval = 0.46
+    private static let nuanceRevealDamping: CGFloat = 0.82
+    private static let nuanceDismissDuration: TimeInterval = 0.42
 
     private static let audioButtonSize: CGFloat = 56
     private static let audioGlyphPointSize: CGFloat = 22
@@ -121,6 +146,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
     private let wordDictionaryDetailView: WordDictionaryDetailView = {
         let v = WordDictionaryDetailView()
         v.showsCompounds = false
+        v.showsSenseSuggestion = true
         return v
     }()
     private let selectionStartDivider = SentenceScrubExperimentViewController.makeHairlineDivider()
@@ -268,11 +294,22 @@ final class SentenceScrubExperimentViewController: UIViewController {
         scrubbableSentenceView.onSelectionChanged = { [weak self] index, surface in
             self?.handleSelectionChanged(index: index, surface: surface)
         }
+        scrubbableSentenceView.onSpanSelected = { [weak self] range, surface in
+            self?.handleSpanSelected(range: range, surface: surface)
+        }
         scrubbableSentenceView.onRequestDictionaryDetail = { [weak self] surface, sentence in
             guard let self else { return }
             WordDictionaryDetailSheetPresenter.push(
                 surface: surface,
                 sentence: sentence,
+                from: self
+            )
+        }
+        wordDictionaryDetailView.onSelectRelatedWord = { [weak self] word in
+            guard let self else { return }
+            WordDictionaryDetailSheetPresenter.push(
+                surface: word,
+                glossFraming: .word,
                 from: self
             )
         }
@@ -322,14 +359,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
 
         nuanceButton.setContentHuggingPriority(.required, for: .horizontal)
         nuanceButton.setContentCompressionResistancePriority(.required, for: .horizontal)
-        Self.configureGlassAudioButton(
-            nuanceButton,
-            glyphView: nuanceGlyphView,
-            symbolName: "sparkle.magnifyingglass",
-            glyphPointSize: Self.audioGlyphPointSize,
-            accessibilityLabel: "Implied meaning"
-        )
-        nuanceButton.accessibilityHint = "Shows the implied meaning of this line"
+        nuanceButton.accessibilityHint = "Shows a deeper reading of this line"
         nuanceButton.addTarget(self, action: #selector(nuanceButtonTapped), for: .touchUpInside)
 
         translationSectionRowStack.axis = .horizontal
@@ -350,6 +380,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
             speakSentenceButton.trailingAnchor.constraint(equalTo: sentenceSectionRowStack.trailingAnchor),
             nuanceButton.trailingAnchor.constraint(equalTo: translationSectionRowStack.trailingAnchor),
             nuanceButton.widthAnchor.constraint(equalTo: speakSentenceButton.widthAnchor),
+            nuanceButton.heightAnchor.constraint(equalTo: speakSentenceButton.heightAnchor),
         ])
 
         nuanceCardView.isHidden = true
@@ -407,7 +438,16 @@ final class SentenceScrubExperimentViewController: UIViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         speakSentenceButton.bringSubviewToFront(speakSentenceGlyphView)
-        nuanceButton.bringSubviewToFront(nuanceGlyphView)
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        guard nuanceCardAnimator != nil || nuanceDismissSnapshot != nil else { return }
+        let shown = nuanceCardIsShown
+        discardNuanceAnimator()
+        coordinator.animate(alongsideTransition: { _ in
+            self.applySettledNuanceCard(shown: shown)
+        })
     }
 
     private var canPlayDialogueLineAudio: Bool {
@@ -558,15 +598,72 @@ final class SentenceScrubExperimentViewController: UIViewController {
     @objc private func nuanceButtonTapped() {
         let trimmed = currentSentence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        beginNuanceLoadIfNeeded()
-        revealNuanceCardIfNeeded()
+        if nuanceCardIsShown {
+            nuanceCardIsShown = false
+            dismissNuanceCard()
+        } else {
+            nuanceCardIsShown = true
+            beginNuanceLoadIfNeeded()
+            revealNuanceCard()
+        }
     }
 
-    /// Grows the card out of the implied-meaning button so the new section
-    /// is visibly tied to that control, then eases the stack open beneath it.
-    private func revealNuanceCardIfNeeded() {
-        guard nuanceCardView.isHidden else { return }
+    /// Grows the card downward out of the deeper-meaning button. The glyph
+    /// slides the same way, and dismiss reverses both motions.
+    private func revealNuanceCard() {
+        updateNuanceButton(showing: true)
+        if nuanceDismissSnapshot != nil {
+            continueNuanceRevealFromDismissSnapshot()
+            return
+        }
+        if retargetNuanceAnimation(showing: true) { return }
+        let reversesToButton = nuanceCardView.isHidden
+        if reversesToButton {
+            prepareNuanceCardForReveal()
+        }
+        let animator = UIViewPropertyAnimator(
+            duration: Self.nuanceRevealDuration,
+            dampingRatio: Self.nuanceRevealDamping
+        ) {
+            self.nuanceCardView.isHidden = false
+            self.nuanceCardView.alpha = 1
+            self.nuanceCardView.transform = .identity
+            self.view.layoutIfNeeded()
+        }
+        beginNuanceAnimator(animator, endsShown: true, reversesToButton: reversesToButton)
+        animator.startAnimation()
+    }
 
+    private func dismissNuanceCard() {
+        updateNuanceButton(showing: false)
+        if retargetNuanceAnimation(showing: false) { return }
+        if nuanceDismissSnapshot != nil { return }
+        beginNuanceSnapshotDismiss()
+    }
+
+    private func updateNuanceButton(showing: Bool) {
+        if showing {
+            nuanceButton.transitionSymbol(
+                to: Self.nuanceDismissSymbol,
+                pointSize: Self.nuanceSymbolPointSize,
+                direction: .down
+            )
+            nuanceButton.accessibilityLabel = "Hide deeper meaning"
+            nuanceButton.accessibilityHint = "Hides the deeper reading of this line"
+        } else {
+            nuanceButton.transitionSymbol(
+                to: Self.nuanceSymbol,
+                pointSize: Self.nuanceSymbolPointSize,
+                direction: .up
+            )
+            nuanceButton.accessibilityLabel = "Deeper meaning"
+            nuanceButton.accessibilityHint = "Shows a deeper reading of this line"
+        }
+    }
+
+    /// Collapse measured while the card is in the stack, then the gap is closed
+    /// again so the reveal animation can open it together with the scale.
+    private func prepareNuanceCardForReveal() {
         var fromTransform = CGAffineTransform.identity
         UIView.performWithoutAnimation {
             nuanceCardView.alpha = 0
@@ -577,40 +674,169 @@ final class SentenceScrubExperimentViewController: UIViewController {
             nuanceCardView.isHidden = true
             view.layoutIfNeeded()
         }
-
+        nuanceCardView.isHidden = false
         nuanceCardView.transform = fromTransform
         nuanceCardView.alpha = 0
+    }
 
-        UIView.animate(
-            withDuration: 0.46,
-            delay: 0,
-            usingSpringWithDamping: 0.82,
-            initialSpringVelocity: 0.35,
-            options: [.curveEaseOut, .allowUserInteraction]
+    /// Flies a snapshot into the button while the real card leaves the stack,
+    /// so the gap closes on the same curve instead of snapping shut afterward.
+    private func beginNuanceSnapshotDismiss() {
+        guard nuanceCardView.bounds.width > 1,
+              nuanceCardView.bounds.height > 1,
+              let host = nuanceCardView.superview,
+              let snapshot = nuanceCardView.snapshotView(afterScreenUpdates: false) else {
+            beginNuanceModelDismiss()
+            return
+        }
+
+        let collapsed = nuanceCardTransformFromButton()
+        let pose = presentedPose(of: nuanceCardView)
+        snapshot.translatesAutoresizingMaskIntoConstraints = true
+        snapshot.autoresizingMask = []
+        snapshot.bounds = nuanceCardView.bounds
+        snapshot.center = nuanceCardView.center
+        snapshot.transform = pose.transform
+        snapshot.alpha = pose.alpha
+        snapshot.isUserInteractionEnabled = false
+        snapshot.accessibilityElementsHidden = true
+        snapshot.layer.zPosition = 1
+        host.addSubview(snapshot)
+        nuanceDismissSnapshot = snapshot
+
+        UIView.performWithoutAnimation {
+            nuanceCardView.isHidden = true
+            nuanceCardView.alpha = 1
+            nuanceCardView.transform = .identity
+        }
+
+        let animator = UIViewPropertyAnimator(duration: Self.nuanceDismissDuration, dampingRatio: 1) {
+            snapshot.transform = collapsed
+            self.view.layoutIfNeeded()
+        }
+        // Stay readable while the card leaves, then fade as it arrives at the button.
+        animator.addAnimations({
+            snapshot.alpha = 0
+        }, delayFactor: 0.42)
+        beginNuanceAnimator(animator, endsShown: false, reversesToButton: false)
+        animator.startAnimation()
+    }
+
+    /// Used when a snapshot can't be taken. The card itself eases back to the button.
+    private func beginNuanceModelDismiss() {
+        let collapsed = nuanceCardTransformFromButton()
+        let pose = presentedPose(of: nuanceCardView)
+        let animator = UIViewPropertyAnimator(duration: Self.nuanceDismissDuration, dampingRatio: 1) {
+            self.nuanceCardView.transform = collapsed
+        }
+        animator.addAnimations({
+            self.nuanceCardView.alpha = 0
+        }, delayFactor: 0.42)
+        // Discard any in-flight reveal before planting the pose it would otherwise snap away.
+        beginNuanceAnimator(animator, endsShown: false, reversesToButton: false)
+        UIView.performWithoutAnimation {
+            nuanceCardView.transform = pose.transform
+            nuanceCardView.alpha = pose.alpha
+        }
+        animator.startAnimation()
+    }
+
+    /// Show tapped while the snapshot is still in flight. Plant that pose on the
+    /// real card and spring it open.
+    private func continueNuanceRevealFromDismissSnapshot() {
+        let snapshot = nuanceDismissSnapshot
+        let pose = snapshot.map { presentedPose(of: $0) } ?? (transform: .identity, alpha: 1)
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        discardNuanceAnimator()
+        UIView.performWithoutAnimation {
+            nuanceCardView.isHidden = false
+            view.layoutIfNeeded()
+            nuanceCardView.transform = pose.transform
+            nuanceCardView.alpha = pose.alpha
+            snapshot?.removeFromSuperview()
+        }
+        CATransaction.commit()
+        nuanceDismissSnapshot = nil
+
+        let animator = UIViewPropertyAnimator(
+            duration: Self.nuanceRevealDuration,
+            dampingRatio: Self.nuanceRevealDamping
         ) {
-            self.nuanceCardView.isHidden = false
             self.nuanceCardView.alpha = 1
             self.nuanceCardView.transform = .identity
             self.view.layoutIfNeeded()
         }
+        beginNuanceAnimator(animator, endsShown: true, reversesToButton: false)
+        animator.startAnimation()
+    }
 
-        UIView.animate(
-            withDuration: 0.16,
-            delay: 0,
-            options: [.curveEaseOut, .allowUserInteraction, .beginFromCurrentState]
-        ) {
-            self.nuanceButton.transform = CGAffineTransform(scaleX: 0.86, y: 0.86)
-        } completion: { _ in
-            UIView.animate(
-                withDuration: 0.38,
-                delay: 0,
-                usingSpringWithDamping: 0.55,
-                initialSpringVelocity: 0.9,
-                options: [.allowUserInteraction]
-            ) {
-                self.nuanceButton.transform = .identity
-            }
+    private func retargetNuanceAnimation(showing: Bool) -> Bool {
+        guard nuanceDismissSnapshot == nil,
+              let animator = nuanceCardAnimator,
+              animator.state == .active else { return false }
+        let headingShown = nuanceAnimatorEndsShown != animator.isReversed
+        if headingShown == showing { return true }
+        // A reveal resumed from a half-hidden snapshot would only spring back
+        // to that midpoint. Start a new dismiss so the card still reaches the button.
+        if !showing, nuanceAnimatorEndsShown, !reversingNuanceAnimatorReachesButton {
+            return false
         }
+        animator.isReversed.toggle()
+        return true
+    }
+
+    private func beginNuanceAnimator(
+        _ animator: UIViewPropertyAnimator,
+        endsShown: Bool,
+        reversesToButton: Bool
+    ) {
+        discardNuanceAnimator()
+        nuanceAnimatorEndsShown = endsShown
+        reversingNuanceAnimatorReachesButton = reversesToButton
+        animator.scrubsLinearly = false
+        animator.addCompletion { [weak self] _ in
+            guard let self, self.nuanceCardAnimator === animator else { return }
+            self.nuanceCardAnimator = nil
+            self.applySettledNuanceCard(shown: self.nuanceCardIsShown)
+        }
+        nuanceCardAnimator = animator
+    }
+
+    private func discardNuanceAnimator() {
+        guard let animator = nuanceCardAnimator else { return }
+        nuanceCardAnimator = nil
+        guard animator.state == .active else { return }
+        animator.stopAnimation(true)
+    }
+
+    private func applySettledNuanceCard(shown: Bool) {
+        nuanceDismissSnapshot?.removeFromSuperview()
+        nuanceDismissSnapshot = nil
+        UIView.performWithoutAnimation {
+            if shown {
+                nuanceCardView.isHidden = false
+                nuanceCardView.alpha = 1
+                nuanceCardView.transform = .identity
+            } else {
+                nuanceCardView.isHidden = true
+                nuanceCardView.layer.removeAllAnimations()
+                nuanceCardView.transform = .identity
+                nuanceCardView.alpha = 1
+            }
+            view.layoutIfNeeded()
+        }
+    }
+
+    private func presentedPose(of view: UIView) -> (transform: CGAffineTransform, alpha: CGFloat) {
+        guard let presentation = view.layer.presentation() else {
+            return (view.transform, view.alpha)
+        }
+        return (
+            CATransform3DGetAffineTransform(presentation.transform),
+            CGFloat(presentation.opacity)
+        )
     }
 
     private func animateNuanceCardLayoutIfVisible() {
@@ -627,14 +853,19 @@ final class SentenceScrubExperimentViewController: UIViewController {
     }
 
     private func nuanceCardTransformFromButton() -> CGAffineTransform {
+        guard let host = nuanceCardView.superview else { return .identity }
         let buttonCenter = nuanceButton.convert(
             CGPoint(x: nuanceButton.bounds.midX, y: nuanceButton.bounds.midY),
-            to: nuanceCardView.superview
+            to: host
         )
-        let cardFrame = nuanceCardView.frame
-        let cardCenter = CGPoint(x: cardFrame.midX, y: cardFrame.midY)
-        let scaleX = min(1, max(0.16, nuanceButton.bounds.width / max(cardFrame.width, 1)))
-        let scaleY = min(1, max(0.16, nuanceButton.bounds.height / max(cardFrame.height, 1)))
+        // `center` and `bounds` stay on the layout frame. `frame` is the
+        // axis-aligned box after the current transform, so it can't be used
+        // to build the next one.
+        let cardCenter = nuanceCardView.center
+        let cardSize = nuanceCardView.bounds.size
+        guard cardSize.width > 1, cardSize.height > 1 else { return .identity }
+        let scaleX = min(1, max(0.16, nuanceButton.bounds.width / cardSize.width))
+        let scaleY = min(1, max(0.16, nuanceButton.bounds.height / cardSize.height))
         return CGAffineTransform(
             translationX: buttonCenter.x - cardCenter.x,
             y: buttonCenter.y - cardCenter.y
@@ -645,12 +876,22 @@ final class SentenceScrubExperimentViewController: UIViewController {
         nuanceLoadTask?.cancel()
         nuanceLoadTask = nil
         nuanceLoadRequest = nil
+        discardNuanceAnimator()
+        nuanceDismissSnapshot?.removeFromSuperview()
+        nuanceDismissSnapshot = nil
         nuanceCardView.layer.removeAllAnimations()
+        nuanceCardView.isHidden = true
         nuanceCardView.transform = .identity
         nuanceCardView.alpha = 1
         nuanceCardView.apply(.loading)
-        nuanceCardView.isHidden = true
-        nuanceButton.layer.removeAllAnimations()
+        nuanceCardIsShown = false
+        nuanceButton.setSymbol(
+            Self.nuanceSymbol,
+            pointSize: Self.nuanceSymbolPointSize,
+            tintColor: Self.audioGlyphColor
+        )
+        nuanceButton.accessibilityLabel = "Deeper meaning"
+        nuanceButton.accessibilityHint = "Shows a deeper reading of this line"
         nuanceButton.transform = .identity
     }
 
@@ -672,16 +913,16 @@ final class SentenceScrubExperimentViewController: UIViewController {
             guard let self else { return }
             if let cached = await GeminiDialogueNuance.cachedResult(for: request) {
                 guard !Task.isCancelled else { return }
-                self.nuanceCardView.apply(.result(cached))
+                self.nuanceCardView.apply(.result(cached.result, feedback: cached.feedback))
                 self.animateNuanceCardLayoutIfVisible()
                 return
             }
 
             self.nuanceCardView.apply(.loading)
             do {
-                let result = try await GeminiDialogueNuance.explain(request)
+                let explained = try await GeminiDialogueNuance.explain(request)
                 guard !Task.isCancelled else { return }
-                self.nuanceCardView.apply(.result(result))
+                self.nuanceCardView.apply(.result(explained.result, feedback: explained.feedback))
                 self.animateNuanceCardLayoutIfVisible()
             } catch {
                 guard !Task.isCancelled else { return }
@@ -700,7 +941,26 @@ final class SentenceScrubExperimentViewController: UIViewController {
             return
         }
 
-        wordDictionaryDetailView.configure(surface: surface, sentence: currentSentence)
+        if let index,
+           let range = scrubbableSentenceView.lookupTokenRange(for: index),
+           range.count > 1 {
+            wordDictionaryDetailView.configureSelectedSpan(
+                surface: surface,
+                sentence: currentSentence,
+                tokens: scrubbableSentenceView.tokenTexts(in: range)
+            )
+        } else {
+            wordDictionaryDetailView.configure(surface: surface, sentence: currentSentence)
+        }
+        selectionStartDivider.isHidden = false
+    }
+
+    private func handleSpanSelected(range: ClosedRange<Int>, surface: String) {
+        wordDictionaryDetailView.configureSelectedSpan(
+            surface: surface,
+            sentence: currentSentence,
+            tokens: scrubbableSentenceView.tokenTexts(in: range)
+        )
         selectionStartDivider.isHidden = false
     }
 
@@ -740,6 +1000,8 @@ final class SentenceScrubExperimentViewController: UIViewController {
                 cacheMetadata: dialogueLineAudio.cacheMetadata,
                 dialogueLines: dialogueLineAudio.dialogueLines,
                 fallbackText: trimmed,
+                lineTimeRange: dialogueLineAudio.timeRange,
+                tokenSync: tokenSync,
                 onTime: { [weak self] time in
                     self?.applyKaraoke(at: time)
                 },

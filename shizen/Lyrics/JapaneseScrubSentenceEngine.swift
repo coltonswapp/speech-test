@@ -69,7 +69,12 @@ final class JapaneseScrubSentenceEngine: ScrubSentenceEngine {
     }
 
     func gloss(for surface: String) -> String {
-        let entries = JMDictStore.shared.entries(forSurface: surface)
+        let lookup = JMDictStore.shared.lookup(forSurface: surface)
+        // A kana hit that is only a shared reading or a stolen lemma would announce the wrong sense.
+        if JMDictStore.shared.isContextSensitiveKanaLookup(lookup) {
+            return ""
+        }
+        let entries = lookup.entries
         guard let primary = entries.max(by: { ($0.score ?? 0) < ($1.score ?? 0) }) ?? entries.first else {
             return ""
         }

@@ -13,8 +13,13 @@ import UIKit
 private final class KanaDetailHeroCell: UICollectionViewCell {
 
     let card = KanaCard()
-    let playButton = UIButton(type: .system)
-    private let playGlyphView = UIImageView()
+    let playButton = GlassIconButton(
+        symbolName: "speaker.wave.2.fill",
+        pointSize: 22,
+        glyphDimension: 26,
+        tintColor: KanaDetailHeroCell.playGlyphColor,
+        accessibilityLabel: "Play pronunciation"
+    )
     var onPlay: (() -> Void)?
 
     private static let cardWidth: CGFloat = 118
@@ -39,24 +44,7 @@ private final class KanaDetailHeroCell: UICollectionViewCell {
 
         card.setPresentation(.detailHero)
         card.translatesAutoresizingMaskIntoConstraints = false
-
-        // Glass style ignores `baseForegroundColor` for the symbol; tint a dedicated image view instead.
-        var playConfig = UIButton.Configuration.glass()
-        playConfig.cornerStyle = .capsule
-        playButton.configuration = playConfig
-        playButton.translatesAutoresizingMaskIntoConstraints = false
-        playButton.accessibilityLabel = "Play pronunciation"
         playButton.addTarget(self, action: #selector(playTapped), for: .touchUpInside)
-
-        let symbolConfig = UIImage.SymbolConfiguration(pointSize: 22, weight: .semibold)
-        playGlyphView.image = UIImage(systemName: "speaker.wave.2.fill", withConfiguration: symbolConfig)?
-            .withRenderingMode(.alwaysTemplate)
-        playGlyphView.tintColor = Self.playGlyphColor
-        playGlyphView.preferredSymbolConfiguration = symbolConfig
-        playGlyphView.contentMode = .scaleAspectFit
-        playGlyphView.isUserInteractionEnabled = false
-        playGlyphView.translatesAutoresizingMaskIntoConstraints = false
-        playButton.addSubview(playGlyphView)
 
         contentView.addSubview(card)
         contentView.addSubview(playButton)
@@ -71,17 +59,7 @@ private final class KanaDetailHeroCell: UICollectionViewCell {
             playButton.centerYAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
             playButton.widthAnchor.constraint(equalToConstant: Self.playButtonSize),
             playButton.heightAnchor.constraint(equalToConstant: Self.playButtonSize),
-
-            playGlyphView.centerXAnchor.constraint(equalTo: playButton.centerXAnchor),
-            playGlyphView.centerYAnchor.constraint(equalTo: playButton.centerYAnchor),
-            playGlyphView.widthAnchor.constraint(equalToConstant: 26),
-            playGlyphView.heightAnchor.constraint(equalToConstant: 26),
         ])
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        playButton.bringSubviewToFront(playGlyphView)
     }
 
     func configure(kana: String, romaji: String) {

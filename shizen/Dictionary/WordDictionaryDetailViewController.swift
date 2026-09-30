@@ -12,12 +12,22 @@ final class WordDictionaryDetailViewController: UIViewController {
 
     private let surface: String
     private let sentence: String?
+    private let glossFraming: ContextualGlossFraming
     private let scrollView = UIScrollView()
     private let detailView = WordDictionaryDetailView()
 
-    init(surface: String, sentence: String? = nil) {
+    init(surface: String, sentence: String? = nil, glossFraming: ContextualGlossFraming? = nil) {
         self.surface = surface
         self.sentence = sentence
+        let trimmedSurface = surface.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSentence = sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if let glossFraming {
+            self.glossFraming = glossFraming
+        } else if !trimmedSentence.isEmpty, trimmedSentence != trimmedSurface {
+            self.glossFraming = .inSentence
+        } else {
+            self.glossFraming = .word
+        }
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -52,6 +62,14 @@ final class WordDictionaryDetailViewController: UIViewController {
         detailView.onSelectKanji = { [weak self] character in
             self?.presentKanjiDetail(character)
         }
+        detailView.onSelectRelatedWord = { [weak self] word in
+            guard let self else { return }
+            WordDictionaryDetailSheetPresenter.push(
+                surface: word,
+                glossFraming: .word,
+                from: self
+            )
+        }
 #if DEBUG
         detailView.onRequestKanjiDecomposition = { [weak self] in
             guard let self else { return }
@@ -59,7 +77,7 @@ final class WordDictionaryDetailViewController: UIViewController {
         }
 #endif
 
-        detailView.configure(surface: surface, sentence: sentence)
+        detailView.configure(surface: surface, sentence: sentence, glossFraming: glossFraming)
     }
 
     private func presentCompound(_ expression: String) {
@@ -142,13 +160,23 @@ final class WordDictionaryDetailViewController: UIViewController {
 
 enum WordDictionaryDetailSheetPresenter {
 
-    static func present(surface: String, sentence: String? = nil, from viewController: UIViewController, animated: Bool = true) {
+    static func present(
+        surface: String,
+        sentence: String? = nil,
+        glossFraming: ContextualGlossFraming? = nil,
+        from viewController: UIViewController,
+        animated: Bool = true
+    ) {
         let trimmed = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
         DefinitionCalloutPresenter.shared.dismiss(animated: true)
 
-        let sheet = WordDictionaryDetailViewController(surface: trimmed, sentence: sentence)
+        let sheet = WordDictionaryDetailViewController(
+            surface: trimmed,
+            sentence: sentence,
+            glossFraming: glossFraming
+        )
         sheet.modalPresentationStyle = .pageSheet
         if let presentation = sheet.sheetPresentationController {
             presentation.detents = [.medium(), .large()]
@@ -161,13 +189,23 @@ enum WordDictionaryDetailSheetPresenter {
     /// Pushes the dictionary detail onto the navigation stack instead of
     /// presenting a sheet. Falls back to a wrapped present when there is no
     /// navigation controller. Mirrors the kanji-detail push behavior.
-    static func push(surface: String, sentence: String? = nil, from viewController: UIViewController, animated: Bool = true) {
+    static func push(
+        surface: String,
+        sentence: String? = nil,
+        glossFraming: ContextualGlossFraming? = nil,
+        from viewController: UIViewController,
+        animated: Bool = true
+    ) {
         let trimmed = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
         DefinitionCalloutPresenter.shared.dismiss(animated: true)
 
-        let detail = WordDictionaryDetailViewController(surface: trimmed, sentence: sentence)
+        let detail = WordDictionaryDetailViewController(
+            surface: trimmed,
+            sentence: sentence,
+            glossFraming: glossFraming
+        )
         if let nav = viewController.navigationController {
             nav.pushViewController(detail, animated: animated)
         } else {

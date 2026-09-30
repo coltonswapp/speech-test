@@ -11,7 +11,9 @@ import UIKit
 struct VocabFlashcard {
     let japanese: String
     let reading: String
+    /// One English line: the contextual meaning, or a few comma-separated glosses from a single sense.
     let english: String
+    var sentence: String?
 }
 
 enum VocabFlashcardBank {
@@ -42,6 +44,9 @@ final class VocabFlashcardView: UIView {
     private let englishLabel = UILabel()
     private let definitionStack = UIStackView()
     private let hintLabel = UILabel()
+    private let dictionaryButton = UIButton(type: .system)
+    private var lookupSurface = ""
+    private var lookupSentence: String?
 
     private var japaneseCenterYConstraint: NSLayoutConstraint!
     private var japaneseTopConstraint: NSLayoutConstraint!
@@ -51,8 +56,6 @@ final class VocabFlashcardView: UIView {
     private static let definitionEntryOffset: CGFloat = 22
     private static let hiddenDefinitionCenterYOffset: CGFloat = 16
     private static let revealedDefinitionCenterYOffset: CGFloat = 32
-    /// Shifts the keyword up when furigana is visible so the glyph block looks centered.
-    private static let furiganaOpticalCenterYOffset: CGFloat = -20
 
     private(set) var isRevealed = false
     private var japaneseText = ""
@@ -72,10 +75,14 @@ final class VocabFlashcardView: UIView {
 
     func configure(with card: VocabFlashcard) {
         japaneseText = card.japanese
+        lookupSurface = card.japanese
+        let sentence = card.sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        lookupSentence = sentence.isEmpty ? nil : sentence
         applyJapaneseDisplay()
         readingLabel.text = card.reading == card.japanese ? "" : card.reading
-        readingLabel.isHidden = readingLabel.text?.isEmpty ?? true
-        englishLabel.text = card.english
+        updateReadingLine()
+
+        englishLabel.text = Self.flashcardDefinitionText(card.english)
         setRevealed(false, animated: false)
     }
 
@@ -97,6 +104,7 @@ final class VocabFlashcardView: UIView {
                 textColor: .label
             )
             updateJapaneseOpticalAlignment(animated: false)
+            updateReadingLine()
             return
         }
 
@@ -113,6 +121,7 @@ final class VocabFlashcardView: UIView {
             animations: {
                 self.japaneseLabel.textInsets = targetInsets
                 self.updateJapaneseOpticalAlignment(animated: false)
+                self.updateReadingLine()
                 self.layoutIfNeeded()
             }
         )
@@ -134,9 +143,20 @@ final class VocabFlashcardView: UIView {
         )
     }
 
+    /// Hidden word stays on the card center. Furigana changes the label bounds;
+    /// `verticalTextInsetsAffectAlignmentRect` is off so that center tracks the frame.
     private func hiddenJapaneseCenterYOffset() -> CGFloat {
-        guard !isRevealed, JapaneseFuriganaSettings.showOnFlashcards else { return 0 }
-        return Self.furiganaOpticalCenterYOffset
+        0
+    }
+
+    /// Furigana on the word, or a hiragana line under it. Never both.
+    private func updateReadingLine() {
+        let hasReading = !(readingLabel.text?.isEmpty ?? true)
+        readingLabel.isHidden = !hasReading || JapaneseFuriganaSettings.showOnFlashcards
+    }
+
+    private static func flashcardDefinitionText(_ text: String) -> String {
+        VocabSenseList.flashcardLine(fromGlossary: text) ?? text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func updateJapaneseOpticalAlignment(animated: Bool) {
@@ -171,8 +191,8 @@ final class VocabFlashcardView: UIView {
         isRevealed = revealed
         revealAnimationGeneration += 1
         let generation = revealAnimationGeneration
-
-        hintLabel.text = revealed ? "Tap to hide" : "Tap to reveal"
+        definitionStack.isUserInteractionEnabled = revealed
+        updateHint(revealed: revealed)
 
         guard animated else {
             applyRevealedVisualState(revealed)
@@ -265,9 +285,36 @@ final class VocabFlashcardView: UIView {
         hintLabel.alpha = revealed ? 0.55 : 1
     }
 
+    private func updateHint(revealed: Bool) {
+        hintLabel.text = revealed ? "Tap to hide" : "Tap to reveal"
+    }
+
+    @objc private func dictionaryButtonTapped() {
+        let surface = lookupSurface.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !surface.isEmpty, let presenter = nearestViewController() else { return }
+        WordDictionaryDetailSheetPresenter.present(
+            surface: surface,
+            sentence: lookupSentence,
+            glossFraming: .word,
+            from: presenter
+        )
+    }
+
+    private func nearestViewController() -> UIViewController? {
+        var responder: UIResponder? = self
+        while let current = responder {
+            if let viewController = current as? UIViewController {
+                return viewController
+            }
+            responder = current.next
+        }
+        return nil
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: layer.cornerRadius).cgPath
+        bringSubviewToFront(dictionaryButton)
     }
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -293,6 +340,10 @@ final class VocabFlashcardView: UIView {
         japaneseLabel.numberOfLines = 1
         japaneseLabel.clipsToBounds = false
         japaneseLabel.translatesAutoresizingMaskIntoConstraints = false
+        // Center the frame, ruby included. The inset is only on top, so turning
+        // furigana on grows the bounds upward and the glyphs settle into the
+        // middle of that taller frame.
+        japaneseLabel.verticalTextInsetsAffectAlignmentRect = false
 
         readingLabel.font = .systemFont(ofSize: 26, weight: .regular)
         readingLabel.textColor = .secondaryLabel
@@ -304,16 +355,24 @@ final class VocabFlashcardView: UIView {
         englishLabel.font = .systemFont(ofSize: 24, weight: .semibold)
         englishLabel.textColor = .label
         englishLabel.textAlignment = .center
-        englishLabel.numberOfLines = 0
+        englishLabel.numberOfLines = 3
 
         definitionStack.axis = .vertical
-        definitionStack.alignment = .center
+        definitionStack.alignment = .fill
         definitionStack.spacing = 14
+        definitionStack.isUserInteractionEnabled = false
         definitionStack.translatesAutoresizingMaskIntoConstraints = false
         definitionStack.addArrangedSubview(readingLabel)
         definitionStack.addArrangedSubview(englishLabel)
         definitionStack.alpha = 0
         definitionStack.isHidden = true
+
+        let symbol = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+        dictionaryButton.setImage(UIImage(systemName: "arrow.up.right", withConfiguration: symbol), for: .normal)
+        dictionaryButton.accessibilityLabel = "Open dictionary"
+        dictionaryButton.accessibilityHint = "Shows the full dictionary entry for this word"
+        dictionaryButton.translatesAutoresizingMaskIntoConstraints = false
+        dictionaryButton.addTarget(self, action: #selector(dictionaryButtonTapped), for: .touchUpInside)
 
         hintLabel.text = "Tap to reveal"
         hintLabel.font = .preferredFont(forTextStyle: .footnote)
@@ -324,9 +383,10 @@ final class VocabFlashcardView: UIView {
         addSubview(japaneseLabel)
         addSubview(definitionStack)
         addSubview(hintLabel)
+        addSubview(dictionaryButton)
 
         japaneseCenterYConstraint = japaneseLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
-        japaneseTopConstraint = japaneseLabel.topAnchor.constraint(equalTo: topAnchor, constant: 40)
+        japaneseTopConstraint = japaneseLabel.topAnchor.constraint(equalTo: topAnchor, constant: 64)
         japaneseTopConstraint.isActive = false
 
         definitionCenterYConstraint = definitionStack.centerYAnchor.constraint(
@@ -342,16 +402,22 @@ final class VocabFlashcardView: UIView {
 
             definitionStack.centerXAnchor.constraint(equalTo: centerXAnchor),
             definitionCenterYConstraint,
-            definitionStack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 20),
-            definitionStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -20),
+            definitionStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 24),
+            definitionStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -24),
 
             hintLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
             hintLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
+
+            dictionaryButton.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            dictionaryButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            dictionaryButton.widthAnchor.constraint(equalToConstant: 44),
+            dictionaryButton.heightAnchor.constraint(equalToConstant: 44),
         ])
     }
 
     private func configureAppearance() {
         backgroundColor = ExperimentPalette.cardSurface
+        dictionaryButton.tintColor = .tertiaryLabel
     }
 
     private func configureShadow() {

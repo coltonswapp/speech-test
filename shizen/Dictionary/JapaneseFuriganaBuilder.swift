@@ -223,18 +223,23 @@ final class FuriganaTranscriptLabel: UILabel {
         }
         let wrapped = JapaneseFuriganaBuilder.usedBaseTextLayout(
             for: attributedText,
-            limitingWidth: limitingWidth
+            limitingWidth: limitingWidth,
+            maxLines: numberOfLines
         )
         // Height at the hugged width, not the column cap — otherwise a
         // wrap-at-max that then shrinks to one line keeps two-line space.
         let heightLimit = max(1, min(limitingWidth, wrapped.width))
         let stacked = JapaneseFuriganaBuilder.usedBaseTextLayout(
             for: attributedText,
-            limitingWidth: heightLimit
+            limitingWidth: heightLimit,
+            maxLines: numberOfLines
         )
+        // A 1pt hug can flip the wrap back to one line in measurement while
+        // drawing still wraps — keep the taller stack so 店 is not clipped.
+        let height = stacked.lineCount < wrapped.lineCount ? wrapped.height : stacked.height
         return CGSize(
             width: max(1, ceil(wrapped.width) + textInsets.left + textInsets.right),
-            height: max(1, ceil(stacked.height) + textInsets.top + textInsets.bottom)
+            height: max(1, ceil(height) + textInsets.top + textInsets.bottom)
         )
     }
 
@@ -257,6 +262,17 @@ final class FuriganaTranscriptLabel: UILabel {
             // and can shift later readings off their glyphs (ま sitting
             // before 待). Base line first, readings centered on top.
             drawBaseTextWithRubyOverlay(attributedText, in: drawRect)
+        } else if numberOfLines > 0 {
+            let storage = NSTextStorage(attributedString: attributedText)
+            let manager = NSLayoutManager()
+            manager.usesFontLeading = true
+            let container = NSTextContainer(size: drawRect.size)
+            container.lineFragmentPadding = 0
+            container.maximumNumberOfLines = numberOfLines
+            container.lineBreakMode = lineBreakMode
+            manager.addTextContainer(container)
+            storage.addLayoutManager(manager)
+            manager.drawGlyphs(forGlyphRange: manager.glyphRange(for: container), at: drawRect.origin)
         } else {
             attributedText.draw(
                 with: drawRect,
@@ -507,7 +523,8 @@ final class FuriganaTranscriptLabel: UILabel {
         let limit = insetBounds.width > 0 ? insetBounds.width : CGFloat.greatestFiniteMagnitude
         let layout = JapaneseFuriganaBuilder.usedBaseTextLayout(
             for: attributedText,
-            limitingWidth: limit
+            limitingWidth: limit,
+            maxLines: numberOfLines
         )
         let usedWidth = insetBounds.width > 0
             ? min(layout.width, insetBounds.width)
@@ -546,7 +563,7 @@ enum JapaneseFuriganaBuilder {
     fileprivate static let rubySizeFactor: CGFloat = 0.45
     fileprivate static let rubyTextColor = UIColor.secondaryLabel
     /// Bump when ruby alignment / drawing changes so cached strings don't keep the old layout.
-    private static let rubyLayoutRevision = "ruby-split-mixed-kana-v12"
+    private static let rubyLayoutRevision = "ruby-split-mixed-kana-v13"
 
     /// Vertical gap between transcript lines in the same speaker turn.
     static let transcriptLineSpacing: CGFloat = 18
@@ -578,6 +595,9 @@ enum JapaneseFuriganaBuilder {
         paragraphStyle.minimumLineHeight = font.lineHeight + rubyReserve * 0.8
         paragraphStyle.lineSpacing = max(8, rubyReserve * 0.52)
         paragraphStyle.lineBreakMode = .byWordWrapping
+        if #available(iOS 14.0, *) {
+            paragraphStyle.lineBreakStrategy = []
+        }
         return paragraphStyle
     }
 
@@ -619,7 +639,8 @@ enum JapaneseFuriganaBuilder {
     /// *between* lines — UILabel otherwise keeps a trailing gap on one line.
     static func usedBaseTextLayout(
         for attributed: NSAttributedString,
-        limitingWidth: CGFloat = .greatestFiniteMagnitude
+        limitingWidth: CGFloat = .greatestFiniteMagnitude,
+        maxLines: Int = 0
     ) -> (width: CGFloat, height: CGFloat, lineCount: Int) {
         guard attributed.length > 0 else {
             return (0, 0, 0)
@@ -675,6 +696,7 @@ enum JapaneseFuriganaBuilder {
             }
             stackedHeight += lineHeight
             visibleLines += 1
+            if maxLines > 0, visibleLines >= maxLines { break }
         }
         return (longest, stackedHeight, visibleLines)
     }
@@ -780,6 +802,62 @@ enum JapaneseFuriganaBuilder {
         let result = NSAttributedString(attributedString: base)
         cache.setObject(result, forKey: cacheKey)
         return result
+    }
+
+    /// Joins selected tokens and applies furigana to each one, so readings stay
+    /// on their own word instead of merging across the span. A zero-width space
+    /// between tokens is a wrap point; word joiners keep each token intact.
+    static func attributedString(
+        joining tokens: [String],
+        font: UIFont,
+        textColor: UIColor
+    ) -> NSAttributedString {
+        let pieces = tokens
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard pieces.count > 1 else {
+            return attributedString(for: pieces.first ?? "", font: font, textColor: textColor)
+        }
+
+        let paragraph = wrappingFuriganaParagraphStyle(font: font)
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: textColor,
+            .paragraphStyle: paragraph,
+        ]
+        let result = NSMutableAttributedString()
+        for (index, piece) in pieces.enumerated() {
+            let pieceString = NSMutableAttributedString(string: piece, attributes: attrs)
+            applyFurigana(to: pieceString, text: piece, font: font, paragraphStyle: paragraph)
+            result.append(gluingCharactersForTokenWrap(pieceString))
+            if index < pieces.count - 1 {
+                result.append(NSAttributedString(string: "\u{200B}", attributes: attrs))
+            }
+        }
+        return result
+    }
+
+    /// Prevents Japanese char-wrap inside a token (お|店) so only the ZWSP
+    /// between tokens is a break opportunity.
+    private static func gluingCharactersForTokenWrap(_ attributed: NSAttributedString) -> NSAttributedString {
+        let string = attributed.string
+        guard string.count > 1 else { return attributed }
+        let rubyKey = NSAttributedString.Key(kCTRubyAnnotationAttributeName as String)
+        let mutable = NSMutableAttributedString(attributedString: attributed)
+        var utf16 = 0
+        var insertAt: [Int] = []
+        for character in string {
+            utf16 += String(character).utf16.count
+            insertAt.append(utf16)
+        }
+        insertAt.removeLast()
+        for location in insertAt.reversed() {
+            guard location > 0, location <= mutable.length else { continue }
+            var attrs = mutable.attributes(at: location - 1, effectiveRange: nil)
+            attrs.removeValue(forKey: rubyKey)
+            mutable.insert(NSAttributedString(string: "\u{2060}", attributes: attrs), at: location)
+        }
+        return mutable
     }
 
     static func usageLadderAttributedString(for text: String, font: UIFont, textColor: UIColor) -> NSAttributedString {

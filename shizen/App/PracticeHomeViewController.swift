@@ -144,7 +144,7 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
     }
 
     @objc private func refreshDailyDialogueCard() {
-        let dayKeys = DialogueProgressGridSupport.recentDayKeys()
+        let dayKeys = DialogueProgressGridSupport.recentDayKeys(calendar: progressStore.progressCalendar)
         dailyDialogueCard.configure(
             dayKeys: dayKeys,
             completedCounts: DialogueProgressGridSupport.completedCounts(

@@ -114,6 +114,7 @@ final class JMDictStore {
         }
 
         let treatAsRenyoStem = Self.continuativeAuxiliaryFollows(trimmed, in: sentence)
+        let preferIkuOverOkonau = Self.surfacePrefersIkuOverOkonau(trimmed, in: sentence)
         // Furigana expansion reads JMdict — do it before this queue's read so lemma
         // alignment cannot re-enter GRDB (Database methods are not reentrant).
         let surfaceKana = JapaneseTokenizer.hiraganaReading(for: trimmed)
@@ -126,7 +127,8 @@ final class JMDictStore {
                     in: db,
                     surface: trimmed,
                     treatAsRenyoStem: treatAsRenyoStem,
-                    surfaceKana: surfaceKana
+                    surfaceKana: surfaceKana,
+                    preferIkuOverOkonau: preferIkuOverOkonau
                    ), !rows.isEmpty {
                     result = rows
                     return
@@ -138,7 +140,8 @@ final class JMDictStore {
                 if let rows = try bestLemmaGuessExactMatch(
                     in: db,
                     surface: trimmed,
-                    surfaceKana: surfaceKana
+                    surfaceKana: surfaceKana,
+                    preferIkuOverOkonau: preferIkuOverOkonau
                 ), !rows.isEmpty {
                     result = rows
                     return
@@ -157,7 +160,8 @@ final class JMDictStore {
                         shortened = String(shortened.dropLast())
                         if let rows = try exactMatch(in: db, surface: shortened), !rows.isEmpty {
                             if Self.shouldRejectSpuriousSingleKanjiTailMatch(trimmed: shortened, original: trimmed)
-                                || Self.shouldRejectKanjiSuffixTailMatch(trimmed: shortened, original: trimmed) {
+                                || Self.shouldRejectKanjiSuffixTailMatch(trimmed: shortened, original: trimmed)
+                                || Self.shouldRejectConjugationRemainderTailMatch(trimmed: shortened, original: trimmed) {
                                 continue
                             }
                             result = rows
@@ -172,6 +176,63 @@ final class JMDictStore {
             print("JMDictStore: query error: \(error)")
         }
         return JMDictLookupResult(surface: trimmed, entries: result)
+    }
+
+    /// Entries whose headword `expression` is exactly `expression`. A shared reading does not count.
+    func entries(matchingExpression expression: String) -> [JMDictEntry] {
+        let trimmed = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        openDatabaseIfNeeded()
+        guard let dbQueue else { return [] }
+        do {
+            return try dbQueue.read { db in
+                try Self.expressionMatch(in: db, expression: trimmed)
+            }
+        } catch {
+            print("JMDictStore: query error: \(error)")
+            return []
+        }
+    }
+
+    /// True when some row's `expression` equals `surface`. Reading-only hits do not count.
+    func hasExactExpressionMatch(for surface: String) -> Bool {
+        let trimmed = surface.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        openDatabaseIfNeeded()
+        guard let dbQueue else { return false }
+        do {
+            return try dbQueue.read { db in
+                try Self.hasExactExpressionMatch(in: db, expression: trimmed)
+            }
+        } catch {
+            print("JMDictStore: query error: \(error)")
+            return false
+        }
+    }
+
+    /// Kana written with no kanji, where the winning JMdict row is not that word.
+    ///
+    /// Trusted: the winning `expression` is the surface (`です`, or `あかん` when that
+    /// row wins), and a real inflection whose reading lines up when the surface is not
+    /// itself a headword (`たべた` → `食べる`).
+    ///
+    /// Untrusted: no entries, a shared reading (`わ` → `は`), or an auxiliary strip that
+    /// collides with a real headword (`みたい` → `見る` while `みたい` is its own word).
+    /// `sentence` only distinguishes a continuative stem (遅れ before そう) from a noun.
+    func isContextSensitiveKanaLookup(
+        _ lookup: JMDictLookupResult,
+        inSentence sentence: String? = nil
+    ) -> Bool {
+        let surface = lookup.surface.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.isKanaOnly(surface) else { return false }
+        guard let primary = lookup.primaryEntry else { return true }
+        let expression = primary.expression.trimmingCharacters(in: .whitespacesAndNewlines)
+        if expression == surface { return false }
+        if hasExactExpressionMatch(for: surface) { return true }
+        if inflectionReadingLinesUp(surface: surface, entry: primary, inSentence: sentence) {
+            return false
+        }
+        return true
     }
 
     /// True when some row has `expression`, `reading`, or `primary_reading` equal to `surface` (no prefix/tail heuristics).
@@ -250,8 +311,29 @@ final class JMDictStore {
             return corrected
         }
 
+        if let corrected = Self.correctImaKonRubyReading(
+            rubySurface: trimmedRuby,
+            rubyReading: rubyReading,
+            range: range,
+            in: sentence
+        ) {
+            return corrected
+        }
+
         if let corrected = Self.correctAidaKanRubyReading(
             wordSurface: trimmedWord,
+            rubySurface: trimmedRuby,
+            rubyReading: rubyReading,
+            range: range,
+            in: sentence
+        ) {
+            return corrected
+        }
+
+        if let corrected = Self.correctIkuOkonauRubyReading(
+            wordSurface: trimmedWord,
+            wordReading: wordReading,
+            wordDictionaryForm: wordDictionaryForm,
             rubySurface: trimmedRuby,
             rubyReading: rubyReading,
             range: range,
@@ -272,7 +354,9 @@ final class JMDictStore {
         guard var lookupExpression = furiganaLookupExpression(
             wordSurface: trimmedWord,
             wordDictionaryForm: wordDictionaryForm,
-            rubySurface: trimmedRuby
+            rubySurface: trimmedRuby,
+            range: range,
+            in: sentence
         ) else {
             return rubyReading
         }
@@ -363,8 +447,15 @@ final class JMDictStore {
     private func furiganaLookupExpression(
         wordSurface: String,
         wordDictionaryForm: String?,
-        rubySurface: String
+        rubySurface: String,
+        range: Range<String.Index>?,
+        in sentence: String
     ) -> String? {
+        if Self.surfacePrefersIkuOverOkonau(wordSurface, rubySurface: rubySurface, range: range, in: sentence),
+           hasExactLexicalMatch(for: "行く") {
+            return "行く"
+        }
+
         if !wordSurface.isEmpty, hasExactLexicalMatch(for: wordSurface) {
             if Self.isSingleUnifiedKanjiExpression(wordSurface),
                let form = wordDictionaryForm?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -568,6 +659,28 @@ final class JMDictStore {
         return nil
     }
 
+    /// IPADic tags lone 今 before a noun as the prefix コン (今シーズン, 今大会), which also
+    /// catches everyday いま before a verb noun (今帰り, 今出かけ). Keep こん only before
+    /// katakana or a kanji compound; anything else is いま.
+    private static func correctImaKonRubyReading(
+        rubySurface: String,
+        rubyReading: String,
+        range: Range<String.Index>?,
+        in sentence: String
+    ) -> String? {
+        guard rubySurface == "今", rubyReading == "こん", let range else { return nil }
+        let after = sentence[range.upperBound...]
+        guard let next = after.first else { return "いま" }
+        if next.unicodeScalars.allSatisfy({ (0x30A0...0x30FF).contains($0.value) }) {
+            return nil
+        }
+        if isKanjiCharacter(next), next != "何",
+           let second = after.dropFirst().first, isKanjiCharacter(second) {
+            return nil
+        }
+        return "いま"
+    }
+
     /// Prefixes after lone 間 that mark ま (間に合う, 間違い), not あいだ.
     private static let maReadingAfterAidaCues = [
         "に合", "にあう", "にあわ", "にあっ", "にあえ", "にあお", "にあい",
@@ -608,6 +721,87 @@ final class JMDictStore {
 
         guard rubyReading == "かん" else { return nil }
         return "あいだ"
+    }
+
+    /// Casual てみる / ちゃう after 行って is 行く. MeCab/IPADic defaults that
+    /// te-form to 行う (newspaper おこなう), which shows おこな over 行ってみたい.
+    private static let ikuAfterTeCues = [
+        "みたい", "みる", "みよう", "みた", "みて", "みます", "みました", "みない",
+        "ちゃう", "ちゃった", "ちゃって",
+    ]
+
+    private static let ikuSurfacePrefixes = [
+        "行ってみ", "行っちゃう", "行っちゃっ",
+    ]
+
+    private static func correctIkuOkonauRubyReading(
+        wordSurface: String,
+        wordReading: String,
+        wordDictionaryForm: String?,
+        rubySurface: String,
+        rubyReading: String,
+        range: Range<String.Index>?,
+        in sentence: String
+    ) -> String? {
+        guard rubySurface == "行" || rubySurface.hasPrefix("行") else { return nil }
+        let looksOkonau = rubyReading.hasPrefix("おこな")
+            || wordReading.hasPrefix("おこな")
+            || wordDictionaryForm == "行う"
+            || wordDictionaryForm == "行なう"
+        guard looksOkonau else { return nil }
+        guard surfacePrefersIkuOverOkonau(
+            wordSurface,
+            rubySurface: rubySurface,
+            range: range,
+            in: sentence
+        ) else { return nil }
+
+        if rubySurface == "行" { return "い" }
+        if rubySurface == "行っ" { return "いっ" }
+        if rubySurface == "行って" { return "いって" }
+        if rubySurface.hasPrefix("行") {
+            return "い" + String(rubySurface.dropFirst())
+        }
+        return "い"
+    }
+
+    private static func surfacePrefersIkuOverOkonau(
+        _ surface: String,
+        rubySurface: String? = nil,
+        range: Range<String.Index>? = nil,
+        in sentence: String? = nil
+    ) -> Bool {
+        if ikuSurfacePrefixes.contains(where: { surface.hasPrefix($0) }) {
+            return true
+        }
+        if let sentence, !sentence.isEmpty {
+            let window: String
+            if let range, range.lowerBound < sentence.endIndex {
+                window = String(sentence[range.lowerBound...])
+            } else if let start = sentence.range(of: surface)?.lowerBound {
+                window = String(sentence[start...])
+            } else {
+                window = sentence
+            }
+            if ikuSurfacePrefixes.contains(where: { window.hasPrefix($0) }) {
+                return true
+            }
+            if let range, range.lowerBound < sentence.endIndex {
+                let after = String(sentence[range.upperBound...])
+                if ikuAfterTeCues.contains(where: { after.hasPrefix($0) || after.hasPrefix("て" + $0) }) {
+                    return rubySurface == "行" || surface.hasPrefix("行")
+                }
+            }
+            var searchStart = sentence.startIndex
+            while let found = sentence.range(of: surface, range: searchStart..<sentence.endIndex) {
+                let after = String(sentence[found.upperBound...])
+                if ikuAfterTeCues.contains(where: { after.hasPrefix($0) || after.hasPrefix("て" + $0) }) {
+                    return true
+                }
+                searchStart = found.upperBound
+            }
+        }
+        return false
     }
 
     private static func isOclockJiContext(in sentence: String, at range: Range<String.Index>?) -> Bool {
@@ -839,6 +1033,13 @@ final class JMDictStore {
         c.unicodeScalars.contains(where: isKanjiOrIterationMark)
     }
 
+    /// Every character is hiragana or katakana. Kanji, Latin, and punctuation are not.
+    private static func isKanaOnly(_ surface: String) -> Bool {
+        let trimmed = surface.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return trimmed.allSatisfy(isExtendedKana)
+    }
+
     private static func isExtendedKana(_ c: Character) -> Bool {
         for s in c.unicodeScalars {
             let v = s.value
@@ -868,6 +1069,22 @@ final class JMDictStore {
             tags: tags
         ) {
             return progressive
+        }
+        if let teMiru = teMiruReading(
+            surface: surface,
+            lemmaExpression: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+        ) {
+            return teMiru
+        }
+        if let voice = voiceReading(
+            surface: surface,
+            lemmaExpression: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+        ) {
+            return voice
         }
 
         // 探してます / 読んでました: te-form + ます contraction of ている / でいる.
@@ -1006,6 +1223,118 @@ final class JMDictStore {
         "いた",
         "いる",
     ]
+
+    /// 行ってみたい / 食べてみる: てみる "try doing".
+    private static let teMiruAuxiliaries: [String] = [
+        "てみませんでした",
+        "でみませんでした",
+        "てみました",
+        "でみました",
+        "てみません",
+        "でみません",
+        "てみます",
+        "でみます",
+        "てみたい",
+        "でみたい",
+        "てみよう",
+        "でみよう",
+        "てみない",
+        "でみない",
+        "てみた",
+        "でみた",
+        "てみて",
+        "でみて",
+        "てみる",
+        "でみる",
+    ]
+
+    private static func teMiruReading(
+        surface: String,
+        lemmaExpression: String,
+        lemmaReading: String,
+        tags: String?
+    ) -> String? {
+        for auxiliary in teMiruAuxiliaries {
+            guard surface.hasSuffix(auxiliary), surface.count > auxiliary.count else { continue }
+            let afterTe = String(auxiliary.dropFirst())
+            let teSurface = String(surface.dropLast(afterTe.count))
+            guard let teReading = conjunctiveReading(
+                surface: teSurface,
+                lemmaExpression: lemmaExpression,
+                lemmaReading: lemmaReading,
+                tags: tags
+            ) else { continue }
+            return teReading + afterTe
+        }
+        return nil
+    }
+
+    /// Longest-first られる / れる (passive/potential) including a following negative.
+    private static let ichidanVoiceSuffixes: [String] = [
+        "られなくちゃいけない",
+        "られなきゃいけない",
+        "られなければ",
+        "られなかった",
+        "られなくて",
+        "られない",
+        "られました",
+        "られます",
+        "られよう",
+        "られて",
+        "られた",
+        "られる",
+        "られ",
+    ]
+
+    private static let godanVoiceSuffixes: [String] = [
+        "れなくちゃいけない",
+        "れなきゃいけない",
+        "れなければ",
+        "れなかった",
+        "れなくて",
+        "れない",
+        "れました",
+        "れます",
+        "れよう",
+        "れて",
+        "れた",
+        "れる",
+        "れ",
+    ]
+
+    /// 立てられなくて / たてる → たてられなくて; 書かれなくて / かく → かかれなくて.
+    private static func voiceReading(
+        surface: String,
+        lemmaExpression: String,
+        lemmaReading: String,
+        tags: String?
+    ) -> String? {
+        for suffix in ichidanVoiceSuffixes {
+            guard surface.hasSuffix(suffix), surface.count > suffix.count else { continue }
+            let stem = String(surface.dropLast(suffix.count))
+            guard lemmaExpression.hasSuffix("る"),
+                  lemmaReading.hasSuffix("る"),
+                  isIchidanRuLemma(lemmaExpression: lemmaExpression, tags: tags),
+                  (stem + "る" == lemmaExpression || stem + "る" == lemmaReading)
+            else { continue }
+            return String(lemmaReading.dropLast()) + suffix
+        }
+
+        for suffix in godanVoiceSuffixes {
+            guard surface.hasSuffix(suffix),
+                  surface.count > suffix.count,
+                  !surface.hasSuffix("ら" + suffix)
+            else { continue }
+            let aStem = String(surface.dropLast(suffix.count))
+            guard let expectedA = godanAStemReading(fromDictionaryReading: lemmaReading) else { continue }
+            let lemmaKanjiStem = String(lemmaExpression.dropLast())
+            let matchesSurface = aStem == expectedA
+                || aStem == lemmaKanjiStem + String(expectedA.suffix(1))
+            guard matchesSurface else { continue }
+            return expectedA + suffix
+        }
+        return nil
+    }
 
     /// Te / ta reading from a dictionary lemma (探して / さがす → さがして, 探した → さがした).
     private static func conjunctiveReading(
@@ -1316,7 +1645,11 @@ final class JMDictStore {
 
     /// Full-text search over expression, reading, romaji, and glossary via the FTS5 index.
     /// Input is matched against all indexed columns; romaji input (e.g. "taberu") hits the
-    /// pre-computed romaji column automatically. Results are sorted by score DESC.
+    /// pre-computed romaji column automatically.
+    ///
+    /// Exact headword, reading, or romaji matches come first. Everything else stays in
+    /// score order. Score is a sum of JMdict priority tags, so a common compound such as
+    /// 心がける would otherwise outrank the exact word こころ.
     func search(query rawQuery: String, limit: Int = 40) -> [JMDictEntry] {
         let q = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return [] }
@@ -1334,10 +1667,21 @@ final class JMDictStore {
                         FROM entries e
                         JOIN entries_fts f ON f.rowid = e.id
                         WHERE entries_fts MATCH ?
-                        ORDER BY e.score DESC, rank, e.id ASC
+                        ORDER BY
+                            CASE
+                                WHEN e.expression = ?
+                                    OR e.reading = ?
+                                    OR e.primary_reading = ?
+                                    OR lower(f.romaji) = lower(?)
+                                THEN 0
+                                ELSE 1
+                            END,
+                            e.score DESC,
+                            rank,
+                            e.id ASC
                         LIMIT ?
                         """,
-                    arguments: [ftsQuery, limit]
+                    arguments: [ftsQuery, q, q, q, q, limit]
                 )
             }
         } catch {
@@ -1356,10 +1700,19 @@ final class JMDictStore {
                     sql: """
                         SELECT * FROM entries
                         WHERE expression LIKE ? OR reading LIKE ?
-                        ORDER BY score DESC, id ASC
+                        ORDER BY
+                            CASE
+                                WHEN expression = ?
+                                    OR reading = ?
+                                    OR primary_reading = ?
+                                THEN 0
+                                ELSE 1
+                            END,
+                            score DESC,
+                            id ASC
                         LIMIT ?
                         """,
-                    arguments: [pattern, pattern, limit]
+                    arguments: [pattern, pattern, query, query, query, limit]
                 )
             }
         } catch {
@@ -1466,6 +1819,31 @@ final class JMDictStore {
         return rows
     }
 
+    private static func hasExactExpressionMatch(in db: Database, expression: String) throws -> Bool {
+        guard !expression.isEmpty else { return false }
+        return try Int.fetchOne(
+            db,
+            sql: """
+                SELECT 1 FROM entries
+                WHERE expression = ?
+                LIMIT 1
+                """,
+            arguments: [expression]
+        ) != nil
+    }
+
+    private static func expressionMatch(in db: Database, expression: String) throws -> [JMDictEntry] {
+        try JMDictEntry.fetchAll(
+            db,
+            sql: """
+                SELECT * FROM entries
+                WHERE expression = ?
+                ORDER BY score DESC, id ASC
+                """,
+            arguments: [expression]
+        )
+    }
+
     private func prefixMatchExpression(in db: Database, surface: String, limit: Int) throws -> [JMDictEntry] {
         // LIKE 'surface%'
         let pattern = surface + "%"
@@ -1496,6 +1874,49 @@ final class JMDictStore {
         guard trimmed != original, original.hasPrefix(trimmed) else { return false }
         return original.dropFirst(trimmed.count).contains(where: isKanjiCharacter)
     }
+
+    /// 立てられなくて tail-trims to the noun 立て. Leftover られ/ない/て is conjugation,
+    /// not a shorter headword.
+    private static func shouldRejectConjugationRemainderTailMatch(trimmed: String, original: String) -> Bool {
+        guard trimmed != original, original.hasPrefix(trimmed) else { return false }
+        let remainder = String(original.dropFirst(trimmed.count))
+        guard !remainder.isEmpty else { return false }
+        return conjugationRemainderPrefixes.contains { remainder == $0 || remainder.hasPrefix($0) }
+    }
+
+    private static let conjugationRemainderPrefixes: [String] = [
+        "られなくちゃいけない",
+        "られなきゃいけない",
+        "られなければ",
+        "られなかった",
+        "られなくて",
+        "られない",
+        "られよう",
+        "られて",
+        "られた",
+        "られる",
+        "られ",
+        "せられ",
+        "させられ",
+        "させて",
+        "させた",
+        "させる",
+        "れなくちゃいけない",
+        "れなきゃいけない",
+        "れなければ",
+        "れなかった",
+        "れなくて",
+        "れない",
+        "れて",
+        "れた",
+        "れる",
+        "なくちゃいけない",
+        "なきゃいけない",
+        "なければ",
+        "なかった",
+        "なくて",
+        "ない",
+    ]
 
     /// Honorific お- plus a kanji stem (お隣 → 隣). Kana-only remainders (おく, おいしい)
     /// are not honorific prefixes.
@@ -1571,7 +1992,8 @@ final class JMDictStore {
         in db: Database,
         surface: String,
         treatAsRenyoStem: Bool = false,
-        surfaceKana: String
+        surfaceKana: String,
+        preferIkuOverOkonau: Bool = false
     ) throws -> [JMDictEntry]? {
         let guesses = Self.buildInflectionLemmaCandidates(
             surface: surface,
@@ -1586,6 +2008,9 @@ final class JMDictStore {
         var bestScore = Int.min
 
         for g in guesses {
+            if preferIkuOverOkonau, g == "行う" || g == "行なう" {
+                continue
+            }
             guard var rows = try exactMatch(in: db, surface: g), !rows.isEmpty else {
                 print("JMDict bestLemma: candidate '\(g)' — no match")
                 continue
@@ -1652,6 +2077,24 @@ final class JMDictStore {
         return surfaceKana == inflected
     }
 
+    /// True when `entry` is a conjugation of `surface` (たべた → 食べる), not merely a shared reading.
+    private func inflectionReadingLinesUp(
+        surface: String,
+        entry: JMDictEntry,
+        inSentence sentence: String?
+    ) -> Bool {
+        let treatAsRenyoStem = Self.continuativeAuxiliaryFollows(surface, in: sentence)
+        guard treatAsRenyoStem || Self.looksInflectedForLemmaGuess(surface) else { return false }
+        // Furigana expansion reads JMdict. Call it outside any open `dbQueue` read.
+        let surfaceKana = JapaneseTokenizer.hiraganaReading(for: surface)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return Self.inflectedReadingMatchesSurface(
+            surface: surface,
+            surfaceKana: surfaceKana,
+            entry: entry
+        )
+    }
+
     /// True when the surface ending unambiguously indicates a verb conjugation,
     /// so only verb lemma candidates should be considered.
     private static func surfaceRequiresVerbLemma(_ surface: String) -> Bool {
@@ -1662,6 +2105,10 @@ final class JMDictStore {
             "ました", "ます", "ません", "ましょう",
             "ています", "でいます", "ている", "でいる",
             "ていた", "でいた",
+            "てみたい", "でみたい", "てみる", "でみる",
+            "てみた", "でみた", "てみて", "でみて",
+            "られなかった", "られなくて", "られない", "られて", "られた", "られる",
+            "れなかった", "れなくて", "れない",
             "なかった", "なくて", "なければ", "なきゃ", "なくちゃ",
             "ない", "て",
             "った", "んだ", "いた", "いだ", "した", "た",
@@ -1783,6 +2230,43 @@ final class JMDictStore {
         }
         add(stem + "る")
         if let g = godanUFromNegativeStem(stem) { add(g) }
+        addUnwrappedVoiceLemmas(from: stem, add: add)
+    }
+
+    /// 立てられ → 立てる; 食べさせられ → 食べる; され → する.
+    private static func addUnwrappedVoiceLemmas(from stem: String, add: (String) -> Void) {
+        guard !stem.isEmpty else { return }
+        if stem.hasSuffix("させられ"), stem.count > 4 {
+            addDictionaryLemmas(fromVoiceInner: String(stem.dropLast(4)), add: add)
+            return
+        }
+        if stem.hasSuffix("られ") {
+            addDictionaryLemmas(fromVoiceInner: String(stem.dropLast(2)), add: add)
+            return
+        }
+        if stem.hasSuffix("させ") {
+            addDictionaryLemmas(fromVoiceInner: String(stem.dropLast(2)), add: add)
+            return
+        }
+        if stem.hasSuffix("れ") {
+            let inner = String(stem.dropLast())
+            if let g = godanUFromNegativeStem(inner) { add(g) }
+            addDictionaryLemmas(fromVoiceInner: inner, add: add)
+        }
+    }
+
+    private static func addDictionaryLemmas(fromVoiceInner inner: String, add: (String) -> Void) {
+        guard !inner.isEmpty else { return }
+        if inner == "し" || inner == "さ" {
+            add("する")
+            return
+        }
+        if inner == "来" || inner == "こ" {
+            add("来る")
+            return
+        }
+        add(inner + "る")
+        if let g = godanUFromNegativeStem(inner) { add(g) }
     }
 
     /// 遅れそうです: 遅れ is a noun in JMdict, but そう after it is the verb stem of 遅れる.
@@ -1826,8 +2310,14 @@ final class JMDictStore {
     private static func addContinuativeAuxiliaryLemmaCandidates(from surface: String, add: (String) -> Void) {
         for suffix in continuativeAuxiliarySuffixes {
             guard surface.hasSuffix(suffix), surface.count > suffix.count else { continue }
-            addRenyoStemLemmaCandidates(from: String(surface.dropLast(suffix.count)), add: add)
-            add(String(surface.dropLast(suffix.count)) + "い")
+            let stem = String(surface.dropLast(suffix.count))
+            // 行ってみたい is てみる + たい, not 行ってみ + たい (which invents 行ってみる).
+            if (suffix == "たい" || suffix == "たく" || suffix == "たかった"),
+               stem.hasSuffix("てみ") || stem.hasSuffix("でみ") {
+                continue
+            }
+            addRenyoStemLemmaCandidates(from: stem, add: add)
+            add(stem + "い")
         }
     }
 
@@ -1846,6 +2336,10 @@ final class JMDictStore {
         for suffix in continuativeAuxiliarySuffixes {
             guard surface.hasSuffix(suffix), surface.count > suffix.count else { continue }
             let stem = String(surface.dropLast(suffix.count))
+            if (suffix == "たい" || suffix == "たく" || suffix == "たかった"),
+               stem.hasSuffix("てみ") || stem.hasSuffix("でみ") {
+                continue
+            }
             guard let stemReading = renyoStemReading(
                 surface: stem,
                 lemmaExpression: lemmaExpression,
@@ -1913,6 +2407,8 @@ final class JMDictStore {
             addMasuStemLemmaCandidates(from: String(surface.dropLast(2)), add: add)
         }
         addProgressiveLemmaCandidates(from: surface, add: add)
+        addTeMiruLemmaCandidates(from: surface, add: add)
+        addPassivePotentialLemmaCandidates(from: surface, add: add)
         if surface.hasSuffix("なくちゃいけない"), surface.count > 7 {
             addVerbLemmaCandidates(fromNegativeStem: String(surface.dropLast(7)), add: add)
         }
@@ -1994,6 +2490,32 @@ final class JMDictStore {
                 guard surface.hasSuffix(suffix), surface.count > suffix.count else { continue }
                 addTeFormLemmaCandidates(from: String(surface.dropLast(auxiliary.count)), add: add)
             }
+        }
+    }
+
+    /// 行ってみたい → 行く: strip みる / みたい and lemma-guess the te-form.
+    private static func addTeMiruLemmaCandidates(from surface: String, add: (String) -> Void) {
+        for auxiliary in teMiruAuxiliaries {
+            guard surface.hasSuffix(auxiliary), surface.count > auxiliary.count else { continue }
+            let afterTe = String(auxiliary.dropFirst())
+            addTeFormLemmaCandidates(from: String(surface.dropLast(afterTe.count)), add: add)
+        }
+    }
+
+    /// 立てられなくて → 立てる; 書かれなくて → 書く.
+    private static func addPassivePotentialLemmaCandidates(from surface: String, add: (String) -> Void) {
+        for suffix in ichidanVoiceSuffixes {
+            guard surface.hasSuffix(suffix), surface.count > suffix.count else { continue }
+            addUnwrappedVoiceLemmas(from: String(surface.dropLast(suffix.count)), add: add)
+        }
+        for suffix in godanVoiceSuffixes {
+            guard surface.hasSuffix(suffix),
+                  surface.count > suffix.count,
+                  !surface.hasSuffix("ら" + suffix)
+            else { continue }
+            let aStem = String(surface.dropLast(suffix.count))
+            if let g = godanUFromNegativeStem(aStem) { add(g) }
+            addUnwrappedVoiceLemmas(from: aStem, add: add)
         }
     }
 

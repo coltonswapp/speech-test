@@ -404,6 +404,10 @@ final class JapaneseTokenizer {
             return true
         case "たい", "たく", "たかった":
             return true
+        case "みたい":
+            return firstText.hasSuffix("て") || firstText.hasSuffix("で")
+        case "られ", "られない", "られなくて", "られて", "られた", "られる":
+            return true
         case "で":
             guard let last = firstText.last else { return false }
             return last == "ん" || last == "い" || last == "っ"

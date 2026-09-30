@@ -1,17 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ChevronLeft,
+  ExternalLink,
   Pause,
   Play,
   SkipForward,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -717,6 +719,25 @@ function LessonPlaythroughSession({
           highlightedSpoken={highlightedSpoken}
           onSpokenClick={handleSpokenClick}
         />
+      )}
+      {current && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/content/dialogues/${collectionId}/${current.slug}?tab=audio`}
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "min-h-11 touch-manipulation md:min-h-8",
+            )}
+            title="Open this scene's audio panel to review timing and approve"
+            onClick={() => {
+              cleanupAudio();
+              onClose();
+            }}
+          >
+            <ExternalLink className="size-3.5" />
+            <span className="ml-1">Open scene audio</span>
+          </Link>
+        </div>
       )}
       <p className="text-[11px] text-muted-foreground">
         Press Play to start each scene. Click a spoken line to seek when

@@ -8,6 +8,31 @@
 
 import Foundation
 
+/// Dialogue lesson track on the home path. 5 = N5 … 3 = N3.
+enum DialogueLessonTrack: Int, CaseIterable {
+    case n5 = 5
+    case n4 = 4
+    case n3 = 3
+
+    var title: String { "N\(rawValue)" }
+
+    private static let storageKey = "dialogue.lessonTrack"
+
+    static let didChangeNotification = Notification.Name("shizen.dialogueLessonTrackDidChange")
+
+    static var current: DialogueLessonTrack {
+        get {
+            let raw = UserDefaults.standard.integer(forKey: storageKey)
+            return DialogueLessonTrack(rawValue: raw) ?? .n5
+        }
+        set {
+            guard newValue != current else { return }
+            UserDefaults.standard.set(newValue.rawValue, forKey: storageKey)
+            NotificationCenter.default.post(name: didChangeNotification, object: nil)
+        }
+    }
+}
+
 struct LessonUnitSection {
     let title: String?
     let subtitle: String?
@@ -63,6 +88,7 @@ enum LessonUnitSectionBuilder {
             conversationCount: summary.scenarioCount,
             thumbnailName: summary.sceneImage ?? summary.id,
             thumbnailURL: (summary.thumbnailSmallUrl ?? summary.thumbnailUrl).flatMap(URL.init(string:)),
+            scenarioIDs: summary.scenarioIDs,
             isLocked: false
         )
     }
@@ -76,6 +102,34 @@ enum LessonUnitSectionBuilder {
         progress: LessonProgressProviding
     ) -> [PathUnit] {
         pathUnits(from: index, completedScenarioIDs: progress.completedScenarioIDs)
+    }
+
+    static func pathUnits(
+        from index: CMSDialogueLessonIndex,
+        progress: LessonProgressProviding,
+        track: DialogueLessonTrack
+    ) -> [PathUnit] {
+        pathUnits(from: scopedIndex(index, track: track), progress: progress)
+    }
+
+    /// Units and lessons for one JLPT track. Lessons with no curriculum unit
+    /// stay on N5 so they remain reachable from the beginner path.
+    static func scopedIndex(
+        _ index: CMSDialogueLessonIndex,
+        track: DialogueLessonTrack
+    ) -> CMSDialogueLessonIndex {
+        if index.units.isEmpty {
+            return track == .n5 ? index : CMSDialogueLessonIndex(units: [], lessons: [])
+        }
+        let knownUnitIDs = Set(index.units.map(\.id))
+        let units = index.units.filter { $0.jlptLevel == track.rawValue }
+        let unitIDs = Set(units.map(\.id))
+        let lessons = index.lessons.filter { lesson in
+            guard let unitId = lesson.unitId else { return track == .n5 }
+            if unitIDs.contains(unitId) { return true }
+            return !knownUnitIDs.contains(unitId) && track == .n5
+        }
+        return CMSDialogueLessonIndex(units: units, lessons: lessons)
     }
 
     static func pathUnits(
@@ -118,7 +172,7 @@ enum LessonUnitSectionBuilder {
             thumbnailName: lesson.thumbnailName,
             thumbnailURL: lesson.thumbnailURL,
             state: lesson.isLocked ? .locked : .current,
-            partCount: lesson.conversationCount
+            partCount: sceneCount(for: lesson)
         )
     }
 
@@ -127,13 +181,14 @@ enum LessonUnitSectionBuilder {
         completedScenarioIDs: Set<String>,
         assignedCurrent: inout Bool
     ) -> PathLesson {
-        let prefix = "\(lesson.id)/"
-        let completedParts = min(
-            lesson.conversationCount,
-            completedScenarioIDs.lazy.filter { $0.hasPrefix(prefix) }.count
+        let partCount = sceneCount(for: lesson)
+        let progress = sceneProgress(
+            for: lesson,
+            partCount: partCount,
+            completedScenarioIDs: completedScenarioIDs
         )
         let state: PathLesson.State
-        if completedParts >= lesson.conversationCount {
+        if progress.completedParts >= partCount {
             state = .completed
         } else if !assignedCurrent {
             state = .current
@@ -148,9 +203,41 @@ enum LessonUnitSectionBuilder {
             thumbnailName: lesson.thumbnailName,
             thumbnailURL: lesson.thumbnailURL,
             state: state,
-            completedParts: completedParts,
-            partCount: lesson.conversationCount
+            completedParts: progress.completedParts,
+            completedPartIndices: progress.completedPartIndices,
+            partCount: partCount
         )
+    }
+
+    private static func sceneCount(for lesson: WaterfallLesson) -> Int {
+        lesson.scenarioIDs.isEmpty ? lesson.conversationCount : lesson.scenarioIDs.count
+    }
+
+    /// Each index is one scene, in lesson order. When the index lists scene ids,
+    /// only those exact ids light up. Older indexes fall back to a prefix count
+    /// and fill the first N segments.
+    private static func sceneProgress(
+        for lesson: WaterfallLesson,
+        partCount: Int,
+        completedScenarioIDs: Set<String>
+    ) -> (completedParts: Int, completedPartIndices: Set<Int>) {
+        if !lesson.scenarioIDs.isEmpty {
+            let indices = Set(
+                lesson.scenarioIDs.enumerated().compactMap { index, id in
+                    completedScenarioIDs.contains(id) ? index : nil
+                }
+            )
+            return (indices.count, indices)
+        }
+        guard let lessonID = lesson.id, !lessonID.isEmpty else {
+            return (0, [])
+        }
+        let prefix = "\(lessonID)/"
+        let completedParts = min(
+            partCount,
+            completedScenarioIDs.lazy.filter { $0.hasPrefix(prefix) }.count
+        )
+        return (completedParts, Set(0 ..< completedParts))
     }
 
     private static func pathEyebrow(for section: LessonUnitSection, index: Int) -> String {

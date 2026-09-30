@@ -123,7 +123,7 @@ final class SavedVocabularyListViewController: UIViewController {
         if let reading = item.reading, reading != item.surface {
             parts.append(reading)
         }
-        if let gloss = item.gloss, !gloss.isEmpty {
+        if let gloss = item.primarySenseText ?? item.gloss, !gloss.isEmpty {
             parts.append(gloss)
         } else if let sentence = item.sentence, !sentence.isEmpty {
             parts.append(sentence)
@@ -145,7 +145,7 @@ extension SavedVocabularyListViewController: UITableViewDataSource, UITableViewD
         configuration.textProperties.font = .preferredFont(forTextStyle: .title3)
         configuration.secondaryText = Self.subtitle(for: item)
         configuration.secondaryTextProperties.color = .secondaryLabel
-        configuration.secondaryTextProperties.numberOfLines = 2
+        configuration.secondaryTextProperties.numberOfLines = 3
         cell.contentConfiguration = configuration
         cell.accessoryType = .disclosureIndicator
         cell.backgroundColor = ExperimentPalette.cardSurface
@@ -159,6 +159,7 @@ extension SavedVocabularyListViewController: UITableViewDataSource, UITableViewD
         WordDictionaryDetailSheetPresenter.push(
             surface: item.surface,
             sentence: item.sentence,
+            glossFraming: .word,
             from: self
         )
     }

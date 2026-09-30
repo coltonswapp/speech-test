@@ -69,6 +69,36 @@ struct DialogueTokenSync: Hashable {
         )
     }
 
+    /// Clip window for each spoken line: first token through the next line's
+    /// first token (last line runs to `clipDuration`).
+    ///
+    /// Published m4a marks can sit ahead of stamps approved later. Dialogue
+    /// playback and quiz proof both follow these windows when they line up.
+    /// Returns `nil` when any stamp is missing or out of order.
+    func lineTimeRanges(clipDuration: TimeInterval) -> [Range<TimeInterval>]? {
+        guard !lines.isEmpty, clipDuration > 0 else { return nil }
+        var ranges: [Range<TimeInterval>] = []
+        ranges.reserveCapacity(lines.count)
+        for index in lines.indices {
+            let tokens = lines[index].tokens
+            guard let start = tokens.first?.startSeconds, start.isFinite, start >= 0 else {
+                return nil
+            }
+            let end: TimeInterval
+            if index + 1 < lines.count {
+                guard let next = lines[index + 1].tokens.first?.startSeconds,
+                      next.isFinite,
+                      next > start
+                else { return nil }
+                end = next
+            } else {
+                end = max(start, clipDuration)
+            }
+            ranges.append(start..<end)
+        }
+        return ranges
+    }
+
     /// Current token for playback. Before the first stamp, returns `0` so the
     /// focused line can highlight immediately instead of waiting on the first
     /// word onset.

@@ -163,7 +163,7 @@
         "config": {
           "type": "auth",
           "title": "Save your progress.",
-          "subtitle": "Sign in with Apple, or skip for now.",
+          "subtitle": "Sign in with Apple or Google.",
           "cta_text": "Continue with Apple"
         }
       },

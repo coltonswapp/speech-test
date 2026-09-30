@@ -20,6 +20,11 @@ struct DialogueScenarioCollection: Hashable {
     let sceneImageName: String?
     /// Public CDN thumbnail for lesson cards when served from the CMS.
     let thumbnailURL: URL?
+    /// Curriculum unit from the collection detail export. Nil when the lesson is unfiled.
+    let unitId: String?
+    let unitTitle: String?
+    /// 5 = N5 … 1 = N1. Nil when the lesson is unfiled or the export omitted it.
+    let jlptLevel: Int?
     let scenarios: [Scenario]
 
     /// Thumbnail to show for a scenario: its own override when the CMS set
@@ -40,6 +45,8 @@ struct DialogueScenarioCollection: Hashable {
         /// `DialogueScenarioCollection.thumbnailURL(for:)`, which applies the
         /// collection fallback.
         let thumbnailURL: URL?
+        /// Published-take length in seconds. Nil when the scene has no take.
+        let durationSeconds: Double?
         let lines: [TaggedLine]
 
         struct TaggedLine: Hashable {
@@ -61,6 +68,9 @@ private struct DialogueScenarioCollectionFile: Decodable {
     let subtitle: String?
     let sceneImage: String?
     let thumbnailUrl: String?
+    let unitId: String?
+    let unitTitle: String?
+    let jlptLevel: Int?
     let scenarios: [ScenarioRecord]
 
     struct ScenarioRecord: Decodable {
@@ -85,13 +95,14 @@ private struct DialogueScenarioCollectionFile: Decodable {
         let ambienceId: String?
         let ambienceUrl: String?
         let ambienceGainDb: Double?
+        let durationSeconds: Double?
 
         enum CodingKeys: String, CodingKey {
             case id, menuTitle, menuSubtitle, japanese, romaji, english
             case targetSubstring, audioKey, publishedAudioUrl, publishedVariantId
             case publishedContentHash, publishedAt, grammarPointIDs, thumbnailUrl
             case scenario, highlights, quiz, tokenSync
-            case ambienceId, ambienceUrl, ambienceGainDb
+            case ambienceId, ambienceUrl, ambienceGainDb, durationSeconds
         }
 
         init(from decoder: Decoder) throws {
@@ -118,6 +129,11 @@ private struct DialogueScenarioCollectionFile: Decodable {
             ambienceId = try container.decodeIfPresent(String.self, forKey: .ambienceId)
             ambienceUrl = try container.decodeIfPresent(String.self, forKey: .ambienceUrl)
             ambienceGainDb = try container.decodeIfPresent(Double.self, forKey: .ambienceGainDb)
+            if let seconds = try? container.decode(Double.self, forKey: .durationSeconds), seconds.isFinite {
+                durationSeconds = seconds
+            } else {
+                durationSeconds = nil
+            }
         }
     }
 
@@ -339,6 +355,9 @@ private extension DialogueScenarioCollection {
         subtitle = file.subtitle
         sceneImageName = file.sceneImage
         thumbnailURL = file.thumbnailUrl.flatMap(URL.init(string:))
+        unitId = file.unitId
+        unitTitle = file.unitTitle
+        jlptLevel = file.jlptLevel
         scenarios = file.scenarios.map { record in
             let taggedLines = record.scenario.lines.enumerated().compactMap { index, line in
                 line.taggedLine(scenarioID: record.id, fallbackIndex: index)
@@ -403,6 +422,7 @@ private extension DialogueScenarioCollection {
                 quiz: quiz,
                 grammarPointIDs: scenarioGrammarIDs,
                 thumbnailURL: record.thumbnailUrl.flatMap(URL.init(string:)),
+                durationSeconds: record.durationSeconds,
                 lines: taggedLines
             )
         }

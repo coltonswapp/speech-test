@@ -19,6 +19,8 @@ struct WaterfallLesson {
     let thumbnailName: String
     /// Remote CDN thumbnail URL when provided by the CMS.
     let thumbnailURL: URL?
+    /// Scene ids in lesson order, when the index provides them.
+    let scenarioIDs: [String]
     let isLocked: Bool
 
     init(
@@ -27,6 +29,7 @@ struct WaterfallLesson {
         conversationCount: Int,
         thumbnailName: String,
         thumbnailURL: URL? = nil,
+        scenarioIDs: [String] = [],
         isLocked: Bool
     ) {
         self.id = id
@@ -34,6 +37,7 @@ struct WaterfallLesson {
         self.conversationCount = conversationCount
         self.thumbnailName = thumbnailName
         self.thumbnailURL = thumbnailURL
+        self.scenarioIDs = scenarioIDs
         self.isLocked = isLocked
     }
 }

@@ -358,6 +358,20 @@ final class KanaProgressGridExperimentViewController: UIViewController {
         configureSliderPanel()
         layoutViews()
         reloadProgress()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(storedProgressDidChange),
+            name: KanaProgressStore.didChange,
+            object: progressStore
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func storedProgressDidChange() {
+        reloadProgress()
     }
 
     override func viewWillAppear(_ animated: Bool) {

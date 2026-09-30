@@ -14,6 +14,9 @@ final class DialogueQuizCompletionViewController: UIViewController {
     static let detentIdentifier = UISheetPresentationController.Detent.Identifier("quizComplete")
 
     var onExploreHighlights: (() -> Void)?
+    var onNextScene: (() -> Void)?
+    /// Menu title of the following scene. When nil, the next-scene action stays hidden.
+    var nextSceneTitle: String?
     var onSheetDismissed: (() -> Void)?
 
     private let tally: DialogueCompletionTally
@@ -28,7 +31,10 @@ final class DialogueQuizCompletionViewController: UIViewController {
     private let subtitleLabel = UILabel()
     private let scoreCard: DialogueScoreSummaryCardView
     private let exploreButton = PrimaryButton()
+    private let nextSceneButton = UIButton(type: .system)
     private let closeButton = UIButton(type: .system)
+    private var nextSceneButtonTopSpacing: NSLayoutConstraint?
+    private var nextSceneButtonHeight: NSLayoutConstraint?
     private var hasCommittedAction = false
     private var hasAnimatedIn = false
 
@@ -120,6 +126,23 @@ final class DialogueQuizCompletionViewController: UIViewController {
             self?.exploreTapped()
         }, for: .touchUpInside)
 
+        var nextConfig = UIButton.Configuration.plain()
+        nextConfig.title = "Next scene"
+        nextConfig.image = UIImage(systemName: "arrow.right")
+        nextConfig.imagePlacement = .trailing
+        nextConfig.imagePadding = 6
+        nextConfig.baseForegroundColor = .label
+        nextConfig.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+            var outgoing = incoming
+            outgoing.font = .systemFont(ofSize: 17, weight: .semibold)
+            return outgoing
+        }
+        nextSceneButton.configuration = nextConfig
+        nextSceneButton.translatesAutoresizingMaskIntoConstraints = false
+        nextSceneButton.addAction(UIAction { [weak self] _ in
+            self?.nextSceneTapped()
+        }, for: .touchUpInside)
+
         addChild(auroraHost)
         view.addSubview(auroraHost.view)
         auroraHost.didMove(toParent: self)
@@ -130,6 +153,12 @@ final class DialogueQuizCompletionViewController: UIViewController {
         view.addSubview(subtitleLabel)
         view.addSubview(scoreCard)
         view.addSubview(exploreButton)
+        view.addSubview(nextSceneButton)
+
+        let nextSceneTopSpacing = nextSceneButton.topAnchor.constraint(equalTo: exploreButton.bottomAnchor)
+        let nextSceneHeight = nextSceneButton.heightAnchor.constraint(equalToConstant: 0)
+        nextSceneButtonTopSpacing = nextSceneTopSpacing
+        nextSceneButtonHeight = nextSceneHeight
 
         NSLayoutConstraint.activate([
             closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
@@ -166,12 +195,28 @@ final class DialogueQuizCompletionViewController: UIViewController {
             exploreButton.topAnchor.constraint(greaterThanOrEqualTo: scoreCard.bottomAnchor, constant: 22),
             exploreButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: PrimaryButton.horizontalInset),
             exploreButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -PrimaryButton.horizontalInset),
-            exploreButton.bottomAnchor.constraint(
+            exploreButton.heightAnchor.constraint(equalToConstant: PrimaryButton.preferredHeight),
+
+            nextSceneTopSpacing,
+            nextSceneHeight,
+            nextSceneButton.leadingAnchor.constraint(equalTo: exploreButton.leadingAnchor),
+            nextSceneButton.trailingAnchor.constraint(equalTo: exploreButton.trailingAnchor),
+            nextSceneButton.bottomAnchor.constraint(
                 equalTo: view.safeAreaLayoutGuide.bottomAnchor,
                 constant: -24
             ),
-            exploreButton.heightAnchor.constraint(equalToConstant: PrimaryButton.preferredHeight),
         ])
+        applyNextSceneButton()
+    }
+
+    private func applyNextSceneButton() {
+        let title = nextSceneTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let show = onNextScene != nil && title?.isEmpty == false
+        nextSceneButton.isHidden = !show
+        nextSceneButton.isEnabled = show
+        nextSceneButton.accessibilityLabel = show ? "Next scene, \(title ?? "")" : "Next scene"
+        nextSceneButtonTopSpacing?.constant = show ? 8 : 0
+        nextSceneButtonHeight?.constant = show ? 44 : 0
     }
 
     private var resultEyebrow: String {
@@ -213,6 +258,12 @@ final class DialogueQuizCompletionViewController: UIViewController {
         guard !hasCommittedAction else { return }
         hasCommittedAction = true
         onExploreHighlights?()
+    }
+
+    private func nextSceneTapped() {
+        guard !hasCommittedAction else { return }
+        hasCommittedAction = true
+        onNextScene?()
     }
 
     private var hostingSheet: UISheetPresentationController? {
@@ -265,6 +316,7 @@ final class DialogueQuizCompletionViewController: UIViewController {
             + cardHeight
             + 22
             + PrimaryButton.preferredHeight
+            + (nextSceneButton.isHidden ? 0 : 8 + 44)
             + 24
             + bottomSafe
     }
@@ -290,6 +342,8 @@ final class DialogueQuizCompletionViewController: UIViewController {
         scoreCard.transform = CGAffineTransform(translationX: 0, y: 18)
         exploreButton.alpha = 0
         exploreButton.transform = CGAffineTransform(translationX: 0, y: 12)
+        nextSceneButton.alpha = 0
+        nextSceneButton.transform = CGAffineTransform(translationX: 0, y: 12)
     }
 
     private func playEntranceAnimationIfNeeded() {
@@ -332,6 +386,10 @@ final class DialogueQuizCompletionViewController: UIViewController {
         ) {
             self.exploreButton.alpha = 1
             self.exploreButton.transform = .identity
+            if !self.nextSceneButton.isHidden {
+                self.nextSceneButton.alpha = 1
+                self.nextSceneButton.transform = .identity
+            }
         }
     }
 }

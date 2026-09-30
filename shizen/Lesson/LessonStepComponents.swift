@@ -28,9 +28,7 @@ enum LessonInstructionLabel {
 /// Glass capsule speaker control used in listen/discovery/vocab rows.
 final class LessonAudioReplayButton: UIView {
 
-    let button: UIButton
-
-    private let glyphView: UIImageView
+    let button: GlassIconButton
 
     init(
         size: CGFloat = 50,
@@ -39,29 +37,17 @@ final class LessonAudioReplayButton: UIView {
         symbolName: String = "speaker.wave.2.fill",
         accessibilityLabel: String = "Play pronunciation"
     ) {
-        button = UIButton(type: .system)
-        glyphView = UIImageView()
+        button = GlassIconButton(
+            symbolName: symbolName,
+            pointSize: glyphPointSize,
+            glyphDimension: glyphDimension,
+            tintColor: .systemYellow,
+            accessibilityLabel: accessibilityLabel
+        )
         super.init(frame: .zero)
 
         translatesAutoresizingMaskIntoConstraints = false
-
-        var replayConfig = UIButton.Configuration.glass()
-        replayConfig.cornerStyle = .capsule
-        button.configuration = replayConfig
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.accessibilityLabel = accessibilityLabel
-
-        let symbolConfig = UIImage.SymbolConfiguration(pointSize: glyphPointSize, weight: .semibold)
-        glyphView.image = UIImage(systemName: symbolName, withConfiguration: symbolConfig)?
-            .withRenderingMode(.alwaysTemplate)
-        glyphView.tintColor = .systemYellow
-        glyphView.preferredSymbolConfiguration = symbolConfig
-        glyphView.contentMode = .scaleAspectFit
-        glyphView.isUserInteractionEnabled = false
-        glyphView.translatesAutoresizingMaskIntoConstraints = false
-
         addSubview(button)
-        button.addSubview(glyphView)
 
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: size),
@@ -70,11 +56,11 @@ final class LessonAudioReplayButton: UIView {
             button.leadingAnchor.constraint(equalTo: leadingAnchor),
             button.trailingAnchor.constraint(equalTo: trailingAnchor),
             button.bottomAnchor.constraint(equalTo: bottomAnchor),
-            glyphView.centerXAnchor.constraint(equalTo: button.centerXAnchor),
-            glyphView.centerYAnchor.constraint(equalTo: button.centerYAnchor),
-            glyphView.widthAnchor.constraint(equalToConstant: glyphDimension),
-            glyphView.heightAnchor.constraint(equalToConstant: glyphDimension),
         ])
+    }
+
+    func setLoading(_ isLoading: Bool, animated: Bool = true) {
+        button.setLoading(isLoading, animated: animated)
     }
 
     required init?(coder: NSCoder) {

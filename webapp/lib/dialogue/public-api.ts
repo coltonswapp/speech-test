@@ -28,6 +28,8 @@ export type PublicDialogueCollectionSummary = {
   orderIndex: number;
   updatedAt: string;
   scenarioCount: number;
+  /** Scene ids in lesson order, `"<collectionId>/<slug>"`. */
+  scenarioIds: string[];
 };
 
 export type PublicCurriculumUnitSummary = {
@@ -196,11 +198,15 @@ export async function listPublicDialogueCollections(): Promise<
     orderBy: [asc(dialogueScenario.orderIndex)],
   });
   const countByCollection = new Map<string, number>();
+  const idsByCollection = new Map<string, string[]>();
   for (const scenario of scenarios) {
     countByCollection.set(
       scenario.collectionId,
       (countByCollection.get(scenario.collectionId) ?? 0) + 1
     );
+    const ids = idsByCollection.get(scenario.collectionId) ?? [];
+    ids.push(scenario.id);
+    idsByCollection.set(scenario.collectionId, ids);
   }
   return collections.map((collection) => ({
     id: collection.id,
@@ -213,6 +219,7 @@ export async function listPublicDialogueCollections(): Promise<
     orderIndex: collection.orderIndex,
     updatedAt: collection.updatedAt.toISOString(),
     scenarioCount: countByCollection.get(collection.id) ?? 0,
+    scenarioIds: idsByCollection.get(collection.id) ?? [],
   }));
 }
 

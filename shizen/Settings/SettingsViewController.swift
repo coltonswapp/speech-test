@@ -18,6 +18,7 @@ final class SettingsViewController: UIViewController {
     private var dataSource: UICollectionViewDiffableDataSource<Section, Item>!
 
     private nonisolated enum Section: String, Hashable, Sendable, CaseIterable {
+        case account = "Account"
         case general = "General"
         case learning = "Learning"
         case support = "Support"
@@ -88,6 +89,7 @@ final class SettingsViewController: UIViewController {
     }
 
     private nonisolated enum Item: Hashable, Sendable {
+        case account(title: String, subtitle: String, isSignedIn: Bool)
         case sounds
         case permissions
         case clearAudioCache(subtitle: String)
@@ -132,7 +134,11 @@ final class SettingsViewController: UIViewController {
         case kanjiSpotlight
         case swiftUIShaders
         case registerLadder
+        case verbCombo
         case dialogueContentRecording
+        case stageLayouts
+        case pillField
+        case spanHighlight
 
         var title: String {
             switch self {
@@ -170,7 +176,11 @@ final class SettingsViewController: UIViewController {
             case .kanjiSpotlight: return "Kanji spotlight"
             case .swiftUIShaders: return "SwiftUI shaders"
             case .registerLadder: return "Register ladder"
+            case .verbCombo: return "Verb combinations"
             case .dialogueContentRecording: return "Dialogue Replay"
+            case .stageLayouts: return "Stage layouts"
+            case .pillField: return "Pill field"
+            case .spanHighlight: return "Multi-select highlight"
             }
         }
 
@@ -210,7 +220,11 @@ final class SettingsViewController: UIViewController {
             case .kanjiSpotlight: return "One kanji · curated compounds & verbs · export cards"
             case .swiftUIShaders: return "Kris Puckett Metal shaders · playground"
             case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
+            case .verbCombo: return "5 stills · hook, rule, 3 examples · Gemini · export cards"
             case .dialogueContentRecording: return "TikTok stage · conversation, two-pass, or quiz"
+            case .stageLayouts: return "Defined onboarding layouts · title rises in · assets shift"
+            case .pillField: return "Study-method capsules · size, depth, blur, haptics"
+            case .spanHighlight: return "Fill, band color, height, and corner radius"
             }
         }
 
@@ -250,7 +264,11 @@ final class SettingsViewController: UIViewController {
             case .kanjiSpotlight: return "lightbulb"
             case .swiftUIShaders: return "sparkles"
             case .registerLadder: return "text.badge.star"
+            case .verbCombo: return "plus.forwardslash.minus"
             case .dialogueContentRecording: return "video"
+            case .stageLayouts: return "square.stack.3d.up"
+            case .pillField: return "capsule"
+            case .spanHighlight: return "highlighter"
             }
         }
     }
@@ -382,6 +400,15 @@ final class SettingsViewController: UIViewController {
 
     private func configure(cell: UICollectionViewListCell, for item: Item) {
         switch item {
+        case .account(let title, let subtitle, _):
+            SettingsMenuStyle.apply(
+                to: cell,
+                title: title,
+                subtitle: subtitle,
+                symbolName: "person.crop.circle",
+                accessories: [.disclosureIndicator()]
+            )
+
         case .sounds:
             SettingsMenuStyle.apply(
                 to: cell,
@@ -460,12 +487,23 @@ final class SettingsViewController: UIViewController {
 
     private func applySnapshot() {
         var snapshot = NSDiffableDataSourceSnapshot<Section, Item>()
-        var sections: [Section] = [.general, .learning, .support]
+        var sections: [Section] = [.account, .general, .learning, .support]
         #if DEBUG
         sections.append(.debug)
         #endif
         snapshot.appendSections(sections)
 
+        let account = AuthService.shared.account
+        snapshot.appendItems(
+            [
+                .account(
+                    title: account.title,
+                    subtitle: account.subtitle,
+                    isSignedIn: account.isSignedIn
+                ),
+            ],
+            toSection: .account
+        )
         snapshot.appendItems(
             [
                 .sounds,
@@ -506,7 +544,7 @@ final class SettingsViewController: UIViewController {
         case .study:
             return "Flashcards, vocab, and kanji"
         case .playground:
-            return "Onboarding, shaders, and effects"
+            return "Onboarding, stage layouts, and effects"
         }
     }
 
@@ -527,7 +565,7 @@ final class SettingsViewController: UIViewController {
             return "\(current.displayName) · unavailable, insights hidden"
         }
         if current == .gemini, !GeminiContextualGloss.isConfigured {
-            return "\(current.displayName) · no API key, insights hidden"
+            return "\(current.displayName) · sign in required, insights hidden"
         }
         return current.displayName
     }
@@ -629,6 +667,7 @@ final class SettingsViewController: UIViewController {
                     .savedVocabulary,
                     .lemmaResolution,
                     .kanjiDecomposition,
+                    .verbCombo,
                     .kanjiSpotlight,
                 ]) ?? []
             }
@@ -637,6 +676,9 @@ final class SettingsViewController: UIViewController {
                 self?.debugItems([
                     .onboarding,
                     .journeyOnboarding,
+                    .stageLayouts,
+                    .pillField,
+                    .spanHighlight,
                     .emojiStickers,
                     .explosions,
                     .feedbackSounds,
@@ -700,6 +742,13 @@ final class SettingsViewController: UIViewController {
 
     private func handleSelection(_ item: Item) {
         switch item {
+        case .account(_, _, let isSignedIn):
+            if isSignedIn {
+                confirmLogOut()
+            } else {
+                let presenter = navigationController ?? self
+                presenter.present(AuthLandingViewController.makeLoginSheet(), animated: true)
+            }
         case .sounds:
             break
         case .permissions:
@@ -756,6 +805,30 @@ final class SettingsViewController: UIViewController {
     private func requestAppReview() {
         guard let scene = view.window?.windowScene else { return }
         AppStore.requestReview(in: scene)
+    }
+
+    private func confirmLogOut() {
+        let alert = UIAlertController(
+            title: "Log out?",
+            message: "You can sign in again with Apple or Google.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Log Out", style: .destructive) { [weak self] _ in
+            do {
+                try AuthService.shared.signOut()
+                self?.applySnapshot()
+            } catch {
+                let failure = UIAlertController(
+                    title: "Couldn’t log out",
+                    message: error.localizedDescription,
+                    preferredStyle: .alert
+                )
+                failure.addAction(UIAlertAction(title: "OK", style: .default))
+                self?.present(failure, animated: true)
+            }
+        })
+        present(alert, animated: true)
     }
 
     private func presentClearAudioCacheConfirmation() {
@@ -947,6 +1020,24 @@ final class SettingsViewController: UIViewController {
         case .registerLadder:
             navigationController?.pushViewController(
                 RegisterLadderPromptViewController(),
+                animated: true
+            )
+        case .verbCombo:
+            navigationController?.pushViewController(
+                VerbComboPromptViewController(),
+                animated: true
+            )
+        case .stageLayouts:
+            let page = OnboardingStageLayoutExperimentViewController()
+            page.modalPresentationStyle = .fullScreen
+            present(page, animated: true)
+        case .pillField:
+            let page = StudyMethodFieldExperimentViewController()
+            page.modalPresentationStyle = .fullScreen
+            present(page, animated: true)
+        case .spanHighlight:
+            navigationController?.pushViewController(
+                MultiSelectHighlightExperimentViewController(),
                 animated: true
             )
         }

@@ -5,6 +5,7 @@
 //  Created by Colton Swapp on 4/19/26.
 //
 
+import InteractionKit
 import NNKit
 import UIKit
 
@@ -26,6 +27,16 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         ExplosionManager.prepare(windowScene: windowScene)
         ExplosionManager.emojis = ExperimentSettings.explosionEmojis
         DialogueScenarioCollectionCatalog.prefetchConfiguredCollections()
+        ScrubbableSentenceView.onRangeSelectionModeEntered = {
+            ToastManager.shared.showBanner(symbol: "hand.draw.fill", text: "Multi-select")
+        }
+        ExperimentSettings.applySpanHighlightStyle()
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        for context in URLContexts {
+            _ = AuthService.shared.handleOpenURL(context.url)
+        }
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {

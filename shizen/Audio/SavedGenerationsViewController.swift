@@ -112,6 +112,7 @@ final class SavedGenerationsViewController: UIViewController {
         case kanjiSpotlight
         case swiftUIShaders
         case registerLadder
+        case verbCombo
         case dialogueContentRecording
 
         var title: String {
@@ -149,6 +150,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .kanjiSpotlight: return "Kanji spotlight"
             case .swiftUIShaders: return "SwiftUI shaders"
             case .registerLadder: return "Register ladder"
+            case .verbCombo: return "Verb combinations"
             case .dialogueContentRecording: return "Dialogue Replay"
             }
         }
@@ -188,6 +190,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .kanjiSpotlight: return "One kanji · curated compounds & verbs · export cards"
             case .swiftUIShaders: return "Kris Puckett Metal shaders · playground"
             case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
+            case .verbCombo: return "5 stills · hook, rule, 3 examples · Gemini · export cards"
             case .dialogueContentRecording: return "TikTok stage · conversation, two-pass, or quiz"
             }
         }
@@ -227,6 +230,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .kanjiSpotlight: return "lightbulb"
             case .swiftUIShaders: return "sparkles"
             case .registerLadder: return "text.badge.star"
+            case .verbCombo: return "plus.forwardslash.minus"
             case .dialogueContentRecording: return "video"
             }
         }
@@ -470,7 +474,7 @@ final class SavedGenerationsViewController: UIViewController {
             return "\(current.displayName) · unavailable, insights hidden"
         }
         if current == .gemini, !GeminiContextualGloss.isConfigured {
-            return "\(current.displayName) · no API key, insights hidden"
+            return "\(current.displayName) · sign in required, insights hidden"
         }
         return current.displayName
     }
@@ -738,6 +742,11 @@ final class SavedGenerationsViewController: UIViewController {
         case .registerLadder:
             navigationController?.pushViewController(
                 RegisterLadderPromptViewController(),
+                animated: true
+            )
+        case .verbCombo:
+            navigationController?.pushViewController(
+                VerbComboPromptViewController(),
                 animated: true
             )
         }

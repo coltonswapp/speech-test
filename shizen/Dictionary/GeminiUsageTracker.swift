@@ -17,15 +17,25 @@ struct GeminiUsageMetadata: Decodable {
 enum GeminiUsageFeature: String, Codable, CaseIterable, Hashable {
     case tokenizer
     case contextualGloss
+    case commonUses
+    case spanGloss
+    case spanBreakdown
+    case senseFit
     case registerLadder
     case dialogueNuance
+    case verbCombo
 
     var displayName: String {
         switch self {
         case .tokenizer: return "Tokenizer"
         case .contextualGloss: return "Contextual gloss"
+        case .commonUses: return "Common uses"
+        case .spanGloss: return "Span gloss"
+        case .spanBreakdown: return "Break down"
+        case .senseFit: return "Sense fit"
         case .registerLadder: return "Register ladder"
-        case .dialogueNuance: return "Implied meaning"
+        case .dialogueNuance: return "Deeper meaning"
+        case .verbCombo: return "Verb combinations"
         }
     }
 }
@@ -39,31 +49,91 @@ struct GeminiUsageRecord: Codable, Identifiable, Hashable {
     let candidatesTokens: Int
     let totalTokens: Int
 
+    /// Tokens Google bills as output. Thinking tokens sit outside `candidatesTokenCount`,
+    /// so when `total` is larger than prompt + candidates, the remainder is included here.
+    var outputTokens: Int {
+        guard totalTokens > 0 else { return candidatesTokens }
+        return max(candidatesTokens, totalTokens - promptTokens)
+    }
+
     /// Estimated USD cost of this single request, or nil when we don't have pricing for `model`.
     var costUSD: Double? {
-        GeminiPricing.costUSD(model: model, promptTokens: promptTokens, candidatesTokens: candidatesTokens)
+        GeminiPricing.cost(
+            model: model,
+            promptTokens: promptTokens,
+            outputTokens: outputTokens,
+            on: timestamp
+        )?.totalUSD
     }
 }
 
-/// Standard-tier, text/image/video pricing per Google's published rate card.
-/// Only models we actually default to are priced; unknown models report no cost rather than a guess.
+/// Standard-tier text pricing from Google's Gemini API rate card.
+/// Only models this app calls are priced; unknown models report no cost rather than a guess.
 enum GeminiPricing {
-    private struct Rate {
+    struct PublishedRate: Equatable {
         let inputPerMillion: Double
         let outputPerMillion: Double
+
+        /// "$0.10 in · $0.40 out per 1M"
+        var label: String {
+            "$\(Self.amount(inputPerMillion)) in · $\(Self.amount(outputPerMillion)) out per 1M"
+        }
+
+        private static func amount(_ value: Double) -> String {
+            String(format: "%.2f", value)
+        }
     }
 
-    private static let rates: [String: Rate] = [
-        "gemini-2.5-flash": Rate(inputPerMillion: 0.30, outputPerMillion: 2.50),
-        "gemini-2.5-flash-lite": Rate(inputPerMillion: 0.10, outputPerMillion: 0.40),
-        "gemini-3.6-flash": Rate(inputPerMillion: 1.50, outputPerMillion: 7.50),
-    ]
+    struct TokenCost: Equatable {
+        let inputUSD: Double
+        let outputUSD: Double
+        var totalUSD: Double { inputUSD + outputUSD }
+    }
 
-    static func costUSD(model: String, promptTokens: Int, candidatesTokens: Int) -> Double? {
-        guard let rate = rates[model] else { return nil }
-        let inputCost = Double(promptTokens) / 1_000_000 * rate.inputPerMillion
-        let outputCost = Double(candidatesTokens) / 1_000_000 * rate.outputPerMillion
-        return inputCost + outputCost
+    /// Google lists `gemini-3.6-flash` at $0.75 / $3.75 through this instant, then $1.50 / $7.50.
+    private static let flash36RateChange: Date = {
+        var components = DateComponents()
+        components.calendar = Calendar(identifier: .gregorian)
+        components.timeZone = TimeZone(secondsFromGMT: 0)
+        components.year = 2027
+        components.month = 1
+        components.day = 1
+        return components.date ?? Date(timeIntervalSince1970: 1_798_761_600)
+    }()
+
+    static func rate(for model: String, on date: Date = Date()) -> PublishedRate? {
+        switch model {
+        case "gemini-2.5-flash":
+            return PublishedRate(inputPerMillion: 0.30, outputPerMillion: 2.50)
+        case "gemini-2.5-flash-lite":
+            return PublishedRate(inputPerMillion: 0.10, outputPerMillion: 0.40)
+        case "gemini-3.1-flash-lite":
+            return PublishedRate(inputPerMillion: 0.25, outputPerMillion: 1.50)
+        case "gemini-3.6-flash":
+            if date < flash36RateChange {
+                return PublishedRate(inputPerMillion: 0.75, outputPerMillion: 3.75)
+            }
+            return PublishedRate(inputPerMillion: 1.50, outputPerMillion: 7.50)
+        default:
+            return nil
+        }
+    }
+
+    static func cost(
+        model: String,
+        promptTokens: Int,
+        outputTokens: Int,
+        on date: Date = Date()
+    ) -> TokenCost? {
+        guard let rate = rate(for: model, on: date) else { return nil }
+        return TokenCost(
+            inputUSD: Double(promptTokens) / 1_000_000 * rate.inputPerMillion,
+            outputUSD: Double(outputTokens) / 1_000_000 * rate.outputPerMillion
+        )
+    }
+
+    static func costUSD(model: String, promptTokens: Int, outputTokens: Int) -> Double? {
+        cost(model: model, promptTokens: promptTokens, outputTokens: outputTokens)?.totalUSD
     }
 }
 
@@ -73,7 +143,7 @@ enum GeminiCostFormatter {
         f.numberStyle = .currency
         f.currencyCode = "USD"
         f.minimumFractionDigits = 2
-        f.maximumFractionDigits = 4
+        f.maximumFractionDigits = 6
         return f
     }()
 
@@ -87,11 +157,17 @@ final class GeminiUsageTracker {
 
     struct Summary {
         let requestCount: Int
+        let promptTokens: Int
+        let outputTokens: Int
         let totalTokens: Int
         let byFeature: [GeminiUsageFeature: Int]
+        /// Sum of input-token cost across records with a published rate. Nil when none were priced.
+        let inputCostUSD: Double?
+        /// Sum of output-token cost across records with a published rate. Nil when none were priced.
+        let outputCostUSD: Double?
         /// Sum of `costUSD` across records that have known pricing; nil if none did.
         let totalCostUSD: Double?
-        /// True when at least one record's model has no pricing data, so `totalCostUSD` is a partial figure.
+        /// True when at least one record's model has no pricing data, so the dollar figures are partial.
         let hasUnpricedRecords: Bool
     }
 
@@ -152,8 +228,9 @@ final class GeminiUsageTracker {
         }
     }
 
-    func summary(since: Date? = nil) -> Summary {
+    func summary(since: Date? = nil, feature: GeminiUsageFeature? = nil) -> Summary {
         let records = allRecords().filter { record in
+            if let feature, record.feature != feature { return false }
             guard let since else { return true }
             return record.timestamp >= since
         }
@@ -162,8 +239,11 @@ final class GeminiUsageTracker {
 
     /// Estimated average cost per day and per session, derived from the retained history.
     /// "Session" is approximated by grouping requests separated by less than `sessionGapInterval`.
-    func costEstimate() -> CostEstimate {
-        let records = allRecords().sorted { $0.timestamp < $1.timestamp }
+    /// Pass `feature` to estimate from one call type.
+    func costEstimate(feature: GeminiUsageFeature? = nil) -> CostEstimate {
+        let records = allRecords()
+            .filter { feature == nil || $0.feature == feature }
+            .sorted { $0.timestamp < $1.timestamp }
         guard !records.isEmpty else {
             return CostEstimate(
                 averagePerDayUSD: nil,
@@ -207,17 +287,41 @@ final class GeminiUsageTracker {
 
     private static func summarize(_ records: [GeminiUsageRecord]) -> Summary {
         var byFeature: [GeminiUsageFeature: Int] = [:]
+        var promptTokens = 0
+        var outputTokens = 0
+        var totalTokens = 0
+        var inputCost = 0.0
+        var outputCost = 0.0
+        var pricedCount = 0
+        var hasUnpricedRecords = false
         for record in records {
             byFeature[record.feature, default: 0] += record.totalTokens
+            promptTokens += record.promptTokens
+            outputTokens += record.outputTokens
+            totalTokens += record.totalTokens
+            if let cost = GeminiPricing.cost(
+                model: record.model,
+                promptTokens: record.promptTokens,
+                outputTokens: record.outputTokens,
+                on: record.timestamp
+            ) {
+                inputCost += cost.inputUSD
+                outputCost += cost.outputUSD
+                pricedCount += 1
+            } else {
+                hasUnpricedRecords = true
+            }
         }
-        let costs = records.map(\.costUSD)
-        let knownCosts = costs.compactMap { $0 }
         return Summary(
             requestCount: records.count,
-            totalTokens: records.reduce(0) { $0 + $1.totalTokens },
+            promptTokens: promptTokens,
+            outputTokens: outputTokens,
+            totalTokens: totalTokens,
             byFeature: byFeature,
-            totalCostUSD: knownCosts.isEmpty ? nil : knownCosts.reduce(0, +),
-            hasUnpricedRecords: costs.contains(nil)
+            inputCostUSD: pricedCount > 0 ? inputCost : nil,
+            outputCostUSD: pricedCount > 0 ? outputCost : nil,
+            totalCostUSD: pricedCount > 0 ? inputCost + outputCost : nil,
+            hasUnpricedRecords: hasUnpricedRecords
         )
     }
 

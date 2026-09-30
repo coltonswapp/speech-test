@@ -695,6 +695,8 @@ final class RepeatAfterMeViewController: UIViewController {
                 cacheMetadata: dialogueLineAudio.cacheMetadata,
                 dialogueLines: dialogueLineAudio.dialogueLines,
                 fallbackText: sentence,
+                lineTimeRange: dialogueLineAudio.timeRange,
+                tokenSync: dialogueLineAudio.tokenSync,
                 onFinished: completion
             )
             return

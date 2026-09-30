@@ -149,7 +149,7 @@ struct IntroPage: View {
                             Button {
                                 onLogin()
                             } label: {
-                                Text("Log in")
+                                Text("Continue with Google")
                                     .fontWeight(.semibold)
                                     .foregroundStyle(.black)
                                     .frame(maxWidth: .infinity)

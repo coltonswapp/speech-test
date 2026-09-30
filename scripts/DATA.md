@@ -18,9 +18,11 @@ Kanjidic (~1 MB) is tracked in git and ships with the app as-is.
 
 ## API keys (iOS app)
 
-Gemini and OpenAI keys are not in git. For local development:
+Gemini, OpenAI, and the Studio content-QA client token are not in git. For local development:
 
 1. Copy `shizen/Secrets.plist.example` to `shizen/Secrets.plist` and fill in your keys, **or**
-2. Set `GEMINI_API_KEY` and `OPENAI_API_KEY` in the **shizen** Xcode scheme (Run → Arguments → Environment Variables).
+2. Set `GEMINI_API_KEY`, `OPENAI_API_KEY`, and `CONTENT_QA_CLIENT_TOKEN` in the **shizen** Xcode scheme (Run → Arguments → Environment Variables).
+
+`CONTENT_QA_CLIENT_TOKEN` is sent as `Authorization: Bearer` on scene check-off calls. Public lesson fetches stay unauthenticated.
 
 If you previously committed keys, rotate them in the provider consoles before reuse.

@@ -80,8 +80,6 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
     /// Keep in lockstep with the parent's emphasis duration so fade and focus
     /// read as one motion.
     private static let lineRevealDuration: TimeInterval = 0.35
-    /// Pause after a stage direction so the scene can land before the next line.
-    private static let stageLineHold: TimeInterval = 0.75
     private static let completionFeedbackDelay: TimeInterval = 1.55
 
     override init(
@@ -260,9 +258,10 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         }
         return UIMenu(children: [
             makePlaybackSpeedMenu(),
+            makeStageLinePauseMenu(),
             makeSpeechRecognizerMenu(),
             makeTokenSyncMenuAction(),
-            makeTokenSyncHighlightStyleMenu(),
+            makeTokenHighlightPreviewAction(),
             switchRole,
         ])
     }
@@ -521,7 +520,9 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
             revealLine(at: index, animated: true)
             dialogueSetActiveLine(index, animated: true)
             scrollRevealedLineIntoView(index)
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.stageLineHold) { [weak self] in
+            let caption = dialogueDisplayLines[index].stageDirection?.text ?? ""
+            let hold = ExperimentSettings.dialogueStageLinePause.duration(forStageLine: caption)
+            DispatchQueue.main.asyncAfter(deadline: .now() + hold) { [weak self] in
                 guard let self, self.advanceGeneration == generation else { return }
                 self.advance(to: index + 1)
             }

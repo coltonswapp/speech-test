@@ -26,6 +26,8 @@ private struct LessonPathConfiguration: Equatable {
     var titleFontSize: CGFloat
     var subtitleFontSize: CGFloat
     var cardVerticalOffset: CGFloat
+    /// Extra gap past the stone radius before a connector is drawn.
+    var connectorEndGap: CGFloat
 
     static let `default` = LessonPathConfiguration(
         spacing: 33,
@@ -38,7 +40,8 @@ private struct LessonPathConfiguration: Equatable {
         titleColumnGap: 8,
         titleFontSize: 17,
         subtitleFontSize: 13,
-        cardVerticalOffset: 0
+        cardVerticalOffset: 0,
+        connectorEndGap: 5
     )
 
     static let leftAligned = LessonPathConfiguration(
@@ -52,7 +55,8 @@ private struct LessonPathConfiguration: Equatable {
         titleColumnGap: 20,
         titleFontSize: 17,
         subtitleFontSize: 13,
-        cardVerticalOffset: 0
+        cardVerticalOffset: 0,
+        connectorEndGap: 16
     )
 
     static let haloInset: CGFloat = 14
@@ -889,6 +893,8 @@ struct PathLesson: Equatable {
     let thumbnailURL: URL?
     let state: State
     let completedParts: Int
+    /// Scene indexes, in lesson order, that the learner has finished.
+    let completedPartIndices: Set<Int>
     let partCount: Int
 
     init(
@@ -899,6 +905,7 @@ struct PathLesson: Equatable {
         thumbnailURL: URL? = nil,
         state: State,
         completedParts: Int = 0,
+        completedPartIndices: Set<Int> = [],
         partCount: Int = LessonPathConfiguration.lessonPartCount
     ) {
         self.id = id
@@ -908,6 +915,7 @@ struct PathLesson: Equatable {
         self.thumbnailURL = thumbnailURL
         self.state = state
         self.completedParts = completedParts
+        self.completedPartIndices = completedPartIndices
         self.partCount = max(1, partCount)
     }
 }
@@ -944,7 +952,7 @@ struct PathUnit: Equatable {
             lessons: [
                 PathLesson(id: "train-station", title: "At the Train Station", symbolName: "tram.fill", thumbnailName: "train-station", state: .completed),
                 PathLesson(title: "At the Library", symbolName: "book.fill", thumbnailName: "at-the-library", state: .completed),
-                PathLesson(title: "At the Convenience Store", symbolName: "basket.fill", thumbnailName: "at-the-convenient-store", state: .current, completedParts: 2),
+                PathLesson(title: "At the Convenience Store", symbolName: "basket.fill", thumbnailName: "at-the-convenient-store", state: .current, completedParts: 2, completedPartIndices: [0, 1]),
                 PathLesson(title: "Asking Directions", symbolName: "map.fill", thumbnailName: "asking-directions", state: .locked),
                 PathLesson(title: "Greetings", symbolName: "hand.wave.fill", thumbnailName: nil, state: .locked),
                 PathLesson(title: "At the Café", symbolName: "cup.and.saucer.fill", thumbnailName: nil, state: .locked),
@@ -1440,8 +1448,8 @@ private final class PathDecorationView: UICollectionReusableView {
             for item in 0 ..< (unitCenters.count - 1) {
                 let start = unitCenters[item]
                 let end = unitCenters[item + 1]
-                let startTrim = (unitRadii[safe: item] ?? 0) + 5
-                let endTrim = (unitRadii[safe: item + 1] ?? 0) + 5
+                let startTrim = (unitRadii[safe: item] ?? 0) + configuration.connectorEndGap
+                let endTrim = (unitRadii[safe: item + 1] ?? 0) + configuration.connectorEndGap
                 let globalIndex = unitStartIndex + item
                 var drawable: [CGPoint] = []
                 for sample in 0 ... 24 {
@@ -1614,12 +1622,12 @@ private final class LessonStoneCell: UICollectionViewCell {
         textStack.addArrangedSubview(subtitleLabel)
 
         contentView.addSubview(haloView)
-        contentView.addSubview(progressRing)
         contentView.addSubview(shadowView)
         contentView.addSubview(stoneContainer)
         stoneContainer.addSubview(button)
         stoneContainer.addSubview(thumbnailView)
         stoneContainer.addSubview(lockOverlay)
+        contentView.addSubview(progressRing)
         contentView.addSubview(badgeView)
         contentView.addSubview(textStack)
     }
@@ -1651,21 +1659,12 @@ private final class LessonStoneCell: UICollectionViewCell {
         UIView.performWithoutAnimation {
             button.configuration = makeConfiguration(lesson: lesson, iconPointSize: iconSize)
             haloView.isHidden = !(selected && lesson.state == .completed)
-            let showProgressRing: Bool
-            switch lesson.state {
-            case .current:
-                showProgressRing = selected || lesson.completedParts > 0
-            case .locked:
-                showProgressRing = selected
-            case .completed:
-                showProgressRing = false
-            }
+            let showProgressRing = lesson.state == .current
             if showProgressRing {
                 progressRing.apply(
-                    completedParts: lesson.completedParts,
+                    completedPartIndices: lesson.completedPartIndices,
                     partCount: lesson.partCount,
-                    lineWidth: LessonPathConfiguration.haloBorderWidth,
-                    highlightCompleted: selected
+                    lineWidth: LessonPathConfiguration.haloBorderWidth
                 )
             }
             progressRing.isHidden = !showProgressRing
@@ -1889,10 +1888,9 @@ private final class LessonStoneCell: UICollectionViewCell {
 
 private final class LessonPartRingView: UIView {
 
-    private var completedParts = 0
+    private var completedPartIndices: Set<Int> = []
     private var partCount = LessonPathConfiguration.lessonPartCount
     private var lineWidth: CGFloat = LessonPathConfiguration.haloBorderWidth
-    private var highlightCompleted = false
     private var segmentLayers: [CAShapeLayer] = []
 
     override init(frame: CGRect) {
@@ -1903,11 +1901,14 @@ private final class LessonPartRingView: UIView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func apply(completedParts: Int, partCount: Int, lineWidth: CGFloat, highlightCompleted: Bool) {
-        self.completedParts = completedParts
+    func apply(
+        completedPartIndices: Set<Int>,
+        partCount: Int,
+        lineWidth: CGFloat
+    ) {
+        self.completedPartIndices = completedPartIndices
         self.partCount = max(1, partCount)
         self.lineWidth = lineWidth
-        self.highlightCompleted = highlightCompleted
         rebuildSegmentsIfNeeded()
         updateSegmentAppearance()
         setNeedsLayout()
@@ -1926,7 +1927,8 @@ private final class LessonPartRingView: UIView {
         }
     }
 
-    private static let filledColor = UIColor.systemBlue
+    /// Same yellow as the lesson button, so a finished scene reads as progress.
+    private static let filledColor = PrimaryButton.appearance(for: .yellow).backgroundColor
 
     private static let emptyColor = UIColor { traits in
         traits.userInterfaceStyle == .dark
@@ -1970,9 +1972,12 @@ private final class LessonPartRingView: UIView {
         let inset = lineWidth / 2
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         let radius = max(0, min(bounds.width, bounds.height) / 2 - inset)
+        let count = CGFloat(max(partCount, 1))
         let visualGap: CGFloat = 3.5
-        let gap = min(.pi / 8, (lineWidth + visualGap) / max(radius, 1))
-        let sweep = (2 * .pi - CGFloat(partCount) * gap) / CGFloat(partCount)
+        let preferredGap = (lineWidth + visualGap) / max(radius, 1)
+        let maxGap = (2 * .pi / count) * 0.35
+        let gap = min(.pi / 8, maxGap, preferredGap)
+        let sweep = max(0.01, (2 * .pi - count * gap) / count)
         let start0 = -CGFloat.pi / 2 + gap / 2
         let empty = Self.emptyColor.resolvedColor(with: traitCollection).cgColor
         let filled = Self.filledColor.resolvedColor(with: traitCollection).cgColor
@@ -1988,9 +1993,8 @@ private final class LessonPartRingView: UIView {
             )
             layer.path = path.cgPath
             layer.lineWidth = lineWidth
-            let isFilled = index < completedParts
-            layer.strokeColor = isFilled ? filled : empty
-            layer.opacity = isFilled && !highlightCompleted ? 0.78 : 1
+            layer.strokeColor = completedPartIndices.contains(index) ? filled : empty
+            layer.opacity = 1
         }
     }
 

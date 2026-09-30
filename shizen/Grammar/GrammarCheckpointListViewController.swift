@@ -53,6 +53,21 @@ final class GrammarCheckpointListViewController: UIViewController {
         configureCollectionView()
         configureDataSource()
         reloadContent()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(storedProgressDidChange),
+            name: GrammarMasteryStore.didChange,
+            object: masteryStore
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func storedProgressDidChange() {
+        refreshFromMasteryStore()
+        onProgressDidChange?()
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -184,7 +199,12 @@ final class GrammarCheckpointListViewController: UIViewController {
     private func reloadContent() {
         var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
         snapshot.appendSections([Section.checkpoints.rawValue])
-        snapshot.appendItems(checkpoints.map(\.id), toSection: Section.checkpoints.rawValue)
+        let ids = checkpoints.map(\.id)
+        snapshot.appendItems(ids, toSection: Section.checkpoints.rawValue)
+        let visible = ids.filter { dataSource.snapshot().itemIdentifiers.contains($0) }
+        if !visible.isEmpty {
+            snapshot.reconfigureItems(visible)
+        }
 
         dataSource.apply(snapshot, animatingDifferences: view.window != nil) { [weak self] in
             self?.reportEmbeddedHeightIfNeeded()

@@ -33,6 +33,10 @@ final class DialogueQuizViewController: UIViewController {
     private var nestedPagingBottomContentInset: CGFloat = 0
 
     private var didFinishQuiz = false
+    /// True while a question page is changing, so the proof button can leave
+    /// before the next question is on screen.
+    private var isTransitioningQuestion = false
+    private var pinnedHandoffTopBoundary: CGFloat = 0
     /// Fired once when every question has been answered correctly.
     var onQuizPassed: (() -> Void)?
     /// Fired once when every question has a selection, with the running score.
@@ -69,7 +73,8 @@ final class DialogueQuizViewController: UIViewController {
     }
 
     var canPlayCurrentEvidence: Bool {
-        currentQuestionHasEvidence
+        !isTransitioningQuestion
+            && currentQuestionHasEvidence
             && questionPages.indices.contains(currentIndex)
             && questionPages[currentIndex].hasSelection
     }
@@ -260,7 +265,8 @@ final class DialogueQuizViewController: UIViewController {
                 audioKey: evidenceContext.audioKey ?? "",
                 cacheMetadata: evidenceContext.cacheMetadata,
                 lineIndex: line.spokenIndex,
-                dialogueLines: evidenceContext.spokenJapaneseTexts
+                dialogueLines: evidenceContext.spokenJapaneseTexts,
+                tokenSync: evidenceContext.tokenSync
             )
         } else {
             dialogueLineAudio = nil
@@ -332,6 +338,7 @@ final class DialogueQuizViewController: UIViewController {
                 cacheMetadata: evidenceContext.cacheMetadata,
                 dialogueLines: dialogueLines,
                 fallbackText: fallback,
+                tokenSync: tokenSync,
                 onTime: applyKaraoke,
                 onFinished: finished
             )
@@ -345,6 +352,7 @@ final class DialogueQuizViewController: UIViewController {
             cacheMetadata: evidenceContext.cacheMetadata,
             dialogueLines: dialogueLines,
             fallbackText: fallback,
+            tokenSync: tokenSync,
             onSpokenIndexStart: { highlight($0) },
             onTime: applyKaraoke,
             onFinished: finished
@@ -385,10 +393,23 @@ final class DialogueQuizViewController: UIViewController {
         return questionPages.contains { $0.scrollView === scrollView }
     }
 
-    func settleHandoffScrollAtTopIfNeeded() {
+    func resetHandoffTopPin() {
+        pinnedHandoffTopBoundary = 0
+    }
+
+    /// Pulls the current question to the top inset while it is still resting
+    /// there, so the first frame on the quiz page clears the chevron.
+    func pinHandoffScrollToTopInsetIfResting(_ topInset: CGFloat) {
         let scrollView = handoffScrollView
-        guard scrollView.contentOffset.y <= 1 else { return }
-        scrollView.contentOffset.y = -scrollView.adjustedContentInset.top
+        guard !scrollView.isTracking, !scrollView.isDecelerating else { return }
+        let topBoundary = -topInset
+        let offset = scrollView.contentOffset.y
+        let atUnsettledOrigin = abs(offset) <= 1
+        let trackingPinnedTop = abs(offset - pinnedHandoffTopBoundary) < 2
+        guard atUnsettledOrigin || trackingPinnedTop else { return }
+        pinnedHandoffTopBoundary = topBoundary
+        guard abs(offset - topBoundary) > 0.5 else { return }
+        scrollView.contentOffset.y = topBoundary
     }
 
     // MARK: - Layout
@@ -423,12 +444,20 @@ final class DialogueQuizViewController: UIViewController {
         direction: UIPageViewController.NavigationDirection
     ) {
         guard questionPages.indices.contains(target), target != currentIndex else { return }
+        isTransitioningQuestion = true
+        stopEvidencePlayback()
+        onNavigationChromeNeedsUpdate?()
         pageViewController.setViewControllers(
             [questionPages[target]],
             direction: direction,
             animated: true
         ) { [weak self] finished in
-            guard let self, finished else { return }
+            guard let self else { return }
+            self.isTransitioningQuestion = false
+            guard finished else {
+                self.onNavigationChromeNeedsUpdate?()
+                return
+            }
             if target != self.currentIndex {
                 self.stopEvidencePlayback()
             }
@@ -481,13 +510,26 @@ extension DialogueQuizViewController: UIPageViewControllerDataSource, UIPageView
 
     func pageViewController(
         _ pageViewController: UIPageViewController,
+        willTransitionTo pendingViewControllers: [UIViewController]
+    ) {
+        isTransitioningQuestion = true
+        stopEvidencePlayback()
+        onNavigationChromeNeedsUpdate?()
+    }
+
+    func pageViewController(
+        _ pageViewController: UIPageViewController,
         didFinishAnimating finished: Bool,
         previousViewControllers: [UIViewController],
         transitionCompleted completed: Bool
     ) {
+        isTransitioningQuestion = false
         guard finished, completed,
               let visible = pageViewController.viewControllers?.first
-        else { return }
+        else {
+            onNavigationChromeNeedsUpdate?()
+            return
+        }
         updateCurrentIndex(from: visible)
     }
 }

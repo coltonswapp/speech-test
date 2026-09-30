@@ -4,20 +4,18 @@
 //
 //  Cloud Gemini contextual English gloss for a word selected in a sentence.
 //  Mirrors FoundationModelContextualGloss's contract so callers can swap between the two.
+//  Served by the LLM gateway (feature `contextual_gloss`); the prompt lives server-side.
 //
 
 import Foundation
 
 enum GeminiContextualGloss {
 
-    enum Model: String {
-        case flash = "gemini-2.5-flash"
-        case flashLite = "gemini-2.5-flash-lite"
-    }
-
     struct Result: Equatable {
         let meaning: String
         let grammarNote: String
+        let relatedWords: [ContextualRelatedWord]
+        let headword: String
     }
 
     struct Request: Equatable {
@@ -25,41 +23,9 @@ enum GeminiContextualGloss {
         let surface: String
         let dictionaryForm: String?
         let dictionaryGloss: String?
+        let framing: ContextualGlossFraming
+        let requestsHeadword: Bool
     }
-
-    private static let endpointBase = "https://generativelanguage.googleapis.com/v1beta/models"
-    private static let deterministicSeed = 42
-
-    private static let instructionsText = """
-    You help Japanese language learners understand one selected token inside a full sentence.
-
-    Write for a beginner. Use only plain, useful English — never linguistics or morphology labels.
-
-    meaning (2-8 words):
-    - Give what the token means here. Do not translate the whole sentence.
-    - When the word is built from familiar parts, give the natural composed meaning \
-    (何時 → what time; 大学生 → university student; スマホ → smartphone).
-    - For conjugated forms, reflect the inflection when it changes the sense (行きましょう → let's go).
-    - For a verb built with auxiliaries, give the natural meaning of the whole token \
-    (作ってあげよう → I'll make it for you).
-    - NEVER output meta labels such as: transparent compound, opaque compound, loanword, \
-    abbreviation, clipping, portmanteau, compound word, katakana word.
-
-    grammarNote:
-    - Only when the token itself has non-obvious grammar worth a short learner note.
-    - OK: inflection, a particle fused to the token, politeness encoded in the form.
-    - For a verb plus auxiliary chain, add one short note on how the parts add up \
-    (作ってあげよう → 作る "make" + てあげる "do for someone" + よう "I'll").
-    - Use an empty string when the meaning alone is enough (most nouns, abbreviations, and ordinary \
-    compounds such as 大学生, 何時, スマホ).
-    - Do NOT describe neighboring tokens (に, は, を, か, etc.).
-    - Do NOT restate the meaning in different words, and do not name the word's type. \
-    A parts breakdown is the note, not a second copy of meaning.
-
-    Dictionary hints are optional — prioritize the sentence context.
-
-    Return a JSON object with "meaning" and "grammarNote" string fields.
-    """
 
     private actor Cache {
         static let shared = Cache()
@@ -75,33 +41,56 @@ enum GeminiContextualGloss {
     }
 
     static var isConfigured: Bool {
-        !GeminiAppKey.resolved.isEmpty
+        LLMGatewayClient.isConfigured && LLMGatewayClient.hasSignedInUser
     }
 
-    static func cachedResult(for request: Request, model: Model = .flashLite) async -> Result? {
-        await Cache.shared.result(for: cacheKey(for: request, model: model))
+    static func cachedResult(for request: Request) async -> Result? {
+        await Cache.shared.result(for: cacheKey(for: request))
     }
 
-    static func explain(_ request: Request, model: Model = .flashLite) async throws -> Result {
+    static func explain(_ request: Request) async throws -> Result {
         let sentence = request.sentence.trimmingCharacters(in: .whitespacesAndNewlines)
         let surface = request.surface.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sentence.isEmpty, !surface.isEmpty else {
             throw GlossError.invalidInput
         }
 
-        let cacheKey = Self.cacheKey(for: request, model: model)
+        let cacheKey = Self.cacheKey(for: request)
         if let cached = await Cache.shared.result(for: cacheKey) {
             return cached
         }
 
         guard isConfigured else {
-            throw GlossError.missingAPIKey
+            throw GlossError.unavailable
         }
 
-        print("[GeminiContextualGloss] explaining \"\(surface)\" in sentence: \"\(sentence)\"")
+        print("[GeminiContextualGloss] explaining \"\(surface)\" in sentence: \"\(sentence)\" via gateway")
 
-        let response = try await fetchGloss(for: request, sentence: sentence, surface: surface, model: model)
-        let result = sanitizedResult(meaning: response.meaning, grammarNote: response.grammarNote, request: request)
+        let response = try await LLMGatewayClient.post(
+            "v1/generate",
+            body: GatewayRequest(
+                feature: "contextual_gloss",
+                sentence: sentence,
+                surface: surface,
+                dictionaryForm: nonEmpty(request.dictionaryForm),
+                dictionaryGloss: nonEmpty(request.dictionaryGloss),
+                framing: request.framing.rawValue,
+                requestsHeadword: request.requestsHeadword
+            ),
+            as: GatewayResponse.self
+        )
+        if let usage = response.usage {
+            GeminiUsageTracker.shared.record(feature: .contextualGloss, model: response.model, usage: usage)
+        }
+
+        let payload = response.result
+        let result = sanitizedResult(
+            meaning: payload.meaning,
+            grammarNote: payload.grammarNote,
+            relatedWords: payload.relatedWords.map { ($0.word, $0.note) },
+            headword: payload.headword,
+            request: request
+        )
         guard !result.meaning.isEmpty else {
             throw GlossError.emptyResponse
         }
@@ -109,159 +98,53 @@ enum GeminiContextualGloss {
         return result
     }
 
-    // MARK: - API
+    // MARK: - Gateway
 
-    private struct GenerateContentRequest: Encodable {
-        struct Content: Encodable {
-            struct Part: Encodable {
-                let text: String
-            }
-
-            let parts: [Part]
-        }
-
-        struct GenerationConfig: Encodable {
-            struct Schema: Encodable {
-                struct Property: Encodable {
-                    let type: String
-                }
-
-                let type: String
-                let properties: [String: Property]
-                let required: [String]
-            }
-
-            let responseMimeType: String
-            let responseSchema: Schema
-            let temperature: Double
-            let topP: Double
-            let topK: Int
-            let seed: Int
-            let candidateCount: Int
-        }
-
-        let contents: [Content]
-        let generationConfig: GenerationConfig
+    private struct GatewayRequest: Encodable {
+        let feature: String
+        let sentence: String
+        let surface: String
+        let dictionaryForm: String?
+        let dictionaryGloss: String?
+        let framing: String
+        let requestsHeadword: Bool
     }
 
-    private struct GenerateContentResponse: Decodable {
-        struct Candidate: Decodable {
-            struct Content: Decodable {
-                struct Part: Decodable {
-                    let text: String?
-                }
-
-                let parts: [Part]?
-            }
-
-            let content: Content?
-        }
-
-        struct APIError: Decodable {
-            let message: String?
-            let status: String?
-        }
-
-        let candidates: [Candidate]?
-        let error: APIError?
-        let usageMetadata: GeminiUsageMetadata?
+    private struct GatewayResponse: Decodable {
+        let result: GlossPayload
+        let model: String
+        let usage: GeminiUsageMetadata?
     }
 
     private struct GlossPayload: Decodable {
+        struct RelatedWord: Decodable {
+            let word: String
+            let note: String
+        }
+
         let meaning: String
         let grammarNote: String
+        let relatedWords: [RelatedWord]
+        let headword: String
+
+        enum CodingKeys: String, CodingKey {
+            case meaning, grammarNote, relatedWords, headword
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            meaning = try container.decode(String.self, forKey: .meaning)
+            grammarNote = try container.decodeIfPresent(String.self, forKey: .grammarNote) ?? ""
+            relatedWords = try container.decodeIfPresent([RelatedWord].self, forKey: .relatedWords) ?? []
+            headword = try container.decodeIfPresent(String.self, forKey: .headword) ?? ""
+        }
     }
 
-    private static func fetchGloss(
-        for request: Request,
-        sentence: String,
-        surface: String,
-        model: Model
-    ) async throws -> GlossPayload {
-        let prompt = prompt(for: request, sentence: sentence, surface: surface)
-        print("[GeminiContextualGloss] prompt:\n\(prompt)")
-
-        let requestBody = GenerateContentRequest(
-            contents: [
-                .init(parts: [.init(text: "\(instructionsText)\n\n\(prompt)")]),
-            ],
-            generationConfig: .init(
-                responseMimeType: "application/json",
-                responseSchema: .init(
-                    type: "object",
-                    properties: [
-                        "meaning": .init(type: "string"),
-                        "grammarNote": .init(type: "string"),
-                    ],
-                    required: ["meaning", "grammarNote"]
-                ),
-                temperature: 0,
-                topP: 1,
-                topK: 1,
-                seed: deterministicSeed,
-                candidateCount: 1
-            )
-        )
-
-        guard let url = URL(string: "\(endpointBase)/\(model.rawValue):generateContent") else {
-            throw GlossError.invalidConfiguration
+    private static func nonEmpty(_ text: String?) -> String? {
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
         }
-
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(GeminiAppKey.resolved, forHTTPHeaderField: "x-goog-api-key")
-        urlRequest.httpBody = try JSONEncoder().encode(requestBody)
-
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        guard let http = response as? HTTPURLResponse else {
-            throw GlossError.invalidResponse
-        }
-
-        let rawBody = String(data: data, encoding: .utf8) ?? "<non-utf8 body, \(data.count) bytes>"
-        print("[GeminiContextualGloss] response (status \(http.statusCode)) raw body:\n\(rawBody)")
-
-        let decoded = try JSONDecoder().decode(GenerateContentResponse.self, from: data)
-        if let usage = decoded.usageMetadata {
-            GeminiUsageTracker.shared.record(feature: .contextualGloss, model: model.rawValue, usage: usage)
-        }
-        if let apiError = decoded.error {
-            throw GlossError.api(apiError.message ?? apiError.status ?? "Gemini API error")
-        }
-        guard (200...299).contains(http.statusCode) else {
-            throw GlossError.api(rawBody)
-        }
-
-        guard
-            let jsonText = decoded.candidates?.first?.content?.parts?.first?.text,
-            let jsonData = jsonText.data(using: .utf8)
-        else {
-            throw GlossError.invalidResponse
-        }
-
-        print("[GeminiContextualGloss] response candidate text:\n\(jsonText)")
-        return try JSONDecoder().decode(GlossPayload.self, from: jsonData)
-    }
-
-    private static func prompt(for request: Request, sentence: String, surface: String) -> String {
-        var lines = [
-            "Sentence: \(sentence)",
-            "Selected token (focus only on this span — not words before or after it): \(surface)",
-            "",
-            "Return:",
-            "• meaning — plain English gloss for this token only (no linguistics labels)",
-            "• grammarNote — short grammar note, or empty string if none",
-        ]
-        if let dictionaryForm = request.dictionaryForm?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !dictionaryForm.isEmpty,
-           dictionaryForm != surface {
-            lines.append("Dictionary form (hint only): \(dictionaryForm)")
-        }
-        if let gloss = request.dictionaryGloss?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !gloss.isEmpty {
-            lines.append("Dictionary gloss (hint only): \(gloss)")
-        }
-        return lines.joined(separator: "\n")
+        return trimmed
     }
 
     // MARK: - Sanitization (shared rules with the on-device gloss)
@@ -282,10 +165,12 @@ enum GeminiContextualGloss {
     private static func sanitizedResult(
         meaning: String,
         grammarNote: String,
+        relatedWords: [(String, String)],
+        headword: String,
         request: Request
     ) -> Result {
-        var gloss = meaning.trimmingCharacters(in: .whitespacesAndNewlines)
-        var grammar = grammarNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        var gloss = glossWithoutVerbLabel(meaning)
+        var grammar = glossWithoutVerbLabel(grammarNote)
 
         if isMetaLabelOnly(gloss),
            let dictionary = request.dictionaryGloss?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -298,7 +183,13 @@ enum GeminiContextualGloss {
             grammar = ""
         }
 
-        return Result(meaning: gloss, grammarNote: grammar)
+        let related = ContextualRelatedWord.sanitized(
+            from: relatedWords,
+            surface: request.surface,
+            dictionaryForm: request.dictionaryForm
+        )
+        let resolvedHeadword = request.requestsHeadword ? ContextualHeadword.sanitized(headword) : ""
+        return Result(meaning: gloss, grammarNote: grammar, relatedWords: related, headword: resolvedHeadword)
     }
 
     private static func isMetaLabelOnly(_ text: String) -> Bool {
@@ -322,37 +213,34 @@ enum GeminiContextualGloss {
         return words.prefix(8).joined(separator: " ")
     }
 
-    private static func cacheKey(for request: Request, model: Model) -> String {
-        [
-            "gemini-gloss-v2",
-            model.rawValue,
+    private static func cacheKey(for request: Request) -> String {
+        var parts = [
+            request.requestsHeadword ? "gemini-gloss-v6-gateway-headword" : "gemini-gloss-v6-gateway",
+            request.framing.rawValue,
             request.sentence,
             request.surface,
             request.dictionaryForm ?? "",
             request.dictionaryGloss ?? "",
-        ].joined(separator: "\u{1F}")
+        ]
+        if request.requestsHeadword {
+            parts.append("headword")
+        }
+        return parts.joined(separator: "\u{1F}")
     }
 
     enum GlossError: LocalizedError {
         case invalidInput
-        case missingAPIKey
-        case invalidConfiguration
-        case invalidResponse
-        case api(String)
+        case unavailable
         case emptyResponse
 
         var errorDescription: String? {
             switch self {
             case .invalidInput:
                 return "Missing sentence or selected word."
-            case .missingAPIKey:
-                return "Gemini API key is not configured."
-            case .invalidConfiguration:
-                return "Gemini contextual gloss is misconfigured."
-            case .invalidResponse:
-                return "Gemini returned an unexpected response."
-            case .api(let message):
-                return message
+            case .unavailable:
+                return LLMGatewayClient.isConfigured
+                    ? "Sign in to see Gemini word insights."
+                    : LLMGatewayError.notConfigured.errorDescription
             case .emptyResponse:
                 return "Gemini returned an empty gloss."
             }

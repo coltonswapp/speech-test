@@ -71,6 +71,18 @@ enum ExperimentHashtags {
         "#languagelearning",
     ]
 
+    static let verbCombo = [
+        "#learnjapanese",
+        "#japanese",
+        "#studytok",
+        "#jlpt",
+        "#nihongo",
+        "#japaneselanguage",
+        "#studyjapanese",
+        "#日本語",
+        "#languagelearning",
+    ]
+
     static let registerLadder = [
         "#learnjapanese",
         "#japanese",

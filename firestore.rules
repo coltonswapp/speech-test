@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Written and read only by the LLM gateway (Admin SDK). Clients use GET /v1/usage.
+    // Studio reads with the Admin SDK, which these rules do not apply to.
+    match /llmUsage/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Votes and sentiment counters. Same Admin-only posture as llmUsage.
+    // llmFeedbackRate (hourly caps) is default-deny: no client match.
+    match /llmFeedback/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /llmFeedbackStats/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+
+      match /{document=**} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+  }
+}

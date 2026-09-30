@@ -19,6 +19,8 @@ struct CMSDialogueLessonSummary: Hashable, Sendable {
     let orderIndex: Int
     let updatedAt: String?
     let scenarioCount: Int
+    /// Scene ids in lesson order. Empty on indexes cached before this field existed.
+    let scenarioIDs: [String]
 }
 
 struct CMSCurriculumUnit: Hashable, Sendable {
@@ -57,6 +59,17 @@ enum ContentCMSClient {
     }
 
     static var isConfigured: Bool { baseURL != nil }
+
+    /// Studio scenario editor URL for content QA copy/paste. DEBUG uses a path-only link.
+    static func studioScenarioEditorLink(collectionId: String, slug: String) -> String {
+        let path = "/content/dialogues/\(collectionId)/\(slug)"
+        #if DEBUG
+        return path
+        #else
+        guard let baseURL else { return path }
+        return baseURL.appendingPathComponent("content/dialogues/\(collectionId)/\(slug)").absoluteString
+        #endif
+    }
 
     /// Lists every dialogue lesson (collection) from the CMS, grouped under
     /// curriculum units. Does not require per-lesson URLs — only the CMS base URL.
@@ -137,6 +150,63 @@ enum ContentCMSClient {
                 return
             }
             writeCachedCollectionData(data, id: id)
+            completion(.success(data))
+        }.resume()
+    }
+
+    /// Marks one scene checked off in Studio content QA.
+    /// Public lesson fetches stay unauthenticated; this write sends `Authorization: Bearer`.
+    static func checkOffScene(
+        collectionId: String,
+        slug: String,
+        reviewNote: String? = nil,
+        reviewedBy: String? = nil,
+        completion: @escaping (Result<Data, Error>) -> Void
+    ) {
+        guard let baseURL else {
+            completion(.failure(CMSClientError.notConfigured))
+            return
+        }
+        let token = ContentQAClientToken.resolved
+        guard !token.isEmpty else {
+            completion(.failure(CMSClientError.missingContentQAToken))
+            return
+        }
+        let url = baseURL
+            .appendingPathComponent("api")
+            .appendingPathComponent("client")
+            .appendingPathComponent("content-qa")
+            .appendingPathComponent("dialogues")
+            .appendingPathComponent(collectionId)
+            .appendingPathComponent("scenarios")
+            .appendingPathComponent(slug)
+            .appendingPathComponent("check-off")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var body: [String: String] = [:]
+        if let reviewNote {
+            body["reviewNote"] = reviewNote
+        }
+        if let reviewedBy {
+            body["reviewedBy"] = reviewedBy
+        }
+        request.httpBody = (try? JSONSerialization.data(withJSONObject: body)) ?? Data("{}".utf8)
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error {
+                completion(.failure(error))
+                return
+            }
+            guard let http = response as? HTTPURLResponse else {
+                completion(.failure(CMSClientError.invalidResponse))
+                return
+            }
+            guard (200 ... 299).contains(http.statusCode), let data else {
+                completion(.failure(CMSClientError.httpStatus(http.statusCode)))
+                return
+            }
             completion(.success(data))
         }.resume()
     }
@@ -230,6 +300,7 @@ enum ContentCMSClient {
         let orderIndex: Int
         let updatedAt: String?
         let scenarioCount: Int
+        let scenarioIds: [String]?
 
         var asSummary: CMSDialogueLessonSummary {
             CMSDialogueLessonSummary(
@@ -242,13 +313,15 @@ enum ContentCMSClient {
                 thumbnailSmallUrl: thumbnailSmallUrl,
                 orderIndex: orderIndex,
                 updatedAt: updatedAt,
-                scenarioCount: scenarioCount
+                scenarioCount: scenarioCount,
+                scenarioIDs: scenarioIds ?? []
             )
         }
     }
 
     enum CMSClientError: LocalizedError {
         case notConfigured
+        case missingContentQAToken
         case invalidResponse
         case httpStatus(Int)
 
@@ -256,6 +329,8 @@ enum ContentCMSClient {
             switch self {
             case .notConfigured:
                 return "SHIZEN_CMS_BASE_URL is not configured."
+            case .missingContentQAToken:
+                return "CONTENT_QA_CLIENT_TOKEN is missing."
             case .invalidResponse:
                 return "Invalid CMS response."
             case .httpStatus(let code):

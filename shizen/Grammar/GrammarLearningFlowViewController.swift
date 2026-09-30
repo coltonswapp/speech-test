@@ -40,6 +40,21 @@ final class GrammarLearningFlowViewController: UIViewController, MainTabScrollab
         layoutViews()
         configureProgressGridSelection()
         refreshProgressGrid()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(storedProgressDidChange),
+            name: GrammarMasteryStore.didChange,
+            object: masteryStore
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func storedProgressDidChange() {
+        updateProgressSubtitle()
+        refreshProgressGrid()
     }
 
     private func configureProgressGridSelection() {

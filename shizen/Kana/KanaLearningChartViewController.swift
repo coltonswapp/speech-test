@@ -40,6 +40,21 @@ final class KanaLearningChartViewController: UIViewController {
         configureHeader()
         configureScroll()
         buildChartsIfNeeded()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(storedProgressDidChange),
+            name: KanaProgressStore.didChange,
+            object: progressStore
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func storedProgressDidChange() {
+        updateProgressStats()
+        refreshChartProgress()
     }
 
     override func viewWillAppear(_ animated: Bool) {

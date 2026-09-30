@@ -34,7 +34,7 @@ final class MainViewController: UIViewController {
     }
 
     private lazy var tabBar = GameCategoryTabBar(
-        titles: MainSection.allCases.map(\.title),
+        titles: [Self.dialogueTabTitle(), MainSection.practice.title],
         initialSelectedIndex: MainSection.dialogue.rawValue
     )
     private let pagingScrollView = HorizontalPagingScrollView()
@@ -47,6 +47,8 @@ final class MainViewController: UIViewController {
     private var trackedVerticalScrollPageIndex = 0
     private var lastObservedVerticalOffset: CGFloat = 0
     private var verticalScrollObservations: [NSKeyValueObservation] = []
+    private var authObserver: NSObjectProtocol?
+    private var isPresentingAuthGate = false
 
     private static let verticalScrollTopRevealThreshold: CGFloat = 12
     private static let verticalScrollDirectionThreshold: CGFloat = 2
@@ -65,7 +67,22 @@ final class MainViewController: UIViewController {
         setupNavigationBar()
         tabBar.delegate = self
         pagingScrollView.delegate = self
+        configureLessonTrackMenu()
         installVerticalScrollObservers()
+        observeAuthGate()
+    }
+
+    deinit {
+        if let authObserver {
+            NotificationCenter.default.removeObserver(authObserver)
+        }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        DispatchQueue.main.async { [weak self] in
+            self?.presentAuthGateIfNeeded()
+        }
     }
 
     override func viewDidLayoutSubviews() {
@@ -113,6 +130,63 @@ final class MainViewController: UIViewController {
 
     @objc private func openSettings() {
         navigationController?.pushViewController(SettingsViewController(), animated: true)
+    }
+
+    // MARK: - Auth gate
+
+    private func observeAuthGate() {
+        guard authObserver == nil else { return }
+        authObserver = NotificationCenter.default.addObserver(
+            forName: AuthService.userDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.presentAuthGateIfNeeded()
+            }
+        }
+    }
+
+    private func presentAuthGateIfNeeded() {
+        guard view.window != nil else { return }
+        guard AuthService.shared.userId == nil else { return }
+        presentLoginSheet()
+    }
+
+    private func presentLoginSheet() {
+        guard view.window != nil else { return }
+        guard AuthService.shared.userId == nil else { return }
+        let presenter = navigationController ?? self
+        if presenter.presentedViewController?.restorationIdentifier == AuthLandingViewController.presentationIdentifier {
+            return
+        }
+        guard !isPresentingAuthGate else { return }
+
+        if presenter.presentedViewController != nil {
+            isPresentingAuthGate = true
+            presenter.dismiss(animated: true) { [weak self] in
+                self?.isPresentingAuthGate = false
+                self?.presentLoginSheet()
+            }
+            return
+        }
+
+        if let navigationController, navigationController.viewControllers.count > 1 {
+            isPresentingAuthGate = true
+            navigationController.popToRootViewController(animated: true)
+            let finish = { [weak self] in
+                self?.isPresentingAuthGate = false
+                self?.presentLoginSheet()
+            }
+            if let coordinator = navigationController.transitionCoordinator {
+                coordinator.animate(alongsideTransition: nil) { _ in finish() }
+            } else {
+                finish()
+            }
+            return
+        }
+
+        presenter.present(AuthLandingViewController.makeLoginSheet(), animated: true)
     }
 
     // MARK: - Layout
@@ -302,6 +376,31 @@ final class MainViewController: UIViewController {
     private func revealInactiveTabsForHorizontalInteraction(animated: Bool) {
         tabBar.setShowsInactiveTabs(true, animated: animated)
     }
+
+    private static func dialogueTabTitle() -> String {
+        "Dialogue · \(DialogueLessonTrack.current.title)"
+    }
+
+    private func configureLessonTrackMenu() {
+        tabBar.contextMenuProvider = { [weak self] in
+            self?.makeLessonTrackMenu()
+        }
+    }
+
+    private func makeLessonTrackMenu() -> UIMenu {
+        UIMenu(
+            title: "Lesson level",
+            children: DialogueLessonTrack.allCases.map { track in
+                UIAction(
+                    title: track.title,
+                    state: track == .current ? .on : .off
+                ) { [weak self] _ in
+                    DialogueLessonTrack.current = track
+                    self?.tabBar.setTitle(Self.dialogueTabTitle(), at: MainSection.dialogue.rawValue)
+                }
+            }
+        )
+    }
 }
 
 // MARK: - GameCategoryTabBarDelegate
@@ -329,6 +428,13 @@ extension MainViewController: GameCategoryTabBarDelegate {
     func tabBarDidEndScrolling(_ tabBar: GameCategoryTabBar) {
         isUpdatingFromScroll = false
         syncPagerHapticPageFromCurrentOffset()
+    }
+
+    func tabBar(_ tabBar: GameCategoryTabBar, didSelectHoldOptionAt index: Int) {
+        let tracks = DialogueLessonTrack.allCases
+        guard tracks.indices.contains(index) else { return }
+        DialogueLessonTrack.current = tracks[index]
+        tabBar.setTitle(Self.dialogueTabTitle(), at: MainSection.dialogue.rawValue)
     }
 }
 

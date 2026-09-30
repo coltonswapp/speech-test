@@ -100,7 +100,8 @@ final class OnboardingPaywallViewController: OnboardingViewController {
 final class OnboardingAuthStepViewController: OnboardingViewController {
 
     private let config: BasicStepConfig
-    private let skipButton = UIButton(type: .system)
+    private let googleButton = UIButton(type: .system)
+    private var isAuthenticating = false
 
     init(config: BasicStepConfig) {
         self.config = config
@@ -116,31 +117,57 @@ final class OnboardingAuthStepViewController: OnboardingViewController {
         super.viewDidLoad()
         addCTAButton(title: config.ctaText ?? "Continue with Apple")
 
-        skipButton.setTitle("Skip for now", for: .normal)
-        skipButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .medium)
-        skipButton.setTitleColor(.secondaryLabel, for: .normal)
-        skipButton.addTarget(self, action: #selector(skipTapped), for: .touchUpInside)
-        skipButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(skipButton)
+        googleButton.setTitle("Continue with Google", for: .normal)
+        googleButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
+        googleButton.setTitleColor(.label, for: .normal)
+        googleButton.addTarget(self, action: #selector(googleTapped), for: .touchUpInside)
+        googleButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(googleButton)
 
         NSLayoutConstraint.activate([
-            skipButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            skipButton.bottomAnchor.constraint(equalTo: contentBottomAnchor, constant: -12),
+            googleButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            googleButton.bottomAnchor.constraint(equalTo: contentBottomAnchor, constant: -12),
         ])
     }
 
     override func setupContent() {}
 
     override func ctaTapped() {
-        playSelectionHaptic()
-        coordinator?.setPendingProvider(.apple)
-        coordinator?.next()
+        authenticateAndContinue(provider: .apple)
     }
 
-    @objc private func skipTapped() {
+    @objc private func googleTapped() {
+        authenticateAndContinue(provider: .google)
+    }
+
+    private func authenticateAndContinue(provider: AuthProvider) {
+        guard !isAuthenticating else { return }
         playSelectionHaptic()
-        coordinator?.setPendingProvider(nil)
-        coordinator?.next()
+        isAuthenticating = true
+        setCTAEnabled(false)
+        googleButton.isEnabled = false
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                self.isAuthenticating = false
+                self.setCTAEnabled(true)
+                self.googleButton.isEnabled = true
+            }
+            do {
+                try await self.coordinator?.authenticate(provider: provider, from: self)
+                self.coordinator?.next()
+            } catch AuthServiceError.canceled {
+                return
+            } catch {
+                let alert = UIAlertController(
+                    title: "Sign-in failed",
+                    message: error.localizedDescription,
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                self.present(alert, animated: true)
+            }
+        }
     }
 }
 

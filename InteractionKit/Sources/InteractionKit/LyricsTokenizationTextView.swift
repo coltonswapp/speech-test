@@ -22,6 +22,49 @@ public enum LyricsTokenSelectionAppearance {
   case scrubUnderline
 }
 
+/// Fill and lower band for a multi-word selection. Single-token tips stay system blue.
+@MainActor
+public struct LyricsSpanHighlightStyle {
+  public var fillColor: UIColor
+  public var bandColor: UIColor
+  public var textColor: UIColor
+  /// Fraction of the pill height covered by `bandColor`, measured from the bottom.
+  public var bandHeightFraction: CGFloat
+  public var cornerRadius: CGFloat
+
+  public init(
+    fillColor: UIColor,
+    bandColor: UIColor,
+    textColor: UIColor,
+    bandHeightFraction: CGFloat,
+    cornerRadius: CGFloat
+  ) {
+    self.fillColor = fillColor
+    self.bandColor = bandColor
+    self.textColor = textColor
+    self.bandHeightFraction = bandHeightFraction
+    self.cornerRadius = cornerRadius
+  }
+
+  public static let standard = LyricsSpanHighlightStyle(
+    fillColor: .systemBlue,
+    bandColor: .systemYellow,
+    textColor: .white,
+    bandHeightFraction: 0.15,
+    cornerRadius: 2
+  )
+
+  public static var current = standard {
+    didSet {
+      NotificationCenter.default.post(name: .lyricsSpanHighlightStyleDidChange, object: nil)
+    }
+  }
+}
+
+public extension Notification.Name {
+  static let lyricsSpanHighlightStyleDidChange = Notification.Name("LyricsSpanHighlightStyleDidChange")
+}
+
 // MARK: - Inset underlines + rounded blue selection (drawn before glyphs)
 
 public final class LyricsInsetUnderlineTextView: UITextView {
@@ -46,11 +89,27 @@ public final class LyricsInsetUnderlineTextView: UITextView {
 
   public private(set) var selectedTokenIndex: Int?
 
+  /// Exact token indices for a scrubbed span. When nil, the highlight follows
+  /// `selectedTokenIndex` and any neighbors that share a lookup surface.
+  private var explicitSelectionIndices: Set<Int>?
+
+  private var activeSelectionIndices: Set<Int> {
+    if let explicitSelectionIndices {
+      return explicitSelectionIndices
+    }
+    if let selectedTokenIndex {
+      return contiguousIndicesWithSameLookup(as: selectedTokenIndex)
+    }
+    return []
+  }
+
   /// Horizontal: keep small so the rounded fill doesn’t extend far past glyph bounds into neighbors.
   private let selectionHPad: CGFloat = 0.5
   private let selectionVPad: CGFloat = 1
   private let selectionCornerRadius: CGFloat = 6
   private let selectionColor = UIColor.systemBlue
+  /// Multi-word spans keep the blue pill and add a darker band on the lower half.
+  private var selectionUsesSpanAccent = false
 
   /// Playback karaoke wash. Independent of `selectedTokenIndex` / definition fill.
   private var karaokeRange: NSRange?
@@ -114,6 +173,25 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     textContainer.heightTracksTextView = false
     tap.addTarget(self, action: #selector(handleTap))
     addGestureRecognizer(tap)
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(spanHighlightStyleDidChange),
+      name: .lyricsSpanHighlightStyleDidChange,
+      object: nil
+    )
+  }
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
+  }
+
+  public var tokenCount: Int { tokens.count }
+
+  @objc private func spanHighlightStyleDidChange() {
+    if selectionUsesSpanAccent {
+      applySelectionAttributed(selectedIndices: activeSelectionIndices)
+    }
+    setNeedsDisplay()
   }
 
   /// Room below the last line for the stroke, gap, and selection padding (`draw` is clipped to bounds).
@@ -248,20 +326,47 @@ public final class LyricsInsetUnderlineTextView: UITextView {
 
   /// Rounded blue fill + light text; only used while a definition tip is active (parent drives this).
   public func setDefinitionSelectionHighlight(tokenIndex: Int?) {
+    selectionUsesSpanAccent = false
+    explicitSelectionIndices = nil
+    selectedTokenIndex = tokenIndex
+    let selectedIndices = tokenIndex.map { contiguousIndicesWithSameLookup(as: $0) }
+    applySelectionAttributed(selectedIndices: selectedIndices)
+  }
+
+  /// Highlights a contiguous token span exactly, without expanding to merged lookup groups.
+  /// The pill stays blue, with a darker band across the lower half.
+  public func setDefinitionSelectionHighlight(tokenRange: ClosedRange<Int>?) {
+    let filtered = tokenRange.map { range in
+      Set(range.filter { tokens.indices.contains($0) })
+    } ?? []
+    selectionUsesSpanAccent = !filtered.isEmpty
+    if filtered.isEmpty {
+      explicitSelectionIndices = nil
+      selectedTokenIndex = nil
+      applySelectionAttributed(selectedIndices: nil)
+    } else {
+      explicitSelectionIndices = filtered
+      selectedTokenIndex = filtered.min()
+      applySelectionAttributed(selectedIndices: filtered)
+    }
+  }
+
+  private func applySelectionAttributed(selectedIndices: Set<Int>?) {
     let font: UIFont
     if let a = attributedText, a.length > 0 {
       font = Self.fontForAttributes(from: a)
     } else {
       font = UIFont.preferredFont(forTextStyle: .title1)
     }
-    selectedTokenIndex = tokenIndex
-    let selectedIndices = tokenIndex.map { contiguousIndicesWithSameLookup(as: $0) }
     let built = Self.buildAttributed(
       text: fullText,
       tokens: tokens,
       font: font,
       selectedIndices: selectedIndices,
       selectionAppearance: tokenSelectionAppearance,
+      selectedTextColor: selectionUsesSpanAccent
+        ? LyricsSpanHighlightStyle.current.textColor
+        : .white,
       showsFurigana: showsFurigana,
       applyRuby: applyRuby
     )
@@ -324,6 +429,8 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       tokenLookupSurfaces = tokens.map(\.text)
     }
     selectedTokenIndex = nil
+    explicitSelectionIndices = nil
+    selectionUsesSpanAccent = false
     karaokeRange = nil
     let edge = textContainerEdgeOutset
     let rubyTop = showsFurigana ? Self.rubyOverlayTopInset(for: lyricFont) : 0
@@ -390,6 +497,129 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   public func tokenSurface(at index: Int) -> String? {
     guard tokens.indices.contains(index), tokenLookupSurfaces.indices.contains(index) else { return nil }
     return tokenLookupSurfaces[index]
+  }
+
+  /// Sentence text covered by a contiguous token range, including characters between those tokens.
+  public func surface(covering tokenRange: ClosedRange<Int>) -> String? {
+    let indices = tokenRange.filter { tokens.indices.contains($0) }
+    guard let firstIndex = indices.min(), let lastIndex = indices.max() else { return nil }
+    let start = tokens[firstIndex].range.lowerBound
+    let end = tokens[lastIndex].range.upperBound
+    guard start < end, end <= fullText.endIndex else { return nil }
+    let trimmed = Self.strippingClauseSeparators(
+      String(fullText[start..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
+    )
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  /// Display text of each token in the range, in order.
+  public func tokenTexts(in tokenRange: ClosedRange<Int>) -> [String] {
+    tokenRange.compactMap { index in
+      guard tokens.indices.contains(index) else { return nil }
+      let text = tokens[index].text.trimmingCharacters(in: .whitespacesAndNewlines)
+      return text.isEmpty ? nil : text
+    }
+  }
+
+  /// Token span that shares this index's lookup surface (お店 from お or 店).
+  public func lookupTokenRange(for index: Int) -> ClosedRange<Int>? {
+    guard tokens.indices.contains(index) else { return nil }
+    let group = contiguousIndicesWithSameLookup(as: index)
+    guard let lo = group.min(), let hi = group.max() else { return nil }
+    return lo...hi
+  }
+
+  /// Extends a span so a merged lookup at either end stays whole (お + 店 → お店).
+  public func tokenRangeExpandingLookupGroups(_ tokenRange: ClosedRange<Int>) -> ClosedRange<Int> {
+    guard !tokens.isEmpty else { return tokenRange }
+    let last = tokens.index(before: tokens.endIndex)
+    let lower = min(max(tokenRange.lowerBound, tokens.startIndex), last)
+    let upper = min(max(tokenRange.upperBound, tokens.startIndex), last)
+    let lo = contiguousIndicesWithSameLookup(as: lower).min() ?? lower
+    let hi = contiguousIndicesWithSameLookup(as: upper).max() ?? upper
+    return min(lo, hi)...max(lo, hi)
+  }
+
+  /// Keeps a drag inside the clause that contains `anchor`. Commas, periods, and
+  /// other separators are walls; the returned index never crosses one.
+  public func tokenIndexLimitedToClause(anchor: Int, proposed: Int) -> Int {
+    guard tokens.indices.contains(anchor) else { return proposed }
+    guard tokens.indices.contains(proposed) else { return anchor }
+    let anchorKind = clauseKind(of: tokens[anchor].text)
+    if anchorKind == .wall { return anchor }
+    if proposed == anchor { return anchor }
+
+    let step = proposed > anchor ? 1 : -1
+    if step > 0, anchorKind == .trailingBreak { return anchor }
+    if step < 0, anchorKind == .leadingBreak { return anchor }
+
+    var cursor = anchor
+    while cursor != proposed {
+      let next = cursor + step
+      if gapContainsClauseSeparator(from: cursor, to: next) { return cursor }
+      switch clauseKind(of: tokens[next].text) {
+      case .wall:
+        return cursor
+      case .trailingBreak:
+        return step > 0 ? next : cursor
+      case .leadingBreak:
+        return step < 0 ? next : cursor
+      case .content:
+        cursor = next
+      }
+    }
+    return cursor
+  }
+
+  private enum ClauseTokenKind {
+    case content
+    case wall
+    case trailingBreak
+    case leadingBreak
+  }
+
+  /// Clause breaks. Middle dots stay selectable so names like ジョン・スミス can be one span.
+  private static let clauseSeparators = CharacterSet(charactersIn: "、。，．,.!?;:！？；：…‥\n\r「」『』【】〈〉《》（）()[]{}")
+
+  private func clauseKind(of text: String) -> ClauseTokenKind {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return .content }
+    let characters = Array(trimmed)
+    func isSeparator(_ character: Character) -> Bool {
+      character.unicodeScalars.allSatisfy { Self.clauseSeparators.contains($0) }
+    }
+    if characters.allSatisfy(isSeparator) { return .wall }
+    let leading = isSeparator(characters[0])
+    let trailing = isSeparator(characters[characters.count - 1])
+    let middle = characters.dropFirst().dropLast().contains(where: isSeparator)
+    if middle || (leading && trailing) { return .wall }
+    if trailing { return .trailingBreak }
+    if leading { return .leadingBreak }
+    return .content
+  }
+
+  private func gapContainsClauseSeparator(from: Int, to: Int) -> Bool {
+    let left = min(from, to)
+    let right = max(from, to)
+    let start = tokens[left].range.upperBound
+    let end = tokens[right].range.lowerBound
+    guard start < end, end <= fullText.endIndex else { return false }
+    return fullText[start..<end].unicodeScalars.contains { Self.clauseSeparators.contains($0) }
+  }
+
+  private static func strippingClauseSeparators(_ text: String) -> String {
+    var scalars = Array(text.unicodeScalars)
+    while let first = scalars.first,
+      clauseSeparators.contains(first) || CharacterSet.whitespacesAndNewlines.contains(first)
+    {
+      scalars.removeFirst()
+    }
+    while let last = scalars.last,
+      clauseSeparators.contains(last) || CharacterSet.whitespacesAndNewlines.contains(last)
+    {
+      scalars.removeLast()
+    }
+    return String(String.UnicodeScalarView(scalars))
   }
 
   // MARK: - Drawing (same as prior Sentence inline implementation)
@@ -524,8 +754,9 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       return
     }
     drawKaraokeHighlight(in: rect)
-    if tokenSelectionAppearance == .definitionTip, let sel = selectedTokenIndex {
-      let highlight = contiguousIndicesWithSameLookup(as: sel)
+    let selectionIndices = activeSelectionIndices
+    if tokenSelectionAppearance == .definitionTip, !selectionIndices.isEmpty {
+      let highlight = selectionIndices
       let source = visibleAttributedText ?? full
       source.enumerateAttribute(
         .scrubTokenIndex, in: NSRange(location: 0, length: source.length), options: []
@@ -546,27 +777,30 @@ public final class LyricsInsetUnderlineTextView: UITextView {
             b = b.insetBy(dx: -selectionHPad, dy: -selectionVPad)
           }
           guard b.width > 1, b.height > 0.5, b.intersects(rect) else { continue }
-          let r = min(selectionCornerRadius, b.height * 0.45)
+          let style = LyricsSpanHighlightStyle.current
+          let radiusSource = selectionUsesSpanAccent ? style.cornerRadius : selectionCornerRadius
+          let r = min(radiusSource, b.height * 0.45)
           let p = UIBezierPath(roundedRect: b, cornerRadius: r)
-          selectionColor.setFill()
+          let fill = selectionUsesSpanAccent ? style.fillColor : selectionColor
+          fill.setFill()
           p.fill()
+          if selectionUsesSpanAccent {
+            drawSpanHalfHighlight(in: p, bounds: b, fraction: style.bandHeightFraction, color: style.bandColor)
+          }
         }
       }
     }
     if showsFurigana {
       _ = rebuildFuriganaLayoutIfNeeded()
       drawFuriganaCoreText()
-      if tokenSelectionAppearance == .definitionTip, let sel = selectedTokenIndex {
-        drawFuriganaSelectionBaseTextOverlay(
-          highlight: contiguousIndicesWithSameLookup(as: sel)
-        )
+      if tokenSelectionAppearance == .definitionTip, !selectionIndices.isEmpty {
+        drawFuriganaSelectionBaseTextOverlay(highlight: selectionIndices)
       }
     } else {
       super.draw(rect)
     }
     let pad = underlineHorizontalPadding
-    let underlineHighlight =
-      selectedTokenIndex.map { contiguousIndicesWithSameLookup(as: $0) } ?? []
+    let underlineHighlight = selectionIndices
     let underlineSegments = mergedUnderlineSegments()
     if showsFurigana {
       drawInsetUnderlinesUsingViewRects(
@@ -595,6 +829,24 @@ public final class LyricsInsetUnderlineTextView: UITextView {
         activeColor: scrubActiveUnderlineColor
       )
     }
+  }
+
+  /// Secondary color across the lower portion of a multi-word pill. Clipped to the rounded fill.
+  private func drawSpanHalfHighlight(
+    in pill: UIBezierPath,
+    bounds: CGRect,
+    fraction: CGFloat,
+    color: UIColor
+  ) {
+    let clamped = min(1, max(0, fraction))
+    guard clamped > 0.01, let ctx = UIGraphicsGetCurrentContext() else { return }
+    ctx.saveGState()
+    pill.addClip()
+    let height = bounds.height * clamped
+    let band = CGRect(x: bounds.minX, y: bounds.maxY - height, width: bounds.width, height: height)
+    color.setFill()
+    UIBezierPath(rect: band).fill()
+    ctx.restoreGState()
   }
 
   private func drawKaraokeHighlight(in rect: CGRect) {
@@ -715,7 +967,11 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       let ctx = UIGraphicsGetCurrentContext()
     else { return }
 
-    let overlay = Self.selectionOverlayAttributedString(from: visible, highlight: highlight)
+    let overlay = Self.selectionOverlayAttributedString(
+      from: visible,
+      highlight: highlight,
+      textColor: selectionUsesSpanAccent ? LyricsSpanHighlightStyle.current.textColor : .white
+    )
     let originalLines = coreTextLines(in: layout.frame)
     let lineOrigins = coreTextLineOrigins(in: layout.frame, lineCount: originalLines.count)
 
@@ -753,7 +1009,8 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   /// Core Text frame so the overlay stays on the same glyphs.
   private static func selectionOverlayAttributedString(
     from visible: NSAttributedString,
-    highlight: Set<Int>
+    highlight: Set<Int>,
+    textColor: UIColor
   ) -> NSAttributedString {
     let overlay = NSMutableAttributedString(attributedString: attributedStringByRemovingRuby(visible))
     let fullRange = NSRange(location: 0, length: overlay.length)
@@ -762,7 +1019,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       guard let value, charRange.length > 0 else { return }
       let n: Int = (value as? NSNumber)?.intValue ?? (value as? Int) ?? -1
       guard highlight.contains(n) else { return }
-      overlay.addAttribute(.foregroundColor, value: UIColor.white, range: charRange)
+      overlay.addAttribute(.foregroundColor, value: textColor, range: charRange)
     }
     return overlay
   }
@@ -843,8 +1100,16 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       let lineNSRange = NSRange(location: lineRange.location, length: lineRange.length)
       let sub = NSIntersectionRange(range, lineNSRange)
       guard sub.length > 0 else { continue }
-      let startX = CTLineGetOffsetForStringIndex(line, sub.location, nil)
-      let endX = CTLineGetOffsetForStringIndex(line, sub.location + sub.length, nil)
+      // Walk every index, including the end, so the last kanji of お店
+      // is not dropped when a single start/end pair undershoots.
+      var minX = CGFloat.greatestFiniteMagnitude
+      var maxX: CGFloat = -.greatestFiniteMagnitude
+      for stringIndex in sub.location...NSMaxRange(sub) {
+        let x = CTLineGetOffsetForStringIndex(line, stringIndex, nil)
+        minX = min(minX, x)
+        maxX = max(maxX, x)
+      }
+      guard minX.isFinite, maxX > minX else { continue }
       var ascent: CGFloat = 0
       var descent: CGFloat = 0
       var leading: CGFloat = 0
@@ -859,8 +1124,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
         glyphDescent = descent
       }
       let origin = lineOrigins[index]
-      let minX = min(startX, endX)
-      let width = abs(endX - startX)
+      let width = maxX - minX
       let y = layout.textOrigin.y + (layout.textSize.height - origin.y - glyphAscent)
       out.append(
         CGRect(
@@ -1084,6 +1348,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     font: UIFont,
     selectedIndices: Set<Int>?,
     selectionAppearance: LyricsTokenSelectionAppearance,
+    selectedTextColor: UIColor = .white,
     showsFurigana: Bool = false,
     applyRuby: ((NSMutableAttributedString, String, UIFont) -> Void)? = nil
   ) -> NSAttributedString {
@@ -1098,7 +1363,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       guard r.location != NSNotFound, r.length > 0, NSMaxRange(r) <= m.length else { continue }
       m.addAttribute(.scrubTokenIndex, value: i, range: r)
       if selectionAppearance == .definitionTip, highlight.contains(i), !showsFurigana {
-        m.addAttribute(.foregroundColor, value: UIColor.white, range: r)
+        m.addAttribute(.foregroundColor, value: selectedTextColor, range: r)
       }
     }
     if showsFurigana {

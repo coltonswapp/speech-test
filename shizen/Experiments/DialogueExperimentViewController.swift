@@ -204,6 +204,17 @@ class DialogueExperimentViewController: UIViewController {
     /// earned by passing the quiz instead of finishing playback.
     var recordsCompletionOnPlaybackFinish = true
 
+    /// Study / view-lesson: Japanese (and stage captions) stay `.label` on every
+    /// line. Focus is still bubble scale and underglow. First-listen modes keep
+    /// unheard lines at `.secondaryLabel`.
+    var usesStudyTranscriptContrast = false {
+        didSet {
+            guard usesStudyTranscriptContrast != oldValue, isViewLoaded else { return }
+            appliedJapaneseColorEmphasis.removeAll()
+            applyRowStylesFromEmphasis()
+        }
+    }
+
     /// Transcript rendering mode; listening variants replace text with
     /// speaker-tinted live meters. See ``DialogueTranscriptDisplayMode``.
     var transcriptDisplayMode: DialogueTranscriptDisplayMode = .full {
@@ -286,8 +297,13 @@ class DialogueExperimentViewController: UIViewController {
 
     private let transportBarContainer = UIView()
     private let elapsedLabel = UILabel()
-    private let playPauseButton = UIButton(type: .system)
-    private let playGlyphView = UIImageView()
+    private let playPauseButton = GlassIconButton(
+        symbolName: "play.fill",
+        pointSize: DialogueExperimentViewController.transportGlyphPointSize,
+        glyphDimension: DialogueExperimentViewController.transportGlyphPointSize + 4,
+        tintColor: DialogueExperimentViewController.transportGlyphColor,
+        accessibilityLabel: "Play / Pause"
+    )
     private let overflowButton = UIButton(type: .system)
     private let overflowGlyphView = UIImageView()
     private let restartButton = UIButton(type: .system)
@@ -313,6 +329,12 @@ class DialogueExperimentViewController: UIViewController {
     private var audioPlayer: AVAudioPlayer?
     private let ambienceBedPlayer = AmbienceBedPlayer()
     private var resolvedAudioURL: URL?
+    /// True from the start of a clip resolve until alignment is applied.
+    private var isResolvingLessonAudio = false
+    /// Delayed so a cached clip doesn't flash a spinner.
+    private var showsPlayLoadingIndicator = false
+    private var lessonAudioResolveGeneration = 0
+    private var playLoadingWorkItem: DispatchWorkItem?
     private var alignedLines: [AlignedTimeLine] = []
     private var clipDuration: TimeInterval = 0
     private var progressDisplayLink: CADisplayLink?
@@ -324,6 +346,9 @@ class DialogueExperimentViewController: UIViewController {
         }
     }
     private var activeLineIndex: Int?
+    /// Display indices that have been the active line this session. Spoken
+    /// history stays `.label`; only still-unheard lines rest at `.secondaryLabel`.
+    private var heardDisplayIndices: Set<Int> = []
     private var lineEmphasis: [CGFloat] = []
     private var emphasisAnimationLink: CADisplayLink?
     private var emphasisAnimationStart: [CGFloat] = []
@@ -444,6 +469,7 @@ class DialogueExperimentViewController: UIViewController {
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         guard traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) else { return }
+        applySceneImageBorder()
         appliedJapaneseColorEmphasis = Array(repeating: -1, count: japaneseLabels.count)
         appliedKaraokeTokenIndex = Array(repeating: -1, count: japaneseLabels.count)
         applyRowStylesFromEmphasis()
@@ -456,7 +482,6 @@ class DialogueExperimentViewController: UIViewController {
         isPerformingLayoutSideEffects = true
         defer { isPerformingLayoutSideEffects = false }
 
-        playPauseButton.bringSubviewToFront(playGlyphView)
         overflowButton.bringSubviewToFront(overflowGlyphView)
         restartButton.bringSubviewToFront(restartGlyphView)
         let topConstant = dialogueContentStackTopConstant()
@@ -481,6 +506,7 @@ class DialogueExperimentViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        dialogueRefreshOverflowMenu()
         if presentationContext == .nestedPagingHost {
             DialogueBubbleSwipeRevealContainer.resetCommittedContainer(animated: false)
             wireBubbleSwipeContentPopDeferral()
@@ -587,6 +613,7 @@ class DialogueExperimentViewController: UIViewController {
         playbackPhase = .idle
 
         hasHeardScenario = false
+        heardDisplayIndices.removeAll()
         englishRevealedIndices.removeAll()
         englishPeekedIndices.removeAll()
         didStartPlaybackThisAttempt = false
@@ -688,7 +715,7 @@ class DialogueExperimentViewController: UIViewController {
         }
     }
 
-    /// Scene-setting image (white border + drop shadow + 20pt rounded corners),
+    /// Scene-setting image (adaptive border + drop shadow + 20pt rounded corners),
     /// almost the screen width, with its native aspect ratio preserved. The
     /// outer container carries the shadow; the inner image view clips the corners.
     private func configureSceneImageView() {
@@ -742,7 +769,7 @@ class DialogueExperimentViewController: UIViewController {
         sceneImageView.layer.cornerRadius = 20
         sceneImageView.layer.cornerCurve = .continuous
         sceneImageView.layer.borderWidth = 3
-        sceneImageView.layer.borderColor = UIColor.white.cgColor
+        applySceneImageBorder()
         if sceneImageView.superview == nil {
             sceneImageContainer.addSubview(sceneImageView)
         }
@@ -791,12 +818,20 @@ class DialogueExperimentViewController: UIViewController {
         updated.isActive = wasActive
     }
 
+    /// White mat in light mode; the raised card surface in dark mode, so the
+    /// frame stays visible without a bright ring on the dark page.
+    private func applySceneImageBorder() {
+        sceneImageView.layer.borderColor = ExperimentPalette.cardSurface
+            .resolvedColor(with: traitCollection)
+            .cgColor
+    }
+
     private func applySceneImage(_ image: UIImage) {
         sceneImageView.image = image
         sceneImageContainer.isHidden = false
         let aspect = image.size.height / max(image.size.width, 1)
         prepareSceneImageChrome(aspectRatio: aspect)
-        sceneImageView.layer.borderColor = UIColor.white.cgColor
+        applySceneImageBorder()
         // Almost the full content width; aspect ratio preserved from the asset.
         // Pinned to the header stack, so it can only be activated once the
         // container has actually been added to that stack (see header build).
@@ -877,13 +912,6 @@ class DialogueExperimentViewController: UIViewController {
         elapsedLabel.textAlignment = .center
         elapsedLabel.text = "00:00.00"
 
-        Self.configureGlassTransportButton(
-            playPauseButton,
-            glyphView: playGlyphView,
-            symbolName: "play.fill",
-            glyphPointSize: Self.transportGlyphPointSize,
-            accessibilityLabel: "Play / Pause"
-        )
         playPauseButton.addAction(UIAction { [weak self] _ in self?.togglePlayPause() }, for: .primaryActionTriggered)
 
         Self.configureGlassTransportButton(
@@ -977,6 +1005,25 @@ class DialogueExperimentViewController: UIViewController {
         )
     }
 
+    func makeStageLinePauseMenu() -> UIMenu {
+        let selected = ExperimentSettings.dialogueStageLinePause
+        let actions = DialogueStageLinePause.allCases.map { pause in
+            UIAction(
+                title: pause.title,
+                subtitle: pause.subtitle,
+                state: pause == selected ? .on : .off
+            ) { [weak self] _ in
+                self?.setStageLinePause(pause)
+            }
+        }
+        return UIMenu(
+            title: "Stage line pause",
+            image: UIImage(systemName: "timer"),
+            options: .singleSelection,
+            children: actions
+        )
+    }
+
     func makeOverflowMenu() -> UIMenu {
         let rolePlay = UIAction(
             title: "Role Play",
@@ -986,8 +1033,9 @@ class DialogueExperimentViewController: UIViewController {
         }
         return UIMenu(children: [
             makePlaybackSpeedMenu(),
+            makeStageLinePauseMenu(),
             makeTokenSyncMenuAction(),
-            makeTokenSyncHighlightStyleMenu(),
+            makeTokenHighlightPreviewAction(),
             rolePlay,
         ])
     }
@@ -1003,32 +1051,33 @@ class DialogueExperimentViewController: UIViewController {
         }
     }
 
-    func makeTokenSyncHighlightStyleMenu() -> UIMenu {
-        let selected = ExperimentSettings.dialogueTokenSyncHighlightStyle
-        let actions = DialogueTokenSyncHighlightStyle.allCases.map { style in
-            UIAction(
-                title: style.title,
-                subtitle: style.subtitle,
-                state: style == selected ? .on : .off
-            ) { [weak self] _ in
-                self?.setTokenSyncHighlightStyle(style)
-            }
-        }
-        return UIMenu(
+    func makeTokenHighlightPreviewAction() -> UIAction {
+        let style = ExperimentSettings.dialogueTokenSyncHighlightStyle
+        return UIAction(
             title: "Token highlight",
-            image: UIImage(systemName: "paintbrush.pointed"),
-            options: .singleSelection,
-            children: actions
-        )
+            subtitle: style.title,
+            image: UIImage(systemName: "paintbrush.pointed")
+        ) { [weak self] _ in
+            self?.presentTokenHighlightPreview()
+        }
+    }
+
+    func presentTokenHighlightPreview() {
+        let preview = DialogueTokenHighlightPreviewViewController()
+        preview.onChange = { [weak self] in
+            self?.applyTokenSyncHighlightSetting()
+        }
+        let nav = UINavigationController(rootViewController: preview)
+        nav.modalPresentationStyle = .pageSheet
+        if let sheet = nav.sheetPresentationController {
+            sheet.detents = [.medium(), .large()]
+            sheet.prefersGrabberVisible = true
+        }
+        present(nav, animated: true)
     }
 
     func toggleTokenSyncHighlight() {
         ExperimentSettings.dialogueShowsTokenSync.toggle()
-        applyTokenSyncHighlightSetting()
-    }
-
-    func setTokenSyncHighlightStyle(_ style: DialogueTokenSyncHighlightStyle) {
-        ExperimentSettings.dialogueTokenSyncHighlightStyle = style
         applyTokenSyncHighlightSetting()
     }
 
@@ -1068,12 +1117,14 @@ class DialogueExperimentViewController: UIViewController {
         }
     }
 
+    private func setStageLinePause(_ pause: DialogueStageLinePause) {
+        ExperimentSettings.dialogueStageLinePause = pause
+        dialogueRefreshOverflowMenu()
+    }
+
     private func setPlaybackSpeed(_ speed: Float) {
         playbackSpeed = speed
-        audioPlayer?.enableRate = true
-        if audioPlayer?.isPlaying == true {
-            audioPlayer?.rate = speed
-        }
+        applyPlaybackSpeedToPlayer()
         dialogueRefreshOverflowMenu()
     }
 
@@ -1448,7 +1499,7 @@ class DialogueExperimentViewController: UIViewController {
         captionLabel.translatesAutoresizingMaskIntoConstraints = false
         captionLabel.numberOfLines = 0
         captionLabel.textAlignment = .center
-        captionLabel.textColor = .secondaryLabel
+        captionLabel.textColor = japaneseColor(forDisplayIndex: index, emphasis: 0)
         captionLabel.font = Self.stageDirectionFont
         captionLabel.text = text
         stageCaptionLabels.append(captionLabel)
@@ -1596,7 +1647,7 @@ class DialogueExperimentViewController: UIViewController {
                 to: japaneseLabel,
                 text: line.japanese,
                 font: japaneseFont,
-                textColor: Self.inactiveJapaneseColor
+                textColor: japaneseColor(forDisplayIndex: index, emphasis: 0)
             )
             DialogueContentLineWrap.applyOrphanGlue(to: japaneseLabel)
         }
@@ -1783,6 +1834,14 @@ class DialogueExperimentViewController: UIViewController {
 
     private func resolveLessonAudio() {
         ambienceBedPlayer.prepare(example.ambience)
+        lessonAudioResolveGeneration += 1
+        let generation = lessonAudioResolveGeneration
+        isResolvingLessonAudio = true
+        showsPlayLoadingIndicator = false
+        playLoadingWorkItem?.cancel()
+        updateTransportControls()
+        schedulePlayLoadingIndicator(generation: generation)
+
         GrammarAudioCatalog.ensureLocalURL(
             publishedAudioUrl: example.publishedAudioUrl,
             audioKey: example.audioKey,
@@ -1790,8 +1849,13 @@ class DialogueExperimentViewController: UIViewController {
         ) { [weak self] url in
             guard let self else { return }
             let apply = {
+                guard generation == self.lessonAudioResolveGeneration else { return }
                 self.resolvedAudioURL = url
-                self.prepareAudioAlignment()
+                if url == nil {
+                    self.finishLessonAudioResolve(generation: generation)
+                } else {
+                    self.prepareAudioAlignment(generation: generation)
+                }
             }
             if Thread.isMainThread {
                 apply()
@@ -1801,14 +1865,42 @@ class DialogueExperimentViewController: UIViewController {
         }
     }
 
-    private func prepareAudioAlignment() {
+    /// Shows the play-button spinner only when resolve is still running after a short delay.
+    private func schedulePlayLoadingIndicator(generation: Int) {
+        let work = DispatchWorkItem { [weak self] in
+            guard let self,
+                  generation == self.lessonAudioResolveGeneration,
+                  self.isResolvingLessonAudio
+            else { return }
+            self.showsPlayLoadingIndicator = true
+            self.updateTransportControls()
+        }
+        playLoadingWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
+    }
+
+    private func finishLessonAudioResolve(generation: Int) {
+        guard generation == lessonAudioResolveGeneration else { return }
+        isResolvingLessonAudio = false
+        showsPlayLoadingIndicator = false
+        playLoadingWorkItem?.cancel()
+        playLoadingWorkItem = nil
+        updateTransportControls()
+    }
+
+    private func prepareAudioAlignment(generation: Int) {
         guard let url = resolvedAudioURL else {
+            finishLessonAudioResolve(generation: generation)
             return
         }
 
         DialogueAlignmentMetadata.readPayload(from: url) { [weak self] _ in
-            guard let self, self.resolvedAudioURL == url else { return }
+            guard let self,
+                  generation == self.lessonAudioResolveGeneration,
+                  self.resolvedAudioURL == url
+            else { return }
             self.applyAudioAlignment(url: url)
+            self.finishLessonAudioResolve(generation: generation)
         }
     }
 
@@ -1857,26 +1949,12 @@ class DialogueExperimentViewController: UIViewController {
     private func applyTokenSyncLineWindows() {
         guard let tokenSync,
               tokenSync.lines.count == alignedLines.count,
-              clipDuration > 0
+              let ranges = tokenSync.lineTimeRanges(clipDuration: clipDuration)
         else { return }
 
-        var ranges: [AlignedTimeLine] = []
-        for index in alignedLines.indices {
-            let tokens = tokenSync.lines[index].tokens
-            guard let start = tokens.first?.startSeconds, start.isFinite, start >= 0 else { return }
-            let end: TimeInterval
-            if index + 1 < tokenSync.lines.count {
-                guard let next = tokenSync.lines[index + 1].tokens.first?.startSeconds,
-                      next.isFinite,
-                      next > start
-                else { return }
-                end = next
-            } else {
-                end = max(start, clipDuration)
-            }
-            ranges.append(AlignedTimeLine(text: alignedLines[index].text, timeRange: start..<end))
+        alignedLines = zip(alignedLines, ranges).map { line, range in
+            AlignedTimeLine(text: line.text, timeRange: range)
         }
-        alignedLines = ranges
         let scenario = example.sourceScenarioId ?? "?"
         print("[karaoke] \(scenario) line windows follow token stamps")
     }
@@ -1885,32 +1963,50 @@ class DialogueExperimentViewController: UIViewController {
         if let audioPlayer, audioPlayer.url == url, audioPlayer.duration > 0 {
             return audioPlayer.duration
         }
-        guard let player = try? AVAudioPlayer(contentsOf: url), player.duration > 0 else { return 0 }
-        player.isMeteringEnabled = true
-        audioPlayer = player
-        player.prepareToPlay()
+        guard let player = makePlayer(for: url) else { return 0 }
         return player.duration
     }
 
     @discardableResult
     private func makePlayer() -> AVAudioPlayer? {
-        guard let url = resolvedAudioURL else {
-            return nil
-        }
-        if let audioPlayer, audioPlayer.url == url {
+        guard let url = resolvedAudioURL else { return nil }
+        return makePlayer(for: url)
+    }
+
+    /// `enableRate` must be true before `prepareToPlay()` / `play()`, or `rate` is ignored.
+    @discardableResult
+    private func makePlayer(for url: URL) -> AVAudioPlayer? {
+        if let audioPlayer, audioPlayer.url == url, audioPlayer.enableRate {
+            audioPlayer.rate = playbackSpeed
             return audioPlayer
         }
-        guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
-        player.enableRate = true
-        player.isMeteringEnabled = true
+        guard let player = try? AVAudioPlayer(contentsOf: url), player.duration > 0 else { return nil }
+        configurePlayerForPlayback(player)
         player.prepareToPlay()
         audioPlayer = player
         return player
     }
 
+    private func configurePlayerForPlayback(_ player: AVAudioPlayer) {
+        player.enableRate = true
+        player.isMeteringEnabled = true
+        player.rate = playbackSpeed
+    }
+
     private func applyPlaybackSpeedToPlayer() {
-        audioPlayer?.enableRate = true
-        audioPlayer?.rate = playbackSpeed
+        guard let player = audioPlayer else { return }
+        if !player.enableRate {
+            let time = player.currentTime
+            let wasPlaying = player.isPlaying
+            audioPlayer = nil
+            guard let replacement = player.url.flatMap({ makePlayer(for: $0) }) else { return }
+            replacement.currentTime = time
+            if wasPlaying {
+                replacement.play()
+            }
+            return
+        }
+        player.rate = playbackSpeed
     }
 
     private func startAmbienceBed(fromStart: Bool) {
@@ -1998,8 +2094,8 @@ class DialogueExperimentViewController: UIViewController {
                 return
             }
             self.playbackResumeStartedAt = CACurrentMediaTime()
-            player.play()
             self.applyPlaybackSpeedToPlayer()
+            (self.audioPlayer ?? player).play()
             self.startProgressDisplayLink()
         }
     }
@@ -2026,9 +2122,9 @@ class DialogueExperimentViewController: UIViewController {
         seekTargetLineIndex = nil
         scrollListeningBubblesIntoView()
         playbackResumeStartedAt = CACurrentMediaTime()
-        player.play()
-        ambienceBedPlayer.play(fromStart: false)
         applyPlaybackSpeedToPlayer()
+        (audioPlayer ?? player).play()
+        ambienceBedPlayer.play(fromStart: false)
         playbackPhase = .playing
         startProgressDisplayLink()
         updateTransportControls()
@@ -2479,7 +2575,9 @@ class DialogueExperimentViewController: UIViewController {
             return
         }
         setActiveLine(displayIndices[offset], animated: true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.stageLineHold) { [weak self] in
+        let caption = displayLines[displayIndices[offset]].stageDirection?.text ?? ""
+        let hold = ExperimentSettings.dialogueStageLinePause.duration(forStageLine: caption)
+        DispatchQueue.main.asyncAfter(deadline: .now() + hold) { [weak self] in
             guard let self, self.stageHoldGeneration == generation, self.isHoldingForStageLine else { return }
             self.presentStageHold(displayIndices: displayIndices, offset: offset + 1, then: continueWork)
         }
@@ -2614,6 +2712,9 @@ class DialogueExperimentViewController: UIViewController {
             lineChangeHaptic.impactOccurred()
         }
 
+        if let previous = activeLineIndex {
+            heardDisplayIndices.insert(previous)
+        }
         activeLineIndex = newIndex
         refreshActiveKaraokeFromPlaybackTime()
 
@@ -2835,9 +2936,10 @@ class DialogueExperimentViewController: UIViewController {
         }
     }
 
-    /// Focus is conveyed by the bubble transform scale, underglow, row spacing,
-    /// and Japanese text color (secondary → label) — font size stays put so
-    /// focused lines never re-wrap.
+    /// Focus is conveyed by the bubble transform scale, underglow, and row
+    /// spacing. Japanese stays `.label` once a line has been heard (and always
+    /// in Study); unheard first-listen lines rest at `.secondaryLabel`. Font
+    /// size stays put so focused lines never re-wrap.
     private func applyRowStylesFromEmphasis() {
         for (i, bubble) in japaneseBubbles.enumerated() {
             guard displayLines.indices.contains(i), displayLines[i].isSpokenLine else { continue }
@@ -2891,7 +2993,7 @@ class DialogueExperimentViewController: UIViewController {
                     || karaokeKey != appliedKaraokeTokenIndex[index] else { continue }
             appliedJapaneseColorEmphasis[index] = emphasis
             appliedKaraokeTokenIndex[index] = karaokeKey
-            let baseColor = japaneseColor(forEmphasis: emphasis)
+            let baseColor = japaneseColor(forDisplayIndex: index, emphasis: emphasis)
             if let karaokeToken,
                let spoken = spokenIndex(forDisplayIndex: index),
                let range = tokenSync?.utf16Range(
@@ -2921,7 +3023,10 @@ class DialogueExperimentViewController: UIViewController {
         return activeKaraokeTokenIndex
     }
 
-    private func japaneseColor(forEmphasis emphasis: CGFloat) -> UIColor {
+    private func japaneseColor(forDisplayIndex index: Int, emphasis: CGFloat) -> UIColor {
+        if usesStudyTranscriptContrast || heardDisplayIndices.contains(index) {
+            return Self.activeJapaneseColor
+        }
         if emphasis <= 0.001 { return Self.inactiveJapaneseColor }
         if emphasis >= 0.999 { return Self.activeJapaneseColor }
         let from = Self.inactiveJapaneseColor.resolvedColor(with: traitCollection)
@@ -2929,8 +3034,8 @@ class DialogueExperimentViewController: UIViewController {
         return from.mixed(with: to, amount: emphasis)
     }
 
-    /// Same emphasis channel as spoken bubbles: scale the caption from center
-    /// and lift the type from secondary to label.
+    /// Same emphasis channel as spoken bubbles: scale the caption from center.
+    /// Color follows the heard / Study rule (secondary only for still-unheard).
     private func applyStageLineEmphasisFromEmphasis() {
         for (index, label) in stageCaptionLabels.enumerated() {
             guard let label else { continue }
@@ -2939,7 +3044,7 @@ class DialogueExperimentViewController: UIViewController {
             label.transform = abs(scale - 1) > 0.001
                 ? CGAffineTransform(scaleX: scale, y: scale)
                 : .identity
-            label.textColor = japaneseColor(forEmphasis: emphasis)
+            label.textColor = japaneseColor(forDisplayIndex: index, emphasis: emphasis)
         }
     }
 
@@ -3065,7 +3170,11 @@ class DialogueExperimentViewController: UIViewController {
                 audioKey: example.audioKey ?? "",
                 cacheMetadata: example.remoteAudioCacheMetadata,
                 lineIndex: spokenIndex,
-                dialogueLines: spokenLineTexts
+                dialogueLines: spokenLineTexts,
+                timeRange: alignedLines.indices.contains(spokenIndex)
+                    ? alignedLines[spokenIndex].timeRange
+                    : nil,
+                tokenSync: tokenSync
             )
         } else {
             dialogueLineAudio = nil
@@ -3236,7 +3345,10 @@ class DialogueExperimentViewController: UIViewController {
             to: label,
             text: line.japanese,
             font: japaneseFont,
-            textColor: Self.inactiveJapaneseColor
+            textColor: japaneseColor(
+                forDisplayIndex: index,
+                emphasis: lineEmphasis.indices.contains(index) ? lineEmphasis[index] : 0
+            )
         )
         DialogueContentLineWrap.applyOrphanGlue(to: label)
 
@@ -3491,6 +3603,7 @@ class DialogueExperimentViewController: UIViewController {
     }
 
     func togglePlayPause() {
+        guard !isResolvingLessonAudio else { return }
         switch playbackPhase {
         case .idle, .finished:
             startPlayback(fromBeginning: true)
@@ -3554,8 +3667,8 @@ class DialogueExperimentViewController: UIViewController {
 
     func dialogueShouldSyncActiveLineFromPlayback() -> Bool { true }
 
-    /// Pause the clip and focus each stage direction for ``stageLineHold``
-    /// before the next spoken line. Role Play sequences its own holds.
+    /// Pause the clip and focus each stage direction before the next spoken
+    /// line. Role Play sequences its own holds.
     func dialogueShouldHoldForStageLinesDuringPlayback() -> Bool { true }
 
     func dialogueShowsElapsedTime() -> Bool {
@@ -3580,16 +3693,23 @@ class DialogueExperimentViewController: UIViewController {
 
     func updateTransportControls() {
         let isPlaying = playbackPhase == .playing
-        let symbolConfig = UIImage.SymbolConfiguration(pointSize: Self.transportGlyphPointSize, weight: .semibold)
-        playGlyphView.image = UIImage(
-            systemName: dialoguePlayPauseSymbolName(isPlaying: isPlaying),
-            withConfiguration: symbolConfig
-        )?.withRenderingMode(.alwaysTemplate)
-        playGlyphView.preferredSymbolConfiguration = symbolConfig
-        playPauseButton.accessibilityLabel = dialoguePlayPauseAccessibilityLabel(isPlaying: isPlaying)
-        let showPlay = dialogueShowsPlayButton()
+        let isLoading = showsPlayLoadingIndicator && isResolvingLessonAudio
+        playPauseButton.setSymbol(
+            dialoguePlayPauseSymbolName(isPlaying: isPlaying),
+            pointSize: Self.transportGlyphPointSize,
+            glyphDimension: Self.transportGlyphPointSize + 4,
+            tintColor: Self.transportGlyphColor
+        )
+        playPauseButton.accessibilityLabel = isLoading
+            ? "Loading audio"
+            : dialoguePlayPauseAccessibilityLabel(isPlaying: isPlaying)
+        let showPlay = isLoading || (dialogueShowsPlayButton() && !isResolvingLessonAudio)
+        let snapSpinnerIn = playPauseButton.isHidden && showPlay && isLoading
+        playPauseButton.setLoading(isLoading, animated: !snapSpinnerIn)
         playPauseButton.isHidden = !showPlay
-        playPauseButton.isUserInteractionEnabled = showPlay
+        // Stay enabled while loading so the spinner isn't dimmed with the glass control.
+        playPauseButton.isEnabled = true
+        playPauseButton.isUserInteractionEnabled = showPlay && !isResolvingLessonAudio
         let showOverflow = dialogueShowsOverflowButton()
         overflowButton.isHidden = !showOverflow
         overflowButton.isUserInteractionEnabled = showOverflow
@@ -3744,9 +3864,6 @@ class DialogueExperimentViewController: UIViewController {
         let hundredths = Int((clamped - floor(clamped)) * 100)
         return String(format: "%02d:%02d.%02d", minutes, seconds, hundredths)
     }
-
-    /// Pause after a stage direction so the scene can land before the next line.
-    private static let stageLineHold: TimeInterval = 0.75
 
     /// Shared duration for the bubble emphasis, follow-along scroll, and
     /// quick-check focus fade so those motions read as one gesture.
@@ -3944,7 +4061,7 @@ extension DialogueExperimentViewController {
 
     func dialogueJapaneseColor(forLineAt index: Int) -> UIColor {
         let emphasis = lineEmphasis.indices.contains(index) ? lineEmphasis[index] : 0
-        return japaneseColor(forEmphasis: emphasis)
+        return japaneseColor(forDisplayIndex: index, emphasis: emphasis)
     }
 
     func dialogueSetActiveLine(_ index: Int?, animated: Bool) {

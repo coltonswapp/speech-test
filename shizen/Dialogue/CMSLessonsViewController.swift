@@ -232,7 +232,11 @@ final class CMSLessonsViewController: UIViewController {
 
     private func openLesson(_ lesson: WaterfallLesson) {
         guard let id = lesson.id else { return }
-        let picker = LessonScenarioPickerViewController(collectionID: id, fallbackTitle: lesson.title)
+        let picker = LessonScenarioPickerViewController(
+            collectionID: id,
+            fallbackTitle: lesson.title,
+            unlockAllScenesForQA: true
+        )
         navigationController?.pushViewController(picker, animated: true)
     }
 }

@@ -240,7 +240,10 @@ public final class FlashcardStackView: UIView, UIGestureRecognizerDelegate {
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         var view = touch.view
         while let current = view, current !== self {
-            if current is UIControl { return false }
+            if current is UIControl {
+                // The dictionary button takes taps. A drag still swipes the card.
+                return gestureRecognizer is UIPanGestureRecognizer
+            }
             view = current.superview
         }
         return true

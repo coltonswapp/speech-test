@@ -23,8 +23,35 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
     /// Called when the user taps the chevron on the compact callout.
     public var onRequestDictionaryDetail: ((_ surface: String, _ sentence: String) -> Void)?
 
+    /// Long-press drag committed a contiguous span of two or more tokens.
+    /// `surface` is the sentence text covered by that span.
+    public var onSpanSelected: ((_ tokenRange: ClosedRange<Int>, _ surface: String) -> Void)?
+
+    /// Fired when a long press begins multi-word selection.
+    public static var onRangeSelectionModeEntered: (() -> Void)?
+
+    /// Fired after tokens are applied, including an empty list while tokenization is in flight.
+    public var onTokensApplied: ((_ tokenCount: Int) -> Void)?
+
     /// Inner text view for layout anchors (e.g. align controls to the sentence line).
     public var sentenceLineView: LyricsInsetUnderlineTextView { sentenceTextView }
+
+    public var tokenCount: Int { sentenceTextView.tokenCount }
+
+    /// Shows the multi-word pill on an exact token span.
+    public func showSpanHighlight(_ tokenRange: ClosedRange<Int>) {
+        sentenceTextView.setDefinitionSelectionHighlight(tokenRange: tokenRange)
+    }
+
+    /// Display text of each token in the range, in order.
+    public func tokenTexts(in tokenRange: ClosedRange<Int>) -> [String] {
+        sentenceTextView.tokenTexts(in: tokenRange)
+    }
+
+    /// Tokens that share this index's dictionary lookup surface.
+    public func lookupTokenRange(for index: Int) -> ClosedRange<Int>? {
+        sentenceTextView.lookupTokenRange(for: index)
+    }
 
     private let sentenceTextView = LyricsInsetUnderlineTextView()
     private let tokenizingIndicator: NNLoadingSpinner = {
@@ -40,7 +67,18 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
     private var scrollObservation: NSKeyValueObservation?
 
     private let selectionFeedback = UISelectionFeedbackGenerator()
+    private let rangeModeFeedback = UIImpactFeedbackGenerator(style: .medium)
+    private let clauseBoundaryFeedback = UIImpactFeedbackGenerator(style: .light)
+    private var didSignalClauseBoundary = false
     private var lastScrubTokenIndex: Int?
+    private var isRangeSelecting = false
+    private var rangeAnchorIndex: Int?
+    private var rangeSelection: ClosedRange<Int>?
+    private var suppressSingleTokenPan = false
+    private var consumeWordTap = false
+    private var scrubPan: UIPanGestureRecognizer?
+    private weak var lockedScrollView: UIScrollView?
+    private var lockedScrollWasEnabled = true
     private var showsFurigana = true
     private var tokenizeTask: Task<Void, Never>?
     private var observedTokenizerNotification: Notification.Name?
@@ -89,9 +127,20 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         pan.maximumNumberOfTouches = 1
         sentenceTextView.addGestureRecognizer(pan)
+        scrubPan = pan
+
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleRangeLongPress(_:)))
+        longPress.minimumPressDuration = 0.4
+        longPress.allowableMovement = 12
+        longPress.delegate = self
+        sentenceTextView.addGestureRecognizer(longPress)
 
         sentenceTextView.onWordTapped = { [weak self] _, _, tokenIndex in
             guard let self else { return }
+            if self.consumeWordTap {
+                self.consumeWordTap = false
+                return
+            }
             if self.lastScrubTokenIndex == tokenIndex {
                 self.applyTokenIndex(nil, fromUser: true, showCallout: false)
             } else {
@@ -100,6 +149,7 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         }
 
         selectionFeedback.prepare()
+        rangeModeFeedback.prepare()
         bindEngineNotifications()
     }
 
@@ -126,6 +176,7 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         super.willMove(toWindow: newWindow)
         guard newWindow == nil else { return }
         tokenizeTask?.cancel()
+        cancelRangeSelection()
         if calloutIsVisible {
             DefinitionCalloutPresenter.shared.dismiss(animated: false)
         }
@@ -195,6 +246,7 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
 
         if clearInteraction {
             dismissCallout(animated: false)
+            cancelRangeSelection()
             lastScrubTokenIndex = nil
             sentenceTextView.setDefinitionSelectionHighlight(tokenIndex: nil)
             onSelectionChanged?(nil, nil)
@@ -238,6 +290,7 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
             preservesTokenBoundaries: preservesTokenBoundaries
         )
         noteTextLayoutChanged()
+        onTokensApplied?(sentenceTextView.tokenCount)
     }
 
     private func reapplyTokenizationIfConfigured() {
@@ -250,6 +303,7 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
 
         if clearInteraction {
             dismissCallout(animated: false)
+            cancelRangeSelection()
             lastScrubTokenIndex = nil
             sentenceTextView.setDefinitionSelectionHighlight(tokenIndex: nil)
             onSelectionChanged?(nil, nil)
@@ -354,6 +408,12 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
     // MARK: - Interaction
 
     @objc private func handlePan(_ g: UIPanGestureRecognizer) {
+        if isRangeSelecting || suppressSingleTokenPan {
+            if g.state == .ended || g.state == .cancelled || g.state == .failed {
+                suppressSingleTokenPan = false
+            }
+            return
+        }
         switch g.state {
         case .began, .changed, .ended:
             break
@@ -363,6 +423,116 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         let p = g.location(in: sentenceTextView)
         guard let idx = sentenceTextView.tokenIndex(at: p) else { return }
         applyTokenIndex(idx, fromUser: true, showCallout: true)
+    }
+
+    @objc private func handleRangeLongPress(_ g: UILongPressGestureRecognizer) {
+        let point = g.location(in: sentenceTextView)
+        switch g.state {
+        case .began:
+            guard let index = sentenceTextView.tokenIndex(at: point) else { return }
+            isRangeSelecting = true
+            consumeWordTap = true
+            rangeAnchorIndex = index
+            rangeSelection = nil
+            setEnclosingScrollLocked(true)
+            rangeModeFeedback.impactOccurred()
+            rangeModeFeedback.prepare()
+            selectionFeedback.prepare()
+            clauseBoundaryFeedback.prepare()
+            didSignalClauseBoundary = false
+            Self.onRangeSelectionModeEntered?()
+            updateRangeSelection(to: index, haptic: false)
+        case .changed:
+            guard isRangeSelecting, let index = sentenceTextView.tokenIndex(at: point) else { return }
+            updateRangeSelection(to: index, haptic: true)
+        case .ended:
+            finishRangeSelection(commit: true)
+        case .cancelled, .failed:
+            let anchor = rangeAnchorIndex
+            finishRangeSelection(commit: false)
+            if let anchor {
+                applyTokenIndex(anchor, fromUser: false, showCallout: true)
+            }
+        default:
+            break
+        }
+    }
+
+    private func updateRangeSelection(to index: Int, haptic: Bool) {
+        guard let anchor = rangeAnchorIndex else { return }
+        let limited = sentenceTextView.tokenIndexLimitedToClause(anchor: anchor, proposed: index)
+        if limited != index, !didSignalClauseBoundary {
+            didSignalClauseBoundary = true
+            clauseBoundaryFeedback.impactOccurred(intensity: 0.7)
+            clauseBoundaryFeedback.prepare()
+        }
+        let raw = min(anchor, limited)...max(anchor, limited)
+        let range = sentenceTextView.tokenRangeExpandingLookupGroups(raw)
+        guard rangeSelection != range else { return }
+        rangeSelection = range
+        if haptic {
+            selectionFeedback.selectionChanged()
+            selectionFeedback.prepare()
+        }
+        sentenceTextView.setDefinitionSelectionHighlight(tokenRange: range)
+        if range.count > 1 {
+            dismissCallout(animated: true)
+        }
+    }
+
+    private func finishRangeSelection(commit: Bool) {
+        let range = rangeSelection
+        let wasSelecting = isRangeSelecting
+        let panIsTracking = scrubPan?.state == .began || scrubPan?.state == .changed
+        cancelRangeSelection()
+        if panIsTracking {
+            suppressSingleTokenPan = true
+        }
+        if wasSelecting {
+            DispatchQueue.main.async { [weak self] in
+                self?.consumeWordTap = false
+            }
+        }
+        guard wasSelecting, commit, let range else { return }
+
+        if range.count <= 1 || onSpanSelected == nil {
+            applyTokenIndex(range.lowerBound, fromUser: true, showCallout: true)
+            return
+        }
+        guard let surface = sentenceTextView.surface(covering: range) else {
+            applyTokenIndex(range.lowerBound, fromUser: true, showCallout: true)
+            return
+        }
+        lastScrubTokenIndex = nil
+        dismissCallout(animated: true)
+        onSpanSelected?(range, surface)
+    }
+
+    private func cancelRangeSelection() {
+        isRangeSelecting = false
+        rangeAnchorIndex = nil
+        rangeSelection = nil
+        didSignalClauseBoundary = false
+        setEnclosingScrollLocked(false)
+    }
+
+    private func setEnclosingScrollLocked(_ locked: Bool) {
+        if locked {
+            guard lockedScrollView == nil else { return }
+            var view = superview
+            while let current = view {
+                if let scroll = current as? UIScrollView {
+                    lockedScrollView = scroll
+                    lockedScrollWasEnabled = scroll.isScrollEnabled
+                    scroll.isScrollEnabled = false
+                    return
+                }
+                view = current.superview
+            }
+        } else if let scroll = lockedScrollView {
+            scroll.isScrollEnabled = lockedScrollWasEnabled
+            lockedScrollView = nil
+        }
     }
 
     @objc private func handleDismissTap(_ g: UITapGestureRecognizer) {

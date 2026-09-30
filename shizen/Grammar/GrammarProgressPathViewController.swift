@@ -52,6 +52,21 @@ final class GrammarProgressPathViewController: UIViewController {
         configureCollectionView()
         configureDataSource()
         reloadContent()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(storedProgressDidChange),
+            name: GrammarMasteryStore.didChange,
+            object: masteryStore
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func storedProgressDidChange() {
+        reloadContent()
+        onProgressDidChange?()
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -213,7 +228,12 @@ final class GrammarProgressPathViewController: UIViewController {
     private func reloadContent() {
         var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
         snapshot.appendSections([Section.points.rawValue])
-        snapshot.appendItems(points.map(\.id), toSection: Section.points.rawValue)
+        let ids = points.map(\.id)
+        snapshot.appendItems(ids, toSection: Section.points.rawValue)
+        let visible = ids.filter { dataSource.snapshot().itemIdentifiers.contains($0) }
+        if !visible.isEmpty {
+            snapshot.reconfigureItems(visible)
+        }
 
         dataSource.apply(snapshot, animatingDifferences: view.window != nil) { [weak self] in
             self?.reportEmbeddedHeightIfNeeded()

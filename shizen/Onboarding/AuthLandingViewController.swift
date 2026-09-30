@@ -4,6 +4,8 @@ import UIKit
 
 final class AuthLandingViewController: UIViewController {
 
+    static let presentationIdentifier = "shizen.auth.login"
+
     enum Entry {
         case original
         case journey
@@ -11,6 +13,25 @@ final class AuthLandingViewController: UIViewController {
 
     var isPreviewMode = false
     var entry: Entry = .original
+
+    /// Page sheet over the app. No close control; the user signs in to leave.
+    static func makeLoginSheet() -> UINavigationController {
+        let landing = AuthLandingViewController()
+        landing.entry = .original
+        let navigationController = UINavigationController(rootViewController: landing)
+        navigationController.setNavigationBarHidden(true, animated: false)
+        navigationController.restorationIdentifier = presentationIdentifier
+        navigationController.modalPresentationStyle = .pageSheet
+        navigationController.isModalInPresentation = true
+        navigationController.overrideUserInterfaceStyle = .dark
+        navigationController.view.backgroundColor = .black
+        if let sheet = navigationController.sheetPresentationController {
+            sheet.detents = [.large()]
+            sheet.prefersGrabberVisible = false
+            sheet.prefersScrollingExpandsWhenScrolledToEdge = false
+        }
+        return navigationController
+    }
 
     private var onboardingCoordinator: OnboardingCoordinator?
     private var introHost: UIHostingController<IntroPage>?
@@ -79,7 +100,7 @@ final class AuthLandingViewController: UIViewController {
     }
 
     private func updateCloseButtonVisibility() {
-        closeButton.isHidden = !(isPreviewMode || presentingViewController != nil)
+        closeButton.isHidden = !isPreviewMode
     }
 
     @objc private func closeTapped() {
@@ -88,31 +109,49 @@ final class AuthLandingViewController: UIViewController {
     }
 
     @objc private func appleTapped() {
-        beginOnboarding(provider: .apple, toast: "Apple Sign-In isn’t configured yet")
+        signInThenOnboard(provider: .apple)
     }
 
     @objc private func loginTapped() {
-        beginOnboarding(provider: .guest, toast: "Log in isn’t configured yet")
+        signInThenOnboard(provider: .google)
     }
 
     @objc private func signUpTapped() {
-        beginOnboarding(provider: .guest, toast: nil)
-    }
-
-    private func beginOnboarding(provider: AuthProvider, toast: String?) {
         HapticsHelper.lightHaptic()
-        let start: () -> Void = { [weak self] in
+        pushOnboarding(provider: nil)
+    }
+
+    private func signInThenOnboard(provider: AuthProvider) {
+        HapticsHelper.lightHaptic()
+        Task { @MainActor [weak self] in
             guard let self else { return }
-            self.pushOnboarding(provider: provider)
-        }
-        if let toast {
-            showToast(toast, completion: start)
-        } else {
-            start()
+            self.view.isUserInteractionEnabled = false
+            defer { self.view.isUserInteractionEnabled = true }
+            do {
+                let isNewUser = try await AuthService.shared.signIn(with: provider, presenting: self)
+                if await self.shouldEnterApp(isNewUser: isNewUser) {
+                    OnboardingStore.markCompletedForCurrentUser()
+                    Task { await UserProfileStore.shared.flushSavedBufferIfNeeded() }
+                    self.signUpComplete()
+                    return
+                }
+                self.pushOnboarding(provider: provider)
+            } catch AuthServiceError.canceled {
+                return
+            } catch {
+                self.showToast(error.localizedDescription)
+            }
         }
     }
 
-    private func pushOnboarding(provider: AuthProvider) {
+    /// Existing Firebase accounts and profiles skip onboarding. Preview always walks the steps.
+    private func shouldEnterApp(isNewUser: Bool) async -> Bool {
+        guard !isPreviewMode else { return false }
+        if !isNewUser { return true }
+        return await UserProfileStore.shared.accountPresence() == .exists
+    }
+
+    private func pushOnboarding(provider: AuthProvider?) {
         pushOnboarding(provider: provider, flow: .original)
     }
 
@@ -127,7 +166,7 @@ final class AuthLandingViewController: UIViewController {
         navigationController?.pushViewController(coordinator.start(), animated: true)
     }
 
-    private func showToast(_ message: String, completion: @escaping () -> Void) {
+    private func showToast(_ message: String, completion: (() -> Void)? = nil) {
         let toast = UIView()
         toast.backgroundColor = UIColor.black.withAlphaComponent(0.78)
         toast.layer.cornerRadius = 12
@@ -165,7 +204,7 @@ final class AuthLandingViewController: UIViewController {
                 toast.alpha = 0
             }, completion: { _ in
                 toast.removeFromSuperview()
-                completion()
+                completion?()
             })
         }
     }

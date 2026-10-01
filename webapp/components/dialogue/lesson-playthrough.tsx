@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  Check,
   ChevronLeft,
   ExternalLink,
   Pause,
@@ -32,11 +33,20 @@ import {
   isSpokenLine,
   isStageLine,
   type DialogueLine,
-  type PublishedToken,
-  type PublishedTokenSync,
+  type VariantTokenSync,
 } from "@/lib/dialogue/types";
 import { ttsApi } from "@/lib/tts/client";
 import { cn } from "@/lib/utils";
+
+/** Studio playthrough karaoke — allows untimed tokens (unlike published export). */
+type PlaythroughToken = {
+  text: string;
+  startSeconds: number | null;
+};
+
+type PlaythroughTokenSync = {
+  lines: Array<{ text: string; tokens: PlaythroughToken[] }>;
+};
 
 type PlaylistItem = {
   scenarioId: string;
@@ -46,13 +56,47 @@ type PlaylistItem = {
   total: number;
   audioUrl: string;
   lines: DialogueLine[];
-  tokenSync: PublishedTokenSync | null;
+  tokenSync: PlaythroughTokenSync | null;
   /** Scenario thumb, else collection; null when neither has a URL. */
   thumbnailUrl: string | null;
+  /** Selected take — needed for approve+publish (Gate A). */
+  projectId: string | null;
+  variantId: string | null;
+  /** Selected take is already the published Gate A take. */
+  isApprovedPublished: boolean;
 };
 
+function toPlaythroughSync(
+  sync:
+    | PlaythroughTokenSync
+    | VariantTokenSync
+    | {
+        lines: Array<{
+          text: string;
+          tokens: Array<{ text: string; startSeconds?: number | null }>;
+        }>;
+      }
+    | null
+    | undefined,
+): PlaythroughTokenSync | null {
+  if (!sync?.lines.length) return null;
+  const lines = sync.lines
+    .map((line) => ({
+      text: line.text,
+      tokens: line.tokens.map((token) => ({
+        text: token.text,
+        startSeconds:
+          token.startSeconds != null && Number.isFinite(token.startSeconds)
+            ? token.startSeconds
+            : null,
+      })),
+    }))
+    .filter((line) => line.tokens.length > 0);
+  return lines.length > 0 ? { lines } : null;
+}
+
 function spokenStartSeconds(
-  tokenSync: PublishedTokenSync | null,
+  tokenSync: PlaythroughTokenSync | null,
   spokenLineIndex: number,
 ): number | null {
   const line = tokenSync?.lines[spokenLineIndex];
@@ -64,7 +108,7 @@ function spokenStartSeconds(
 }
 
 function activeSpokenIndex(
-  tokenSync: PublishedTokenSync | null,
+  tokenSync: PlaythroughTokenSync | null,
   currentTime: number,
 ): number | null {
   if (!tokenSync?.lines.length) return null;
@@ -106,7 +150,7 @@ function PlaythroughTokenSpan({
   token,
   active,
 }: {
-  token: PublishedToken;
+  token: PlaythroughToken;
   active: boolean;
 }) {
   return (
@@ -128,16 +172,22 @@ function DialoguePlaybackPanel({
   playing,
   highlightedSpoken,
   onSpokenClick,
+  approveControl,
 }: {
   lines: DialogueLine[];
-  tokenSync: PublishedTokenSync | null;
+  tokenSync: PlaythroughTokenSync | null;
   currentTime: number;
   playing: boolean;
   highlightedSpoken: number | null;
   onSpokenClick: (spokenIndex: number) => void;
+  /** Tiny approve+publish control under karaoke when sync exists. */
+  approveControl?: ReactNode;
 }) {
   const spokenMap = useMemo(() => spokenIndexByDialogueIndex(lines), [lines]);
   const activeRowRef = useRef<HTMLDivElement | null>(null);
+  const hasAnyKaraoke = Boolean(
+    tokenSync?.lines.some((line) => line.tokens.length > 0),
+  );
 
   useEffect(() => {
     if (!playing || highlightedSpoken == null) return;
@@ -244,26 +294,93 @@ function DialoguePlaybackPanel({
           </div>
         );
       })}
+      {hasAnyKaraoke && approveControl ? (
+        <div className="sticky bottom-0 mt-1 flex justify-center border-t border-border/40 bg-muted/40 pt-2">
+          {approveControl}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-async function resolveAudioUrl(
+/**
+ * Resolve playable audio + karaoke for a scene.
+ * Karaoke uses take token sync whenever it exists — approval/publish is not
+ * required (scenario.tokenSync is only filled at Gate A publish).
+ */
+async function resolvePlaylistScene(
   scenario: DialogueCollectionScenario,
-  collectionId: string,
-): Promise<string | null> {
-  if (scenario.publishedAudioUrl) return scenario.publishedAudioUrl;
+  collection: DialogueCollection,
+): Promise<Omit<PlaylistItem, "index" | "total"> | null> {
+  const slug = scenarioSlug(scenario);
+  let audioUrl: string | null = scenario.publishedAudioUrl;
+  let tokenSync = toPlaythroughSync(scenario.tokenSync);
+  let projectId: string | null = null;
+  let variantId: string | null = null;
+  let isApprovedPublished = false;
+
   try {
     const { project } = await dialogueApi.getScenarioAudio(
-      collectionId,
-      scenarioSlug(scenario),
+      collection.id,
+      slug,
     );
-    if (!project?.selectedVariantId) return null;
-    // Prefer selected take; byte count unknown — cache-bust with project id.
-    return ttsApi.variantAudioUrl(project.id, project.selectedVariantId);
+    if (project?.selectedVariantId) {
+      projectId = project.id;
+      variantId = project.selectedVariantId;
+      isApprovedPublished =
+        !!scenario.publishedAudioUrl &&
+        scenario.publishedVariantId === variantId;
+
+      const { variants } = await ttsApi.listVariants(project.id);
+      const selected = variants.find((v) => v.id === variantId) ?? null;
+      const published =
+        scenario.publishedVariantId != null
+          ? (variants.find((v) => v.id === scenario.publishedVariantId) ?? null)
+          : null;
+
+      if (!audioUrl && selected && selected.audioByteCount > 0) {
+        audioUrl = ttsApi.variantAudioUrl(
+          project.id,
+          selected.id,
+          selected.audioByteCount,
+        );
+      }
+
+      // Karaoke for the audio we will play — never gate on approval.
+      if (scenario.publishedAudioUrl) {
+        // Playing published CDN clip: published snapshot, else published take sync.
+        tokenSync =
+          toPlaythroughSync(scenario.tokenSync) ??
+          toPlaythroughSync(published?.tokenSync) ??
+          // Same take selected: fall back to working sync (approval without republish).
+          (scenario.publishedVariantId === variantId
+            ? toPlaythroughSync(selected?.tokenSync)
+            : null);
+      } else {
+        // Playing selected (possibly unapproved) take — use its sync when present.
+        tokenSync =
+          toPlaythroughSync(selected?.tokenSync) ??
+          toPlaythroughSync(scenario.tokenSync);
+      }
+    }
   } catch {
-    return null;
+    // Keep published URL / scenario.tokenSync when audio project lookup fails.
   }
+
+  if (!audioUrl) return null;
+
+  return {
+    scenarioId: scenario.id,
+    slug,
+    title: scenario.menuTitle,
+    audioUrl,
+    lines: scenario.lines,
+    tokenSync,
+    thumbnailUrl: resolveThumbnailUrl(scenario, collection),
+    projectId,
+    variantId,
+    isApprovedPublished,
+  };
 }
 
 /** Published CDN URLs are absolute; Studio take proxies are same-origin paths. */
@@ -277,22 +394,9 @@ async function buildPlaylist(
   const ordered = [...collection.scenarios].sort(
     (a, b) => a.orderIndex - b.orderIndex,
   );
-  const resolved: Array<Omit<PlaylistItem, "index" | "total"> | null> =
-    await Promise.all(
-      ordered.map(async (scenario) => {
-        const audioUrl = await resolveAudioUrl(scenario, collection.id);
-        if (!audioUrl) return null;
-        return {
-          scenarioId: scenario.id,
-          slug: scenarioSlug(scenario),
-          title: scenario.menuTitle,
-          audioUrl,
-          lines: scenario.lines,
-          tokenSync: scenario.tokenSync,
-          thumbnailUrl: resolveThumbnailUrl(scenario, collection),
-        };
-      }),
-    );
+  const resolved = await Promise.all(
+    ordered.map((scenario) => resolvePlaylistScene(scenario, collection)),
+  );
   const playable = resolved.filter(
     (item): item is Omit<PlaylistItem, "index" | "total"> => item != null,
   );
@@ -314,6 +418,7 @@ function LessonPlaythroughSession({
   lessonTitle?: string | null;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["dialogue-collection", collectionId],
     queryFn: () => dialogueApi.getCollection(collectionId),
@@ -324,6 +429,9 @@ function LessonPlaythroughSession({
   const [currentTime, setCurrentTime] = useState(0);
   const [loadingAudio, setLoadingAudio] = useState(false);
   const [selectedSpoken, setSelectedSpoken] = useState<number | null>(null);
+  const [approvedOverride, setApprovedOverride] = useState<
+    Record<string, boolean>
+  >({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const blobUrlRef = useRef<string | null>(null);
@@ -442,28 +550,9 @@ function LessonPlaythroughSession({
         audio.preload = "auto";
         audio.src = src;
         audio.onended = () => {
+          // Stay on this scene — no auto-advance. Rewind so Play restarts cleanly.
           setPlaying(false);
           stopRaf();
-          const list = playlistRef.current;
-          const prev = sceneIndexRef.current;
-          const next = prev + 1;
-          if (list && next < list.length) {
-            // Advance without autoplay — tear down clip; wait for Play.
-            audio.onended = null;
-            audio.removeAttribute("src");
-            audio.load();
-            audioRef.current = null;
-            loadedScenarioIdRef.current = null;
-            if (blobUrlRef.current) {
-              URL.revokeObjectURL(blobUrlRef.current);
-              blobUrlRef.current = null;
-            }
-            setCurrentTime(0);
-            setSelectedSpoken(null);
-            setSceneIndex(next);
-            return;
-          }
-          // Last scene: rewind so Play restarts from the beginning.
           audio.currentTime = 0;
           setCurrentTime(0);
         };
@@ -586,12 +675,69 @@ function LessonPlaythroughSession({
     void playFrom(current, start);
   }
 
+  /**
+   * Same Gate A path as Review queue "Publish to database":
+   * select take → publishScenario → markReviewed.
+   */
+  const approvePublishMutation = useMutation({
+    mutationFn: async (item: PlaylistItem) => {
+      if (!item.projectId || !item.variantId) {
+        throw new Error("This scene has no selected take to approve.");
+      }
+      await ttsApi.selectVariant(item.projectId, item.variantId);
+      const published = await dialogueApi.publishScenario(
+        collectionId,
+        item.slug,
+      );
+      // Review queue always mark-reviews after publish. Human takes may 409 —
+      // publish already succeeded; only fail the toast if publish failed.
+      try {
+        await ttsApi.markReviewed(item.projectId, item.variantId);
+      } catch {
+        /* non-auto takes: Gate A publish is enough */
+      }
+      return published;
+    },
+    onSuccess: (result, item) => {
+      setApprovedOverride((prev) => ({ ...prev, [item.scenarioId]: true }));
+      void queryClient.invalidateQueries({ queryKey: ["dialogue-collections"] });
+      void queryClient.invalidateQueries({ queryKey: ["dialogue-collection"] });
+      void queryClient.invalidateQueries({ queryKey: ["dialogue-scenario"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["dialogue-collection-audio-status"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["lesson-playthrough-playlist", collectionId],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
+      toast.success(
+        result.hasTokenKaraoke
+          ? "Approved & published with karaoke."
+          : "Approved & published.",
+        {
+          description: "Gate A only — lesson visibility unchanged.",
+          duration: 4000,
+        },
+      );
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Could not approve."),
+  });
+
   const timingActive =
     playing && current
       ? activeSpokenIndex(current.tokenSync, currentTime)
       : null;
   const highlightedSpoken =
     timingActive != null ? timingActive : selectedSpoken;
+
+  const sceneApproved =
+    current != null &&
+    (approvedOverride[current.scenarioId] === true ||
+      current.isApprovedPublished);
+  const canApprovePublish = Boolean(
+    current?.projectId && current.variantId && current.tokenSync,
+  );
 
   if (isLoading || building) {
     return (
@@ -718,6 +864,40 @@ function LessonPlaythroughSession({
           playing={playing}
           highlightedSpoken={highlightedSpoken}
           onSpokenClick={handleSpokenClick}
+          approveControl={
+            canApprovePublish ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className={cn(
+                  "h-7 min-h-7 gap-1 px-2 text-[11px] touch-manipulation",
+                  sceneApproved
+                    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                    : "border-border/70 text-muted-foreground hover:text-foreground",
+                )}
+                disabled={
+                  sceneApproved ||
+                  approvePublishMutation.isPending ||
+                  !current.projectId ||
+                  !current.variantId
+                }
+                title={
+                  sceneApproved
+                    ? "This take is already approved and published (Gate A)"
+                    : "Approve and publish this take (same as Review queue Publish to database)"
+                }
+                onClick={() => approvePublishMutation.mutate(current)}
+              >
+                <Check className="size-3" />
+                {approvePublishMutation.isPending
+                  ? "Publishing…"
+                  : sceneApproved
+                    ? "Approved"
+                    : "Approve & publish"}
+              </Button>
+            ) : null
+          }
         />
       )}
       {current && (
@@ -741,8 +921,8 @@ function LessonPlaythroughSession({
       )}
       <p className="text-[11px] text-muted-foreground">
         Press Play to start each scene. Click a spoken line to seek when
-        stamps exist. Stage lines are shown between spoken lines — karaoke
-        follows published token stamps when present.
+        stamps exist. Scenes do not auto-advance — use Next. Karaoke follows
+        take token stamps when present (approval not required).
       </p>
     </div>
   );

@@ -113,6 +113,13 @@
       "when": 1790200000000,
       "tag": "0015_slideshow",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790300000000,
+      "tag": "0016_shizen_note_jobs",
+      "breakpoints": true
     }
   ]
 }

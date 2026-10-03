@@ -2,6 +2,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { shizenNoteJob } from "@/lib/db/schema";
+import { resolveShoheiDeliveryTarget } from "./delivery-target";
 
 const DELIVERY_TIMEOUT_MS = 15_000;
 
@@ -10,9 +11,9 @@ export async function deliverToShohei(jobId: string): Promise<void> {
   const [job] = await db.select().from(shizenNoteJob).where(eq(shizenNoteJob.id, jobId));
   if (!job) return;
 
-  const url = process.env.SHOHEI_DELIVERY_URL?.trim();
-  if (!url) {
-    await markJob(jobId, "queued", "SHOHEI_DELIVERY_URL is not set");
+  const target = resolveShoheiDeliveryTarget();
+  if (!target.ok) {
+    await markJob(jobId, "queued", target.error);
     return;
   }
 
@@ -30,9 +31,9 @@ export async function deliverToShohei(jobId: string): Promise<void> {
   };
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(target.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: target.headers,
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
     });

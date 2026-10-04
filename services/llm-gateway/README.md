@@ -41,6 +41,7 @@ The body is `{ "feature": "<name>", ...feature fields }`. Every success response
 | `dialogue_nuance` | `focused {speaker?, japanese, english?}`, `preceding[]` and `following[]` (≤2 lines each) | `naturalMeaning`, `impliedMeaning`, `notes` | `gemini-2.5-flash` | `GeminiDialogueNuance` |
 | `span_gloss` | `surface` (≤120), `sentence` | `meaning`, `note` | `gemini-2.5-flash` | `GeminiSpanGloss` (`GeminiTokenLookup.swift`) |
 | `span_breakdown` | `surface` (≤120), `sentence` | `inThisSentence`, `otherUses[]`, `partsNote` | `gemini-2.5-flash` | `GeminiSpanBreakdown` (`GeminiTokenLookup.swift`) |
+| `grammar_usage` | `pattern` (≤60), `grammarPointID?`, `lines[{speaker?, japanese, english?, focus?}]` (1–12) | `inThisScene`, `form`, `examples[]` (≤3), `note` | `gemini-2.5-flash` | `GeminiGrammarUsage` |
 
 Optional hint strings are trimmed and truncated (`dictionaryGloss` to 300 characters), not rejected.
 

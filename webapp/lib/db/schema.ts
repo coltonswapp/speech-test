@@ -395,6 +395,27 @@ export const teachingPattern = pgTable("teaching_pattern", {
     .defaultNow(),
 });
 
+// --- Shizen notes (QA notes relayed to Shohei) ---
+
+export const shizenNoteJob = pgTable("shizen_note_job", {
+  id: text("id").primaryKey(), // job_<random>
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  source: text("source").notNull(), // dialogue | quiz
+  sourceId: text("source_id").notNull(),
+  title: text("title"),
+  note: text("note").notNull(),
+  agent: text("agent").notNull().default("shohei"), // shohei | vikram | hana
+  url: text("url").notNull(),
+  noteCreatedAt: timestamp("note_created_at", { withTimezone: true }).notNull(),
+  status: text("status").notNull().default("queued"), // queued | delivered | failed
+  error: text("error"),
+});
+
 // --- Shared ---
 
 export const appSettings = pgTable("app_settings", {

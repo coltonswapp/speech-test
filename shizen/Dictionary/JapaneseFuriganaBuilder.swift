@@ -563,7 +563,7 @@ enum JapaneseFuriganaBuilder {
     fileprivate static let rubySizeFactor: CGFloat = 0.45
     fileprivate static let rubyTextColor = UIColor.secondaryLabel
     /// Bump when ruby alignment / drawing changes so cached strings don't keep the old layout.
-    private static let rubyLayoutRevision = "ruby-split-mixed-kana-v13"
+    private static let rubyLayoutRevision = "ruby-glued-runs-v14"
 
     /// Vertical gap between transcript lines in the same speaker turn.
     static let transcriptLineSpacing: CGFloat = 18
@@ -854,7 +854,10 @@ enum JapaneseFuriganaBuilder {
         for location in insertAt.reversed() {
             guard location > 0, location <= mutable.length else { continue }
             var attrs = mutable.attributes(at: location - 1, effectiveRange: nil)
-            attrs.removeValue(forKey: rubyKey)
+            // A rubyless joiner inside ヶ月 splits the run, and each half draws かげつ.
+            if !DialogueContentLineWrap.sharesRubyAnnotation(mutable, before: location) {
+                attrs.removeValue(forKey: rubyKey)
+            }
             mutable.insert(NSAttributedString(string: "\u{2060}", attributes: attrs), at: location)
         }
         return mutable
@@ -1090,7 +1093,14 @@ enum JapaneseFuriganaBuilder {
         return UIEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
     }
 
-    static func applyFlashcardDisplay(to label: FuriganaTranscriptLabel, text: String, font: UIFont, textColor: UIColor) {
+    /// `tokens` with more than one entry render as a phrase: furigana per token, wrapping only between tokens.
+    static func applyFlashcardDisplay(
+        to label: FuriganaTranscriptLabel,
+        text: String,
+        tokens: [String]? = nil,
+        font: UIFont,
+        textColor: UIColor
+    ) {
         label.textInsets = flashcardTextInsets(
             for: font,
             showFurigana: JapaneseFuriganaSettings.showOnFlashcards
@@ -1098,6 +1108,7 @@ enum JapaneseFuriganaBuilder {
         applyFlashcardContent(
             to: label,
             text: text,
+            tokens: tokens,
             font: font,
             textColor: textColor,
             showFurigana: JapaneseFuriganaSettings.showOnFlashcards
@@ -1107,10 +1118,23 @@ enum JapaneseFuriganaBuilder {
     static func applyFlashcardContent(
         to label: FuriganaTranscriptLabel,
         text: String,
+        tokens: [String]? = nil,
         font: UIFont,
         textColor: UIColor,
         showFurigana: Bool
     ) {
+        let pieces = (tokens ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if pieces.count > 1 {
+            label.attributedText = flashcardPhraseAttributedString(
+                pieces: pieces,
+                font: font,
+                textColor: textColor,
+                showFurigana: showFurigana
+            )
+            return
+        }
         if showFurigana {
             label.attributedText = flashcardAttributedString(for: text, font: font, textColor: textColor)
         } else {
@@ -1119,6 +1143,42 @@ enum JapaneseFuriganaBuilder {
             label.text = text
             label.textColor = textColor
         }
+    }
+
+    private static func flashcardPhraseAttributedString(
+        pieces: [String],
+        font: UIFont,
+        textColor: UIColor,
+        showFurigana: Bool
+    ) -> NSAttributedString {
+        let result: NSMutableAttributedString
+        if showFurigana {
+            result = NSMutableAttributedString(
+                attributedString: attributedString(joining: pieces, font: font, textColor: textColor)
+            )
+        } else {
+            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
+            result = NSMutableAttributedString()
+            for (index, piece) in pieces.enumerated() {
+                result.append(gluingCharactersForTokenWrap(NSAttributedString(string: piece, attributes: attrs)))
+                if index < pieces.count - 1 {
+                    result.append(NSAttributedString(string: "\u{200B}", attributes: attrs))
+                }
+            }
+        }
+        let fullRange = NSRange(location: 0, length: result.length)
+        var styled: [(NSRange, NSParagraphStyle)] = []
+        result.enumerateAttribute(.paragraphStyle, in: fullRange) { value, range, _ in
+            let style = ((value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle)
+                ?? NSMutableParagraphStyle()
+            style.alignment = .center
+            style.lineBreakMode = .byWordWrapping
+            styled.append((range, style))
+        }
+        for (range, style) in styled {
+            result.addAttribute(.paragraphStyle, value: style, range: range)
+        }
+        return result
     }
 
     private static func flashcardAttributedString(for text: String, font: UIFont, textColor: UIColor) -> NSAttributedString {

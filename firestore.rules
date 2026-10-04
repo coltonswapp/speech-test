@@ -21,6 +21,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Dialogue lesson ratings from POST /v1/lesson-feedback. Admin-only, like llmFeedback.
+    // lessonFeedbackRate (hourly caps) is denied here too so the intent is explicit.
+    match /lessonFeedback/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /lessonFeedbackStats/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /lessonFeedbackRate/{document=**} {
+      allow read, write: if false;
+    }
+
     match /users/{userId} {
       allow read, write: if isSignedIn() && request.auth.uid == userId;
 

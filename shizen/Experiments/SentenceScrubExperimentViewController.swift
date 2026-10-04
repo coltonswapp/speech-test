@@ -120,13 +120,12 @@ final class SentenceScrubExperimentViewController: UIViewController {
     private var nuanceDismissSnapshot: UIView?
     private var nuanceLoadTask: Task<Void, Never>?
     private var nuanceLoadRequest: GeminiDialogueNuance.Request?
+    /// Token or span the learner last selected, included in a QA note.
+    private var qaSelectionSummary: String?
 
     private static let nuanceSymbol = "sparkle.magnifyingglass"
     private static let nuanceDismissSymbol = "arrow.down.left"
     private static let nuanceSymbolPointSize: CGFloat = 22
-    private static let nuanceRevealDuration: TimeInterval = 0.46
-    private static let nuanceRevealDamping: CGFloat = 0.82
-    private static let nuanceDismissDuration: TimeInterval = 0.42
 
     private static let audioButtonSize: CGFloat = 56
     private static let audioGlyphPointSize: CGFloat = 22
@@ -225,7 +224,62 @@ final class SentenceScrubExperimentViewController: UIViewController {
         }
         let examplesMenu = UIMenu(title: "Example sentence", children: exampleActions)
 
-        return UIMenu(children: [overlayToggle, repeatAfterMe, examplesMenu])
+        var children: [UIMenuElement] = [overlayToggle, repeatAfterMe, examplesMenu]
+        if lessonQAHost?.canPresentContentQANote == true {
+            let note = UIAction(
+                title: "Note",
+                image: UIImage(systemName: "square.and.pencil")
+            ) { [weak self] _ in
+                self?.presentContentQANote()
+            }
+            children.insert(note, at: 0)
+        }
+        return UIMenu(children: children)
+    }
+
+    /// Lesson shell that pushed this scrub, when the sentence belongs to a Studio scene.
+    private var lessonQAHost: DialogueNestedPagingExperimentViewController? {
+        navigationController?.viewControllers
+            .compactMap { $0 as? DialogueNestedPagingExperimentViewController }
+            .last
+    }
+
+    private func presentContentQANote() {
+        guard let host = lessonQAHost else { return }
+        var details = ["Japanese: \(currentSentence)"]
+        if let english = qaEnglishLine() {
+            details.append("English: \(english)")
+        }
+        let speaker = dialogueContext?.focused.speaker
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !speaker.isEmpty {
+            details.append("Speaker: \(speaker)")
+        }
+        if let lineIndex = dialogueLineAudio?.lineIndex {
+            details.append("Spoken index: \(lineIndex)")
+        }
+        if let qaSelectionSummary {
+            details.append(qaSelectionSummary)
+        }
+        let title: String
+        if let lineIndex = dialogueLineAudio?.lineIndex {
+            title = "Sentence scrub · line \(lineIndex + 1)"
+        } else {
+            title = "Sentence scrub"
+        }
+        host.presentContentQANote(focusTitle: title, focusDetailLines: details)
+    }
+
+    private func qaEnglishLine() -> String? {
+        if let providedEnglish, !providedEnglish.isEmpty {
+            return providedEnglish
+        }
+        let shown = englishTranslationLabel.text?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !shown.isEmpty, shown != "Translating…", !shown.hasPrefix("Couldn’t translate") else {
+            return nil
+        }
+        return shown
     }
 
     private func refreshOptionsMenu() {
@@ -239,6 +293,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         providedTokens = nil
         tokenSync = nil
         dialogueContext = nil
+        qaSelectionSummary = nil
         stopSentencePlayback()
         updateSpeakButtonAccessibility()
         beginEnglishTranslationIfNeeded()
@@ -416,6 +471,11 @@ final class SentenceScrubExperimentViewController: UIViewController {
         ])
 
         updateSpeakButtonAccessibility()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        refreshOptionsMenu()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -608,7 +668,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         }
     }
 
-    /// Grows the card downward out of the deeper-meaning button. The glyph
+    /// Opens the card from the deeper-meaning button's corner. The glyph
     /// slides the same way, and dismiss reverses both motions.
     private func revealNuanceCard() {
         updateNuanceButton(showing: true)
@@ -621,10 +681,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         if reversesToButton {
             prepareNuanceCardForReveal()
         }
-        let animator = UIViewPropertyAnimator(
-            duration: Self.nuanceRevealDuration,
-            dampingRatio: Self.nuanceRevealDamping
-        ) {
+        let animator = GlossMotion.revealAnimator {
             self.nuanceCardView.isHidden = false
             self.nuanceCardView.alpha = 1
             self.nuanceCardView.transform = .identity
@@ -710,14 +767,13 @@ final class SentenceScrubExperimentViewController: UIViewController {
             nuanceCardView.transform = .identity
         }
 
-        let animator = UIViewPropertyAnimator(duration: Self.nuanceDismissDuration, dampingRatio: 1) {
+        let animator = GlossMotion.dismissAnimator {
             snapshot.transform = collapsed
             self.view.layoutIfNeeded()
         }
-        // Stay readable while the card leaves, then fade as it arrives at the button.
         animator.addAnimations({
             snapshot.alpha = 0
-        }, delayFactor: 0.42)
+        }, delayFactor: GlossMotion.dismissFadeDelay)
         beginNuanceAnimator(animator, endsShown: false, reversesToButton: false)
         animator.startAnimation()
     }
@@ -726,12 +782,12 @@ final class SentenceScrubExperimentViewController: UIViewController {
     private func beginNuanceModelDismiss() {
         let collapsed = nuanceCardTransformFromButton()
         let pose = presentedPose(of: nuanceCardView)
-        let animator = UIViewPropertyAnimator(duration: Self.nuanceDismissDuration, dampingRatio: 1) {
+        let animator = GlossMotion.dismissAnimator {
             self.nuanceCardView.transform = collapsed
         }
         animator.addAnimations({
             self.nuanceCardView.alpha = 0
-        }, delayFactor: 0.42)
+        }, delayFactor: GlossMotion.dismissFadeDelay)
         // Discard any in-flight reveal before planting the pose it would otherwise snap away.
         beginNuanceAnimator(animator, endsShown: false, reversesToButton: false)
         UIView.performWithoutAnimation {
@@ -760,10 +816,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         CATransaction.commit()
         nuanceDismissSnapshot = nil
 
-        let animator = UIViewPropertyAnimator(
-            duration: Self.nuanceRevealDuration,
-            dampingRatio: Self.nuanceRevealDamping
-        ) {
+        let animator = GlossMotion.revealAnimator {
             self.nuanceCardView.alpha = 1
             self.nuanceCardView.transform = .identity
             self.view.layoutIfNeeded()
@@ -819,6 +872,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
                 nuanceCardView.isHidden = false
                 nuanceCardView.alpha = 1
                 nuanceCardView.transform = .identity
+                nuanceCardView.presentPendingFeedback()
             } else {
                 nuanceCardView.isHidden = true
                 nuanceCardView.layer.removeAllAnimations()
@@ -839,16 +893,14 @@ final class SentenceScrubExperimentViewController: UIViewController {
         )
     }
 
-    private func animateNuanceCardLayoutIfVisible() {
-        guard !nuanceCardView.isHidden else { return }
-        UIView.animate(
-            withDuration: 0.28,
-            delay: 0,
-            usingSpringWithDamping: 0.9,
-            initialSpringVelocity: 0.15,
-            options: [.allowUserInteraction, .beginFromCurrentState]
-        ) {
-            self.view.layoutIfNeeded()
+    /// Thumbs wait until the card has finished growing so the two springs don't overlap.
+    private func animateNuanceCardResizeIfVisible() {
+        guard !nuanceCardView.isHidden else {
+            nuanceCardView.presentPendingFeedback()
+            return
+        }
+        GlossMotion.animateResize(in: view, joining: nuanceCardAnimator) { [weak self] in
+            self?.nuanceCardView.presentPendingFeedback()
         }
     }
 
@@ -858,18 +910,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
             CGPoint(x: nuanceButton.bounds.midX, y: nuanceButton.bounds.midY),
             to: host
         )
-        // `center` and `bounds` stay on the layout frame. `frame` is the
-        // axis-aligned box after the current transform, so it can't be used
-        // to build the next one.
-        let cardCenter = nuanceCardView.center
-        let cardSize = nuanceCardView.bounds.size
-        guard cardSize.width > 1, cardSize.height > 1 else { return .identity }
-        let scaleX = min(1, max(0.16, nuanceButton.bounds.width / cardSize.width))
-        let scaleY = min(1, max(0.16, nuanceButton.bounds.height / cardSize.height))
-        return CGAffineTransform(
-            translationX: buttonCenter.x - cardCenter.x,
-            y: buttonCenter.y - cardCenter.y
-        ).scaledBy(x: scaleX, y: scaleY)
+        return GlossMotion.collapsedTransform(for: nuanceCardView, toward: buttonCenter)
     }
 
     private func resetNuanceCard() {
@@ -914,7 +955,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
             if let cached = await GeminiDialogueNuance.cachedResult(for: request) {
                 guard !Task.isCancelled else { return }
                 self.nuanceCardView.apply(.result(cached.result, feedback: cached.feedback))
-                self.animateNuanceCardLayoutIfVisible()
+                self.animateNuanceCardResizeIfVisible()
                 return
             }
 
@@ -923,19 +964,20 @@ final class SentenceScrubExperimentViewController: UIViewController {
                 let explained = try await GeminiDialogueNuance.explain(request)
                 guard !Task.isCancelled else { return }
                 self.nuanceCardView.apply(.result(explained.result, feedback: explained.feedback))
-                self.animateNuanceCardLayoutIfVisible()
+                self.animateNuanceCardResizeIfVisible()
             } catch {
                 guard !Task.isCancelled else { return }
                 let message = (error as? LocalizedError)?.errorDescription
                     ?? error.localizedDescription
                 self.nuanceCardView.apply(.failed(message))
-                self.animateNuanceCardLayoutIfVisible()
+                self.animateNuanceCardResizeIfVisible()
             }
         }
     }
 
     private func handleSelectionChanged(index: Int?, surface: String?) {
         guard let surface, !surface.isEmpty else {
+            qaSelectionSummary = nil
             wordDictionaryDetailView.configure(surface: "")
             selectionStartDivider.isHidden = true
             return
@@ -944,18 +986,21 @@ final class SentenceScrubExperimentViewController: UIViewController {
         if let index,
            let range = scrubbableSentenceView.lookupTokenRange(for: index),
            range.count > 1 {
+            qaSelectionSummary = "Span: \(surface)"
             wordDictionaryDetailView.configureSelectedSpan(
                 surface: surface,
                 sentence: currentSentence,
                 tokens: scrubbableSentenceView.tokenTexts(in: range)
             )
         } else {
+            qaSelectionSummary = "Token: \(surface)"
             wordDictionaryDetailView.configure(surface: surface, sentence: currentSentence)
         }
         selectionStartDivider.isHidden = false
     }
 
     private func handleSpanSelected(range: ClosedRange<Int>, surface: String) {
+        qaSelectionSummary = "Span: \(surface)"
         wordDictionaryDetailView.configureSelectedSpan(
             surface: surface,
             sentence: currentSentence,

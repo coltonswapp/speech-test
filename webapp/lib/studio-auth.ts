@@ -9,6 +9,8 @@ export function isPublicPath(pathname: string): boolean {
     pathname.startsWith("/api/logout") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/public/") ||
+    pathname.startsWith("/hooks/") ||
+    pathname === "/api/client/content-qa/notes" ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico"
   );
@@ -84,9 +86,7 @@ export function bearerMatches(header: string | null): boolean {
   });
 }
 
-/** Learner-client write token for content QA (parallel to Studio agent bearer). */
-export function contentQaClientTokenMatches(header: string | null): boolean {
-  const expected = process.env.CONTENT_QA_CLIENT_TOKEN?.trim();
+function bearerEquals(header: string | null, expected: string | undefined): boolean {
   if (!expected || !header) return false;
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token) return false;
@@ -94,6 +94,16 @@ export function contentQaClientTokenMatches(header: string | null): boolean {
   const b = Buffer.from(expected);
   if (a.length !== b.length) return false;
   return timingSafeEqual(a, b);
+}
+
+/** Learner-client write token for content QA (parallel to Studio agent bearer). */
+export function contentQaClientTokenMatches(header: string | null): boolean {
+  return bearerEquals(header, process.env.CONTENT_QA_CLIENT_TOKEN?.trim());
+}
+
+/** Static token for `POST /hooks/shizen-note`. Never shipped in the app. */
+export function shizenNoteWebhookTokenMatches(header: string | null): boolean {
+  return bearerEquals(header, process.env.SHIZEN_NOTE_WEBHOOK_TOKEN?.trim());
 }
 
 /** Studio agent token or dedicated content-QA client token. */

@@ -55,6 +55,20 @@ const fallback = parse("物置", {
 });
 assert.deepEqual(fallback.otherUses, ["物置小屋 — a storage shed"]);
 
+const framed = parse("似合う", {
+  inThisSentence: "This word is used to say that something looks good on someone.",
+  otherUses: [],
+  kanjiNote: "",
+});
+assert.equal(framed.inThisSentence, "Used to say that something looks good on someone.");
+
+const alreadyDirect = parse("似合う", {
+  inThisSentence: "Used to say something looks good on someone.",
+  otherUses: [],
+  kanjiNote: "",
+});
+assert.equal(alreadyDirect.inThisSentence, "Used to say something looks good on someone.");
+
 const prompt = commonUses.build({
   surface: "物置",
   sentence: "物置にしまう。",
@@ -63,5 +77,7 @@ const prompt = commonUses.build({
 assert.match(prompt, /物置小屋 \(ものおきごや\) — a storage shed/);
 assert.match(prompt, /If the Japanese is already all kana, do not add a reading/);
 assert.match(prompt, /Empty string when it doesn't help\. No readings/);
+assert.match(prompt, /Used to say/);
+assert.match(prompt, /Do not start with "This word is used"/);
 
 console.log("common_uses selftest ok");

@@ -42,7 +42,7 @@ enum DialogueContentLineWrap {
 
     /// Word-joiners plus word-wrapping, matching what the label draws.
     static func preparingForLayout(_ attributed: NSAttributedString) -> NSAttributedString {
-        let glued = gluingOrphanPunctuation(in: attributed)
+        let glued = gluingOrphanPunctuation(in: gluingRubyRuns(in: attributed))
         let mutable = NSMutableAttributedString(attributedString: glued)
         let fullRange = NSRange(location: 0, length: mutable.length)
         mutable.enumerateAttribute(.paragraphStyle, in: fullRange, options: []) { value, range, _ in
@@ -110,6 +110,48 @@ enum DialogueContentLineWrap {
         }
         return mutable
     }
+
+    /// Joins the characters under one reading (罪悪感 / ざいあくかん) so a wrap
+    /// can't split the base. Ruby is drawn once over the first line's part,
+    /// so a split run crams its reading against the previous word.
+    /// The joiner keeps the ruby attribute, leaving the run contiguous.
+    static func gluingRubyRuns(in attributed: NSAttributedString) -> NSAttributedString {
+        guard attributed.length > 1 else { return attributed }
+        let ns = attributed.string as NSString
+        var locations: [Int] = []
+        var location = 0
+        while location < ns.length {
+            let composed = ns.rangeOfComposedCharacterSequence(at: location)
+            let next = NSMaxRange(composed)
+            if next < ns.length,
+               ns.character(at: location) != wordJoinerUnit,
+               ns.character(at: next) != wordJoinerUnit,
+               sharesRubyAnnotation(attributed, before: next) {
+                locations.append(next)
+            }
+            location = next
+        }
+        guard !locations.isEmpty else { return attributed }
+
+        let mutable = NSMutableAttributedString(attributedString: attributed)
+        for location in locations.reversed() {
+            let attrs = mutable.attributes(at: location - 1, effectiveRange: nil)
+            mutable.insert(NSAttributedString(string: wordJoiner, attributes: attrs), at: location)
+        }
+        return mutable
+    }
+
+    /// True when the characters on both sides of `location` sit under the same ruby annotation.
+    static func sharesRubyAnnotation(_ attributed: NSAttributedString, before location: Int) -> Bool {
+        guard location > 0, location < attributed.length else { return false }
+        let rubyKey = NSAttributedString.Key(kCTRubyAnnotationAttributeName as String)
+        guard let previous = attributed.attribute(rubyKey, at: location - 1, effectiveRange: nil),
+              let next = attributed.attribute(rubyKey, at: location, effectiveRange: nil)
+        else { return false }
+        return CFEqual(previous as CFTypeRef, next as CFTypeRef)
+    }
+
+    private static let wordJoinerUnit: unichar = 0x2060
 
     private static func isHangingPunctuation(_ character: Character) -> Bool {
         character.unicodeScalars.contains(where: { hangingPunctuation.contains($0) })

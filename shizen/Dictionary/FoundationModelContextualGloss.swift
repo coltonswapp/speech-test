@@ -19,7 +19,7 @@ struct FoundationModelRelatedWord {
 
 @Generable
 struct FoundationModelContextualWordGloss {
-    @Guide(description: "Plain English meaning. 2-8 words. In a sentence, the meaning here (何時 → what time; 行きましょう → let's go). On its own, the word's natural meaning, with no \"in this sentence\" framing. Never use linguistics jargon or word-type labels.")
+    @Guide(description: "Plain English meaning. 2-10 words. In a sentence, the meaning here (何時 → what time; 行きましょう → let's go). On its own, the word's natural meaning, with no \"in this sentence\" framing. For a katakana borrowing, add the source in plain English (デジタル → digital, from English). Never use a linguistics label as the whole meaning.")
     var meaning: String
 
     @Guide(description: "Optional note on non-obvious grammar of the token itself (inflection, fused particle, politeness). For a verb plus auxiliary chain, one short parts breakdown (作ってあげよう → 作る \"make\" + てあげる \"do for someone\" + よう \"I'll\"). Empty string for ordinary compounds (大学生, 何時, スマホ) and when meaning alone is enough. Never name word types, describe neighboring words, or mention related words — those belong in relatedWords.")
@@ -59,7 +59,7 @@ enum FoundationModelContextualGloss {
     Write for a beginner. Use only plain, useful English — never linguistics or morphology labels. \
     Gloss a verb as "to X" (働く → to work). Never write "the verb", "the verb to X", or "the verb, to X".
 
-    meaning (2-8 words):
+    meaning (2-10 words):
     - In a sentence: what the token means here. Do not translate the whole sentence.
     - On its own: the word's natural meaning. If a usage example is included, use it only \
     as a hint. Do not say "in this sentence" or describe the word's role in that line.
@@ -68,8 +68,19 @@ enum FoundationModelContextualGloss {
     - For conjugated forms, reflect the inflection when it changes the sense (行きましょう → let's go).
     - For a verb built with auxiliaries, give the natural meaning of the whole token \
     (作ってあげよう → I'll make it for you).
-    - NEVER output meta labels such as: transparent compound, opaque compound, loanword, \
-    abbreviation, clipping, portmanteau, compound word, katakana word.
+    - For a katakana borrowing, fold the source into this field in plain English \
+    (デジタル → digital, from English; ナイター → night game, from English). \
+    If the Japanese sense is not the English word's sense, give the Japanese meaning \
+    and name the English source (テンション → excitement, from English "tension"). \
+    Write "from English", not "loanword".
+    - For katakana that is not a borrowing (onomatopoeia, a name, native slang), \
+    give the meaning only. If you are not sure it is borrowed, omit the source. \
+    Do not invent an etymology.
+    - Hiragana and kanji words are unchanged — do not add a source language.
+    - NEVER use a linguistics label as the whole meaning, and do not start meaning \
+    with one: transparent compound, opaque compound, loanword, abbreviation, clipping, \
+    portmanteau, compound word, katakana word. A real gloss that also names a source \
+    language is fine.
 
     grammarNote:
     - Only when the token itself has non-obvious grammar worth a short learner note.
@@ -82,6 +93,7 @@ enum FoundationModelContextualGloss {
     - Do NOT restate the meaning in different words, and do not name the word's type. \
     A parts breakdown is the note, not a second copy of meaning.
     - Do NOT mention related words here.
+    - Do NOT put a source language here. That belongs in meaning.
 
     relatedWords:
     - Up to 2 other Japanese words a learner would look up because they share a root \
@@ -230,7 +242,7 @@ enum FoundationModelContextualGloss {
 
     private static func cacheKey(for request: Request) -> String {
         var parts = [
-            request.requestsHeadword ? "gloss-v6" : "gloss-v5",
+            request.requestsHeadword ? "gloss-v7" : "gloss-v6",
             request.framing.rawValue,
             request.sentence,
             request.surface,
@@ -270,7 +282,7 @@ enum FoundationModelContextualGloss {
         lines.append(contentsOf: [
             "",
             "Return:",
-            "• meaning — plain English gloss for this token only (no linguistics labels)",
+            "• meaning — plain English gloss for this token only (no linguistics labels as the whole answer)",
             "• grammarNote — short grammar note, or empty string if none",
             "• relatedWords — up to 2 lookup-worthy Japanese relatives, or an empty list",
         ])

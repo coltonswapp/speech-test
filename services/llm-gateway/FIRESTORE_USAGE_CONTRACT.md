@@ -191,6 +191,7 @@ Currently registered in `services/llm-gateway/src/features/index.ts` (`FEATURE_N
 | `dialogue_nuance` |
 | `span_gloss` |
 | `span_breakdown` |
+| `grammar_usage` |
 
 **Treat as an open set.** A new feature is a gateway deploy (`src/features/<name>.ts` plus register in `index.ts`). The writer passes the request `feature` string through after an allowlist check, so unknown names cannot appear until registered, but a reader should not hard-fail on a new key.
 
@@ -319,3 +320,55 @@ gcloud firestore fields ttls update expiresAt \
 ```
 
 Hourly caps live in `llmFeedbackRate/{uid}/hours/{YYYY-MM-DDTHH}` and `llmFeedbackRate/device_{hash}/hours/...`. Clients cannot read them (no matching allow rule). They are not a Studio surface.
+
+---
+
+## Lesson feedback (`lessonFeedback`, `lessonFeedbackStats`)
+
+Writer: `recordLessonFeedback` in `services/llm-gateway/src/lesson-feedback.ts`, behind `POST /v1/lesson-feedback`. iOS asks on a sample of finished dialogue scenes for 1–5 ratings. It is not tied to a generate call, so there is no feedback token.
+
+Dimensions (open set, same advice as feature ids): `audio`, `content`, `highlighting` (word highlighting synced to audio), `quiz`. Every dimension is optional, and each request has at least one.
+
+`sceneKey` is `${collectionId}__${scenarioId}`. `scenarioId` is the Studio scene slug, so it matches `/content/dialogues/{collectionId}/{scenarioSlug}`. The writer rejects ids containing `/` or `__`.
+
+### Rating documents
+
+```
+lessonFeedback/{attemptId}
+```
+
+`attemptId` is a client UUID. A retry of the same attempt is a no-op.
+
+| Field | When |
+| --- | --- |
+| `uid`, `sceneKey`, `collectionId`, `scenarioId` | every rating |
+| `ratings` | nested map, e.g. `{ "audio": 4, "quiz": 2 }` (this is a real map: it is written with `set`, not dotted keys) |
+| `score` | nested map `{ correct, total, stars }` |
+| `publishedVariantId`, `publishedContentHash` | when the scene had a published take |
+| `englishPeeks`, `appVersion`, `deviceHash` | optional |
+| `createdAt`, `expiresAt` | every rating; `expiresAt` uses `LLM_FEEDBACK_RETENTION_DAYS` |
+
+Studio lists recent ratings for one scene with `where("sceneKey", "==", key).orderBy("createdAt", "desc")`. That needs the composite index in `firestore.indexes.json`. Add a TTL policy on `lessonFeedback.expiresAt` the same way as `llmFeedback`.
+
+### Stats documents
+
+```
+lessonFeedbackStats/{sceneKey}
+lessonFeedbackStats/_product
+```
+
+No periods: these are all-time totals per scene. Same literal dotted field names as usage (`set`+merge):
+
+```
+count                  // accepted rating requests
+audio.sum              // sum of 1–5 values
+audio.n                // number of audio ratings
+audio.h1 … audio.h5    // histogram
+content.* / highlighting.* / quiz.*
+collectionId, scenarioId   // scene docs only, plain strings
+updatedAt
+```
+
+Average for a dimension is `sum / n`. Treat missing numbers as 0. A histogram bucket appears only after its first rating.
+
+Hourly caps: `lessonFeedbackRate/{uid}/hours/{YYYY-MM-DDTHH}` (20 per hour). Not a Studio surface.

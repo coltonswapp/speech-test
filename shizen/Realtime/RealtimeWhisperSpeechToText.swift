@@ -313,6 +313,7 @@ final class RealtimeWhisperSpeechToText: NSObject {
         sessionUsage = WhisperTranscriptionUsage()
 
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        PlaybackAudioSession.noteDeactivated()
     }
 
     // MARK: - WebSocket

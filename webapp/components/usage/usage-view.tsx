@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LowestRatedScenes } from "@/components/lesson-feedback/lowest-rated-scenes";
 import { usageApi, type UsageApiResponse } from "@/lib/usage/client";
 import type { UsageFeatureRow, UsagePeriodSnapshot } from "@/lib/usage/parse-period";
 import {
@@ -403,6 +404,8 @@ export function UsageView() {
           </Card>
         </>
       )}
+
+      <LowestRatedScenes />
     </div>
   );
 }

@@ -17,7 +17,8 @@ import { getFirestore } from "firebase-admin/firestore";
  *   (`FIREBASE_PRIVATE_KEY` may contain escaped `\n`)
  *
  * The service account only needs Firestore **read** on `llmUsage/**` and
- * `llmFeedbackStats/**` (configure in Firestore rules / IAM for the Studio
+ * `llmFeedbackStats/**`, plus `lessonFeedbackStats/**` and `lessonFeedback/**`
+ * for lesson ratings (configure in Firestore rules / IAM for the Studio
  * service account). Do not grant or rely on client SDK access — security
  * rules deny the iOS app for these aggregates.
  */

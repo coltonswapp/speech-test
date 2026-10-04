@@ -17,7 +17,7 @@ final class DialogueNuanceCardView: UIView {
         case failed(String)
     }
 
-    private let surface = UIView()
+    private let surface = GlossCardSurfaceView()
     private let sectionStack = UIStackView()
     private let sectionTitle = UILabel()
     private let loadingRow = UIStackView()
@@ -35,6 +35,8 @@ final class DialogueNuanceCardView: UIView {
     private static let thumbsOverlap: CGFloat = 18
 
     private var sectionBottomConstraint: NSLayoutConstraint?
+    /// Offered thumbs whose space is already reserved but which appear only after the card settles.
+    private var pendingFeedback: LLMFeedbackReceipt?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -46,7 +48,24 @@ final class DialogueNuanceCardView: UIView {
         setupUI()
     }
 
+    /// Swaps content with a short crossfade when the card is on screen. Thumbs for a
+    /// result wait for `presentPendingFeedback()`.
     func apply(_ state: State) {
+        let onScreen = !isHidden && window != nil
+        GlossMotion.crossfade(sectionStack, animated: onScreen) {
+            applyContent(state)
+        }
+    }
+
+    func presentPendingFeedback() {
+        guard let feedback = pendingFeedback else { return }
+        pendingFeedback = nil
+        feedbackRow.present(feedback)
+        updateEdgeChrome()
+    }
+
+    private func applyContent(_ state: State) {
+        pendingFeedback = nil
         switch state {
         case .loading:
             loadingRow.isHidden = false
@@ -72,7 +91,11 @@ final class DialogueNuanceCardView: UIView {
             let note = result.notes.trimmingCharacters(in: .whitespacesAndNewlines)
             noteLabel.text = note.isEmpty ? nil : note
             noteLabel.isHidden = note.isEmpty
-            feedbackRow.present(feedback)
+            if let feedback, LLMFeedbackPrompt.shouldOffer(feedback) {
+                pendingFeedback = feedback
+            } else {
+                feedbackRow.dismiss()
+            }
         case .unavailable(let message), .failed(let message):
             loadingRow.isHidden = true
             loadingSpinner.isHidden = true
@@ -86,14 +109,6 @@ final class DialogueNuanceCardView: UIView {
         }
         updateEdgeChrome()
         setNeedsLayout()
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        surface.layer.shadowPath = UIBezierPath(
-            roundedRect: surface.bounds,
-            cornerRadius: surface.layer.cornerRadius
-        ).cgPath
     }
 
     private func setupUI() {
@@ -202,7 +217,7 @@ final class DialogueNuanceCardView: UIView {
     }
 
     private func updateEdgeChrome() {
-        let showingThumbs = !feedbackRow.isHidden
+        let showingThumbs = !feedbackRow.isHidden || pendingFeedback != nil
         let overlap = showingThumbs ? Self.thumbsOverlap + Self.edgeControlLift : 0
         sectionBottomConstraint?.constant = -(Self.contentInsets.bottom + overlap)
         bringSubviewToFront(feedbackRow)

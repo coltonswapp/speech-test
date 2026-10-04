@@ -1,6 +1,6 @@
 import { Type } from "@google/genai";
 
-import { optionalString, parseJSONObject, requiredString, trimmedString, withJapanese, withoutVerbLabel } from "../validate.js";
+import { optionalString, parseJSONObject, requiredString, trimmedString, withoutVerbLabel, withPhraseReading } from "../validate.js";
 import { defineFeature } from "./types.js";
 
 const INSTRUCTIONS = `You help English-speaking Japanese learners compare how one word is used.
@@ -15,7 +15,11 @@ inThisSentence:
 - One short sentence: what this word is doing in the given sentence.
 - Plain English. Do not translate the rest of the sentence.
 - Do not start with the Japanese word.
+- Do not start with "This word is used" or talk about "this word" as the subject. Lead with the use: "Used to say…", "Commonly heard when…", "Typically used to express…".
 - Gloss a verb as "to X" (働く → to work). Never write "the verb", "the verb to X", or "the verb, to X".
+- For a katakana borrowing, include the source in this field in plain English (デジタル → digital, from English; ナイター → a night game, from English). If the Japanese sense is not the English word's sense, give the Japanese meaning and name the English source (テンション → excitement, from English "tension"). Write "from English", not "loanword".
+- For katakana that is not a borrowing (onomatopoeia, a name, native slang), omit the source. If you are not sure it is borrowed, omit the source. Do not invent an etymology.
+- Hiragana and kanji words are unchanged — do not add a source language.
 
 otherUses:
 - 2 to 4 other common uses of this word.
@@ -37,6 +41,7 @@ kanjiNote:
 - Skip place names and characters that don't change the idea (don't gloss 大阪).
 - Skip kana-only words, particles, and words where the pieces add nothing.
 - Empty string when it doesn't help. No readings, radicals, or history.
+- Never put a source language here. For a katakana borrowing, that belongs in inThisSentence.
 
 No grammar jargon. otherUses are short Japanese phrases with a gloss, not full sentences and not English-only labels. Plain text only, no markdown.
 
@@ -45,7 +50,6 @@ A dictionary hint, when present, is optional. Prioritize the sentence.
 Return a JSON object with "word" (string), "inThisSentence" (string), "otherUses" (array of strings), and "kanjiNote" (string).`;
 
 const KANJI = /[\u3400-\u4DBF\u4E00-\u9FFF\u3005]/gu;
-const HIRAGANA_READING = /^[\u3041-\u3096ー]+$/u;
 
 /** First occurrence only; the client does not send the token's offset. */
 function markSelection(sentence: string, surface: string): string {
@@ -54,34 +58,11 @@ function markSelection(sentence: string, surface: string): string {
   return `${sentence.slice(0, at)}【${surface}】${sentence.slice(at + surface.length)}`;
 }
 
-/**
- * Keeps otherUses as "Japanese (ひらがな) — gloss" when the phrase has kanji.
- * Drops a redundant reading on an all-kana phrase, and drops romaji readings.
- */
-function withOtherUseReading(text: string): string {
-  const raw = withJapanese(text);
-  if (!raw) return "";
-
-  const split = raw.match(/^(.*?)\s*[—–]\s*(.+)$/u) ?? raw.match(/^(.*?)\s+-\s+(.+)$/u);
-  if (!split) return raw;
-
-  let phrase = split[1].trim();
-  const gloss = split[2].trim();
-  if (!phrase || !gloss) return raw;
-
-  let reading: string | null = null;
-  const readMatch = phrase.match(/^(.*?)\s*[\(（]([^)）]*)[\)）]\s*$/u);
-  if (readMatch) {
-    phrase = readMatch[1].trim();
-    reading = readMatch[2].replace(/\s+/g, "");
-  }
-  if (!phrase) return "";
-
-  const hiragana = reading && HIRAGANA_READING.test(reading);
-  if (/[\u3400-\u4DBF\u4E00-\u9FFF\u3005]/u.test(phrase) && hiragana) {
-    return `${phrase} (${reading}) — ${gloss}`;
-  }
-  return `${phrase} — ${gloss}`;
+/** "This word is used to say X" → "Used to say X". */
+function withoutWordSubject(text: string): string {
+  const stripped = text.replace(/^(?:this|the|that)\s+word\s+is\s+/i, "");
+  if (stripped === text || !stripped) return text;
+  return stripped.charAt(0).toUpperCase() + stripped.slice(1);
 }
 
 /** Drops a note that glosses kanji the selected word doesn't contain (帰 for お疲れ). */
@@ -131,13 +112,13 @@ export const commonUses = defineFeature({
     if (word !== surface) {
       throw new Error(`common_uses: answered for "${word}" instead of "${surface}"`);
     }
-    const inThisSentence = withoutVerbLabel(trimmedString(raw.inThisSentence));
+    const inThisSentence = withoutWordSubject(withoutVerbLabel(trimmedString(raw.inThisSentence)));
     if (!inThisSentence) {
       throw new Error("common_uses: empty inThisSentence");
     }
     const otherUses = Array.isArray(raw.otherUses)
       ? raw.otherUses
-          .map((item) => withOtherUseReading(withoutVerbLabel(trimmedString(item))))
+          .map((item) => withPhraseReading(withoutVerbLabel(trimmedString(item))))
           .filter(Boolean)
       : [];
     return {

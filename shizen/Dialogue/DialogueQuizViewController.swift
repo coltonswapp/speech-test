@@ -149,6 +149,10 @@ final class DialogueQuizViewController: UIViewController {
             page.onFocusEvidenceLine = { [weak self] line in
                 self?.presentSentenceFocus(for: line)
             }
+            page.onPlayEvidenceLine = { [weak self, weak page] line in
+                guard let self, let page else { return }
+                self.playEvidenceLine(line, on: page)
+            }
             return page
         }
 
@@ -303,6 +307,58 @@ final class DialogueQuizViewController: UIViewController {
         navigationController?.pushViewController(scrub, animated: true)
     }
 
+    private func playEvidenceLine(
+        _ line: DialogueQuizSourceLine,
+        on page: DialogueQuizQuestionPageViewController
+    ) {
+        guard let evidenceContext,
+              evidenceContext.spokenLines.indices.contains(line.spokenIndex)
+        else { return }
+
+        if isPlayingCurrentEvidence,
+           questionPages.indices.contains(currentIndex),
+           questionPages[currentIndex] === page,
+           page.playingEvidenceSpokenIndex == line.spokenIndex {
+            stopEvidencePlayback()
+            return
+        }
+
+        stopEvidencePlayback()
+        onEvidencePlaybackWillStart?()
+
+        let spokenIndex = line.spokenIndex
+        let dialogueLines = evidenceContext.spokenJapaneseTexts
+        let fallback = dialogueLines.indices.contains(spokenIndex)
+            ? dialogueLines[spokenIndex]
+            : line.japanese
+        let tokenSync = evidenceContext.tokenSync
+        let highlight: (Int?) -> Void = { [weak page] index in
+            page?.setPlayingSpokenIndex(index)
+        }
+        let applyKaraoke: (TimeInterval) -> Void = { [weak page] time in
+            page?.applyEvidenceKaraoke(tokenSync: tokenSync, time: time)
+        }
+        let finished = { [weak self, weak page] in
+            highlight(nil)
+            page?.applyEvidenceKaraoke(tokenSync: nil, time: 0)
+            self?.setPlayingCurrentEvidence(false)
+        }
+
+        setPlayingCurrentEvidence(true)
+        highlight(spokenIndex)
+        evidenceAudioPlayer.playDialogueLine(
+            at: spokenIndex,
+            publishedAudioUrl: evidenceContext.publishedAudioUrl,
+            audioKey: evidenceContext.audioKey,
+            cacheMetadata: evidenceContext.cacheMetadata,
+            dialogueLines: dialogueLines,
+            fallbackText: fallback,
+            tokenSync: tokenSync,
+            onTime: applyKaraoke,
+            onFinished: finished
+        )
+    }
+
     private func playEvidence(
         for question: DialogueQuizQuestion,
         on page: DialogueQuizQuestionPageViewController
@@ -312,6 +368,13 @@ final class DialogueQuizViewController: UIViewController {
               let first = indices.first
         else { return }
 
+        if indices.count == 1,
+           let line = evidenceContext.sourceLines(for: question).first(where: { $0.spokenIndex == first }) {
+            playEvidenceLine(line, on: page)
+            return
+        }
+
+        stopEvidencePlayback()
         onEvidencePlaybackWillStart?()
         let dialogueLines = evidenceContext.spokenJapaneseTexts
         let fallback = dialogueLines[first]
@@ -328,22 +391,6 @@ final class DialogueQuizViewController: UIViewController {
             self?.setPlayingCurrentEvidence(false)
         }
         setPlayingCurrentEvidence(true)
-
-        if indices.count == 1 {
-            highlight(first)
-            evidenceAudioPlayer.playDialogueLine(
-                at: first,
-                publishedAudioUrl: evidenceContext.publishedAudioUrl,
-                audioKey: evidenceContext.audioKey,
-                cacheMetadata: evidenceContext.cacheMetadata,
-                dialogueLines: dialogueLines,
-                fallbackText: fallback,
-                tokenSync: tokenSync,
-                onTime: applyKaraoke,
-                onFinished: finished
-            )
-            return
-        }
 
         evidenceAudioPlayer.playDialogueSequence(
             spokenIndices: indices,
@@ -480,6 +527,41 @@ final class DialogueQuizViewController: UIViewController {
         onHandoffScrollViewChanged?()
         coordinateEvidenceSwipes()
     }
+
+    func contentQAFocus() -> (title: String, details: [String], questionNumber: Int?) {
+        guard questionPages.indices.contains(currentIndex) else {
+            return ("Quiz", ["No question loaded"], nil)
+        }
+        let page = questionPages[currentIndex]
+        let question = page.question
+        let number = currentIndex + 1
+        let total = questionPages.count
+        var details = [
+            "Question \(number) of \(total)",
+            "Prompt: \(question.prompt)",
+        ]
+        if let target = question.target, !target.isEmpty {
+            details.append("Target: \(target)")
+        }
+        if let indices = question.sourceSpokenIndices, !indices.isEmpty {
+            let spoken = indices.map(String.init).joined(separator: ", ")
+            details.append("Evidence spoken indices: \(spoken)")
+        }
+        details.append("Layout: \(question.layout.rawValue)")
+        if page.hasSelection {
+            if let choice = page.selectedChoiceText {
+                details.append("Selected: \(choice)")
+            }
+            details.append(page.isSelectionCorrect ? "Result: correct" : "Result: incorrect")
+        } else {
+            details.append("Result: not answered yet")
+        }
+        if didFinishQuiz {
+            let score = currentScore
+            details.append("Quiz status: finished (\(score.correctCount)/\(score.questionCount) correct)")
+        }
+        return ("Quiz · question \(number)", details, number)
+    }
 }
 
 // MARK: - UIPageViewControllerDataSource & Delegate
@@ -550,6 +632,7 @@ final class DialogueQuizQuestionPageViewController: UIViewController {
     let question: DialogueQuizQuestion
 
     var hasSelection: Bool { questionView.hasSelection }
+    var selectedChoiceText: String? { questionView.selectedChoiceText }
     var isSelectionCorrect: Bool { questionView.isSelectionCorrect }
 
     func selectedChoiceExplosionPoint() -> CGPoint? {
@@ -569,6 +652,13 @@ final class DialogueQuizQuestionPageViewController: UIViewController {
     var onFocusEvidenceLine: ((DialogueQuizSourceLine) -> Void)? {
         get { questionView.onFocusEvidenceLine }
         set { questionView.onFocusEvidenceLine = newValue }
+    }
+    var onPlayEvidenceLine: ((DialogueQuizSourceLine) -> Void)? {
+        get { questionView.onPlayEvidenceLine }
+        set { questionView.onPlayEvidenceLine = newValue }
+    }
+    var playingEvidenceSpokenIndex: Int? {
+        questionView.playingEvidenceSpokenIndex
     }
 
     init(

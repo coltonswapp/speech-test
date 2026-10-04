@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { dialogueApi } from "@/lib/dialogue/client";
 import {
   usageApi,
   type FeedbackVotesApiResponse,
@@ -36,6 +37,7 @@ import {
   USAGE_PERIODS,
   type UsagePeriod,
 } from "@/lib/usage/period-keys";
+import Link from "next/link";
 
 const periodLabels: Record<UsagePeriod, string> = {
   day: "Day",
@@ -432,6 +434,184 @@ function FeedbackVotesPanel() {
           </CardContent>
         </Card>
       )}
+
+      <SceneContentQaPanel />
+    </div>
+  );
+}
+
+const CONTENT_QA_STATUS_LABELS: Record<
+  "pending" | "dialogue" | "quiz" | "done",
+  string
+> = {
+  pending: "Pending",
+  dialogue: "Dialogue only",
+  quiz: "Quiz only",
+  done: "Checked off",
+};
+
+function SceneContentQaPanel() {
+  const query = useQuery({
+    queryKey: ["studio-usage-scene-content-qa"],
+    queryFn: () => dialogueApi.listContentQa(),
+  });
+
+  const reviews = useMemo(() => {
+    const rows = query.data?.reviews ?? [];
+    return [...rows].sort((a, b) => {
+      const aMs = Date.parse(a.updatedAt);
+      const bMs = Date.parse(b.updatedAt);
+      if (Number.isFinite(bMs) && Number.isFinite(aMs) && bMs !== aMs) {
+        return bMs - aMs;
+      }
+      return a.scenarioId.localeCompare(b.scenarioId);
+    });
+  }, [query.data?.reviews]);
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-border/60 pt-6">
+      <div>
+        <h2 className="text-lg font-medium tracking-tight">
+          Per-scene content QA
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Read-only rows the app already writes to Postgres (
+          <code className="text-xs">dialogue_scenario_content_qa</code>
+          ): dialogue/quiz looked-over timestamps, optional note. There is no{" "}
+          <code className="text-xs">lessonFeedback</code> Firestore collection
+          or audio/content/highlighting/quiz rating store — only these fields.
+          Chips also live on{" "}
+          <Link href="/content/curriculum" className="underline underline-offset-2">
+            Curriculum
+          </Link>
+          .
+        </p>
+      </div>
+
+      {query.isLoading && (
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+      )}
+
+      {query.isError && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm">
+          {query.error instanceof Error
+            ? query.error.message
+            : "Failed to load scene content QA"}
+        </div>
+      )}
+
+      {query.data && (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="text-base font-medium">
+                Recent scene reviews
+              </CardTitle>
+              <Badge variant="secondary">
+                {query.data.summary.total} total
+              </Badge>
+              <Badge variant="outline">{query.data.summary.done} done</Badge>
+            </div>
+            <CardDescription>
+              Sorted by updated time. Missing scene id never happens on these
+              rows — PK is <code className="text-xs">scenario_id</code>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {reviews.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No content QA rows yet.
+              </p>
+            ) : (
+              <Accordion className="rounded-md border border-border/60 px-3">
+                {reviews.slice(0, 40).map((row) => (
+                  <AccordionItem key={row.scenarioId} value={row.scenarioId}>
+                    <AccordionTrigger className="hover:no-underline">
+                      <div className="flex min-w-0 flex-1 flex-col gap-1.5 pr-2 sm:flex-row sm:items-center sm:gap-3">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <Badge
+                            variant={
+                              row.status === "done" ? "default" : "secondary"
+                            }
+                          >
+                            {CONTENT_QA_STATUS_LABELS[row.status]}
+                          </Badge>
+                          <span className="truncate font-medium font-mono text-xs sm:text-sm">
+                            {row.scenarioId}
+                          </span>
+                          {row.reviewNote?.trim() ? (
+                            <Badge variant="outline">note</Badge>
+                          ) : null}
+                        </div>
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground sm:ml-auto">
+                          <span>{formatWhen(row.updatedAt)}</span>
+                        </div>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionPanel>
+                      <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                        <div>
+                          <dt className="text-xs text-muted-foreground">
+                            Collection
+                          </dt>
+                          <dd className="font-mono text-xs">
+                            {row.collectionId}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-muted-foreground">
+                            Reviewed by
+                          </dt>
+                          <dd className="text-xs">{row.reviewedBy ?? "—"}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-muted-foreground">
+                            Dialogue reviewed
+                          </dt>
+                          <dd className="text-xs">
+                            {formatWhen(row.dialogueReviewedAt)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-muted-foreground">
+                            Quiz reviewed
+                          </dt>
+                          <dd className="text-xs">
+                            {formatWhen(row.quizReviewedAt)}
+                          </dd>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <dt className="text-xs text-muted-foreground">
+                            Review note
+                          </dt>
+                          <dd className="text-sm whitespace-pre-wrap">
+                            {row.reviewNote?.trim() || "—"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-muted-foreground">
+                            Created
+                          </dt>
+                          <dd className="text-xs">{formatWhen(row.createdAt)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-muted-foreground">
+                            Updated
+                          </dt>
+                          <dd className="text-xs">{formatWhen(row.updatedAt)}</dd>
+                        </div>
+                      </dl>
+                    </AccordionPanel>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -656,8 +836,8 @@ export function UsageView() {
           <h1 className="text-2xl font-semibold tracking-tight">Usage</h1>
           <p className="text-sm text-muted-foreground">
             Read-only LLM usage and feedback for Studio operators. Aggregates
-            stay on the counts tab; open Feedback to read individual gloss
-            votes.
+            stay on the counts tab; Feedback shows gloss votes and per-scene
+            content QA the app already writes.
           </p>
         </div>
         <Tabs

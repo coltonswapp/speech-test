@@ -141,7 +141,7 @@ enum GeminiCommonUses {
 
     private static func cacheKey(for request: Request) -> String {
         [
-            "gemini-common-uses-v5-gateway",
+            "gemini-common-uses-v6-gateway",
             request.sentence,
             request.surface,
             request.dictionaryGloss ?? "",

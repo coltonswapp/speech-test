@@ -1,6 +1,6 @@
 import { Type } from "@google/genai";
 
-import { optionalString, parseJSONObject, requiredString, trimmedString, withoutVerbLabel } from "../validate.js";
+import { optionalString, parseJSONObject, requiredString, trimmedString, withJapanese, withoutVerbLabel } from "../validate.js";
 import { defineFeature } from "./types.js";
 
 const INSTRUCTIONS = `You help English-speaking Japanese learners compare how one word is used.
@@ -18,8 +18,14 @@ inThisSentence:
 - Gloss a verb as "to X" (働く → to work). Never write "the verb", "the verb to X", or "the verb, to X".
 
 otherUses:
-- 2 to 4 other common uses of this word, each a short phrase.
+- 2 to 4 other common uses of this word.
+- Each item is a short Japanese phrase that shows the use, then " — ", then a plain English gloss.
+- The Japanese must include this word in a real phrase. かける → "眼鏡をかける (めがねをかける) — to put on glasses", not "to put on glasses".
+- After the Japanese and before the em dash, add a hiragana reading of the whole phrase in parentheses: 物置小屋 (ものおきごや) — a storage shed.
+- Hiragana only. Not romaji. Not furigana over the characters. Not a reading of only the selected word.
+- If the Japanese is already all kana, do not add a reading.
 - These are uses in general, not more notes about this sentence.
+- A short phrase, not a full sentence, and under 80 characters. No English-only items.
 - Do not repeat the in-sentence use.
 - If the word really has only one everyday use, return an empty list.
 
@@ -32,19 +38,50 @@ kanjiNote:
 - Skip kana-only words, particles, and words where the pieces add nothing.
 - Empty string when it doesn't help. No readings, radicals, or history.
 
-No grammar jargon and no example sentences. Plain text only, no markdown.
+No grammar jargon. otherUses are short Japanese phrases with a gloss, not full sentences and not English-only labels. Plain text only, no markdown.
 
 A dictionary hint, when present, is optional. Prioritize the sentence.
 
 Return a JSON object with "word" (string), "inThisSentence" (string), "otherUses" (array of strings), and "kanjiNote" (string).`;
 
 const KANJI = /[\u3400-\u4DBF\u4E00-\u9FFF\u3005]/gu;
+const HIRAGANA_READING = /^[\u3041-\u3096ー]+$/u;
 
 /** First occurrence only; the client does not send the token's offset. */
 function markSelection(sentence: string, surface: string): string {
   const at = sentence.indexOf(surface);
   if (at < 0) return sentence;
   return `${sentence.slice(0, at)}【${surface}】${sentence.slice(at + surface.length)}`;
+}
+
+/**
+ * Keeps otherUses as "Japanese (ひらがな) — gloss" when the phrase has kanji.
+ * Drops a redundant reading on an all-kana phrase, and drops romaji readings.
+ */
+function withOtherUseReading(text: string): string {
+  const raw = withJapanese(text);
+  if (!raw) return "";
+
+  const split = raw.match(/^(.*?)\s*[—–]\s*(.+)$/u) ?? raw.match(/^(.*?)\s+-\s+(.+)$/u);
+  if (!split) return raw;
+
+  let phrase = split[1].trim();
+  const gloss = split[2].trim();
+  if (!phrase || !gloss) return raw;
+
+  let reading: string | null = null;
+  const readMatch = phrase.match(/^(.*?)\s*[\(（]([^)）]*)[\)）]\s*$/u);
+  if (readMatch) {
+    phrase = readMatch[1].trim();
+    reading = readMatch[2].replace(/\s+/g, "");
+  }
+  if (!phrase) return "";
+
+  const hiragana = reading && HIRAGANA_READING.test(reading);
+  if (/[\u3400-\u4DBF\u4E00-\u9FFF\u3005]/u.test(phrase) && hiragana) {
+    return `${phrase} (${reading}) — ${gloss}`;
+  }
+  return `${phrase} — ${gloss}`;
 }
 
 /** Drops a note that glosses kanji the selected word doesn't contain (帰 for お疲れ). */
@@ -99,7 +136,9 @@ export const commonUses = defineFeature({
       throw new Error("common_uses: empty inThisSentence");
     }
     const otherUses = Array.isArray(raw.otherUses)
-      ? raw.otherUses.map((item) => withoutVerbLabel(trimmedString(item))).filter(Boolean)
+      ? raw.otherUses
+          .map((item) => withOtherUseReading(withoutVerbLabel(trimmedString(item))))
+          .filter(Boolean)
       : [];
     return {
       inThisSentence,

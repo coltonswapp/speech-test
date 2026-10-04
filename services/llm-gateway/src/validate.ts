@@ -83,6 +83,13 @@ export function trimmedString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+const JAPANESE = /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF]/;
+
+/** Keeps a phrase that actually shows Japanese. Drops English-only labels. */
+export function withJapanese(text: string): string {
+  return JAPANESE.test(text) ? text : "";
+}
+
 /**
  * "the verb to work" / "the verb, to move" / `the verb "to work"` → "to work".
  * A note that is only a part of speech ("the verb") becomes empty.

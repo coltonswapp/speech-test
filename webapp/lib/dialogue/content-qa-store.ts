@@ -26,7 +26,16 @@ export async function listContentQa(params?: {
   collectionId?: string;
 }): Promise<ContentQaRecord[]> {
   const rows = await db.query.dialogueScenarioContentQa.findMany();
-  const records = rows.map(toContentQaRecord);
+  const records = rows
+    .map(toContentQaRecord)
+    .sort((a, b) => {
+      const aMs = Date.parse(a.updatedAt);
+      const bMs = Date.parse(b.updatedAt);
+      if (Number.isFinite(bMs) && Number.isFinite(aMs) && bMs !== aMs) {
+        return bMs - aMs;
+      }
+      return a.scenarioId.localeCompare(b.scenarioId);
+    });
   if (!params?.collectionId) return records;
   return records.filter((row) => row.collectionId === params.collectionId);
 }

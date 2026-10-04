@@ -1,18 +1,19 @@
 //
-//  DialogueNuanceCardView.swift
+//  DialogueGrammarUsageCardView.swift
 //  shizen
 //
-//  Rounded card for a dialogue line’s deeper meaning.
+//  "How to use" card on the grammar pattern screen.
+//  Same surface and motion as the Deeper Meaning card.
 //
 
 import InteractionKit
 import UIKit
 
-final class DialogueNuanceCardView: UIView {
+final class DialogueGrammarUsageCardView: UIView {
 
     enum State {
         case loading
-        case result(GeminiDialogueNuance.Result, feedback: LLMFeedbackReceipt?)
+        case result(GeminiGrammarUsage.Result, feedback: LLMFeedbackReceipt?)
         case unavailable(String)
         case failed(String)
     }
@@ -24,9 +25,11 @@ final class DialogueNuanceCardView: UIView {
     private let loadingSpinner = NNLoadingSpinner(frame: CGRect(x: 0, y: 0, width: 24, height: 24))
     private let loadingLabel = UILabel()
     private let headlineLabel = UILabel()
+    private let formLabel = UILabel()
+    private let examplesLabel = UILabel()
     private let noteLabel = UILabel()
-    private let feedbackRow = LLMFeedbackRow()
     private let messageLabel = UILabel()
+    private let feedbackRow = LLMFeedbackRow()
 
     private static let contentInsets = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
     private static let shadowBleed: CGFloat = 12
@@ -66,31 +69,24 @@ final class DialogueNuanceCardView: UIView {
 
     private func applyContent(_ state: State) {
         pendingFeedback = nil
+        let resultLabels = [headlineLabel, formLabel, examplesLabel, noteLabel]
         switch state {
         case .loading:
             loadingRow.isHidden = false
             loadingSpinner.isHidden = false
             loadingSpinner.reset()
-            headlineLabel.isHidden = true
-            noteLabel.isHidden = true
-            feedbackRow.dismiss()
+            resultLabels.forEach { $0.isHidden = true }
             messageLabel.isHidden = true
-            headlineLabel.text = nil
-            noteLabel.text = nil
-            messageLabel.text = nil
+            feedbackRow.dismiss()
         case .result(let result, let feedback):
             loadingRow.isHidden = true
             loadingSpinner.isHidden = true
             messageLabel.isHidden = true
-            messageLabel.text = nil
-
-            let headline = result.impliedMeaning.trimmingCharacters(in: .whitespacesAndNewlines)
-            headlineLabel.text = headline.isEmpty ? nil : headline
-            headlineLabel.isHidden = headline.isEmpty
-
-            let note = result.notes.trimmingCharacters(in: .whitespacesAndNewlines)
-            noteLabel.text = note.isEmpty ? nil : note
-            noteLabel.isHidden = note.isEmpty
+            setText(headlineLabel, glossWithoutVerbLabel(result.inThisScene))
+            setAttributed(formLabel, Self.attributedForm(result.form))
+            let examples = result.examples.map { "· \($0)" }.joined(separator: "\n")
+            setAttributed(examplesLabel, Self.attributedExamples(examples))
+            setText(noteLabel, result.note)
             if let feedback, LLMFeedbackPrompt.shouldOffer(feedback) {
                 pendingFeedback = feedback
             } else {
@@ -99,49 +95,87 @@ final class DialogueNuanceCardView: UIView {
         case .unavailable(let message), .failed(let message):
             loadingRow.isHidden = true
             loadingSpinner.isHidden = true
-            headlineLabel.isHidden = true
-            noteLabel.isHidden = true
+            resultLabels.forEach { $0.isHidden = true }
             feedbackRow.dismiss()
-            headlineLabel.text = nil
-            noteLabel.text = nil
-            messageLabel.text = message
-            messageLabel.isHidden = message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            setText(messageLabel, message)
         }
         updateEdgeChrome()
         setNeedsLayout()
+    }
+
+    private func setText(_ label: UILabel, _ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        label.text = trimmed.isEmpty ? nil : trimmed
+        label.isHidden = trimmed.isEmpty
+    }
+
+    private func setAttributed(_ label: UILabel, _ text: NSAttributedString?) {
+        label.attributedText = text
+        label.isHidden = text == nil
+    }
+
+    /// Japanese in the formula reads in the primary color, the slot words stay secondary.
+    private static func attributedForm(_ form: String) -> NSAttributedString? {
+        let trimmed = form.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let baseFont = UIFont.preferredFont(forTextStyle: .subheadline)
+        let attributed = NSMutableAttributedString(string: trimmed, attributes: [
+            .font: baseFont,
+            .foregroundColor: UIColor.secondaryLabel,
+        ])
+        let japaneseFont = baseFont.bold()
+        var utf16 = 0
+        for character in trimmed {
+            let length = character.utf16.count
+            if character.unicodeScalars.contains(where: isJapanese) {
+                attributed.addAttributes(
+                    [.font: japaneseFont, .foregroundColor: UIColor.label],
+                    range: NSRange(location: utf16, length: length)
+                )
+            }
+            utf16 += length
+        }
+        return attributed
+    }
+
+    private static func attributedExamples(_ text: String) -> NSAttributedString? {
+        guard !text.isEmpty else { return nil }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 3
+        return NSAttributedString(string: text, attributes: [
+            .font: UIFont.preferredFont(forTextStyle: .subheadline),
+            .foregroundColor: UIColor.secondaryLabel,
+            .paragraphStyle: paragraph,
+        ])
+    }
+
+    private static func isJapanese(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x3040...0x30FF, 0x3400...0x4DBF, 0x4E00...0x9FFF, 0x3005:
+            return true
+        default:
+            return false
+        }
     }
 
     private func setupUI() {
         clipsToBounds = false
         translatesAutoresizingMaskIntoConstraints = false
 
-        sectionTitle.text = "DEEPER MEANING"
+        sectionTitle.text = "HOW TO USE"
         sectionTitle.font = UIFont.preferredFont(forTextStyle: .caption1)
         sectionTitle.textColor = .secondaryLabel
 
-        let headlineFont: UIFont = {
-            let base = UIFont.preferredFont(forTextStyle: .title3)
-            if let d = base.fontDescriptor.withSymbolicTraits(.traitBold) {
-                return UIFont(descriptor: d, size: 0)
-            }
-            return base
-        }()
-        headlineLabel.font = headlineFont
+        headlineLabel.font = UIFont.preferredFont(forTextStyle: .title3).bold()
         headlineLabel.textColor = .label
-        headlineLabel.textAlignment = .natural
         headlineLabel.numberOfLines = 0
 
-        noteLabel.font = .preferredFont(forTextStyle: .subheadline)
-        noteLabel.textColor = .secondaryLabel
-        noteLabel.textAlignment = .natural
-        noteLabel.numberOfLines = 0
-        noteLabel.isHidden = true
-
-        messageLabel.font = .preferredFont(forTextStyle: .subheadline)
-        messageLabel.textColor = .secondaryLabel
-        messageLabel.textAlignment = .natural
-        messageLabel.numberOfLines = 0
-        messageLabel.isHidden = true
+        for label in [formLabel, examplesLabel, noteLabel, messageLabel] {
+            label.font = .preferredFont(forTextStyle: .subheadline)
+            label.textColor = .secondaryLabel
+            label.numberOfLines = 0
+            label.isHidden = true
+        }
 
         loadingSpinner.configure(with: Self.accentColor)
         loadingSpinner.translatesAutoresizingMaskIntoConstraints = false
@@ -164,11 +198,10 @@ final class DialogueNuanceCardView: UIView {
         sectionStack.axis = .vertical
         sectionStack.alignment = .fill
         sectionStack.spacing = 6
-        sectionStack.addArrangedSubview(sectionTitle)
-        sectionStack.addArrangedSubview(loadingRow)
-        sectionStack.addArrangedSubview(headlineLabel)
-        sectionStack.addArrangedSubview(noteLabel)
-        sectionStack.addArrangedSubview(messageLabel)
+        [sectionTitle, loadingRow, headlineLabel, formLabel, examplesLabel, noteLabel, messageLabel]
+            .forEach { sectionStack.addArrangedSubview($0) }
+        sectionStack.setCustomSpacing(8, after: formLabel)
+        sectionStack.setCustomSpacing(8, after: examplesLabel)
         sectionStack.translatesAutoresizingMaskIntoConstraints = false
 
         surface.backgroundColor = .secondarySystemGroupedBackground
@@ -213,7 +246,7 @@ final class DialogueNuanceCardView: UIView {
             ),
         ])
 
-        apply(.loading)
+        applyContent(.loading)
     }
 
     private func updateEdgeChrome() {
@@ -221,5 +254,12 @@ final class DialogueNuanceCardView: UIView {
         let overlap = showingThumbs ? Self.thumbsOverlap + Self.edgeControlLift : 0
         sectionBottomConstraint?.constant = -(Self.contentInsets.bottom + overlap)
         bringSubviewToFront(feedbackRow)
+    }
+}
+
+extension UIFont {
+    fileprivate func bold() -> UIFont {
+        guard let descriptor = fontDescriptor.withSymbolicTraits(.traitBold) else { return self }
+        return UIFont(descriptor: descriptor, size: 0)
     }
 }

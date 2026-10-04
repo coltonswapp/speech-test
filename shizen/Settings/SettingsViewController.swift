@@ -136,6 +136,7 @@ final class SettingsViewController: UIViewController {
         case registerLadder
         case verbCombo
         case dialogueContentRecording
+        case dialogueLessonWrapUp
         case stageLayouts
         case pillField
         case spanHighlight
@@ -178,6 +179,7 @@ final class SettingsViewController: UIViewController {
             case .registerLadder: return "Register ladder"
             case .verbCombo: return "Verb combinations"
             case .dialogueContentRecording: return "Dialogue Replay"
+            case .dialogueLessonWrapUp: return "Lesson wrap-up"
             case .stageLayouts: return "Stage layouts"
             case .pillField: return "Pill field"
             case .spanHighlight: return "Multi-select highlight"
@@ -222,6 +224,7 @@ final class SettingsViewController: UIViewController {
             case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
             case .verbCombo: return "5 stills · hook, rule, 3 examples · Gemini · export cards"
             case .dialogueContentRecording: return "TikTok stage · conversation, two-pass, or quiz"
+            case .dialogueLessonWrapUp: return "End-lesson sheet · thumbnail · per-scene scores"
             case .stageLayouts: return "Defined onboarding layouts · title rises in · assets shift"
             case .pillField: return "Study-method capsules · size, depth, blur, haptics"
             case .spanHighlight: return "Fill, band color, height, and corner radius"
@@ -266,6 +269,7 @@ final class SettingsViewController: UIViewController {
             case .registerLadder: return "text.badge.star"
             case .verbCombo: return "plus.forwardslash.minus"
             case .dialogueContentRecording: return "video"
+            case .dialogueLessonWrapUp: return "flag.checkered"
             case .stageLayouts: return "square.stack.3d.up"
             case .pillField: return "capsule"
             case .spanHighlight: return "highlighter"
@@ -644,6 +648,7 @@ final class SettingsViewController: UIViewController {
             pushDetailList(title: link.title) { [weak self] in
                 self?.debugItems([
                     .dialogueContentRecording,
+                    .dialogueLessonWrapUp,
                     .dialogueExperimentHarness,
                     .registerLadder,
                 ]) ?? []
@@ -683,6 +688,7 @@ final class SettingsViewController: UIViewController {
                     .explosions,
                     .feedbackSounds,
                     .swiftUIShaders,
+                    .dialogueLessonWrapUp,
                 ]) ?? []
             }
         }
@@ -1015,6 +1021,11 @@ final class SettingsViewController: UIViewController {
         case .dialogueContentRecording:
             navigationController?.pushViewController(
                 DialogueContentListViewController(),
+                animated: true
+            )
+        case .dialogueLessonWrapUp:
+            navigationController?.pushViewController(
+                DialogueLessonWrapUpExperimentViewController(),
                 animated: true
             )
         case .registerLadder:

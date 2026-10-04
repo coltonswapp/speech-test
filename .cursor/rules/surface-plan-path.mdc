@@ -1,0 +1,12 @@
+---
+description: Always show the full path of any plan file created or updated
+alwaysApply: true
+---
+
+# Surface plan paths
+
+Whenever you create or update a plan (CreatePlan or editing a `.plan.md` file), include its full absolute path in the reply to the user, every time.
+
+Example:
+
+> Plan: `/Users/cswapp/.cursor/plans/shizen_note_webhook_38572635.plan.md`

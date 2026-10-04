@@ -1,6 +1,7 @@
 import { commonUses } from "./common_uses.js";
 import { contextualGloss } from "./contextual_gloss.js";
 import { dialogueNuance } from "./dialogue_nuance.js";
+import { grammarUsage } from "./grammar_usage.js";
 import { senseFit } from "./sense_fit.js";
 import { spanBreakdown } from "./span_breakdown.js";
 import { spanGloss } from "./span_gloss.js";
@@ -13,6 +14,7 @@ const FEATURES: Record<string, FeatureDefinition<any, unknown>> = {
   dialogue_nuance: dialogueNuance,
   span_gloss: spanGloss,
   span_breakdown: spanBreakdown,
+  grammar_usage: grammarUsage,
 };
 
 export const FEATURE_NAMES = Object.keys(FEATURES);

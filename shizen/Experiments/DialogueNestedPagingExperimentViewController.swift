@@ -409,7 +409,8 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private static let pageTransitionResistance: CGFloat = 0.52
     private static let pageNavigationControlHeight: CGFloat = 52
     private static let pageNavigationSymbolPointSize: CGFloat = 22
-    private static let highlightsSecondPageTopInsetExtra: CGFloat = 56
+    /// Clearance below the status bar for the top-rail page chevron (`pageChevronTopCenterY` + half control height).
+    private static let highlightsChevronBandPadding: CGFloat = 4
     private static let quizCheckButtonHorizontalInset: CGFloat = 20
     private static let quizCheckButtonBottomInset: CGFloat = 8
     private static let quizCheckButtonHeight: CGFloat = 50
@@ -532,6 +533,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     /// Set while "Next scene" dismisses the completion sheet, so that dismiss
     /// doesn't also drop the learner into review of the scene they just left.
     private var suppressViewLessonOnSheetDismiss = false
+    private var nextSceneButtonEndsLesson = false
 
     private var authoredHasQuiz: Bool {
         !(currentScenarioItem?.quiz.isEmpty ?? true)
@@ -845,10 +847,10 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         guard !hasLoadedLessonContent else { return }
         hasLoadedLessonContent = true
 
-        configureDialogueNavigationItems()
         configureOuterPager()
         configureDialoguePage()
         configureQuizPage()
+        configureDialogueNavigationItems()
         configureQuizNextButton()
         configureHighlightsPage()
         reloadQuizContent()
@@ -1015,6 +1017,11 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         return items[index + 1]
     }
 
+    /// Last scene of a lesson collection: the next-scene slot ends the lesson instead.
+    private var endsLessonHere: Bool {
+        !usesLegacyCatalog && collection != nil && currentScenarioItem != nil && nextScenarioItem == nil
+    }
+
     /// Listening and quiz are done for this visit, or the scene was already completed.
     private var sceneIsReadyForNextScene: Bool {
         if isHighlightsUnlocked { return true }
@@ -1068,7 +1075,13 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
                 makeTokenHighlightPreviewAction(),
             ]
         )
-        var children: [UIMenuElement] = [experimentsMenu]
+        let dictionarySearch = UIAction(
+            title: "Dictionary",
+            image: UIImage(systemName: "character.book.closed")
+        ) { [weak self] _ in
+            self?.presentDictionaryLookup()
+        }
+        var children: [UIMenuElement] = [dictionarySearch, experimentsMenu]
         if let context = contentQASceneContext {
             let approved = approvedScenarioIDs.contains(selectedScenarioID)
             let approve = UIAction(
@@ -1081,10 +1094,10 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             }
             let note = UIAction(
                 title: "Note",
-                subtitle: "Comment + Studio link for an agent",
+                subtitle: contentQANoteMenuSubtitle,
                 image: UIImage(systemName: "square.and.pencil")
             ) { [weak self] _ in
-                self?.presentSceneQANote()
+                self?.presentContentQANote()
             }
             let qaMenu = UIMenu(
                 title: "QA",
@@ -1124,6 +1137,102 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         let lessonTitle: String
         let lessonID: String
         let sceneTitle: String
+    }
+
+    private struct ContentQAFocus {
+        let title: String
+        let detailLines: [String]
+        var source: ContentCMSClient.QANoteSource = .dialogue
+        var quizQuestionNumber: Int?
+    }
+
+    private struct ContentQAContext {
+        let scene: ContentQASceneContext
+        let focus: ContentQAFocus
+    }
+
+    private var contentQAContext: ContentQAContext? {
+        guard let scene = contentQASceneContext else { return nil }
+        return ContentQAContext(scene: scene, focus: makeContentQAFocus())
+    }
+
+    private var contentQANoteMenuSubtitle: String {
+        contentQAContext?.focus.title ?? "Comment + Studio link for an agent"
+    }
+
+    private func contentQASessionModeLabel() -> String {
+        switch sessionMode {
+        case .attempt: return "Lesson attempt"
+        case .viewLesson: return "Study / view lesson"
+        case .retakeQuiz: return "Quiz retake"
+        }
+    }
+
+    private func makeContentQAFocus() -> ContentQAFocus {
+        let pageIndex = activePageIndex
+        if pageIndex == 0 {
+            if let focus = dialogueViewController?.contentQAFocus(
+                sessionModeLabel: contentQASessionModeLabel()
+            ) {
+                return ContentQAFocus(title: focus.title, detailLines: focus.details)
+            }
+            return ContentQAFocus(
+                title: "Dialogue",
+                detailLines: ["Session: \(contentQASessionModeLabel())"]
+            )
+        }
+        if hasQuizPage, pageIndex == 1 {
+            if let focus = quizViewController?.contentQAFocus() {
+                return ContentQAFocus(
+                    title: focus.title,
+                    detailLines: focus.details,
+                    source: .quiz,
+                    quizQuestionNumber: focus.questionNumber
+                )
+            }
+            return ContentQAFocus(title: "Quiz", detailLines: [], source: .quiz)
+        }
+        return highlightsContentQAFocus()
+    }
+
+    private func highlightsContentQAFocus() -> ContentQAFocus {
+        guard let item = currentScenarioItem else {
+            return ContentQAFocus(title: "Lesson highlights", detailLines: [])
+        }
+        let highlights = item.highlights
+        var details: [String] = []
+        if highlights.vocabulary.isEmpty {
+            details.append("Vocab: none authored")
+        } else {
+            let preview = highlights.vocabulary.prefix(10).joined(separator: ", ")
+            let suffix = highlights.vocabulary.count > 10 ? "…" : ""
+            details.append("Vocab (\(highlights.vocabulary.count)): \(preview)\(suffix)")
+        }
+        if highlights.grammarPatterns.isEmpty {
+            details.append("Grammar: none authored")
+        } else {
+            let labels = highlights.grammarPatternLabels.prefix(6).joined(separator: ", ")
+            let suffix = highlights.grammarPatterns.count > 6 ? "…" : ""
+            details.append("Grammar (\(highlights.grammarPatterns.count)): \(labels)\(suffix)")
+        }
+        if highlights.contextNotes.isEmpty {
+            details.append("Context notes: none")
+        } else {
+            details.append("Context notes: \(highlights.contextNotes.count)")
+            if let first = highlights.contextNotes.first {
+                details.append("First note: \(Self.contentQATrimmedExportText(first))")
+            }
+        }
+        return ContentQAFocus(title: "Lesson highlights", detailLines: details)
+    }
+
+    private static func contentQATrimmedExportText(_ text: String, maxLength: Int = 240) -> String {
+        let collapsed = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard collapsed.count > maxLength else { return collapsed }
+        let end = collapsed.index(collapsed.startIndex, offsetBy: maxLength)
+        return String(collapsed[..<end]) + "…"
     }
 
     /// Best-effort Studio identity for any dialogue source (CMS lesson, bundled JSON, harness clip).
@@ -1181,25 +1290,45 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         return (fallbackCollection, scenarioID)
     }
 
-    private func presentSceneQANote() {
-        guard let context = contentQASceneContext else { return }
-        let note = DialogueSceneQANoteViewController(
-            lessonTitle: context.lessonTitle,
-            lessonID: context.lessonID,
-            sceneTitle: context.sceneTitle,
-            sceneSlug: context.slug,
+    var canPresentContentQANote: Bool {
+        contentQAContext != nil
+    }
+
+    /// Presents the shared QA note sheet. Scene identity, source, and Studio link
+    /// stay on the current lesson page. Pass a focus override when the note is
+    /// about a pushed surface such as sentence scrub.
+    func presentContentQANote(focusTitle: String? = nil, focusDetailLines: [String]? = nil) {
+        guard let context = contentQAContext else { return }
+        var sourceId = "\(context.scene.collectionId)/\(context.scene.slug)"
+        if let number = context.focus.quizQuestionNumber {
+            sourceId += "#q\(number)"
+        }
+        DialogueContentQANoteViewController.present(
+            from: self,
+            source: context.focus.source,
+            sourceId: sourceId,
+            focusTitle: focusTitle ?? context.focus.title,
+            focusDetailLines: focusDetailLines ?? context.focus.detailLines,
+            lessonTitle: context.scene.lessonTitle,
+            lessonID: context.scene.lessonID,
+            sceneTitle: context.scene.sceneTitle,
+            sceneSlug: context.scene.slug,
             studioLink: ContentCMSClient.studioScenarioEditorLink(
-                collectionId: context.collectionId,
-                slug: context.slug
+                collectionId: context.scene.collectionId,
+                slug: context.scene.slug
             )
         )
-        let sheet = UINavigationController(rootViewController: note)
-        sheet.modalPresentationStyle = .pageSheet
-        if let presentation = sheet.sheetPresentationController {
-            presentation.detents = [.medium(), .large()]
-            presentation.prefersGrabberVisible = true
+    }
+
+    /// Results push inside the sheet's own navigation controller, never onto the scene's stack.
+    private func presentDictionaryLookup() {
+        if dialogueViewController.dialoguePlaybackPhase == .playing {
+            dialogueViewController.dialoguePausePlayback()
         }
-        present(sheet, animated: true)
+        quizViewController?.stopEvidencePlayback()
+        let nav = UINavigationController(rootViewController: DictionarySearchViewController())
+        nav.modalPresentationStyle = .formSheet
+        present(nav, animated: true)
     }
 
     private func approveCurrentScene(collectionId: String, slug: String) {
@@ -1312,8 +1441,8 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         applySessionUnlocksForCurrentMode()
         guard let item = currentScenarioItem else { return }
         title = item.menuTitle
-        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
         embedDialogue(for: item)
+        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
         reloadQuizContent()
         reloadHighlightsContent()
         updateUnlockedPagesVisibility()
@@ -1556,29 +1685,40 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     }
 
     private func configureNextSceneButton() {
-        var config = UIButton.Configuration.glass()
-        config.cornerStyle = .capsule
-        config.title = "Next scene"
-        config.image = UIImage(systemName: "arrow.right")
-        config.imagePlacement = .trailing
-        config.imagePadding = 6
-        config.baseForegroundColor = .systemYellow
-        config.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 18, bottom: 12, trailing: 18)
-        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
-            var outgoing = incoming
-            outgoing.font = .systemFont(ofSize: 17, weight: .semibold)
-            outgoing.foregroundColor = .systemYellow
-            return outgoing
-        }
-        nextSceneButton.configuration = config
+        applyNextSceneButtonConfiguration(endsLesson: false)
         nextSceneButton.translatesAutoresizingMaskIntoConstraints = false
         nextSceneButton.setContentHuggingPriority(.required, for: .horizontal)
         nextSceneButton.setContentCompressionResistancePriority(.required, for: .horizontal)
         nextSceneButton.accessibilityLabel = "Next scene"
         nextSceneButton.alpha = 0
         nextSceneButton.addAction(UIAction { [weak self] _ in
-            self?.advanceToNextScene()
+            guard let self else { return }
+            if self.endsLessonHere {
+                self.presentLessonWrapUp()
+            } else {
+                self.advanceToNextScene()
+            }
         }, for: .primaryActionTriggered)
+    }
+
+    private func applyNextSceneButtonConfiguration(endsLesson: Bool) {
+        nextSceneButtonEndsLesson = endsLesson
+        var config = UIButton.Configuration.glass()
+        config.cornerStyle = .capsule
+        config.title = endsLesson ? "End lesson" : "Next scene"
+        config.image = UIImage(systemName: endsLesson ? "flag.checkered" : "arrow.right")
+        config.imagePlacement = .trailing
+        config.imagePadding = 6
+        config.baseForegroundColor = .label
+        config.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 18, bottom: 12, trailing: 18)
+        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+            var outgoing = incoming
+            outgoing.font = .systemFont(ofSize: 17, weight: .semibold)
+            outgoing.foregroundColor = .label
+            return outgoing
+        }
+        config.imageColorTransformer = UIConfigurationColorTransformer { _ in .label }
+        nextSceneButton.configuration = config
     }
 
     private func configureQuizContinueButton() {
@@ -1748,11 +1888,13 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         refreshHandoffCoordinatorInnerScrollViews()
         navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
         view.layoutIfNeeded()
+        highlightsPinnedTopBoundary = 0
         if snapToHighlights, isHighlightsUnlocked {
             handoffCoordinator?.snapToPage(highlightsPageIndex)
         } else {
             clampOuterScrollToValidPageIfNeeded()
         }
+        applyPageTransitionProgress(currentPageTransitionProgress())
     }
 
     private func advanceToNextScene() {
@@ -1785,6 +1927,10 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             highlights: item.highlights
         )
         sheet.nextSceneTitle = nextScenarioItem?.menuTitle
+        if sessionMode == .attempt, let feedback = lessonFeedbackContext(item: item, tally: tally),
+           LessonFeedbackPrompt.shouldOffer(feedback) {
+            sheet.feedbackContext = feedback
+        }
         sheet.onExploreHighlights = { [weak self] in
             self?.dismiss(animated: true) {
                 self?.enterViewLesson(snapToHighlights: true)
@@ -1796,6 +1942,13 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             self.dismiss(animated: true) {
                 self.advanceToNextScene()
                 self.suppressViewLessonOnSheetDismiss = false
+            }
+        }
+        if endsLessonHere {
+            sheet.onEndLesson = { [weak self] in
+                self?.dismiss(animated: true) {
+                    self?.presentLessonWrapUp()
+                }
             }
         }
         sheet.onSheetDismissed = { [weak self] in
@@ -1814,6 +1967,40 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         present(sheet, animated: true)
     }
 
+    private func presentLessonWrapUp() {
+        guard presentedViewController == nil, let collection else { return }
+        DialogueLessonWrapUpPresenter.present(from: self, collection: collection) { [weak self] in
+            self?.dismiss(animated: true) {
+                self?.returnToLessonList()
+            }
+        }
+    }
+
+    /// Pops past this lesson's scene picker when it is on the stack.
+    private func returnToLessonList() {
+        guard let navigationController else { return }
+        let stack = navigationController.viewControllers
+        if let pickerIndex = stack.lastIndex(where: { $0 is LessonScenarioPickerViewController }), pickerIndex > 0 {
+            navigationController.popToViewController(stack[pickerIndex - 1], animated: true)
+        } else {
+            navigationController.popViewController(animated: true)
+        }
+    }
+
+    private func lessonFeedbackContext(item: ScenarioItem, tally: DialogueCompletionTally) -> LessonFeedbackContext? {
+        guard let scene = contentQASceneContext else { return nil }
+        return LessonFeedbackContext(
+            collectionId: scene.collectionId,
+            scenarioId: scene.slug,
+            publishedVariantId: item.example.publishedVariantId,
+            publishedContentHash: item.example.publishedContentHash,
+            correctCount: tally.score.correctCount,
+            questionCount: tally.score.questionCount,
+            starCount: tally.starCount,
+            englishPeekedCount: tally.englishPeekedCount
+        )
+    }
+
     private func updateQuizNextButtonState() {
         applyQuizNextButtonProgress(pageTransitionProgress)
     }
@@ -1821,6 +2008,15 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private func updateUnlockedPagesVisibility() {
         quizPageView.isHidden = !hasQuizPage
         highlightsPageView.isHidden = !isHighlightsUnlocked
+        let offersQuiz = authoredHasQuiz && sessionMode != .viewLesson
+        dialogueViewController?.onQuizRequested = offersQuiz
+            ? { [weak self] in self?.openQuizFromDialogue() }
+            : nil
+    }
+
+    private func openQuizFromDialogue() {
+        guard hasQuizPage else { return }
+        handoffCoordinator?.snapToPage(1)
     }
 
     private func refreshHandoffCoordinatorInnerScrollViews() {
@@ -1863,9 +2059,14 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
                 from: self
             )
         }
-        highlightsContentView.onSelectGrammar = { [weak self] grammarPointID in
+        highlightsContentView.onSelectGrammar = { [weak self] pattern in
             guard let self else { return }
-            GrammarReferencePresenter.open(grammarPointID: grammarPointID, from: self)
+            let lines = self.currentScenarioItem?.example.scenario?.lines ?? []
+            GrammarPatternDetailPresenter.push(
+                pattern: pattern,
+                request: GeminiGrammarUsage.request(for: pattern, in: lines),
+                from: self
+            )
         }
         highlightsScrollView.addSubview(highlightsContentView)
 
@@ -1940,9 +2141,18 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         quizViewController.pinHandoffScrollToTopInsetIfResting(topInset)
     }
 
+    private func highlightsSettledTopContentInset() -> CGFloat {
+        view.safeAreaInsets.top + highlightsChevronTopInsetExtra()
+    }
+
+    private func highlightsChevronTopInsetExtra() -> CGFloat {
+        let chevronBottom = pageChevronTopCenterY() + Self.pageNavigationControlHeight / 2
+        return chevronBottom - view.safeAreaInsets.top + Self.highlightsChevronBandPadding
+    }
+
     private func quizTopContentInset(for outerPageOffset: CGFloat) -> CGFloat {
         let base = view.safeAreaInsets.top
-        let settled = base + Self.highlightsSecondPageTopInsetExtra
+        let settled = highlightsSettledTopContentInset()
         guard hasQuizPage else { return base }
         // Stay on the progress fraction. Rounding to the quiz page halfway
         // through the transition used to jump the inset ahead of the chevron.
@@ -1960,18 +2170,27 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
 
     /// Fades in on the highlights page, in the same trailing slot as quiz Continue.
     private func applyNextSceneButtonProgress(_ outerPageOffset: CGFloat) {
-        guard let next = nextScenarioItem, sceneIsReadyForNextScene, isHighlightsUnlocked else {
+        let next = nextScenarioItem
+        let endsLesson = endsLessonHere
+        guard next != nil || endsLesson, sceneIsReadyForNextScene, isHighlightsUnlocked else {
             nextSceneButton.alpha = 0
             nextSceneButton.isEnabled = false
             nextSceneButton.isUserInteractionEnabled = false
             return
+        }
+        if endsLesson != nextSceneButtonEndsLesson {
+            applyNextSceneButtonConfiguration(endsLesson: endsLesson)
         }
         let segmentStart = CGFloat(highlightsPageIndex - 1)
         let pageAlpha = min(max(outerPageOffset - segmentStart, 0), 1)
         nextSceneButton.alpha = pageAlpha
         nextSceneButton.isEnabled = pageAlpha > 0.55
         nextSceneButton.isUserInteractionEnabled = pageAlpha > 0.55
-        nextSceneButton.accessibilityLabel = "Next scene, \(next.menuTitle)"
+        if let next {
+            nextSceneButton.accessibilityLabel = "Next scene, \(next.menuTitle)"
+        } else {
+            nextSceneButton.accessibilityLabel = "End lesson"
+        }
     }
 
     /// Fades the quiz next button in on the quiz page, matching Play's slot.
@@ -2176,7 +2395,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         var bottomInset = appliedBottomContentInset >= 0
             ? appliedBottomContentInset
             : view.safeAreaInsets.bottom + 16
-        if nextScenarioItem != nil {
+        if nextScenarioItem != nil || endsLessonHere {
             bottomInset += Self.quizCheckButtonHeight
         }
 
@@ -2197,17 +2416,35 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         guard !scrollView.isTracking, !scrollView.isDecelerating else { return }
         let topBoundary = -topInset
         let offset = scrollView.contentOffset.y
-        let atUnsettledOrigin = abs(offset) <= 1
-        let trackingPinnedTop = abs(offset - highlightsPinnedTopBoundary) < 2
-        guard atUnsettledOrigin || trackingPinnedTop else { return }
+        guard highlightsScrollOffsetIsPinnedToTop(
+            offset: offset,
+            topBoundary: topBoundary,
+            safeAreaTopInset: view.safeAreaInsets.top
+        ) else { return }
         highlightsPinnedTopBoundary = topBoundary
         guard abs(offset - topBoundary) > 0.5 else { return }
         scrollView.contentOffset.y = topBoundary
     }
 
+    /// True when the learner has not scrolled into the list — includes the
+    /// safe-area-only top while the chevron band grows during outer paging.
+    private func highlightsScrollOffsetIsPinnedToTop(
+        offset: CGFloat,
+        topBoundary: CGFloat,
+        safeAreaTopInset: CGFloat
+    ) -> Bool {
+        if abs(offset) <= 1 { return true }
+        if abs(offset - highlightsPinnedTopBoundary) < 2 { return true }
+        let safeAreaOnlyTop = -safeAreaTopInset
+        if offset >= topBoundary - 0.5, offset <= safeAreaOnlyTop + 1 {
+            return true
+        }
+        return false
+    }
+
     private func highlightsTopContentInset(for outerPageOffset: CGFloat) -> CGFloat {
         let base = view.safeAreaInsets.top
-        let settled = base + Self.highlightsSecondPageTopInsetExtra
+        let settled = highlightsSettledTopContentInset()
         let segmentStart = CGFloat(max(highlightsPageIndex - 1, 0))
         let clamped = min(max(outerPageOffset - segmentStart, 0), 1)
         return base + (settled - base) * clamped
@@ -2561,26 +2798,59 @@ extension DialogueNestedPagingExperimentViewController: UISheetPresentationContr
 
 // MARK: - Content QA note sheet
 
-private final class DialogueSceneQANoteViewController: UIViewController {
+/// Routing hints Shohei's agents read from the note text.
+private enum ContentQANoteTag: String, CaseIterable {
+    case content
+    case bug
+    case localPrompt = "local-prompt"
+    case remoteAgent = "remote-agent"
+    case ux
+    case quiz
+    case fyi
+    case question
 
+    var hashtag: String { "#\(rawValue)" }
+}
+
+final class DialogueContentQANoteViewController: UIViewController, UITextViewDelegate {
+
+    private let source: ContentCMSClient.QANoteSource
+    private let sourceId: String
+    private let focusTitle: String
+    private let focusDetailLines: [String]
     private let lessonTitle: String
     private let lessonID: String
-    private let sceneTitle: String
-    private let sceneSlug: String
+    private let sceneTitle: String?
+    private let sceneSlug: String?
     private let studioLink: String
 
     private let scrollView = UIScrollView()
     private let stack = UIStackView()
     private let noteTextView = UITextView()
-    private let copyButton = PrimaryButton(type: .system)
+    private let sendButton = PrimaryButton(type: .system)
+    private let contextDisclosureButton = UIButton(type: .system)
+    private let contextChevron = UIImageView()
+    private let contextBodyLabel = UILabel()
+    private var tagButtons: [(tag: ContentQANoteTag, button: GlassTagControl)] = []
+    private var keyboardObservers: [NSObjectProtocol] = []
+    private var isSending = false
+    private var contextExpanded = false
 
     init(
+        source: ContentCMSClient.QANoteSource,
+        sourceId: String,
+        focusTitle: String,
+        focusDetailLines: [String],
         lessonTitle: String,
         lessonID: String,
-        sceneTitle: String,
-        sceneSlug: String,
+        sceneTitle: String? = nil,
+        sceneSlug: String? = nil,
         studioLink: String
     ) {
+        self.source = source
+        self.sourceId = sourceId
+        self.focusTitle = focusTitle
+        self.focusDetailLines = focusDetailLines
         self.lessonTitle = lessonTitle
         self.lessonID = lessonID
         self.sceneTitle = sceneTitle
@@ -2596,12 +2866,20 @@ private final class DialogueSceneQANoteViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = ExperimentPalette.pageBackground
-        navigationItem.title = "Scene note"
+        navigationItem.title = focusTitle
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .done,
             target: self,
             action: #selector(doneTapped)
         )
+        let copyItem = UIBarButtonItem(
+            image: UIImage(systemName: "doc.on.doc"),
+            style: .plain,
+            target: self,
+            action: #selector(copyTapped)
+        )
+        copyItem.accessibilityLabel = "Copy for agent"
+        navigationItem.leftBarButtonItem = copyItem
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.keyboardDismissMode = .interactive
@@ -2614,42 +2892,140 @@ private final class DialogueSceneQANoteViewController: UIViewController {
         stack.addArrangedSubview(makeMetaBlock())
         stack.addArrangedSubview(makeNoteSection())
 
-        copyButton.primaryStyle = .yellow
-        copyButton.setTitle("Copy for agent", for: .normal)
-        copyButton.accessibilityLabel = "Copy for agent"
-        copyButton.addTarget(self, action: #selector(copyTapped), for: .touchUpInside)
-        view.addSubview(copyButton)
+        sendButton.primaryStyle = .yellow
+        sendButton.setTitle("Send to agent", for: .normal)
+        sendButton.accessibilityLabel = "Send to agent"
+        sendButton.addTarget(self, action: #selector(sendTapped), for: .touchUpInside)
+        view.addSubview(sendButton)
 
         NSLayoutConstraint.activate([
-            copyButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: PrimaryButton.horizontalInset),
-            copyButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -PrimaryButton.horizontalInset),
-            copyButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
-            copyButton.heightAnchor.constraint(equalToConstant: PrimaryButton.preferredHeight),
+            sendButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: PrimaryButton.horizontalInset),
+            sendButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -PrimaryButton.horizontalInset),
+            sendButton.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -12),
+            sendButton.heightAnchor.constraint(equalToConstant: PrimaryButton.preferredHeight),
 
             scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: copyButton.topAnchor, constant: -16),
+            scrollView.bottomAnchor.constraint(equalTo: sendButton.topAnchor, constant: -16),
 
             stack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 16),
             stack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: 20),
             stack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -20),
             stack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -16),
             stack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor, constant: -40),
+            stack.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.frameLayoutGuide.heightAnchor, constant: -32),
         ])
+
+        installKeyboardScrollObservers()
+    }
+
+    deinit {
+        keyboardObservers.forEach { NotificationCenter.default.removeObserver($0) }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        scrollCaretIntoView(animated: true)
+    }
+
+    private func installKeyboardScrollObservers() {
+        let center = NotificationCenter.default
+        keyboardObservers = [
+            center.addObserver(
+                forName: UIResponder.keyboardWillChangeFrameNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                self?.keyboardWillChangeFrame(notification)
+            },
+        ]
+    }
+
+    private func keyboardWillChangeFrame(_ notification: Notification) {
+        guard let userInfo = notification.userInfo else { return }
+        let duration = (userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?.doubleValue ?? 0.25
+        let curveRaw = (userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? NSNumber)?.uintValue ?? 0
+        let options = UIView.AnimationOptions(rawValue: curveRaw << 16)
+
+        UIView.animate(withDuration: duration, delay: 0, options: options) {
+            self.view.layoutIfNeeded()
+            self.scrollCaretIntoView(animated: false)
+        }
+    }
+
+    /// The text view grows instead of scrolling, so the outer scroll view follows the caret.
+    private func scrollCaretIntoView(animated: Bool) {
+        guard noteTextView.isFirstResponder, let selection = noteTextView.selectedTextRange else { return }
+        view.layoutIfNeeded()
+        let caret = noteTextView.caretRect(for: selection.end)
+        guard !caret.isNull, !caret.isInfinite else { return }
+        let target = noteTextView.convert(caret, to: scrollView)
+        scrollView.scrollRectToVisible(target.insetBy(dx: 0, dy: -24), animated: animated)
+    }
+
+    func textViewDidChange(_ textView: UITextView) {
+        scrollCaretIntoView(animated: false)
+    }
+
+    func textViewDidChangeSelection(_ textView: UITextView) {
+        scrollCaretIntoView(animated: false)
     }
 
     private func makeMetaBlock() -> UIView {
-        let label = UILabel()
-        label.numberOfLines = 0
-        label.font = .preferredFont(forTextStyle: .subheadline)
-        label.textColor = .secondaryLabel
-        label.text = """
-        Lesson: \(lessonTitle) (\(lessonID))
-        Scene: \(sceneTitle) (\(sceneSlug))
-        Studio: \(studioLink)
-        """
-        return label
+        contextChevron.image = UIImage(systemName: "chevron.right")
+        contextChevron.tintColor = .secondaryLabel
+        contextChevron.preferredSymbolConfiguration = UIImage.SymbolConfiguration(
+            textStyle: .subheadline,
+            scale: .small
+        )
+        contextChevron.setContentHuggingPriority(.required, for: .horizontal)
+        contextChevron.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        let title = UILabel()
+        title.text = "Context"
+        title.font = .preferredFont(forTextStyle: .subheadline)
+        title.textColor = .secondaryLabel
+
+        let row = UIStackView(arrangedSubviews: [contextChevron, title])
+        row.axis = .horizontal
+        row.spacing = 6
+        row.alignment = .center
+        row.isUserInteractionEnabled = false
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        contextDisclosureButton.accessibilityLabel = "Context"
+        contextDisclosureButton.accessibilityValue = "Collapsed"
+        contextDisclosureButton.addTarget(self, action: #selector(toggleContextExpanded), for: .touchUpInside)
+        contextDisclosureButton.addSubview(row)
+        NSLayoutConstraint.activate([
+            row.topAnchor.constraint(equalTo: contextDisclosureButton.topAnchor, constant: 4),
+            row.bottomAnchor.constraint(equalTo: contextDisclosureButton.bottomAnchor, constant: -4),
+            row.leadingAnchor.constraint(equalTo: contextDisclosureButton.leadingAnchor),
+            row.trailingAnchor.constraint(lessThanOrEqualTo: contextDisclosureButton.trailingAnchor),
+        ])
+
+        contextBodyLabel.numberOfLines = 0
+        contextBodyLabel.font = .preferredFont(forTextStyle: .subheadline)
+        contextBodyLabel.textColor = .secondaryLabel
+        contextBodyLabel.text = contextLines().joined(separator: "\n")
+        contextBodyLabel.isHidden = true
+
+        let wrap = UIStackView(arrangedSubviews: [contextDisclosureButton, contextBodyLabel])
+        wrap.axis = .vertical
+        wrap.spacing = 8
+        wrap.alignment = .fill
+        return wrap
+    }
+
+    @objc private func toggleContextExpanded() {
+        contextExpanded.toggle()
+        contextChevron.image = UIImage(systemName: contextExpanded ? "chevron.down" : "chevron.right")
+        contextDisclosureButton.accessibilityValue = contextExpanded ? "Expanded" : "Collapsed"
+        UIView.animate(withDuration: 0.2) {
+            self.contextBodyLabel.isHidden = !self.contextExpanded
+            self.view.layoutIfNeeded()
+        }
     }
 
     private func makeNoteSection() -> UIView {
@@ -2662,31 +3038,152 @@ private final class DialogueSceneQANoteViewController: UIViewController {
         noteTextView.layer.borderWidth = 1
         noteTextView.layer.borderColor = UIColor.separator.cgColor
         noteTextView.textContainerInset = UIEdgeInsets(top: 12, left: 10, bottom: 12, right: 10)
+        noteTextView.isScrollEnabled = false
+        noteTextView.delegate = self
         noteTextView.translatesAutoresizingMaskIntoConstraints = false
-        noteTextView.heightAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive = true
+        // Lowest hugging in the sheet: the field absorbs all spare height down to the tags and CTA.
+        noteTextView.setContentHuggingPriority(UILayoutPriority(1), for: .vertical)
+        noteTextView.heightAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
 
-        let wrap = UIStackView(arrangedSubviews: [heading, noteTextView])
+        let wrap = UIStackView(arrangedSubviews: [heading, noteTextView, makeTagFlow()])
         wrap.axis = .vertical
         wrap.spacing = 8
+        wrap.setCustomSpacing(14, after: noteTextView)
         return wrap
     }
 
-    private func agentPasteboardText() -> String {
-        let note = noteTextView.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func makeTagFlow() -> UIView {
+        tagButtons = ContentQANoteTag.allCases.map { tag in
+            (tag, GlassTagControl(title: tag.hashtag))
+        }
+        let flow = GlassTagFlowView()
+        flow.setTags(tagButtons.map(\.button))
+        flow.setContentCompressionResistancePriority(.required, for: .vertical)
+        return flow
+    }
+
+    private var typedNote: String {
+        noteTextView.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var selectedTags: [ContentQANoteTag] {
+        tagButtons.filter { $0.button.isSelected }.map(\.tag)
+    }
+
+    /// Leading `Tags:` line plus a blank separator, or nothing when no tags are on.
+    private func tagLines() -> [String] {
+        let tags = selectedTags
+        guard !tags.isEmpty else { return [] }
+        return ["Tags: " + tags.map(\.hashtag).joined(separator: " "), ""]
+    }
+
+    private func contextLines() -> [String] {
         var lines = [
-            "Lesson: \(lessonTitle) (\(lessonID))",
-            "Scene: \(sceneTitle) (\(sceneSlug))",
-            "Studio: \(studioLink)",
-            "",
-            "Note:",
+            "Looking at: \(focusTitle)",
         ]
-        lines.append(note.isEmpty ? "" : note)
+        lines.append(contentsOf: focusDetailLines)
+        lines.append("")
+        lines.append("Lesson: \(lessonTitle) (\(lessonID))")
+        if let sceneTitle, let sceneSlug {
+            lines.append("Scene: \(sceneTitle) (\(sceneSlug))")
+        }
+        lines.append("Studio: \(studioLink)")
+        return lines
+    }
+
+    static func present(
+        from presenter: UIViewController,
+        source: ContentCMSClient.QANoteSource,
+        sourceId: String,
+        focusTitle: String,
+        focusDetailLines: [String],
+        lessonTitle: String,
+        lessonID: String,
+        sceneTitle: String? = nil,
+        sceneSlug: String? = nil,
+        studioLink: String
+    ) {
+        let note = DialogueContentQANoteViewController(
+            source: source,
+            sourceId: sourceId,
+            focusTitle: focusTitle,
+            focusDetailLines: focusDetailLines,
+            lessonTitle: lessonTitle,
+            lessonID: lessonID,
+            sceneTitle: sceneTitle,
+            sceneSlug: sceneSlug,
+            studioLink: studioLink
+        )
+        let sheet = UINavigationController(rootViewController: note)
+        sheet.modalPresentationStyle = .pageSheet
+        if let presentation = sheet.sheetPresentationController {
+            presentation.detents = [.medium(), .large()]
+            presentation.selectedDetentIdentifier = .large
+            presentation.prefersGrabberVisible = true
+        }
+        presenter.present(sheet, animated: true)
+    }
+
+    private func agentPasteboardText() -> String {
+        var lines = tagLines() + contextLines()
+        lines.append("")
+        lines.append("Note:")
+        lines.append(typedNote)
         return lines.joined(separator: "\n")
     }
 
+    /// Tags and typed text first, then the same context block the clipboard copy carries.
+    private func webhookNoteText() -> String {
+        (tagLines() + [typedNote, ""] + contextLines()).joined(separator: "\n")
+    }
+
     @objc private func copyTapped() {
+        view.endEditing(true)
         UIPasteboard.general.string = agentPasteboardText()
         showToast(text: "Copied")
+    }
+
+    @objc private func sendTapped() {
+        guard !isSending else { return }
+        guard !typedNote.isEmpty else {
+            showToast(text: "Write a note first", sentiment: .negative)
+            return
+        }
+        view.endEditing(true)
+        setSending(true)
+        let note = ContentCMSClient.QANote(
+            source: source,
+            sourceId: sourceId,
+            title: focusTitle,
+            note: webhookNoteText(),
+            metadata: .init(url: studioLink, createdAt: Date())
+        )
+        ContentCMSClient.sendQANote(note) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.setSending(false)
+                switch result {
+                case .success:
+                    self.showToast(text: "Sent to Shohei")
+                    self.dismiss(animated: true)
+                case .failure(let error):
+                    let alert = UIAlertController(
+                        title: "Couldn’t send note",
+                        message: error.localizedDescription,
+                        preferredStyle: .alert
+                    )
+                    alert.addAction(UIAlertAction(title: "OK", style: .default))
+                    self.present(alert, animated: true)
+                }
+            }
+        }
+    }
+
+    private func setSending(_ sending: Bool) {
+        isSending = sending
+        sendButton.isEnabled = !sending
+        sendButton.setTitle(sending ? "Sending…" : "Send to agent", for: .normal)
+        isModalInPresentation = sending
     }
 
     @objc private func doneTapped() {

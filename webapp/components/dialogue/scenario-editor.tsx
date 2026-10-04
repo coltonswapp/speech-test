@@ -35,6 +35,7 @@ import { ScenarioAudioPanel } from "@/components/dialogue/scenario-audio-panel";
 import { ScenarioAuditPanel } from "@/components/dialogue/scenario-audit-panel";
 import { ScenarioMinimap } from "@/components/dialogue/scenario-minimap";
 import { SourceScriptPanel } from "@/components/dialogue/source-script-panel";
+import { SceneFeedbackCard } from "@/components/lesson-feedback/scene-feedback-card";
 import {
   hasSpokenJapanese,
   type AuditScenarioResult,
@@ -593,6 +594,12 @@ export function ScenarioEditor({
         isAuditing={isAuditing}
         onApply={applyAuditFixes}
         onDismiss={() => setAuditResult(null)}
+      />
+
+      <SceneFeedbackCard
+        collectionId={collectionId}
+        scenarioSlug={scenarioSlug}
+        currentVariantId={draft.publishedVariantId}
       />
 
       <Tabs value={view} onValueChange={(value) => value && setView(value)}>

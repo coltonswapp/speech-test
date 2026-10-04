@@ -38,6 +38,9 @@ final class AmbienceBedPlayer {
                     self.player = player
                     if self.shouldBePlaying {
                         player.play()
+                    } else {
+                        try? PlaybackAudioSession.activateForPlayback()
+                        player.warmUpOutput()
                     }
                 } catch {
                     self.player = nil

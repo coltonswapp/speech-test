@@ -1,6 +1,6 @@
 import { Type } from "@google/genai";
 
-import { optionalString, parseJSONObject, requiredString, trimmedString, withoutVerbLabel } from "../validate.js";
+import { optionalString, parseJSONObject, requiredString, trimmedString, withoutVerbLabel, withPhraseReading } from "../validate.js";
 import { defineFeature } from "./types.js";
 
 const INSTRUCTIONS = `You help English-speaking Japanese learners compare how one word is used.
@@ -15,11 +15,21 @@ inThisSentence:
 - One short sentence: what this word is doing in the given sentence.
 - Plain English. Do not translate the rest of the sentence.
 - Do not start with the Japanese word.
+- Do not start with "This word is used" or talk about "this word" as the subject. Lead with the use: "Used to say…", "Commonly heard when…", "Typically used to express…".
 - Gloss a verb as "to X" (働く → to work). Never write "the verb", "the verb to X", or "the verb, to X".
+- For a katakana borrowing, include the source in this field in plain English (デジタル → digital, from English; ナイター → a night game, from English). If the Japanese sense is not the English word's sense, give the Japanese meaning and name the English source (テンション → excitement, from English "tension"). Write "from English", not "loanword".
+- For katakana that is not a borrowing (onomatopoeia, a name, native slang), omit the source. If you are not sure it is borrowed, omit the source. Do not invent an etymology.
+- Hiragana and kanji words are unchanged — do not add a source language.
 
 otherUses:
-- 2 to 4 other common uses of this word, each a short phrase.
+- 2 to 4 other common uses of this word.
+- Each item is a short Japanese phrase that shows the use, then " — ", then a plain English gloss.
+- The Japanese must include this word in a real phrase. かける → "眼鏡をかける (めがねをかける) — to put on glasses", not "to put on glasses".
+- After the Japanese and before the em dash, add a hiragana reading of the whole phrase in parentheses: 物置小屋 (ものおきごや) — a storage shed.
+- Hiragana only. Not romaji. Not furigana over the characters. Not a reading of only the selected word.
+- If the Japanese is already all kana, do not add a reading.
 - These are uses in general, not more notes about this sentence.
+- A short phrase, not a full sentence, and under 80 characters. No English-only items.
 - Do not repeat the in-sentence use.
 - If the word really has only one everyday use, return an empty list.
 
@@ -31,8 +41,9 @@ kanjiNote:
 - Skip place names and characters that don't change the idea (don't gloss 大阪).
 - Skip kana-only words, particles, and words where the pieces add nothing.
 - Empty string when it doesn't help. No readings, radicals, or history.
+- Never put a source language here. For a katakana borrowing, that belongs in inThisSentence.
 
-No grammar jargon and no example sentences. Plain text only, no markdown.
+No grammar jargon. otherUses are short Japanese phrases with a gloss, not full sentences and not English-only labels. Plain text only, no markdown.
 
 A dictionary hint, when present, is optional. Prioritize the sentence.
 
@@ -45,6 +56,13 @@ function markSelection(sentence: string, surface: string): string {
   const at = sentence.indexOf(surface);
   if (at < 0) return sentence;
   return `${sentence.slice(0, at)}【${surface}】${sentence.slice(at + surface.length)}`;
+}
+
+/** "This word is used to say X" → "Used to say X". */
+function withoutWordSubject(text: string): string {
+  const stripped = text.replace(/^(?:this|the|that)\s+word\s+is\s+/i, "");
+  if (stripped === text || !stripped) return text;
+  return stripped.charAt(0).toUpperCase() + stripped.slice(1);
 }
 
 /** Drops a note that glosses kanji the selected word doesn't contain (帰 for お疲れ). */
@@ -94,12 +112,14 @@ export const commonUses = defineFeature({
     if (word !== surface) {
       throw new Error(`common_uses: answered for "${word}" instead of "${surface}"`);
     }
-    const inThisSentence = withoutVerbLabel(trimmedString(raw.inThisSentence));
+    const inThisSentence = withoutWordSubject(withoutVerbLabel(trimmedString(raw.inThisSentence)));
     if (!inThisSentence) {
       throw new Error("common_uses: empty inThisSentence");
     }
     const otherUses = Array.isArray(raw.otherUses)
-      ? raw.otherUses.map((item) => withoutVerbLabel(trimmedString(item))).filter(Boolean)
+      ? raw.otherUses
+          .map((item) => withPhraseReading(withoutVerbLabel(trimmedString(item))))
+          .filter(Boolean)
       : [];
     return {
       inThisSentence,

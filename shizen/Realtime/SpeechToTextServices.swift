@@ -131,6 +131,7 @@ private final class SpeechToTextEngine: NSObject {
             audioEngine.inputNode.removeTap(onBus: 0)
             stopRecognitionTaskOnly()
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            PlaybackAudioSession.noteDeactivated()
             return
         }
         stopRecognitionTaskOnly()

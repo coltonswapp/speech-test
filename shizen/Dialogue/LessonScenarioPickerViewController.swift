@@ -506,7 +506,65 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
             image: UIImage(systemName: "arrow.counterclockwise"),
             children: resetChildren
         )
-        return UIMenu(children: [unlock, resetMenu])
+        let note = UIAction(
+            title: "Note",
+            subtitle: lessonNavigationTitle ?? fallbackTitle ?? "Comment + Studio link for an agent",
+            image: UIImage(systemName: "square.and.pencil")
+        ) { [weak self] _ in
+            self?.presentContentQANote()
+        }
+        let qaMenu = UIMenu(
+            title: "QA",
+            image: UIImage(systemName: "checklist"),
+            children: [note]
+        )
+        return UIMenu(children: [qaMenu, unlock, resetMenu])
+    }
+
+    private func presentContentQANote() {
+        let lessonTitle = lessonNavigationTitle
+            ?? fallbackTitle
+            ?? collection?.title
+            ?? collectionID
+        DialogueContentQANoteViewController.present(
+            from: self,
+            source: .dialogue,
+            sourceId: collectionID,
+            focusTitle: "Lesson",
+            focusDetailLines: lessonQAFocusDetailLines(),
+            lessonTitle: lessonTitle,
+            lessonID: collectionID,
+            studioLink: ContentCMSClient.studioLessonEditorLink(collectionId: collectionID)
+        )
+    }
+
+    /// Lesson-wide context: curriculum chips plus the scene list. No Scene line
+    /// is attached, so agents treat this as the collection rather than one slug.
+    private func lessonQAFocusDetailLines() -> [String] {
+        guard let collection else {
+            return ["Lesson not loaded yet"]
+        }
+        var details: [String] = []
+        let unit = resolvedLessonUnit(for: collection)
+        if let level = unit.jlptLevel {
+            details.append("JLPT: N\(level)")
+        }
+        if let title = unit.title {
+            details.append("Unit: \(title)")
+        }
+        if let subtitle = collection.subtitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !subtitle.isEmpty {
+            details.append("Summary: \(subtitle)")
+        }
+        if collection.scenarios.isEmpty {
+            details.append("Scenes: none")
+        } else {
+            details.append("Scenes (\(collection.scenarios.count)):")
+            for (index, scenario) in collection.scenarios.enumerated() {
+                details.append(sceneMenuTitle(number: index + 1, title: scenario.menuTitle))
+            }
+        }
+        return details
     }
 
     private func sceneMenuTitle(number: Int, title: String) -> String {

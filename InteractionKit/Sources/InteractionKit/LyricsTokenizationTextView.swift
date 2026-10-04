@@ -540,8 +540,9 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     return min(lo, hi)...max(lo, hi)
   }
 
-  /// Keeps a drag inside the clause that contains `anchor`. Commas, periods, and
-  /// other separators are walls; the returned index never crosses one.
+  /// Keeps a drag inside the sentence part that contains `anchor`. Periods, quotes,
+  /// and other separators are walls; the returned index never crosses one.
+  /// Commas are not walls — phrases like それなのに、もう often only read as a pair.
   public func tokenIndexLimitedToClause(anchor: Int, proposed: Int) -> Int {
     guard tokens.indices.contains(anchor) else { return proposed }
     guard tokens.indices.contains(proposed) else { return anchor }
@@ -579,7 +580,10 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   }
 
   /// Clause breaks. Middle dots stay selectable so names like ジョン・スミス can be one span.
-  private static let clauseSeparators = CharacterSet(charactersIn: "、。，．,.!?;:！？；：…‥\n\r「」『』【】〈〉《》（）()[]{}")
+  private static let clauseSeparators = CharacterSet(charactersIn: "。．.!?;:！？；：…‥\n\r「」『』【】〈〉《》（）()[]{}")
+
+  /// Trimmed from span ends; commas can sit inside a span but never start or end one.
+  private static let spanEdgeSeparators = clauseSeparators.union(CharacterSet(charactersIn: "、，,､"))
 
   private func clauseKind(of text: String) -> ClauseTokenKind {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -610,12 +614,12 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   private static func strippingClauseSeparators(_ text: String) -> String {
     var scalars = Array(text.unicodeScalars)
     while let first = scalars.first,
-      clauseSeparators.contains(first) || CharacterSet.whitespacesAndNewlines.contains(first)
+      spanEdgeSeparators.contains(first) || CharacterSet.whitespacesAndNewlines.contains(first)
     {
       scalars.removeFirst()
     }
     while let last = scalars.last,
-      clauseSeparators.contains(last) || CharacterSet.whitespacesAndNewlines.contains(last)
+      spanEdgeSeparators.contains(last) || CharacterSet.whitespacesAndNewlines.contains(last)
     {
       scalars.removeLast()
     }

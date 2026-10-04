@@ -215,7 +215,7 @@ enum GeminiContextualGloss {
 
     private static func cacheKey(for request: Request) -> String {
         var parts = [
-            request.requestsHeadword ? "gemini-gloss-v6-gateway-headword" : "gemini-gloss-v6-gateway",
+            request.requestsHeadword ? "gemini-gloss-v7-gateway-headword" : "gemini-gloss-v7-gateway",
             request.framing.rawValue,
             request.sentence,
             request.surface,

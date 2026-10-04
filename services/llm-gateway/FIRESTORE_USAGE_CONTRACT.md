@@ -291,7 +291,7 @@ Do **not** fold `up` / `down` into the usage parser's `BY_FEATURE_FIELD_RE` (tha
 
 Totals `up` and `down` are incremented once per accepted vote (create only). A reason-chip update does not increment. A retry of the same `requestId` does not increment.
 
-Studio can read these with the same Firebase Admin client it uses for `llmUsage` (`getUsageFirestore()`, project `shizen-b453f`). One doc get per period. Security rules deny the iOS client; they do not apply to the Admin SDK. The Studio service account needs read on `llmFeedbackStats/**` for sentiment. Read on `llmFeedback/**` is only for a thumbs-down queue, which is not part of the usage aggregate.
+Studio can read these with the same Firebase Admin client it uses for `llmUsage` (`getUsageFirestore()`, project `shizen-b453f`). One doc get per period. Security rules deny the iOS client; they do not apply to the Admin SDK. The Studio service account needs read on `llmFeedbackStats/**` for sentiment and on `llmFeedback/**` for the Usage feedback browser (`GET /api/usage/feedback`).
 
 ### Vote documents (`llmFeedback`)
 
@@ -308,6 +308,8 @@ llmFeedback/{requestId}
 | `feature`, `model`, `requestId`, `uid` | every vote |
 | `createdAt`, `expiresAt` | every vote |
 | `input`, `result` | every down, and about 1 in 10 ups |
+
+Studio lists recent docs ordered by `createdAt` desc. Optional `rating` filter uses a composite index (`rating` ASC + `createdAt` DESC) declared in `firestore.indexes.json`. Ups without `input`/`result` are vote-only — readers must not invent a gloss payload.
 
 `expiresAt` is `createdAt` + `LLM_FEEDBACK_RETENTION_DAYS` (default 90). Enable a Firestore TTL policy on collection group `llmFeedback`, field `expiresAt`, so payload docs (learner sentences from nuance and tutor context) do not become a standing corpus. Stats period docs have no sentence text and are not TTL'd.
 

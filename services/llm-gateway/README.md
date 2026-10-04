@@ -75,7 +75,7 @@ curl -s "$BASE/v1/usage?period=week" -H "Authorization: Bearer $ID_TOKEN"
 curl -s "$BASE/v1/usage/features?period=month" -H "Authorization: Bearer $ID_TOKEN"
 ```
 
-Look up one user in the Firebase console: `llmUsage/{uid}/periods/week_2026-W40`. The Cloud Run service account in `shizen-studio` needs `roles/datastore.user` on `shizen-b453f`. Clients cannot read this collection (see `firestore.rules`). Studio's Firebase Admin reader should also be allowed to read `llmFeedbackStats/**` (sentiment) and, only if a thumbs-down queue is added, `llmFeedback/**`.
+Look up one user in the Firebase console: `llmUsage/{uid}/periods/week_2026-W40`. The Cloud Run service account in `shizen-studio` needs `roles/datastore.user` on `shizen-b453f`. Clients cannot read this collection (see `firestore.rules`). Studio's Firebase Admin reader should also be allowed to read `llmFeedbackStats/**` (sentiment) and `llmFeedback/**` (Usage feedback browser).
 
 ### Feedback
 

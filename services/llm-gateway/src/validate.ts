@@ -83,6 +83,47 @@ export function trimmedString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+const JAPANESE = /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF]/;
+
+/** Keeps a phrase that actually shows Japanese. Drops English-only labels. */
+export function withJapanese(text: string): string {
+  return JAPANESE.test(text) ? text : "";
+}
+
+/** Kana with sentence punctuation; katakana loanwords stay katakana in a reading. No romaji, no kanji. */
+const KANA_READING = /^[\u3041-\u3096\u30A1-\u30FAー、。？！?!…・〜～]+$/u;
+const HIRAGANA = /[\u3041-\u3096]/u;
+
+/**
+ * Keeps "Japanese (ひらがな) — gloss" when the phrase has kanji.
+ * Drops a redundant reading on an all-kana phrase, and drops romaji readings.
+ */
+export function withPhraseReading(text: string): string {
+  const raw = withJapanese(text);
+  if (!raw) return "";
+
+  const split = raw.match(/^(.*?)\s*[—–]\s*(.+)$/u) ?? raw.match(/^(.*?)\s+-\s+(.+)$/u);
+  if (!split) return raw;
+
+  let phrase = split[1].trim();
+  const gloss = split[2].trim();
+  if (!phrase || !gloss) return raw;
+
+  let reading: string | null = null;
+  const readMatch = phrase.match(/^(.*?)\s*[\(（]([^)）]*)[\)）]\s*$/u);
+  if (readMatch) {
+    phrase = readMatch[1].trim();
+    reading = readMatch[2].replace(/\s+/g, "");
+  }
+  if (!phrase) return "";
+
+  const kana = reading && KANA_READING.test(reading) && HIRAGANA.test(reading);
+  if (/[\u3400-\u4DBF\u4E00-\u9FFF\u3005]/u.test(phrase) && kana) {
+    return `${phrase} (${reading}) — ${gloss}`;
+  }
+  return `${phrase} — ${gloss}`;
+}
+
 /**
  * "the verb to work" / "the verb, to move" / `the verb "to work"` → "to work".
  * A note that is only a part of speech ("the verb") becomes empty.

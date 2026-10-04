@@ -60,15 +60,117 @@ enum ContentCMSClient {
 
     static var isConfigured: Bool { baseURL != nil }
 
-    /// Studio scenario editor URL for content QA copy/paste. DEBUG uses a path-only link.
+    /// Studio lesson editor URL for content QA notes. Path-only when no CMS base URL is set.
+    static func studioLessonEditorLink(collectionId: String) -> String {
+        let path = "/content/dialogues/\(collectionId)"
+        guard let baseURL else { return path }
+        return baseURL.appendingPathComponent("content/dialogues/\(collectionId)").absoluteString
+    }
+
+    /// Studio scenario editor URL for content QA notes. Path-only when no CMS base URL is set.
     static func studioScenarioEditorLink(collectionId: String, slug: String) -> String {
         let path = "/content/dialogues/\(collectionId)/\(slug)"
-        #if DEBUG
-        return path
-        #else
         guard let baseURL else { return path }
         return baseURL.appendingPathComponent("content/dialogues/\(collectionId)/\(slug)").absoluteString
-        #endif
+    }
+
+    enum QANoteSource: String, Encodable {
+        case dialogue
+        case quiz
+    }
+
+    struct QANote: Encodable {
+        struct Metadata: Encodable {
+            let url: String
+            let createdAt: Date
+
+            private enum CodingKeys: String, CodingKey {
+                case url
+                case createdAt = "created_at"
+            }
+
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(url, forKey: .url)
+                try container.encode(ISO8601DateFormatter().string(from: createdAt), forKey: .createdAt)
+            }
+        }
+
+        let source: QANoteSource
+        let sourceId: String
+        let title: String?
+        let note: String
+        let metadata: Metadata
+
+        private enum CodingKeys: String, CodingKey {
+            case source
+            case sourceId = "source_id"
+            case title
+            case note
+            case metadata
+        }
+    }
+
+    /// Sends a QA note to Shohei through Studio. Returns the accepted job id.
+    /// `agent` is omitted so the note always starts with Shohei.
+    static func sendQANote(
+        _ note: QANote,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        guard let baseURL else {
+            completion(.failure(CMSClientError.notConfigured))
+            return
+        }
+        let token = ContentQAClientToken.resolved
+        guard !token.isEmpty else {
+            completion(.failure(CMSClientError.missingContentQAToken))
+            return
+        }
+        let url = baseURL
+            .appendingPathComponent("api")
+            .appendingPathComponent("client")
+            .appendingPathComponent("content-qa")
+            .appendingPathComponent("notes")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        do {
+            request.httpBody = try JSONEncoder().encode(note)
+        } catch {
+            completion(.failure(error))
+            return
+        }
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error {
+                completion(.failure(error))
+                return
+            }
+            guard let http = response as? HTTPURLResponse else {
+                completion(.failure(CMSClientError.invalidResponse))
+                return
+            }
+            guard http.statusCode == 202, let data else {
+                let reason = data.flatMap { String(data: $0, encoding: .utf8) }?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if (400 ..< 500).contains(http.statusCode), !reason.isEmpty {
+                    completion(.failure(CMSClientError.rejected(reason)))
+                } else {
+                    completion(.failure(CMSClientError.httpStatus(http.statusCode)))
+                }
+                return
+            }
+            struct Accepted: Decodable {
+                let jobId: String
+                private enum CodingKeys: String, CodingKey { case jobId = "job_id" }
+            }
+            guard let accepted = try? JSONDecoder().decode(Accepted.self, from: data) else {
+                completion(.failure(CMSClientError.invalidResponse))
+                return
+            }
+            completion(.success(accepted.jobId))
+        }.resume()
     }
 
     /// Lists every dialogue lesson (collection) from the CMS, grouped under
@@ -324,6 +426,7 @@ enum ContentCMSClient {
         case missingContentQAToken
         case invalidResponse
         case httpStatus(Int)
+        case rejected(String)
 
         var errorDescription: String? {
             switch self {
@@ -335,6 +438,8 @@ enum ContentCMSClient {
                 return "Invalid CMS response."
             case .httpStatus(let code):
                 return "CMS request failed with status \(code)."
+            case .rejected(let reason):
+                return reason
             }
         }
     }

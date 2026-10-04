@@ -14,6 +14,20 @@ struct VocabFlashcard {
     /// One English line: the contextual meaning, or a few comma-separated glosses from a single sense.
     let english: String
     var sentence: String?
+    /// Set for phrase cards: the scrub tokens that make up `japanese`.
+    var tokens: [String]? = nil
+    /// Lemma of `japanese` (e.g. 似合う for 似合ってる), when known.
+    var dictionaryForm: String? = nil
+
+    var isPhrase: Bool { (tokens?.count ?? 0) > 1 }
+
+    /// Only set when it differs from what's on the card.
+    var displayedDictionaryForm: String? {
+        guard !isPhrase else { return nil }
+        let form = dictionaryForm?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !form.isEmpty, form != japanese.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        return form
+    }
 }
 
 enum VocabFlashcardBank {
@@ -59,6 +73,7 @@ final class VocabFlashcardView: UIView {
 
     private(set) var isRevealed = false
     private var japaneseText = ""
+    private var phraseTokens: [String]?
     /// Bumped on each reveal toggle so stale animation completions can't clobber state.
     private var revealAnimationGeneration = 0
     private var furiganaAnimationGeneration = 0
@@ -75,9 +90,15 @@ final class VocabFlashcardView: UIView {
 
     func configure(with card: VocabFlashcard) {
         japaneseText = card.japanese
+        phraseTokens = card.isPhrase ? card.tokens : nil
+        let isPhrase = phraseTokens != nil
+        japaneseLabel.numberOfLines = isPhrase ? 2 : 1
+        japaneseLabel.lineBreakMode = isPhrase ? .byWordWrapping : .byTruncatingTail
+        japaneseLabel.minimumScaleFactor = isPhrase ? Self.phraseMinimumScaleFactor : 0.5
         lookupSurface = card.japanese
         let sentence = card.sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         lookupSentence = sentence.isEmpty ? nil : sentence
+        updateDictionaryButton(dictionaryForm: card.displayedDictionaryForm)
         applyJapaneseDisplay()
         readingLabel.text = card.reading == card.japanese ? "" : card.reading
         updateReadingLine()
@@ -91,7 +112,9 @@ final class VocabFlashcardView: UIView {
     }
 
     private func applyJapaneseDisplay(animated: Bool = false) {
-        let fontSize = Self.japaneseFontSize(for: japaneseText)
+        let fontSize = phraseTokens == nil
+            ? Self.japaneseFontSize(for: japaneseText)
+            : Self.phraseFontSize(for: japaneseText)
         let font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
         let showFurigana = JapaneseFuriganaSettings.showOnFlashcards
         let targetInsets = JapaneseFuriganaBuilder.flashcardTextInsets(for: font, showFurigana: showFurigana)
@@ -100,6 +123,7 @@ final class VocabFlashcardView: UIView {
             JapaneseFuriganaBuilder.applyFlashcardDisplay(
                 to: japaneseLabel,
                 text: japaneseText,
+                tokens: phraseTokens,
                 font: font,
                 textColor: .label
             )
@@ -135,6 +159,7 @@ final class VocabFlashcardView: UIView {
                 JapaneseFuriganaBuilder.applyFlashcardContent(
                     to: self.japaneseLabel,
                     text: self.japaneseText,
+                    tokens: self.phraseTokens,
                     font: font,
                     textColor: .label,
                     showFurigana: showFurigana
@@ -183,6 +208,20 @@ final class VocabFlashcardView: UIView {
         case 5: return 50
         case 6: return 44
         default: return 38
+        }
+    }
+
+    /// Floor for phrases, so a long span wraps instead of shrinking past readable.
+    private static let phraseMinimumScaleFactor: CGFloat = 0.85
+
+    /// Phrases wrap to two lines between tokens, so size by roughly half the length.
+    private static func phraseFontSize(for text: String) -> CGFloat {
+        switch (text.count + 1) / 2 {
+        case ...4: return 52
+        case 5: return 46
+        case 6: return 40
+        case 7: return 36
+        default: return 32
         }
     }
 
@@ -289,6 +328,24 @@ final class VocabFlashcardView: UIView {
         hintLabel.text = revealed ? "Tap to hide" : "Tap to reveal"
     }
 
+    /// Icon-only by default; with a dictionary form, an underlined lemma sits before the arrow.
+    private func updateDictionaryButton(dictionaryForm: String?) {
+        var config = dictionaryButton.configuration ?? .plain()
+        if let dictionaryForm {
+            var attributes = AttributeContainer()
+            attributes.font = UIFont.systemFont(ofSize: 15, weight: .medium)
+            attributes.underlineStyle = .single
+            config.attributedTitle = AttributedString(dictionaryForm, attributes: attributes)
+            config.baseForegroundColor = .secondaryLabel
+            dictionaryButton.accessibilityLabel = "Dictionary form: \(dictionaryForm)"
+        } else {
+            config.attributedTitle = nil
+            config.baseForegroundColor = .tertiaryLabel
+            dictionaryButton.accessibilityLabel = "Open dictionary"
+        }
+        dictionaryButton.configuration = config
+    }
+
     @objc private func dictionaryButtonTapped() {
         let surface = lookupSurface.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !surface.isEmpty, let presenter = nearestViewController() else { return }
@@ -368,7 +425,14 @@ final class VocabFlashcardView: UIView {
         definitionStack.isHidden = true
 
         let symbol = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
-        dictionaryButton.setImage(UIImage(systemName: "arrow.up.right", withConfiguration: symbol), for: .normal)
+        var dictionaryConfig = UIButton.Configuration.plain()
+        dictionaryConfig.image = UIImage(systemName: "arrow.up.right", withConfiguration: symbol)
+        dictionaryConfig.imagePlacement = .trailing
+        dictionaryConfig.imagePadding = 4
+        dictionaryConfig.titleLineBreakMode = .byTruncatingTail
+        dictionaryConfig.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 13)
+        dictionaryConfig.baseForegroundColor = .tertiaryLabel
+        dictionaryButton.configuration = dictionaryConfig
         dictionaryButton.accessibilityLabel = "Open dictionary"
         dictionaryButton.accessibilityHint = "Shows the full dictionary entry for this word"
         dictionaryButton.translatesAutoresizingMaskIntoConstraints = false
@@ -410,14 +474,14 @@ final class VocabFlashcardView: UIView {
 
             dictionaryButton.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             dictionaryButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            dictionaryButton.widthAnchor.constraint(equalToConstant: 44),
+            dictionaryButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            dictionaryButton.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, multiplier: 0.5),
             dictionaryButton.heightAnchor.constraint(equalToConstant: 44),
         ])
     }
 
     private func configureAppearance() {
         backgroundColor = ExperimentPalette.cardSurface
-        dictionaryButton.tintColor = .tertiaryLabel
     }
 
     private func configureShadow() {

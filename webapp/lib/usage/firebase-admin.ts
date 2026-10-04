@@ -18,7 +18,8 @@ import { getFirestore } from "firebase-admin/firestore";
  *
  * The service account only needs Firestore **read** on `llmUsage/**`,
  * `llmFeedbackStats/**`, and `llmFeedback/**` (vote docs for the Usage
- * feedback browser). Configure IAM for the Studio service account. Do not
+ * feedback browser), plus `lessonFeedbackStats/**` and `lessonFeedback/**`
+ * for lesson ratings. Configure IAM for the Studio service account. Do not
  * grant or rely on client SDK access — security rules deny the iOS app for
  * these collections.
  */

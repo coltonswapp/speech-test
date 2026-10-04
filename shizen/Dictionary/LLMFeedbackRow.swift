@@ -3,7 +3,8 @@
 //  shizen
 //
 //  Two glass thumbs on a card edge. They start as one blob and separate.
-//  A recorded vote fades them out.
+//  A tap highlights a rating. Another tap can flip it. The vote is sent
+//  only when the thumbs fade out.
 //
 
 import CryptoKit
@@ -109,7 +110,7 @@ enum LLMFeedbackPrompt {
     }
 }
 
-/// Glass thumbs for one LLM result. Hidden until `present`. The first tap locks the rating.
+/// Glass thumbs for one LLM result. Hidden until `present`. A tap is pending until they fade.
 final class LLMFeedbackRow: UIView {
 
     static let diameter: CGFloat = 36
@@ -130,13 +131,17 @@ final class LLMFeedbackRow: UIView {
     private let upButton = UIButton(type: .system)
 
     private var receipt: LLMFeedbackReceipt?
-    private var locked = false
-    private var hideTask: Task<Void, Never>?
+    private var pendingRating: LLMFeedbackRating?
+    private var pendingReason: LLMFeedbackReason?
+    private var commitTask: Task<Void, Never>?
+    private var isCommitting = false
     private var isReasonSheetPresented = false
+    private var hasAskedReason = false
     private var thumbsSeparated = false
-    private var collapsedToUp = false
     private var widthConstraint: NSLayoutConstraint!
     private var heightConstraint: NSLayoutConstraint!
+
+    private static let commitDelay: TimeInterval = 1.0
 
     private static let upSymbol = "hand.thumbsup"
     private static let downSymbol = "hand.thumbsdown"
@@ -163,19 +168,21 @@ final class LLMFeedbackRow: UIView {
         if self.receipt?.requestId == receipt.requestId, !isHidden, alpha > 0.9 {
             return
         }
-        hideTask?.cancel()
+        commitTask?.cancel()
+        commitTask = nil
         isReasonSheetPresented = false
+        hasAskedReason = false
+        pendingRating = nil
+        pendingReason = nil
+        isCommitting = false
         self.receipt = receipt
-        locked = false
         alpha = 1
         isHidden = false
         downButton.isUserInteractionEnabled = true
         upButton.isUserInteractionEnabled = true
         downGlass.alpha = 1
         upGlass.alpha = 1
-        collapsedToUp = false
-        styleThumb(downButton, symbol: Self.downSymbol, tint: .secondaryLabel)
-        styleThumb(upButton, symbol: Self.upSymbol, tint: .secondaryLabel)
+        applySelectionStyles()
         thumbsSeparated = false
         onVisibilityChange?()
         setNeedsLayout()
@@ -194,14 +201,16 @@ final class LLMFeedbackRow: UIView {
     }
 
     func dismiss() {
-        hideTask?.cancel()
-        hideTask = nil
+        commitTask?.cancel()
+        commitTask = nil
         isReasonSheetPresented = false
+        hasAskedReason = false
+        pendingRating = nil
+        pendingReason = nil
+        isCommitting = false
         receipt = nil
-        locked = false
         alpha = 1
         thumbsSeparated = false
-        collapsedToUp = false
         downGlass.alpha = 1
         upGlass.alpha = 1
         isHidden = true
@@ -256,16 +265,6 @@ final class LLMFeedbackRow: UIView {
     }
 
     private func applyThumbFrames(separated: Bool) {
-        if collapsedToUp {
-            downGlass.alpha = 0
-            upGlass.frame = CGRect(
-                x: glassContainer.bounds.width - Self.diameter,
-                y: 0,
-                width: Self.diameter,
-                height: Self.diameter
-            )
-            return
-        }
         let travel: CGFloat = separated ? (Self.diameter + Self.thumbGap) / 2 : 0
         let mid = glassContainer.bounds.midX
         downGlass.frame = CGRect(
@@ -311,51 +310,51 @@ final class LLMFeedbackRow: UIView {
     }
 
     @objc private func upTapped() {
-        guard !locked else { return }
-        lock()
-        styleThumb(upButton, symbol: Self.upSymbol + ".fill", tint: .label)
-        send(rating: .up, reason: nil)
-        showVoteToast()
-        UIView.animate(
-            withDuration: 0.42,
-            delay: 0,
-            usingSpringWithDamping: 0.86,
-            initialSpringVelocity: 0.4,
-            options: [.allowUserInteraction, .beginFromCurrentState]
-        ) {
-            self.collapsedToUp = true
-            self.thumbsSeparated = false
-            self.applyThumbFrames(separated: false)
-        }
-        scheduleHide(after: 2.6)
+        choose(.up)
     }
 
     @objc private func downTapped() {
-        guard !locked else { return }
-        lock()
-        hideTask?.cancel()
-        isReasonSheetPresented = true
-        styleThumb(downButton, symbol: Self.downSymbol + ".fill", tint: .label)
-        send(rating: .down, reason: nil)
-        presentReasonSheet()
+        choose(.down)
+    }
+
+    private func choose(_ rating: LLMFeedbackRating) {
+        guard receipt != nil, !isCommitting else { return }
+        pendingRating = rating
+        if rating == .up {
+            pendingReason = nil
+        }
+        applySelectionStyles()
+        if rating == .down, !hasAskedReason {
+            commitTask?.cancel()
+            presentReasonSheet()
+            return
+        }
+        scheduleCommit()
+    }
+
+    private func applySelectionStyles() {
+        let upOn = pendingRating == .up
+        let downOn = pendingRating == .down
+        styleThumb(upButton, symbol: Self.upSymbol + (upOn ? ".fill" : ""), tint: upOn ? .label : .secondaryLabel)
+        styleThumb(downButton, symbol: Self.downSymbol + (downOn ? ".fill" : ""), tint: downOn ? .label : .secondaryLabel)
     }
 
     private func presentReasonSheet() {
         guard let presenter = presentingController() else {
-            finishReasonPrompt()
+            finishReasonPrompt(reason: nil)
             return
         }
+        isReasonSheetPresented = true
+        let requestId = receipt?.requestId
         let picker = LLMFeedbackReasonSheetController()
         picker.onFinish = { [weak self] reason in
-            if let reason {
-                self?.send(rating: .down, reason: reason)
-            }
-            self?.showVoteToast()
-            self?.finishReasonPrompt()
+            guard let self, self.receipt?.requestId == requestId else { return }
+            self.finishReasonPrompt(reason: reason)
         }
         let nav = UINavigationController(rootViewController: picker)
         nav.modalPresentationStyle = .pageSheet
         nav.modalTransitionStyle = .coverVertical
+        nav.presentationController?.delegate = picker
         if let sheet = nav.sheetPresentationController {
             sheet.detents = [
                 .custom(identifier: UISheetPresentationController.Detent.Identifier("llmReason")) { _ in 292 },
@@ -366,28 +365,36 @@ final class LLMFeedbackRow: UIView {
         presenter.present(nav, animated: true)
     }
 
-    private func finishReasonPrompt() {
-        guard isReasonSheetPresented else { return }
+    private func finishReasonPrompt(reason: LLMFeedbackReason?) {
+        guard isReasonSheetPresented || !hasAskedReason else { return }
         isReasonSheetPresented = false
-        scheduleHide(after: 0.25)
+        hasAskedReason = true
+        if let reason {
+            pendingReason = reason
+        }
+        scheduleCommit()
     }
 
-    private func lock() {
-        locked = true
-        upButton.isUserInteractionEnabled = false
-        downButton.isUserInteractionEnabled = false
-    }
-
-    private func scheduleHide(after seconds: TimeInterval) {
-        guard !isReasonSheetPresented else { return }
-        hideTask?.cancel()
-        hideTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(seconds))
+    private func scheduleCommit() {
+        guard !isReasonSheetPresented, pendingRating != nil, !isCommitting else { return }
+        commitTask?.cancel()
+        commitTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.commitDelay))
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                self?.fadeOut()
+                self?.commit()
             }
         }
+    }
+
+    private func commit() {
+        guard let rating = pendingRating, !isCommitting else { return }
+        isCommitting = true
+        upButton.isUserInteractionEnabled = false
+        downButton.isUserInteractionEnabled = false
+        send(rating: rating, reason: rating == .down ? pendingReason : nil)
+        nearestViewController()?.showToast(text: "Thanks for the feedback")
+        fadeOut()
     }
 
     private func fadeOut() {
@@ -406,10 +413,6 @@ final class LLMFeedbackRow: UIView {
         Task {
             await LLMGatewayClient.postFeedback(receipt, rating: rating, reason: reason)
         }
-    }
-
-    private func showVoteToast() {
-        nearestViewController()?.showToast(text: "Thanks for the feedback")
     }
 
     private func presentingController() -> UIViewController? {
@@ -432,7 +435,7 @@ final class LLMFeedbackRow: UIView {
     }
 }
 
-private final class LLMFeedbackReasonSheetController: UIViewController {
+private final class LLMFeedbackReasonSheetController: UIViewController, UIAdaptivePresentationControllerDelegate {
     var onFinish: ((LLMFeedbackReason?) -> Void)?
     private var didFinish = false
 
@@ -476,12 +479,18 @@ private final class LLMFeedbackReasonSheetController: UIViewController {
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        if isBeingDismissed {
+        let parentDismissing = navigationController?.isBeingDismissed == true
+        if isBeingDismissed || parentDismissing {
             finish(nil)
         }
     }
 
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        finish(nil)
+    }
+
     @objc private func closeTapped() {
+        finish(nil)
         dismiss(animated: true)
     }
 

@@ -8,6 +8,7 @@ import { FEATURE_NAMES, featureNamed, modelFor } from "./features/index.js";
 import { FeedbackError, newRequestId, recordFeedback } from "./feedback.js";
 import { feedbackExpiry, requireFeedbackHmacKey, retentionDays, signFeedbackToken } from "./feedback-token.js";
 import { createGeminiClient, UpstreamError } from "./gemini.js";
+import { recordLessonFeedback } from "./lesson-feedback.js";
 import { log, userHash } from "./log.js";
 import { featuresRanked, isUsagePeriod, readUsage, recordUsage } from "./usage.js";
 import { InputError, isObject, type Body } from "./validate.js";
@@ -146,6 +147,25 @@ app.post("/v1/feedback", ...feedbackMiddleware, async (c) => {
   }
   try {
     await recordFeedback(c.get("uid"), body, feedbackHmacKey, feedbackRetentionDays);
+    return c.json({ ok: true });
+  } catch (err) {
+    if (err instanceof FeedbackError) {
+      return c.json({ error: err.code, detail: err.detail }, err.status);
+    }
+    throw err;
+  }
+});
+
+/** 1–5 ratings for a finished dialogue scene. Not tied to a generate call. */
+app.post("/v1/lesson-feedback", ...feedbackMiddleware, async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  try {
+    await recordLessonFeedback(c.get("uid"), body, feedbackRetentionDays);
     return c.json({ ok: true });
   } catch (err) {
     if (err instanceof FeedbackError) {

@@ -9,6 +9,12 @@ import FirebaseFirestore
 import Foundation
 import os
 
+enum SavedVocabularyKind: String, Codable, Equatable {
+    case word
+    /// A multi-token span saved as one card, glossed in its sentence.
+    case phrase
+}
+
 struct SavedVocabularyItem: Codable, Equatable, Identifiable {
     var id: String
     var surface: String
@@ -21,9 +27,15 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
     /// Index into `senses` the learner chose. Nil uses the first sense.
     var primarySenseIndex: Int?
     var sentence: String?
+    /// Missing on rows saved before phrase cards; those read as `.word`.
+    var kind: SavedVocabularyKind
+    /// Scrub tokens for a phrase, so furigana and readings stay per word.
+    var tokens: [String]?
     var createdAt: Date
     var updatedAt: Date
     var deletedAt: Date?
+
+    var isPhrase: Bool { kind == .phrase }
 
     var resolvedPrimaryIndex: Int {
         if let primarySenseIndex, senses.indices.contains(primarySenseIndex) {
@@ -45,7 +57,9 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
             japanese: surface,
             reading: reading ?? "",
             english: primarySenseText ?? sentence ?? "",
-            sentence: sentence
+            sentence: sentence,
+            tokens: isPhrase ? tokens : nil,
+            dictionaryForm: dictionaryForm
         )
     }
 
@@ -58,6 +72,8 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
         senses: [VocabSense] = [],
         primarySenseIndex: Int? = nil,
         sentence: String? = nil,
+        kind: SavedVocabularyKind = .word,
+        tokens: [String]? = nil,
         createdAt: Date,
         updatedAt: Date? = nil,
         deletedAt: Date? = nil
@@ -67,6 +83,11 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
         self.dictionaryForm = dictionaryForm
         self.reading = reading
         self.sentence = sentence
+        self.kind = kind
+        let cleanedTokens = tokens?
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        self.tokens = (cleanedTokens?.isEmpty ?? true) ? nil : cleanedTokens
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.deletedAt = deletedAt
@@ -102,7 +123,7 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
     var isDeleted: Bool { deletedAt != nil }
 
     private enum CodingKeys: String, CodingKey {
-        case id, surface, dictionaryForm, reading, gloss, senses, primarySenseIndex, sentence, createdAt, updatedAt, deletedAt
+        case id, surface, dictionaryForm, reading, gloss, senses, primarySenseIndex, sentence, kind, tokens, createdAt, updatedAt, deletedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -117,6 +138,8 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
             senses: try container.decodeIfPresent([VocabSense].self, forKey: .senses) ?? [],
             primarySenseIndex: try container.decodeIfPresent(Int.self, forKey: .primarySenseIndex),
             sentence: try container.decodeIfPresent(String.self, forKey: .sentence),
+            kind: (try? container.decodeIfPresent(SavedVocabularyKind.self, forKey: .kind)) ?? .word,
+            tokens: try container.decodeIfPresent([String].self, forKey: .tokens),
             createdAt: createdAt,
             updatedAt: try container.decodeIfPresent(Date.self, forKey: .updatedAt),
             deletedAt: try container.decodeIfPresent(Date.self, forKey: .deletedAt)
@@ -133,6 +156,8 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
         try container.encode(senses, forKey: .senses)
         try container.encodeIfPresent(primarySenseIndex, forKey: .primarySenseIndex)
         try container.encodeIfPresent(sentence, forKey: .sentence)
+        try container.encode(kind, forKey: .kind)
+        try container.encodeIfPresent(tokens, forKey: .tokens)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
         try container.encodeIfPresent(deletedAt, forKey: .deletedAt)
@@ -185,6 +210,7 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
     private static let sourceKeyLimit = 80
     private static let sentenceLimit = 1200
     private static let nameLimit = 80
+    private static let tokenLimit = 24
 
     private struct StoredFolder: Equatable {
         var id: String
@@ -412,6 +438,8 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
             },
             "primarySenseIndex": item.primarySenseIndex ?? NSNull(),
             "sentence": item.sentence ?? NSNull(),
+            "kind": item.kind.rawValue,
+            "tokens": item.tokens ?? NSNull(),
             "createdAt": Timestamp(date: item.createdAt),
             "updatedAt": Timestamp(date: item.updatedAt),
             "deletedAt": item.deletedAt.map { Timestamp(date: $0) } ?? NSNull(),
@@ -703,6 +731,8 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
             senses: Self.decodeSenses(map["senses"]),
             primarySenseIndex: LearnerSnapshotValue.int(map["primarySenseIndex"]),
             sentence: LearnerSnapshotValue.string(map["sentence"]),
+            kind: LearnerSnapshotValue.string(map["kind"]).flatMap(SavedVocabularyKind.init(rawValue:)) ?? .word,
+            tokens: LearnerSnapshotValue.stringList(map["tokens"]),
             createdAt: createdAt,
             updatedAt: LearnerSnapshotValue.date(map["updatedAt"]) ?? createdAt,
             deletedAt: LearnerSnapshotValue.date(map["deletedAt"])
@@ -781,6 +811,8 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
         stored.dictionaryForm = optionalClipped(item.dictionaryForm, limit: surfaceLimit)
         stored.reading = optionalClipped(item.reading, limit: surfaceLimit)
         stored.sentence = optionalClipped(item.sentence, limit: sentenceLimit)
+        stored.kind = item.kind
+        stored.tokens = item.kind == .phrase ? clippedTokens(item.tokens) : nil
         let senses = clippedSenses(item.senses)
         stored.senses = senses
         if let index = item.primarySenseIndex, senses.indices.contains(index) {
@@ -796,6 +828,13 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
             stored.senses = [VocabSense(text: gloss, sourceKey: nil)]
         }
         return stored
+    }
+
+    private static func clippedTokens(_ tokens: [String]?) -> [String]? {
+        let clipped = (tokens ?? [])
+            .compactMap { optionalClipped($0, limit: surfaceLimit) }
+            .prefix(tokenLimit)
+        return clipped.isEmpty ? nil : Array(clipped)
     }
 
     private static func clippedSenses(_ senses: [VocabSense]) -> [VocabSense] {

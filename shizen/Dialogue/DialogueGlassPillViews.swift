@@ -341,12 +341,257 @@ final class GlassChipControl: UIControl {
     }
 }
 
+// MARK: - Toggle tag
+
+/// Glass pill matching `DialogueGlassPillView`'s surface that toggles on tap.
+/// Selected tags tint blue with a semibold label; width is measured at semibold
+/// so toggling never reflows the row.
+final class GlassTagControl: UIControl {
+
+    private static let cornerRadius: CGFloat = 18
+    private static let contentInsets = UIEdgeInsets(top: 8, left: 16, bottom: 8, right: 16)
+    private static let regularFont = UIFontMetrics(forTextStyle: .body)
+        .scaledFont(for: .systemFont(ofSize: 17, weight: .regular))
+    private static let selectedFont = UIFontMetrics(forTextStyle: .body)
+        .scaledFont(for: .systemFont(ofSize: 17, weight: .semibold))
+    static var fixedHeight: CGFloat {
+        ceil(selectedFont.lineHeight) + contentInsets.top + contentInsets.bottom
+    }
+
+    private let glassView: UIVisualEffectView
+    /// Fallback fill for the selected state on OS versions without glass tint.
+    private let selectedFillView = UIView()
+    private let titleLabel = UILabel()
+    private let selectionHaptic = UISelectionFeedbackGenerator()
+
+    init(title: String) {
+        glassView = LiquidGlassEffectView.makeLightPillContainer()
+        super.init(frame: .zero)
+        isAccessibilityElement = true
+        accessibilityLabel = title
+
+        LiquidGlassEffectView.applyPillStyle(to: glassView, cornerRadius: Self.cornerRadius)
+        glassView.isUserInteractionEnabled = false
+
+        selectedFillView.translatesAutoresizingMaskIntoConstraints = false
+        selectedFillView.backgroundColor = .systemBlue
+        selectedFillView.layer.cornerRadius = Self.cornerRadius
+        selectedFillView.layer.cornerCurve = .continuous
+        selectedFillView.isUserInteractionEnabled = false
+        selectedFillView.alpha = 0
+
+        titleLabel.text = title
+        titleLabel.textAlignment = .center
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(glassView)
+        addSubview(selectedFillView)
+        addSubview(titleLabel)
+
+        NSLayoutConstraint.activate([
+            glassView.topAnchor.constraint(equalTo: topAnchor),
+            glassView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glassView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            glassView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            selectedFillView.topAnchor.constraint(equalTo: topAnchor),
+            selectedFillView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            selectedFillView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            selectedFillView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            titleLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+
+        addTarget(self, action: #selector(toggleSelected), for: .touchUpInside)
+        applySelectionAppearance(animated: false)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var isSelected: Bool {
+        didSet {
+            guard oldValue != isSelected else { return }
+            applySelectionAppearance(animated: true)
+        }
+    }
+
+    override var isHighlighted: Bool {
+        didSet {
+            guard oldValue != isHighlighted else { return }
+            animatePress(down: isHighlighted)
+        }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil else { return }
+        selectionHaptic.prepare()
+    }
+
+    @objc private func toggleSelected() {
+        isSelected.toggle()
+        selectionHaptic.selectionChanged()
+        sendActions(for: .valueChanged)
+    }
+
+    private func applySelectionAppearance(animated: Bool) {
+        accessibilityTraits = isSelected ? [.button, .selected] : .button
+        titleLabel.font = isSelected ? Self.selectedFont : Self.regularFont
+
+        let fillAlpha: CGFloat
+        if #available(iOS 26.0, *) {
+            let glassEffect = UIGlassEffect(style: .regular)
+            glassEffect.isInteractive = false
+            if isSelected {
+                glassEffect.tintColor = .systemBlue
+            }
+            glassView.effect = glassEffect
+            fillAlpha = 0
+        } else {
+            fillAlpha = isSelected ? 1 : 0
+        }
+
+        let updates = { [self] in
+            selectedFillView.alpha = fillAlpha
+            titleLabel.textColor = isSelected ? .white : .label
+            glassView.layer.borderColor = isSelected
+                ? UIColor.clear.cgColor
+                : UIColor.white.withAlphaComponent(0.22).cgColor
+        }
+
+        if animated {
+            UIView.animate(
+                withDuration: 0.2,
+                delay: 0,
+                options: [.allowUserInteraction, .beginFromCurrentState],
+                animations: updates
+            )
+        } else {
+            updates()
+        }
+    }
+
+    private func animatePress(down: Bool) {
+        UIView.animate(
+            withDuration: down ? 0.12 : 0.28,
+            delay: 0,
+            usingSpringWithDamping: down ? 1 : 0.6,
+            initialSpringVelocity: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState]
+        ) {
+            self.transform = down ? CGAffineTransform(scaleX: 0.93, y: 0.93) : .identity
+        }
+    }
+
+    override func sizeThatFits(_ size: CGSize) -> CGSize {
+        let titleWidth = ceil(
+            (titleLabel.text ?? "").size(withAttributes: [.font: Self.selectedFont]).width
+        )
+        return CGSize(
+            width: titleWidth + Self.contentInsets.left + Self.contentInsets.right,
+            height: Self.fixedHeight
+        )
+    }
+
+    override var intrinsicContentSize: CGSize {
+        sizeThatFits(.zero)
+    }
+}
+
 // MARK: - Wrapping flow
 
-final class DialogueGlassPillFlowView: UIView {
+/// Left-aligned wrapping rows shared by the glass pill and tag flows.
+enum GlassPillFlowLayout {
+    static let horizontalSpacing: CGFloat = 10
+    static let verticalSpacing: CGFloat = 10
 
-    private static let horizontalSpacing: CGFloat = 10
-    private static let verticalSpacing: CGFloat = 10
+    static func frames(for sizes: [CGSize], in width: CGFloat) -> (frames: [CGRect], height: CGFloat) {
+        var frames: [CGRect] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+
+        for size in sizes {
+            let fitsOnRow = x == 0 || x + size.width <= width + 0.5
+            if !fitsOnRow {
+                x = 0
+                y += rowHeight + verticalSpacing
+                rowHeight = 0
+            }
+            frames.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
+            x += size.width + horizontalSpacing
+            rowHeight = max(rowHeight, size.height)
+        }
+
+        return (frames, sizes.isEmpty ? 0 : y + rowHeight)
+    }
+}
+
+private extension UIView {
+    /// Own width, else the nearest ancestor's, so flows can size before their first layout pass.
+    var nearestLaidOutWidth: CGFloat {
+        var view: UIView? = self
+        while let candidate = view {
+            if candidate.bounds.width > 0 { return candidate.bounds.width }
+            view = candidate.superview
+        }
+        return 0
+    }
+}
+
+/// Wraps `GlassTagControl`s with the same rows as `DialogueGlassPillFlowView`.
+final class GlassTagFlowView: UIView {
+
+    private var tagViews: [GlassTagControl] = []
+    private var laidOutHeight: CGFloat = 0
+
+    func setTags(_ tags: [GlassTagControl]) {
+        tagViews.forEach { $0.removeFromSuperview() }
+        tagViews = tags
+        tags.forEach { addSubview($0) }
+        laidOutHeight = 0
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = nearestLaidOutWidth
+        guard width > 0 else { return }
+
+        let layout = flowLayout(in: width)
+        zip(tagViews, layout.frames).forEach { $0.frame = $1 }
+        if abs(layout.height - laidOutHeight) > 0.5 {
+            laidOutHeight = layout.height
+            invalidateIntrinsicContentSize()
+            superview?.setNeedsLayout()
+        }
+    }
+
+    override var intrinsicContentSize: CGSize {
+        let width = nearestLaidOutWidth
+        guard width > 0, !tagViews.isEmpty else {
+            return CGSize(width: UIView.noIntrinsicMetric, height: 0)
+        }
+        let height = laidOutHeight > 0 ? laidOutHeight : flowLayout(in: width).height
+        return CGSize(width: UIView.noIntrinsicMetric, height: height)
+    }
+
+    override func sizeThatFits(_ size: CGSize) -> CGSize {
+        let width = size.width > 0 ? size.width : nearestLaidOutWidth
+        return CGSize(width: width, height: flowLayout(in: width).height)
+    }
+
+    private func flowLayout(in width: CGFloat) -> (frames: [CGRect], height: CGFloat) {
+        let sizes = tagViews.map { $0.sizeThatFits(.zero) }
+        return GlassPillFlowLayout.frames(for: sizes, in: width)
+    }
+}
+
+final class DialogueGlassPillFlowView: UIView {
 
     private var pillViews: [DialogueGlassPillView] = []
     private var laidOutHeight: CGFloat = 0
@@ -354,8 +599,8 @@ final class DialogueGlassPillFlowView: UIView {
 
     /// Forwarded to each pill; invoked with the tapped pill's text.
     var onPillTap: ((String) -> Void)?
-    /// Invoked with grammar point id when a tagged grammar pill is tapped.
-    var onGrammarTap: ((String) -> Void)?
+    /// Invoked with the tapped grammar pattern.
+    var onGrammarTap: ((DialogueGrammarPatternRef) -> Void)?
     /// Vocabulary surfaces already opened in this session, kept across `configure`.
     private var viewedTexts: Set<String> = []
 
@@ -382,9 +627,11 @@ final class DialogueGlassPillFlowView: UIView {
         pillViews.forEach { $0.removeFromSuperview() }
         pillViews = patterns.map { pattern in
             let pill = DialogueGlassPillView(text: pattern.label, style: style)
-            if let grammarPointID = pattern.grammarPointID {
-                pill.onTap = { [weak self] _ in self?.onGrammarTap?(grammarPointID) }
+            pill.onTap = { [weak self] tapped in
+                self?.markViewed(text: tapped, animated: true)
+                self?.onGrammarTap?(pattern)
             }
+            pill.setViewed(viewedTexts.contains(pattern.label), animated: false)
             addSubview(pill)
             return pill
         }
@@ -426,60 +673,30 @@ final class DialogueGlassPillFlowView: UIView {
     }
 
     private func resolvedLayoutWidth() -> CGFloat {
-        if bounds.width > 0 { return bounds.width }
-        var view: UIView? = superview
-        while let candidate = view {
-            if candidate.bounds.width > 0 { return candidate.bounds.width }
-            view = candidate.superview
-        }
-        return 0
+        nearestLaidOutWidth
     }
 
     @discardableResult
     private func layoutPills(in width: CGFloat) -> CGFloat {
         guard width > 0, !pillViews.isEmpty else { return 0 }
-
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-
-        for pill in pillViews {
-            let pillSize = pill.sizeThatFits(CGSize(width: width, height: CGFloat.greatestFiniteMagnitude))
-            let fitsOnRow = x == 0 || x + pillSize.width <= width + 0.5
-            if !fitsOnRow {
-                x = 0
-                y += rowHeight + Self.verticalSpacing
-                rowHeight = 0
-            }
-
-            pill.frame = CGRect(x: x, y: y, width: pillSize.width, height: DialogueGlassPillView.fixedPillHeight)
-            x += pillSize.width + Self.horizontalSpacing
-            rowHeight = max(rowHeight, DialogueGlassPillView.fixedPillHeight)
-        }
-
-        return y + rowHeight
+        let layout = pillLayout(in: width)
+        zip(pillViews, layout.frames).forEach { $0.frame = $1 }
+        return layout.height
     }
 
     private func measuredHeight(for width: CGFloat) -> CGFloat {
         guard width > 0, !pillViews.isEmpty else { return 0 }
+        return pillLayout(in: width).height
+    }
 
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-
-        for pill in pillViews {
-            let pillSize = pill.sizeThatFits(CGSize(width: width, height: CGFloat.greatestFiniteMagnitude))
-            let fitsOnRow = x == 0 || x + pillSize.width <= width + 0.5
-            if !fitsOnRow {
-                x = 0
-                y += rowHeight + Self.verticalSpacing
-                rowHeight = 0
-            }
-            x += pillSize.width + Self.horizontalSpacing
-            rowHeight = max(rowHeight, DialogueGlassPillView.fixedPillHeight)
+    private func pillLayout(in width: CGFloat) -> (frames: [CGRect], height: CGFloat) {
+        let sizes = pillViews.map { pill in
+            CGSize(
+                width: pill.sizeThatFits(CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)).width,
+                height: DialogueGlassPillView.fixedPillHeight
+            )
         }
-
-        return y + rowHeight
+        return GlassPillFlowLayout.frames(for: sizes, in: width)
     }
 }
 
@@ -496,7 +713,7 @@ final class DialogueLearningHighlightsSectionView: UIView {
         didSet { flowView.onPillTap = onPillTap }
     }
 
-    var onGrammarTap: ((String) -> Void)? {
+    var onGrammarTap: ((DialogueGrammarPatternRef) -> Void)? {
         didSet { flowView.onGrammarTap = onGrammarTap }
     }
 
@@ -621,8 +838,10 @@ final class DialogueLearningHighlightsContentView: UIView {
         didSet { vocabSection.onPillTap = onSelectVocabulary }
     }
 
-    /// Invoked with a grammar point id when a tagged grammar pill is tapped.
-    var onSelectGrammar: ((String) -> Void)?
+    /// Invoked with the tapped grammar pattern, for its detail screen.
+    var onSelectGrammar: ((DialogueGrammarPatternRef) -> Void)? {
+        didSet { grammarSection.onGrammarTap = onSelectGrammar }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -652,7 +871,6 @@ final class DialogueLearningHighlightsContentView: UIView {
     func configure(highlights: DialogueLearningHighlights) {
         vocabSection.configure(title: "VOCAB", items: highlights.vocabulary)
         grammarSection.configureGrammar(title: "GRAMMAR", patterns: highlights.grammarPatterns)
-        grammarSection.onGrammarTap = onSelectGrammar
         notesSection.configure(notes: highlights.contextNotes)
         setNeedsLayout()
     }

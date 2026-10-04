@@ -262,6 +262,10 @@ class DialogueExperimentViewController: UIViewController {
     private(set) var didStartPlaybackThisAttempt = false
     /// Host is notified after a full listen so the pager can unlock the quiz.
     var onPlaybackFinished: (() -> Void)?
+    /// When set, Play turns into a Quiz button once the dialogue finishes.
+    var onQuizRequested: (() -> Void)? {
+        didSet { updateTransportControls() }
+    }
     /// First complete listen unlocks the scene summary.
     private var hasHeardScenario = false
 
@@ -304,6 +308,11 @@ class DialogueExperimentViewController: UIViewController {
         tintColor: DialogueExperimentViewController.transportGlyphColor,
         accessibilityLabel: "Play / Pause"
     )
+    /// Holds Play and Quiz so the nested-paging slide moves the slot, leaving
+    /// each button's own transform free for the Play ↔ Quiz swap.
+    private let trailingTransportSlot = UIView()
+    private let quizTransportButton = UIButton(type: .system)
+    private var isShowingQuizTransportButton = false
     private let overflowButton = UIButton(type: .system)
     private let overflowGlyphView = UIImageView()
     private let restartButton = UIButton(type: .system)
@@ -351,6 +360,9 @@ class DialogueExperimentViewController: UIViewController {
     private var heardDisplayIndices: Set<Int> = []
     private var lineEmphasis: [CGFloat] = []
     private var emphasisAnimationLink: CADisplayLink?
+    #if DEBUG
+    private var emphasisLastTickTimestamp: CFTimeInterval = 0
+    #endif
     private var emphasisAnimationStart: [CGFloat] = []
     private var emphasisAnimationTarget: [CGFloat] = []
     private var emphasisAnimationStartTime: CFTimeInterval = 0
@@ -541,7 +553,7 @@ class DialogueExperimentViewController: UIViewController {
             let distance = Self.nestedPagingTransportSlideDistance * clamped
             self.transportBarContainer.transform = .identity
             self.leftTransportControlsStack.transform = CGAffineTransform(translationX: -distance, y: 0)
-            self.playPauseButton.transform = CGAffineTransform(translationX: distance, y: 0)
+            self.trailingTransportSlot.transform = CGAffineTransform(translationX: distance, y: 0)
             self.transportBarContainer.alpha = 1 - clamped
             self.transportBarContainer.isUserInteractionEnabled = clamped < 0.98
         }
@@ -942,14 +954,22 @@ class DialogueExperimentViewController: UIViewController {
         leftTransportControlsStack.addArrangedSubview(overflowButton)
         leftTransportControlsStack.addArrangedSubview(restartButton)
 
+        configureQuizTransportButton()
+
+        trailingTransportSlot.translatesAutoresizingMaskIntoConstraints = false
+        trailingTransportSlot.addSubview(playPauseButton)
+        trailingTransportSlot.addSubview(quizTransportButton)
+
         transportBarContainer.addSubview(leftTransportControlsStack)
         transportBarContainer.addSubview(elapsedLabel)
-        transportBarContainer.addSubview(playPauseButton)
+        transportBarContainer.addSubview(trailingTransportSlot)
 
         elapsedLabel.isHidden = !dialogueShowsElapsedTime()
 
         let horizontalInset: CGFloat = 20
         let buttonSize = Self.transportButtonSize
+        let slotHuggingConstraint = trailingTransportSlot.widthAnchor.constraint(equalToConstant: 0)
+        slotHuggingConstraint.priority = .defaultLow
 
         NSLayoutConstraint.activate([
             leftTransportControlsStack.leadingAnchor.constraint(equalTo: transportBarContainer.leadingAnchor, constant: horizontalInset),
@@ -961,10 +981,23 @@ class DialogueExperimentViewController: UIViewController {
             restartButton.widthAnchor.constraint(equalToConstant: buttonSize),
             restartButton.heightAnchor.constraint(equalToConstant: buttonSize),
 
-            playPauseButton.trailingAnchor.constraint(equalTo: transportBarContainer.trailingAnchor, constant: -horizontalInset),
-            playPauseButton.centerYAnchor.constraint(equalTo: leftTransportControlsStack.centerYAnchor),
+            trailingTransportSlot.trailingAnchor.constraint(equalTo: transportBarContainer.trailingAnchor, constant: -horizontalInset),
+            trailingTransportSlot.centerYAnchor.constraint(equalTo: leftTransportControlsStack.centerYAnchor),
+            trailingTransportSlot.heightAnchor.constraint(equalToConstant: buttonSize),
+            // Wide enough for whichever button is wider, so Quiz stays tappable.
+            trailingTransportSlot.leadingAnchor.constraint(lessThanOrEqualTo: playPauseButton.leadingAnchor),
+            trailingTransportSlot.leadingAnchor.constraint(lessThanOrEqualTo: quizTransportButton.leadingAnchor),
+            slotHuggingConstraint,
+
+            playPauseButton.trailingAnchor.constraint(equalTo: trailingTransportSlot.trailingAnchor),
+            playPauseButton.centerYAnchor.constraint(equalTo: trailingTransportSlot.centerYAnchor),
             playPauseButton.widthAnchor.constraint(equalToConstant: buttonSize),
             playPauseButton.heightAnchor.constraint(equalToConstant: buttonSize),
+
+            quizTransportButton.trailingAnchor.constraint(equalTo: trailingTransportSlot.trailingAnchor),
+            quizTransportButton.centerYAnchor.constraint(equalTo: trailingTransportSlot.centerYAnchor),
+            quizTransportButton.heightAnchor.constraint(equalToConstant: buttonSize),
+            quizTransportButton.widthAnchor.constraint(greaterThanOrEqualToConstant: buttonSize),
 
             elapsedLabel.centerXAnchor.constraint(equalTo: transportBarContainer.centerXAnchor),
             elapsedLabel.centerYAnchor.constraint(equalTo: leftTransportControlsStack.centerYAnchor),
@@ -1794,6 +1827,12 @@ class DialogueExperimentViewController: UIViewController {
                 hasEnglishTranslation = true
             }
             messageColumn.addArrangedSubview(englishWrapper)
+            if hasEnglishTranslation {
+                messageColumn.setCustomSpacing(
+                    Self.messageColumnBubbleToEnglishBaseSpacing,
+                    after: bubbleLayoutTarget
+                )
+            }
             englishLabels.append(englishLabel)
             englishWrappers.append(englishWrapper)
         } else {
@@ -1906,6 +1945,7 @@ class DialogueExperimentViewController: UIViewController {
 
     private func applyAudioAlignment(url: URL) {
         clipDuration = playerDuration(for: url)
+        warmUpPlayerOutputIfIdle()
         updateMetadataLabel()
 
         let pcm = try? TTSAudioFileLoader.loadMonoFloatSamples(from: url)
@@ -1985,6 +2025,20 @@ class DialogueExperimentViewController: UIViewController {
         player.prepareToPlay()
         audioPlayer = player
         return player
+    }
+
+    /// Pays the clip's cold first-`play()` cost during load instead of at the
+    /// stage-line → first-line handoff, where it dropped frames mid-animation.
+    private func warmUpPlayerOutputIfIdle() {
+        guard playbackPhase != .playing, let player = audioPlayer, !player.isPlaying else { return }
+        try? PlaybackAudioSession.activateForPlayback()
+        #if DEBUG
+        let start = CACurrentMediaTime()
+        #endif
+        player.warmUpOutput()
+        #if DEBUG
+        print(String(format: "[playback-start] warm-up %.1fms", (CACurrentMediaTime() - start) * 1000))
+        #endif
     }
 
     private func configurePlayerForPlayback(_ player: AVAudioPlayer) {
@@ -2095,7 +2149,13 @@ class DialogueExperimentViewController: UIViewController {
             }
             self.playbackResumeStartedAt = CACurrentMediaTime()
             self.applyPlaybackSpeedToPlayer()
+            #if DEBUG
+            let playStart = CACurrentMediaTime()
+            #endif
             (self.audioPlayer ?? player).play()
+            #if DEBUG
+            print(String(format: "[playback-start] play() %.1fms", (CACurrentMediaTime() - playStart) * 1000))
+            #endif
             self.startProgressDisplayLink()
         }
     }
@@ -2765,7 +2825,22 @@ class DialogueExperimentViewController: UIViewController {
         emphasisAnimationLink = link
     }
 
-    @objc private func tickEmphasisAnimation() {
+    @objc private func tickEmphasisAnimation(_ link: CADisplayLink) {
+        #if DEBUG
+        let frameInterval = link.targetTimestamp - link.timestamp
+        if emphasisLastTickTimestamp > 0, frameInterval > 0 {
+            let gap = link.timestamp - emphasisLastTickTimestamp
+            if gap > frameInterval * 1.5 {
+                print(String(
+                    format: "[playback-start] emphasis hitch %.1fms (~%d frames) active=%@",
+                    gap * 1000,
+                    Int((gap / frameInterval).rounded()) - 1,
+                    activeLineIndex.map(String.init) ?? "nil"
+                ))
+            }
+        }
+        emphasisLastTickTimestamp = link.timestamp
+        #endif
         let elapsed = CACurrentMediaTime() - emphasisAnimationStartTime
         let progress = min(1, elapsed / Self.emphasisAnimationDuration)
         let eased = Self.emphasisEase(progress)
@@ -2803,6 +2878,9 @@ class DialogueExperimentViewController: UIViewController {
     private func stopEmphasisAnimation() {
         emphasisAnimationLink?.invalidate()
         emphasisAnimationLink = nil
+        #if DEBUG
+        emphasisLastTickTimestamp = 0
+        #endif
         followAlongScrollDirection = nil
     }
 
@@ -3077,11 +3155,13 @@ class DialogueExperimentViewController: UIViewController {
             guard abs(emphasis - appliedRowSpacingEmphasis[index]) > 0.0005 else { continue }
             appliedRowSpacingEmphasis[index] = emphasis
 
-            let spacing = Self.messageColumnBaseSpacing
+            let speakerSpacing = Self.messageColumnBaseSpacing
                 + Self.emphasizedMessageColumnExtraSpacing * emphasis
-            layout.column.setCustomSpacing(spacing, after: layout.viewBeforeBubble)
+            layout.column.setCustomSpacing(speakerSpacing, after: layout.viewBeforeBubble)
             if layout.hasEnglish {
-                layout.column.setCustomSpacing(spacing, after: layout.bubbleView)
+                let bubbleToEnglishSpacing = Self.messageColumnBubbleToEnglishBaseSpacing
+                    + Self.emphasizedMessageColumnExtraSpacing * emphasis
+                layout.column.setCustomSpacing(bubbleToEnglishSpacing, after: layout.bubbleView)
             }
         }
     }
@@ -3709,10 +3789,86 @@ class DialogueExperimentViewController: UIViewController {
         playPauseButton.isHidden = !showPlay
         // Stay enabled while loading so the spinner isn't dimmed with the glass control.
         playPauseButton.isEnabled = true
-        playPauseButton.isUserInteractionEnabled = showPlay && !isResolvingLessonAudio
         let showOverflow = dialogueShowsOverflowButton()
         overflowButton.isHidden = !showOverflow
         overflowButton.isUserInteractionEnabled = showOverflow
+
+        let showQuiz = onQuizRequested != nil && playbackPhase == .finished
+        if showQuiz != isShowingQuizTransportButton {
+            isShowingQuizTransportButton = showQuiz
+            swapTrailingTransportButton(
+                showQuiz: showQuiz,
+                animated: isViewLoaded && view.window != nil
+            )
+        }
+        playPauseButton.isUserInteractionEnabled = showPlay && !isResolvingLessonAudio && !showQuiz
+        playPauseButton.accessibilityElementsHidden = showQuiz
+        quizTransportButton.isUserInteractionEnabled = showQuiz
+        quizTransportButton.accessibilityElementsHidden = !showQuiz
+    }
+
+    private func configureQuizTransportButton() {
+        var config = UIButton.Configuration.glass()
+        config.cornerStyle = .capsule
+        config.title = "Quiz"
+        config.baseForegroundColor = .systemYellow
+        config.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 18, bottom: 12, trailing: 18)
+        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+            var outgoing = incoming
+            outgoing.font = .systemFont(ofSize: 17, weight: .semibold)
+            outgoing.foregroundColor = .systemYellow
+            return outgoing
+        }
+        quizTransportButton.configuration = config
+        quizTransportButton.translatesAutoresizingMaskIntoConstraints = false
+        quizTransportButton.setContentHuggingPriority(.required, for: .horizontal)
+        quizTransportButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        quizTransportButton.accessibilityLabel = "Quiz"
+        quizTransportButton.accessibilityHint = "Opens the quiz for this dialogue"
+        quizTransportButton.alpha = 0
+        quizTransportButton.isUserInteractionEnabled = false
+        quizTransportButton.addAction(UIAction { [weak self] _ in
+            self?.onQuizRequested?()
+        }, for: .primaryActionTriggered)
+    }
+
+    /// The outgoing button shrinks away while the incoming one springs up,
+    /// the same pop the quiz's Continue button uses.
+    private func swapTrailingTransportButton(showQuiz: Bool, animated: Bool) {
+        let incoming: UIView = showQuiz ? quizTransportButton : playPauseButton
+        let outgoing: UIView = showQuiz ? playPauseButton : quizTransportButton
+        incoming.layer.removeAllAnimations()
+        outgoing.layer.removeAllAnimations()
+
+        guard animated else {
+            outgoing.alpha = 0
+            outgoing.transform = .identity
+            incoming.alpha = 1
+            incoming.transform = .identity
+            return
+        }
+
+        UIView.animate(
+            withDuration: 0.2,
+            delay: 0,
+            options: [.curveEaseIn, .beginFromCurrentState, .allowUserInteraction]
+        ) {
+            outgoing.transform = CGAffineTransform(scaleX: 0.78, y: 0.78)
+            outgoing.alpha = 0
+        }
+
+        incoming.transform = CGAffineTransform(translationX: 0, y: 10).scaledBy(x: 0.78, y: 0.78)
+        incoming.alpha = 0
+        UIView.animate(
+            withDuration: 0.32,
+            delay: 0.1,
+            usingSpringWithDamping: 0.78,
+            initialSpringVelocity: 0.7,
+            options: [.allowUserInteraction, .beginFromCurrentState]
+        ) {
+            incoming.transform = .identity
+            incoming.alpha = 1
+        }
     }
 
     private func updateElapsedLabel(currentTime: TimeInterval) {
@@ -3869,6 +4025,8 @@ class DialogueExperimentViewController: UIViewController {
     /// quick-check focus fade so those motions read as one gesture.
     private static let emphasisAnimationDuration: TimeInterval = DialogueBubbleLayout.emphasisDuration
     private static let messageColumnBaseSpacing: CGFloat = 6
+    /// Gap between the Japanese bubble and English gloss in `.full` (and when English is revealed).
+    private static let messageColumnBubbleToEnglishBaseSpacing: CGFloat = 10
     /// Extra vertical gap above/below the bubble while a line is focused.
     private static let emphasizedMessageColumnExtraSpacing: CGFloat = 4
     private static let activeBubbleScale: CGFloat = DialogueBubbleLayout.activeBubbleScale
@@ -4143,6 +4301,88 @@ extension DialogueExperimentViewController {
     func dialogueMarkScenarioCompleted() {
         guard let scenarioID else { return }
         recordDialogueProgress(scenarioID: scenarioID)
+    }
+}
+
+// MARK: - Content QA
+
+extension DialogueExperimentViewController {
+    func contentQAFocus(sessionModeLabel: String) -> (title: String, details: [String]) {
+        var details = [
+            "Session: \(sessionModeLabel)",
+            "Transcript mode: \(Self.contentQATranscriptModeLabel(transcriptDisplayMode))",
+            "Playback: \(contentQAPlaybackLabel())",
+        ]
+
+        if let activeInlineQuestionView,
+           let inlineIndex = inlineQuestionViews.first(where: { $0.value === activeInlineQuestionView })?.key,
+           displayLines.indices.contains(inlineIndex),
+           let question = displayLines[inlineIndex].inlineQuestion {
+            details.append("Checkpoint: inline question (transcript line \(inlineIndex + 1))")
+            details.append("Prompt: \(question.prompt)")
+            if let target = question.target, !target.isEmpty {
+                details.append("Target: \(target)")
+            }
+            return ("Dialogue · inline check", details)
+        }
+
+        if let index = activeLineIndex, displayLines.indices.contains(index) {
+            let line = displayLines[index]
+            let spokenIndex = displayLineSpokenIndices.indices.contains(index)
+                ? displayLineSpokenIndices[index]
+                : nil
+            details.append("Transcript line: \(index + 1) of \(displayLines.count)")
+            if let spokenIndex {
+                details.append("Spoken index: \(spokenIndex)")
+            }
+
+            if line.isStageLine, let stage = line.stageDirection {
+                details.append("Stage direction: \(Self.contentQATrimmed(stage.text))")
+                return ("Dialogue · stage direction", details)
+            }
+            if line.isInlineQuestion, let question = line.inlineQuestion {
+                details.append("Type: inline question row")
+                details.append("Prompt: \(question.prompt)")
+                return ("Dialogue · inline question", details)
+            }
+
+            details.append("Speaker: \(line.speaker)")
+            details.append("Japanese: \(Self.contentQATrimmed(line.japanese))")
+            if let english = line.english, !english.isEmpty {
+                details.append("English: \(Self.contentQATrimmed(english))")
+            }
+            return ("Dialogue · line \(index + 1)", details)
+        }
+
+        return ("Dialogue transcript", details)
+    }
+
+    private static func contentQATranscriptModeLabel(_ mode: DialogueTranscriptDisplayMode) -> String {
+        switch mode {
+        case .full: return "Japanese + English"
+        case .japaneseOnly: return "Japanese only"
+        case .listeningSpeakers: return "Listening (speakers)"
+        case .listeningLines: return "Listening (lines)"
+        case .reveal: return "Progressive reveal"
+        }
+    }
+
+    private func contentQAPlaybackLabel() -> String {
+        switch playbackPhase {
+        case .idle: return "idle"
+        case .playing: return "playing"
+        case .paused: return "paused"
+        case .finished: return "finished"
+        }
+    }
+
+    private static func contentQATrimmed(_ text: String, maxLength: Int = 240) -> String {
+        let collapsed = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard collapsed.count > maxLength else { return collapsed }
+        let end = collapsed.index(collapsed.startIndex, offsetBy: maxLength)
+        return String(collapsed[..<end]) + "…"
     }
 }
 

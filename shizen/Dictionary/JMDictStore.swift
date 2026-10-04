@@ -774,6 +774,9 @@ final class JMDictStore {
         if ikuSurfacePrefixes.contains(where: { surface.hasPrefix($0) }) {
             return true
         }
+        if isGeminateIkuForm(surface, rubySurface: rubySurface, range: range, in: sentence) {
+            return true
+        }
         if let sentence, !sentence.isEmpty {
             let window: String
             if let range, range.lowerBound < sentence.endIndex {
@@ -802,6 +805,37 @@ final class JMDictStore {
             }
         }
         return false
+    }
+
+    /// 行って / 行った / 行っちゃう are spelled the same for 行く and 行う.
+    /// Conversation means 行く; 行う takes an object (会議を行って), so only を keeps おこな.
+    private static func isGeminateIkuForm(
+        _ surface: String,
+        rubySurface: String?,
+        range: Range<String.Index>?,
+        in sentence: String?
+    ) -> Bool {
+        let startsWithIku = surface.hasPrefix("行") || (rubySurface?.hasPrefix("行") ?? false)
+        guard startsWithIku else { return false }
+
+        let start: String.Index?
+        if let sentence, let range, range.lowerBound < sentence.endIndex {
+            start = range.lowerBound
+        } else if let sentence {
+            start = sentence.range(of: surface)?.lowerBound
+        } else {
+            start = nil
+        }
+
+        guard let sentence, let start else {
+            return surface.hasPrefix("行っ")
+        }
+        guard sentence[start...].hasPrefix("行っ") else { return false }
+        if start > sentence.startIndex,
+           sentence[sentence.index(before: start)] == "を" {
+            return false
+        }
+        return true
     }
 
     private static func isOclockJiContext(in sentence: String, at range: Range<String.Index>?) -> Bool {

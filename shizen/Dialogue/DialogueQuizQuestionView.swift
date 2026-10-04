@@ -36,6 +36,7 @@ final class DialogueQuizQuestionView: UIView {
     private var evidenceRow: DialogueQuizEvidenceRowView?
 
     var hasSelection: Bool { selectedButton != nil }
+    var selectedChoiceText: String? { selectedButton?.value }
     var selectedChoiceView: UIView? { selectedButton }
     var isSelectionCorrect: Bool {
         guard let selectedButton else { return false }
@@ -46,6 +47,8 @@ final class DialogueQuizQuestionView: UIView {
     var onRevealContentDidChange: (() -> Void)?
     /// Right-swipe on an evidence bubble — host pushes sentence scrub.
     var onFocusEvidenceLine: ((DialogueQuizSourceLine) -> Void)?
+    /// Tap on an evidence bubble — host plays that spoken line.
+    var onPlayEvidenceLine: ((DialogueQuizSourceLine) -> Void)?
     var hostScrollView: UIScrollView? {
         didSet { evidenceRow?.hostScrollView = hostScrollView }
     }
@@ -242,6 +245,9 @@ final class DialogueQuizQuestionView: UIView {
         row.onFocusLine = { [weak self] line in
             self?.onFocusEvidenceLine?(line)
         }
+        row.onPlayLine = { [weak self] line in
+            self?.onPlayEvidenceLine?(line)
+        }
         evidenceRow = row
         evidenceStack.addArrangedSubview(row)
     }
@@ -389,6 +395,10 @@ final class DialogueQuizQuestionView: UIView {
         evidenceRow?.setPlayingSpokenIndex(spokenIndex)
     }
 
+    var playingEvidenceSpokenIndex: Int? {
+        evidenceRow?.playingSpokenIndex
+    }
+
     func applyEvidenceKaraoke(tokenSync: DialogueTokenSync?, time: TimeInterval) {
         evidenceRow?.applyKaraoke(tokenSync: tokenSync, time: time)
     }
@@ -511,6 +521,7 @@ private final class DialogueQuizEvidenceRowView: UIView {
     }()
 
     var onFocusLine: ((DialogueQuizSourceLine) -> Void)?
+    var onPlayLine: ((DialogueQuizSourceLine) -> Void)?
     var hostScrollView: UIScrollView? {
         didSet { swipeContainers.forEach { $0.hostScrollView = hostScrollView } }
     }
@@ -518,7 +529,7 @@ private final class DialogueQuizEvidenceRowView: UIView {
     private(set) var swipeContainers: [DialogueBubbleSwipeRevealContainer] = []
     private(set) var firstLineView: UIView?
     private var items: [LineItem] = []
-    private var playingSpokenIndex: Int?
+    private(set) var playingSpokenIndex: Int?
     private var appliedKaraokeTokens: [Int] = []
 
     func lineView(forSpokenIndex spokenIndex: Int) -> UIView? {
@@ -740,6 +751,11 @@ private final class DialogueQuizEvidenceRowView: UIView {
         }
         swipeContainers.append(swipeContainer)
 
+        bubble.isUserInteractionEnabled = true
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleBubbleTap(_:)))
+        bubble.addGestureRecognizer(tap)
+        tap.require(toFail: swipeContainer.panGestureRecognizer)
+
         column.addArrangedSubview(swipeContainer)
         if let speakerView = column.arrangedSubviews.first, speakerLabel != nil {
             column.setCustomSpacing(4, after: speakerView)
@@ -766,6 +782,12 @@ private final class DialogueQuizEvidenceRowView: UIView {
         DialogueBubbleLayout.pinMessageColumn(column, to: row, side: line.speakerSide)
 
         return LineItem(line: line, row: row, bubble: bubble)
+    }
+
+    @objc private func handleBubbleTap(_ gesture: UITapGestureRecognizer) {
+        guard gesture.state == .ended, let view = gesture.view else { return }
+        guard let item = items.first(where: { $0.bubble === view }) else { return }
+        onPlayLine?(item.line)
     }
 }
 

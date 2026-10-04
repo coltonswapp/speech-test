@@ -24,6 +24,7 @@ enum GeminiUsageFeature: String, Codable, CaseIterable, Hashable {
     case registerLadder
     case dialogueNuance
     case verbCombo
+    case grammarUsage
 
     var displayName: String {
         switch self {
@@ -36,6 +37,7 @@ enum GeminiUsageFeature: String, Codable, CaseIterable, Hashable {
         case .registerLadder: return "Register ladder"
         case .dialogueNuance: return "Deeper meaning"
         case .verbCombo: return "Verb combinations"
+        case .grammarUsage: return "How to use"
         }
     }
 }

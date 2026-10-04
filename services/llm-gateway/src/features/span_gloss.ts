@@ -11,10 +11,14 @@ meaning:
 - Plain English, about 2-12 words.
 - The span's meaning in this sentence, not a translation of the whole sentence.
 - If the span is a set phrase or compound, give that meaning.
+- For a katakana borrowing, one short mention of the source in meaning or note, not both (デジタル → digital, from English). If the Japanese sense is not the English word's sense, give the Japanese meaning and name the English source (テンション → excitement, from English "tension"). Write "from English", not "loanword".
+- If the span is not a borrowing (onomatopoeia, a name, native slang), or you are not sure, omit the source. Do not invent an etymology.
+- Hiragana and kanji spans are unchanged.
 
 note:
 - One short sentence only when the parts combine in a way a beginner would miss.
 - Empty string when meaning is enough.
+- Do not repeat a source language already named in meaning.
 
 No grammar jargon. Do not describe words outside the span.
 

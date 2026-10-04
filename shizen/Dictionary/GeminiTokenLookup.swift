@@ -141,7 +141,7 @@ enum GeminiCommonUses {
 
     private static func cacheKey(for request: Request) -> String {
         [
-            "gemini-common-uses-v5-gateway",
+            "gemini-common-uses-v8-gateway",
             request.sentence,
             request.surface,
             request.dictionaryGloss ?? "",
@@ -257,7 +257,7 @@ enum GeminiSpanBreakdown {
 
     private static func cacheKey(for request: Request) -> String {
         [
-            "gemini-span-breakdown-v4-gateway",
+            "gemini-span-breakdown-v5-gateway",
             request.sentence,
             request.surface,
         ].joined(separator: "\u{1F}")
@@ -345,7 +345,7 @@ enum GeminiSpanGloss {
 
     private static func cacheKey(for request: Request) -> String {
         [
-            "gemini-span-gloss-v2-gateway",
+            "gemini-span-gloss-v3-gateway",
             request.sentence,
             request.surface,
         ].joined(separator: "\u{1F}")

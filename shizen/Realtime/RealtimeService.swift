@@ -560,6 +560,7 @@ final class RealtimeService: NSObject {
         }
         isCapturingMic = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        PlaybackAudioSession.noteDeactivated()
     }
 
     private func setupAudioEngine() throws {

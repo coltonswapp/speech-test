@@ -11,6 +11,7 @@ import {
   Pause,
   Play,
   SkipForward,
+  Upload,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -59,11 +60,13 @@ type PlaylistItem = {
   tokenSync: PlaythroughTokenSync | null;
   /** Scenario thumb, else collection; null when neither has a URL. */
   thumbnailUrl: string | null;
-  /** Selected take — needed for approve+publish (Gate A). */
+  /** Selected take — needed for approve / publish. */
   projectId: string | null;
   variantId: string | null;
-  /** Selected take is already the published Gate A take. */
-  isApprovedPublished: boolean;
+  /** Selected take is the published Gate A take. */
+  isPublishedTake: boolean;
+  /** Take tokenSync.source === "reviewed" (review-queue Approve). */
+  isReviewed: boolean;
 };
 
 function toPlaythroughSync(
@@ -172,7 +175,7 @@ function DialoguePlaybackPanel({
   playing,
   highlightedSpoken,
   onSpokenClick,
-  approveControl,
+  approvedStamp,
 }: {
   lines: DialogueLine[];
   tokenSync: PlaythroughTokenSync | null;
@@ -180,8 +183,8 @@ function DialoguePlaybackPanel({
   playing: boolean;
   highlightedSpoken: number | null;
   onSpokenClick: (spokenIndex: number) => void;
-  /** Tiny approve+publish control under karaoke when sync exists. */
-  approveControl?: ReactNode;
+  /** Quiet stamp under karaoke — only when the take is actually reviewed. */
+  approvedStamp?: ReactNode;
 }) {
   const spokenMap = useMemo(() => spokenIndexByDialogueIndex(lines), [lines]);
   const activeRowRef = useRef<HTMLDivElement | null>(null);
@@ -294,9 +297,9 @@ function DialoguePlaybackPanel({
           </div>
         );
       })}
-      {hasAnyKaraoke && approveControl ? (
+      {hasAnyKaraoke && approvedStamp ? (
         <div className="sticky bottom-0 mt-1 flex justify-center border-t border-border/40 bg-muted/40 pt-2">
-          {approveControl}
+          {approvedStamp}
         </div>
       ) : null}
     </div>
@@ -317,7 +320,8 @@ async function resolvePlaylistScene(
   let tokenSync = toPlaythroughSync(scenario.tokenSync);
   let projectId: string | null = null;
   let variantId: string | null = null;
-  let isApprovedPublished = false;
+  let isPublishedTake = false;
+  let isReviewed = false;
 
   try {
     const { project } = await dialogueApi.getScenarioAudio(
@@ -327,7 +331,7 @@ async function resolvePlaylistScene(
     if (project?.selectedVariantId) {
       projectId = project.id;
       variantId = project.selectedVariantId;
-      isApprovedPublished =
+      isPublishedTake =
         !!scenario.publishedAudioUrl &&
         scenario.publishedVariantId === variantId;
 
@@ -337,6 +341,8 @@ async function resolvePlaylistScene(
         scenario.publishedVariantId != null
           ? (variants.find((v) => v.id === scenario.publishedVariantId) ?? null)
           : null;
+
+      isReviewed = selected?.tokenSync?.source === "reviewed";
 
       if (!audioUrl && selected && selected.audioByteCount > 0) {
         audioUrl = ttsApi.variantAudioUrl(
@@ -379,7 +385,8 @@ async function resolvePlaylistScene(
     thumbnailUrl: resolveThumbnailUrl(scenario, collection),
     projectId,
     variantId,
-    isApprovedPublished,
+    isPublishedTake,
+    isReviewed,
   };
 }
 
@@ -413,10 +420,13 @@ function LessonPlaythroughSession({
   collectionId,
   lessonTitle,
   onClose,
+  fromReview = false,
 }: {
   collectionId: string;
   lessonTitle?: string | null;
   onClose: () => void;
+  /** When true, "Open scene audio" deep-links back to the review queue. */
+  fromReview?: boolean;
 }) {
   const queryClient = useQueryClient();
   const { data, isLoading, isError, error } = useQuery({
@@ -429,7 +439,10 @@ function LessonPlaythroughSession({
   const [currentTime, setCurrentTime] = useState(0);
   const [loadingAudio, setLoadingAudio] = useState(false);
   const [selectedSpoken, setSelectedSpoken] = useState<number | null>(null);
-  const [approvedOverride, setApprovedOverride] = useState<
+  const [reviewedOverride, setReviewedOverride] = useState<
+    Record<string, boolean>
+  >({});
+  const [publishedOverride, setPublishedOverride] = useState<
     Record<string, boolean>
   >({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -676,13 +689,40 @@ function LessonPlaythroughSession({
   }
 
   /**
-   * Same Gate A path as Review queue "Publish to database":
-   * select take → publishScenario → markReviewed.
+   * Same as Review queue "Approve (clear flags)": markReviewed only.
+   * Does not publish or advance scenes.
    */
-  const approvePublishMutation = useMutation({
+  const approveMutation = useMutation({
     mutationFn: async (item: PlaylistItem) => {
       if (!item.projectId || !item.variantId) {
         throw new Error("This scene has no selected take to approve.");
+      }
+      return ttsApi.markReviewed(item.projectId, item.variantId);
+    },
+    onSuccess: (_result, item) => {
+      setReviewedOverride((prev) => ({ ...prev, [item.scenarioId]: true }));
+      void queryClient.invalidateQueries({
+        queryKey: ["lesson-playthrough-playlist", collectionId],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
+      toast.success("Approved — flags cleared.", {
+        description:
+          "Does not publish or change lesson visibility. Stay on this scene.",
+        duration: 4000,
+      });
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Could not approve."),
+  });
+
+  /**
+   * Same Gate A path as Review queue "Publish to database":
+   * select take → publishScenario → markReviewed.
+   */
+  const publishMutation = useMutation({
+    mutationFn: async (item: PlaylistItem) => {
+      if (!item.projectId || !item.variantId) {
+        throw new Error("This scene has no selected take to publish.");
       }
       await ttsApi.selectVariant(item.projectId, item.variantId);
       const published = await dialogueApi.publishScenario(
@@ -691,15 +731,20 @@ function LessonPlaythroughSession({
       );
       // Review queue always mark-reviews after publish. Human takes may 409 —
       // publish already succeeded; only fail the toast if publish failed.
+      let markedReviewed = false;
       try {
         await ttsApi.markReviewed(item.projectId, item.variantId);
+        markedReviewed = true;
       } catch {
         /* non-auto takes: Gate A publish is enough */
       }
-      return published;
+      return { published, markedReviewed };
     },
     onSuccess: (result, item) => {
-      setApprovedOverride((prev) => ({ ...prev, [item.scenarioId]: true }));
+      setPublishedOverride((prev) => ({ ...prev, [item.scenarioId]: true }));
+      if (result.markedReviewed) {
+        setReviewedOverride((prev) => ({ ...prev, [item.scenarioId]: true }));
+      }
       void queryClient.invalidateQueries({ queryKey: ["dialogue-collections"] });
       void queryClient.invalidateQueries({ queryKey: ["dialogue-collection"] });
       void queryClient.invalidateQueries({ queryKey: ["dialogue-scenario"] });
@@ -711,9 +756,9 @@ function LessonPlaythroughSession({
       });
       void queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
       toast.success(
-        result.hasTokenKaraoke
-          ? "Approved & published with karaoke."
-          : "Approved & published.",
+        result.published.hasTokenKaraoke
+          ? "Published to database with karaoke · flags cleared."
+          : "Published to database · flags cleared.",
         {
           description: "Gate A only — lesson visibility unchanged.",
           duration: 4000,
@@ -721,7 +766,7 @@ function LessonPlaythroughSession({
       );
     },
     onError: (err) =>
-      toast.error(err instanceof Error ? err.message : "Could not approve."),
+      toast.error(err instanceof Error ? err.message : "Could not publish."),
   });
 
   const timingActive =
@@ -731,13 +776,15 @@ function LessonPlaythroughSession({
   const highlightedSpoken =
     timingActive != null ? timingActive : selectedSpoken;
 
-  const sceneApproved =
+  const sceneReviewed =
     current != null &&
-    (approvedOverride[current.scenarioId] === true ||
-      current.isApprovedPublished);
-  const canApprovePublish = Boolean(
-    current?.projectId && current.variantId && current.tokenSync,
-  );
+    (reviewedOverride[current.scenarioId] === true || current.isReviewed);
+  const scenePublished =
+    current != null &&
+    (publishedOverride[current.scenarioId] === true || current.isPublishedTake);
+  const canReviewActions = Boolean(current?.projectId && current.variantId);
+  const actionBusy =
+    approveMutation.isPending || publishMutation.isPending;
 
   if (isLoading || building) {
     return (
@@ -773,6 +820,12 @@ function LessonPlaythroughSession({
     );
   }
 
+  const sceneAudioHref = current
+    ? `/content/dialogues/${collectionId}/${current.slug}?tab=audio${
+        fromReview ? "&from=review" : ""
+      }${current.variantId ? `&take=${current.variantId}` : ""}`
+    : "#";
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -783,6 +836,18 @@ function LessonPlaythroughSession({
           <span className="text-xs text-muted-foreground">
             {skipped} scene{skipped === 1 ? "" : "s"} skipped (no audio)
           </span>
+        )}
+        {sceneReviewed && (
+          <Badge
+            variant="outline"
+            className="border-emerald-500/50 text-emerald-700 dark:text-emerald-300"
+          >
+            <Check className="mr-1 size-3" />
+            Approved
+          </Badge>
+        )}
+        {scenePublished && (
+          <Badge variant="secondary">published</Badge>
         )}
       </div>
       <div className="flex items-start gap-3">
@@ -864,51 +929,75 @@ function LessonPlaythroughSession({
           playing={playing}
           highlightedSpoken={highlightedSpoken}
           onSpokenClick={handleSpokenClick}
-          approveControl={
-            canApprovePublish ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className={cn(
-                  "h-7 min-h-7 gap-1 px-2 text-[11px] touch-manipulation",
-                  sceneApproved
-                    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                    : "border-border/70 text-muted-foreground hover:text-foreground",
-                )}
-                disabled={
-                  sceneApproved ||
-                  approvePublishMutation.isPending ||
-                  !current.projectId ||
-                  !current.variantId
-                }
-                title={
-                  sceneApproved
-                    ? "This take is already approved and published (Gate A)"
-                    : "Approve and publish this take (same as Review queue Publish to database)"
-                }
-                onClick={() => approvePublishMutation.mutate(current)}
+          approvedStamp={
+            sceneReviewed ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+                title="This take was approved (flags cleared / marked reviewed)"
               >
                 <Check className="size-3" />
-                {approvePublishMutation.isPending
-                  ? "Publishing…"
-                  : sceneApproved
-                    ? "Approved"
-                    : "Approve & publish"}
-              </Button>
+                Approved
+              </span>
             ) : null
           }
         />
       )}
       {current && (
         <div className="flex flex-wrap items-center gap-2">
+          {canReviewActions ? (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className={cn(
+                  "min-h-11 touch-manipulation md:min-h-8",
+                  sceneReviewed
+                    ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : "border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+                )}
+                disabled={actionBusy || sceneReviewed}
+                title={
+                  sceneReviewed
+                    ? "Flags already cleared for this take"
+                    : "Clear flags and mark reviewed (same as Review queue Approve). Does not publish."
+                }
+                onClick={() => approveMutation.mutate(current)}
+              >
+                <Check className="size-3.5" />
+                <span className="ml-1.5">
+                  {approveMutation.isPending
+                    ? "Approving…"
+                    : sceneReviewed
+                      ? "Approved"
+                      : "Approve (clear flags)"}
+                </span>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="min-h-11 touch-manipulation md:min-h-8"
+                disabled={actionBusy}
+                title="Select this take, publish audio to the database (Gate A), then clear flags. Does not make the lesson visible to learners (Gate B)."
+                onClick={() => publishMutation.mutate(current)}
+              >
+                <Upload className="size-3.5" />
+                <span className="ml-1.5">
+                  {publishMutation.isPending
+                    ? "Publishing…"
+                    : "Publish to database"}
+                </span>
+              </Button>
+            </>
+          ) : null}
           <Link
-            href={`/content/dialogues/${collectionId}/${current.slug}?tab=audio`}
+            href={sceneAudioHref}
             className={cn(
               buttonVariants({ variant: "outline", size: "sm" }),
               "min-h-11 touch-manipulation md:min-h-8",
             )}
-            title="Open this scene's audio panel to review timing and approve"
+            title="Open this scene's audio panel to review timing"
             onClick={() => {
               cleanupAudio();
               onClose();
@@ -921,8 +1010,14 @@ function LessonPlaythroughSession({
       )}
       <p className="text-[11px] text-muted-foreground">
         Press Play to start each scene. Click a spoken line to seek when
-        stamps exist. Scenes do not auto-advance — use Next. Karaoke follows
-        take token stamps when present (approval not required).
+        stamps exist. Scenes do not auto-advance — use Next.{" "}
+        <span className="font-medium text-foreground/80">Approve</span> clears
+        flags only;{" "}
+        <span className="font-medium text-foreground/80">
+          Publish to database
+        </span>{" "}
+        is Gate A. Karaoke follows take token stamps when present (approval not
+        required).
       </p>
     </div>
   );
@@ -939,6 +1034,7 @@ export function LessonPlaythroughButton({
   size = "sm",
   variant = "outline",
   label = "Play all scenes",
+  fromReview = false,
 }: {
   collectionId: string;
   lessonTitle?: string | null;
@@ -946,6 +1042,8 @@ export function LessonPlaythroughButton({
   size?: "sm" | "default";
   variant?: "outline" | "ghost" | "secondary";
   label?: string;
+  /** When opened from the review queue, editor links include from=review. */
+  fromReview?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -971,6 +1069,7 @@ export function LessonPlaythroughButton({
             <LessonPlaythroughSession
               collectionId={collectionId}
               lessonTitle={lessonTitle}
+              fromReview={fromReview}
               onClose={() => setOpen(false)}
             />
           )}

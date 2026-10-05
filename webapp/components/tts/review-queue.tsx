@@ -100,10 +100,11 @@ function fmt(n: number | null, unit = ""): string {
 function editorHref(take: Take, lineIndex?: number): string {
   const lineQs =
     lineIndex != null ? `&line=${lineIndex}&timing=tokens` : "";
+  // from=review: editor collapses non-audio sections + shows Back to queue.
   if (take.collectionId && take.slug) {
-    return `/content/dialogues/${take.collectionId}/${take.slug}?tab=audio&take=${take.variantId}${lineQs}`;
+    return `/content/dialogues/${take.collectionId}/${take.slug}?tab=audio&from=review&take=${take.variantId}${lineQs}`;
   }
-  return `/tts/${take.projectId}?take=${take.variantId}${lineQs}`;
+  return `/tts/${take.projectId}?from=review&take=${take.variantId}${lineQs}`;
 }
 
 function curriculumHref(take: Take): string | null {
@@ -112,6 +113,19 @@ function curriculumHref(take: Take): string | null {
   }
   if (take.jlptLevel === 5) return "/content/curriculum";
   return take.unitId || take.collectionId ? "/content/curriculum" : null;
+}
+
+/** Lesson scene order (first → last), then take index within a scene. */
+function sortTakesChronologically(takes: Take[]): Take[] {
+  return [...takes].sort((a, b) => {
+    const ao = a.scenarioOrderIndex ?? Number.POSITIVE_INFINITY;
+    const bo = b.scenarioOrderIndex ?? Number.POSITIVE_INFINITY;
+    if (ao !== bo) return ao - bo;
+    const ai = a.scenarioIndex ?? Number.POSITIVE_INFINITY;
+    const bi = b.scenarioIndex ?? Number.POSITIVE_INFINITY;
+    if (ai !== bi) return ai - bi;
+    return (a.takeIndex ?? 0) - (b.takeIndex ?? 0);
+  });
 }
 
 function groupTakesByLesson(takes: Take[]): LessonGroup[] {
@@ -135,6 +149,9 @@ function groupTakesByLesson(takes: Take[]): LessonGroup[] {
       takes: [take],
     });
   }
+  for (const group of groups) {
+    group.takes = sortTakesChronologically(group.takes);
+  }
   return groups;
 }
 
@@ -145,12 +162,19 @@ function withFlagsCleared(
 ): Take {
   const reviewedAt =
     take.timing?.reviewedAt ?? new Date().toISOString();
+  // Keep previously flagged lines visible (codes cleared) so Approve does not
+  // collapse the card and jump the viewport to the next scene.
+  const clearedFlaggedLines = take.flaggedLines.map((line) => ({
+    ...line,
+    lineCodes: [] as TokenSyncFlag["code"][],
+    tokens: line.tokens.map((token) => ({ ...token, codes: [] as TokenSyncFlag["code"][] })),
+  }));
   return {
     ...take,
     ...patch,
     flagCount: 0,
     flagsByCode: {},
-    flaggedLines: [],
+    flaggedLines: clearedFlaggedLines,
     lines: take.lines.map((line) => ({
       ...line,
       tokens: line.tokens.map((token) => ({ ...token, codes: [] })),
@@ -481,8 +505,8 @@ function SiblingTakeChips({ take }: { take: Take }) {
         const selected = sib.variantId === take.variantId;
         const href =
           take.collectionId && take.slug
-            ? `/content/dialogues/${take.collectionId}/${take.slug}?tab=audio&take=${sib.variantId}`
-            : `/tts/${take.projectId}?take=${sib.variantId}`;
+            ? `/content/dialogues/${take.collectionId}/${take.slug}?tab=audio&from=review&take=${sib.variantId}`
+            : `/tts/${take.projectId}?from=review&take=${sib.variantId}`;
         const labels: string[] = [`Take ${sib.takeIndex}`];
         if (sib.isPublishedTake) labels.push("published");
         else if (sib.isSelectedTake) labels.push("selected");
@@ -601,6 +625,9 @@ function TakeCard({
   const approveMutation = useMutation({
     mutationFn: () => ttsApi.markReviewed(take.projectId, take.variantId),
     onSuccess: () => {
+      // Freeze scroll so clearing flags / toast does not jump to the next card.
+      const scrollY =
+        typeof window !== "undefined" ? window.scrollY : null;
       const cleared = withFlagsCleared(take);
       onKeepInQueue(cleared);
       queryClient.setQueryData<ReviewQueueResult>(
@@ -622,68 +649,80 @@ function TakeCard({
         duration: 4500,
       });
       onInteract?.();
-    },
-    onError: (error) => toast.error(error.message),
-  });
+          if (scrollY != null) {
+            requestAnimationFrame(() => {
+              window.scrollTo({ top: scrollY, behavior: "auto" });
+            });
+          }
+        },
+        onError: (error) => toast.error(error.message),
+      });
 
-  /**
-   * Gate A only: select take → publish scenario audio to DB/CDN → mark reviewed.
-   * Never flips lesson `isActive` (Gate B).
-   * Publish runs before mark-reviewed so a failed Gate A keeps flags intact.
-   * Does not remove the take from the queue — use Remove for that.
-   */
-  const publishAndCompleteMutation = useMutation({
-    mutationFn: async () => {
-      if (!take.collectionId || !take.slug) {
-        throw new Error("This take is not linked to a dialogue scene.");
-      }
-      if (!take.isSelectedTake) {
-        await ttsApi.selectVariant(take.projectId, take.variantId);
-      }
-      const published = await dialogueApi.publishScenario(
-        take.collectionId,
-        take.slug,
-      );
-      await ttsApi.markReviewed(take.projectId, take.variantId);
-      return published;
-    },
-    onSuccess: (result) => {
-      const cleared = withFlagsCleared(take, {
-        isPublishedTake: true,
-        isSelectedTake: true,
-      });
-      onKeepInQueue(cleared);
-      queryClient.setQueryData<ReviewQueueResult>(
-        ["tts-review-queue"],
-        (prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            takes: prev.takes.map((row) =>
-              row.variantId === cleared.variantId ? cleared : row,
-            ),
-          };
+      /**
+       * Gate A only: select take → publish scenario audio to DB/CDN → mark reviewed.
+       * Never flips lesson `isActive` (Gate B).
+       * Publish runs before mark-reviewed so a failed Gate A keeps flags intact.
+       * Does not remove the take from the queue — use Remove for that.
+       */
+      const publishAndCompleteMutation = useMutation({
+        mutationFn: async () => {
+          if (!take.collectionId || !take.slug) {
+            throw new Error("This take is not linked to a dialogue scene.");
+          }
+          if (!take.isSelectedTake) {
+            await ttsApi.selectVariant(take.projectId, take.variantId);
+          }
+          const published = await dialogueApi.publishScenario(
+            take.collectionId,
+            take.slug,
+          );
+          await ttsApi.markReviewed(take.projectId, take.variantId);
+          return published;
         },
-      );
-      void queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
-      queryClient.invalidateQueries({ queryKey: ["dialogue-collections"] });
-      queryClient.invalidateQueries({ queryKey: ["dialogue-collection"] });
-      queryClient.invalidateQueries({ queryKey: ["dialogue-scenario"] });
-      queryClient.invalidateQueries({
-        queryKey: ["dialogue-collection-audio-status"],
-      });
-      toast.success(
-        result.hasTokenKaraoke
-          ? "Published to database with karaoke · flags cleared."
-          : "Published to database · flags cleared.",
-        {
-          description:
-            "Gate A only — lesson visibility (Gate B) unchanged. Still in the review queue until you Remove it.",
-          duration: 5000,
+        onSuccess: (result) => {
+          const scrollY =
+            typeof window !== "undefined" ? window.scrollY : null;
+          const cleared = withFlagsCleared(take, {
+            isPublishedTake: true,
+            isSelectedTake: true,
+          });
+          onKeepInQueue(cleared);
+          queryClient.setQueryData<ReviewQueueResult>(
+            ["tts-review-queue"],
+            (prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                takes: prev.takes.map((row) =>
+                  row.variantId === cleared.variantId ? cleared : row,
+                ),
+              };
+            },
+          );
+          void queryClient.invalidateQueries({ queryKey: ["tts-review-queue"] });
+          queryClient.invalidateQueries({ queryKey: ["dialogue-collections"] });
+          queryClient.invalidateQueries({ queryKey: ["dialogue-collection"] });
+          queryClient.invalidateQueries({ queryKey: ["dialogue-scenario"] });
+          queryClient.invalidateQueries({
+            queryKey: ["dialogue-collection-audio-status"],
+          });
+          toast.success(
+            result.hasTokenKaraoke
+              ? "Published to database with karaoke · flags cleared."
+              : "Published to database · flags cleared.",
+            {
+              description:
+                "Gate A only — lesson visibility (Gate B) unchanged. Still in the review queue until you Remove it.",
+              duration: 5000,
+            },
+          );
+          onInteract?.();
+          if (scrollY != null) {
+            requestAnimationFrame(() => {
+              window.scrollTo({ top: scrollY, behavior: "auto" });
+            });
+          }
         },
-      );
-      onInteract?.();
-    },
     onError: (error) => toast.error(error.message),
   });
 
@@ -897,22 +936,22 @@ function TakeCard({
           <Badge
             variant="outline"
             className={cn(
-              queueLines.length === 0
+              alreadyApproved || queueLines.length === 0
                 ? "border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
                 : uncheckedCount > 0
                   ? "border-amber-500/50 text-amber-600 dark:text-amber-400"
                   : "border-emerald-500/50 text-emerald-600 dark:text-emerald-400",
             )}
           >
-            {queueLines.length === 0
-              ? alreadyApproved
-                ? "approved"
-                : "no flags"
-              : allLinesChecked
-                ? "all lines checked"
-                : checkedCount === 0
-                  ? `${queueLines.length} flagged`
-                  : `${checkedCount}/${queueLines.length} checked`}
+            {alreadyApproved
+              ? "approved"
+              : queueLines.length === 0
+                ? "no flags"
+                : allLinesChecked
+                  ? "all lines checked"
+                  : checkedCount === 0
+                    ? `${queueLines.length} flagged`
+                    : `${checkedCount}/${queueLines.length} checked`}
           </Badge>
           {take.isPublishedTake && <Badge variant="secondary">published</Badge>}
           {take.isSelectedTake && !take.isPublishedTake && (
@@ -1067,6 +1106,12 @@ function TakeCard({
                 ))}
               </div>
             )}
+            {alreadyApproved && take.flagCount === 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                Flags cleared — lines kept visible so Publish stays on this
+                scene.
+              </p>
+            )}
             {queueLines.map((line) => {
               const linePlaying =
                 playingKey === `${take.variantId}:${line.lineIndex}`;
@@ -1080,7 +1125,7 @@ function TakeCard({
                   editorHref={editorHref(take, line.lineIndex)}
                   playing={linePlaying}
                   activeTokenIndex={lineActiveToken}
-                  checked={checkedLines.has(line.lineIndex)}
+                  checked={checkedLines.has(line.lineIndex) || alreadyApproved}
                   playDisabled={
                     !hasAudioBytes || (audioLoading && !linePlaying)
                   }
@@ -1154,6 +1199,7 @@ function LessonGroupSection({
             variant="ghost"
             label="Play lesson"
             className="shrink-0"
+            fromReview
           />
         )}
       </div>

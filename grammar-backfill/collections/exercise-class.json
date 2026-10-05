@@ -1,0 +1,373 @@
+{
+  "collectionId": "exercise-class",
+  "scenes": [
+    {
+      "sceneId": "planning",
+      "title": "Planning",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "エミちゃん、今日、時間ある？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "はい、ありますよ。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "よかったー。実は、今日、運動教室があるの。一緒に行かない？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "運動教室ですか？楽しそうですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "でしょう？毎週、行ってるのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "へえ、毎週ですか。すごいですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "ふふ、そんなことないわよ。ただの趣味だから。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "いえいえ、続けるのは大変だと思います。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "ありがとう。でも、みんなでやるから楽しいのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "何時に始まるんですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "十時からよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "じゃあ、準備しないとですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 12,
+          "text": "そうね。九時半には、家を出ましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 13,
+          "text": "はい、分かりました。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ない？"
+        },
+        {
+          "label": "〜のよ"
+        },
+        {
+          "label": "〜と思います"
+        },
+        {
+          "label": "〜しないと"
+        }
+      ]
+    },
+    {
+      "sceneId": "on-the-train",
+      "title": "On the train",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "エミちゃんの分も、これで大丈夫よ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "あ、ありがとうございます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "この電車で、教室の駅まで行くのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "駅から、遠いですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "ううん、駅から歩いて五分くらいよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "近いですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "電車の中、静かですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "そうねー。朝は、いつも静かよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 8,
+          "text": "いいですね、カリフォルニアの電車と違って。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 9,
+          "text": "あら、カリフォルニアにも電車、あるの？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 10,
+          "text": "はい、ありますけど……日本より、少ないです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 11,
+          "text": "そうなんだ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 12,
+          "text": "あ、次の駅で降りるわよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 13,
+          "text": "はい。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜も"
+        },
+        {
+          "label": "〜のよ"
+        },
+        {
+          "label": "〜ですか？"
+        },
+        {
+          "label": "〜くらい"
+        },
+        {
+          "label": "〜ですね"
+        },
+        {
+          "label": "〜より"
+        }
+      ]
+    },
+    {
+      "sceneId": "exercise-class",
+      "title": "At the exercise class",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "もうすぐ、友達も来ますよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "そうなんですね。楽しみです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "あ、来た来た！",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "あ、本当だ。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "エミちゃんのこと、紹介するわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "さあ、中に入りましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 6,
+          "text": "はい。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "え、意外と難しいですね……",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "ふふ、最初はみんなそうよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "エミちゃん、上手よー。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 10,
+          "text": "いえ、全然です……",
+          "speaker": "Emi"
+        },
+        {
+          "i": 11,
+          "text": "ふふ、そのうち慣れるから。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 12,
+          "text": "疲れましたけど、楽しかったです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 13,
+          "text": "それはよかった。",
+          "speaker": "Obaachan"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ますよ"
+        },
+        {
+          "label": "〜なんですね"
+        },
+        {
+          "label": "〜するわね"
+        },
+        {
+          "label": "〜ましょう"
+        },
+        {
+          "label": "〜から"
+        },
+        {
+          "label": "〜けど"
+        }
+      ]
+    },
+    {
+      "sceneId": "heading-home",
+      "title": "Heading home",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "疲れたねー。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "はい、思ったより、大変でした。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "ふふ、でも、いい運動になったでしょう？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "はい、なりました。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "じゃあ、帰りましょうか。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "はい、帰りましょう。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "お昼、何が食べたい？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "うーん、何でもいいです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "じゃあ、帰ったら、一緒に考えましょうね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "はい、楽しみです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "今日、来てくれて、ありがとうね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "いえいえ、こちらこそ、ありがとうございます。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ねー"
+        },
+        {
+          "label": "〜より"
+        },
+        {
+          "label": "〜でしょう？"
+        },
+        {
+          "label": "〜ましょうか"
+        },
+        {
+          "label": "〜たい"
+        },
+        {
+          "label": "〜たら"
+        }
+      ]
+    }
+  ]
+}

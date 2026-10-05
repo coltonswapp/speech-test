@@ -1,0 +1,517 @@
+{
+  "collectionId": "trip-to-the-ball-game",
+  "scenes": [
+    {
+      "sceneId": "setup-and-planning",
+      "title": "Setup & planning",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "ねえ、聞いて。金曜のチケット取れたんだけど。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "え、チケットって、何の？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "阪神対広島。二枚取れたんだよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "マジで！行きたい！",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "だよね？一緒にどう？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "あ…でも金曜、友達とご飯行く約束してたかも。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "あー、それなら仕方ないか。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "ちょっと待って、考える。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "うーん、野球の方が絶対楽しくない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "それは僕に聞かれても。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "ご飯はまた今度でいいや。野球行く。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "友達に連絡しとくね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "いいの？無理しなくても。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "全然。野球の方が見たい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "よし、決まりだね。金曜、楽しみ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 15,
+          "text": "うん、楽しみ。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜んだけど"
+        },
+        {
+          "label": "〜くない？"
+        },
+        {
+          "label": "〜ておく"
+        },
+        {
+          "label": "〜なくても"
+        }
+      ]
+    },
+    {
+      "sceneId": "arriving-and-scanning-tickets",
+      "title": "Arriving and scanning tickets",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "うわ、人めっちゃ多いね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "だよね。さすが金曜のナイター。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "あ、チケット、二枚とも僕のスマホに入ってるから。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "そうなんだ、デジタルだと楽でいいね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "あれ、どこだっけ。ちょっと待って。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "大丈夫？急がなくていいよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "あった！これだ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "おお、開いた。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "入れたねー。ちゃんと入場できてよかった。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "なんか、テンション上がってきた。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "私も。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "よし、行こう。席、こっちだよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "おお、頼りになるじゃん。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "いやー、そのことないよ。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜てよかった"
+        },
+        {
+          "label": "〜てきた"
+        },
+        {
+          "label": "〜じゃん"
+        }
+      ]
+    },
+    {
+      "sceneId": "finding-seats-and-beer",
+      "title": "Finding seats and beer",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "うわ、見て！めっちゃ近くない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "マジだ。めっちゃ良い席じゃん。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "この角度、最高。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "だよね。ここ選んで正解だった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "あ、ビール買ってくるよ。俺が奢るよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "え、いいの？ありがとう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "はい、お待たせー。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "ありがとう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "なんか、今日のカイト優しくない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "え、そう？いつも通りだけど。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "ふうん、そういうことにしとく。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "あ、始まる。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "見よう。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜くない？"
+        },
+        {
+          "label": "〜てくる"
+        },
+        {
+          "label": "〜ことにする"
+        }
+      ]
+    },
+    {
+      "sceneId": "kaitos-baseball-history",
+      "title": "Kaito's baseball history",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "うわ、今の当たり良かったな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "だね。カイトも野球やってたことあるの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "あるよ。高校の時、部活でやってた。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "え、そうなんだ！知らなかった。ポジションは？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "セカンドだった。結構真剣にやってたよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "大学でも続けなかったの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "本当は続けたかったんだけどね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "セレクションで落ちちゃって。それで、諦めた。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "そっか…それは悔しかったね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "まあね。でも、今でも見るのは好きだよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "へえ、そんな一面もあったんだね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "え、そう？照れるな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "あ、点入った！",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "よし！",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜たことがある"
+        },
+        {
+          "label": "〜たかったんだけど"
+        },
+        {
+          "label": "〜ちゃう"
+        }
+      ]
+    },
+    {
+      "sceneId": "seventh-inning-stretch",
+      "title": "7th inning stretch",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "お、来た。ジェット風船だ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "え、これ何するの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "膨らませて、曲が終わったタイミングで一斉に飛ばすんだよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "そうなんだ！面白そう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "音楽、そろそろ始まるよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "うわ、みんな知ってるんだ、この歌。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "阪神ファンなら常識だから。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "わあああ、すごい！",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "だろ！めっちゃ気持ちいいよね、これ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "うん、感動した。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "これ観たら、阪神ファンになるしかないでしょ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "なるかも、本当に。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜たタイミングで"
+        },
+        {
+          "label": "〜しかない"
+        }
+      ]
+    },
+    {
+      "sceneId": "heading-home",
+      "title": "Heading home",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "いや、勝ってよかったな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "だよね。最後のホームラン、鳥肌立った。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "あれは興奮したね。風船も最高だったし。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "うん、今日一番楽しかったかも、あれ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "ビール、奢ってよかった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "ふふ、ありがとう、改めて。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "別に、大したことじゃないし。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "そういうところ、いいと思うけどな。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "え、そう…ありがと。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "また誘ってね、こういうの。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "うん、絶対。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "おやすみ、カイト。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "おやすみ。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜てよかった"
+        },
+        {
+          "label": "〜じゃないし"
+        },
+        {
+          "label": "〜てね"
+        }
+      ]
+    }
+  ]
+}

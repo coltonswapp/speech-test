@@ -1,0 +1,360 @@
+{
+  "collectionId": "ashiyu",
+  "scenes": [
+    {
+      "sceneId": "planning",
+      "title": "Planning",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "はぁ…疲れた。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "どうしたの？なんか顔疲れてない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "最近、仕事がバタバタしてて。ちょっと参ってる。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "そっか、大変だね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "あ、そうだ。あし湯とか行かない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "あし湯？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "足だけお湯に浸かるやつ。めっちゃリラックスできるよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "へえ、良さそう。行ってみたい。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "でしょ？近くにあるところ知ってるから、今度一緒に行こうよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "うん、ぜひ。いつがいい？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "週末とか、どう？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "じゃあ、それにしよう。楽しみだな。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "arriving-and-settling-in",
+      "title": "Arriving and settling in",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "ここだね。思ったより小さいけど、雰囲気いいね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "でしょ？穴場なんだよ、ここ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "うわ、あったかい。気持ちいい。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "だよね。疲れてる時、ここ来ると一気に楽になるんだよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "分かる気がする。なんか、肩の力抜けるわ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "ここ、どうやって見つけたの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "前に、友達に教えてもらったんだ。意外と穴場でしょ？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "うん、ほんと穴場だと思う。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "仕事、いつもこんな感じで大変なの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "いや、いつもってわけじゃないんだけど。こういう、頭空っぽにできる時間があるのは嬉しいかな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "それに比べて、今日は静かでいいよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "ほんとそれ。たまにはこういうのもいいね。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "mikas-turn",
+      "title": "Mika's turn",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "そういえば、ミカっていつも美味しいお店知ってるよね。あのラーメン屋も、居酒屋の名物も。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "あはは、よく言われる。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "なんか理由あるの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "実はね、昔パティシエになりたかったんだ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "え、そうなの！？知らなかった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "おばあちゃんがお菓子作るの好きで、小さい頃からよく一緒に作ってたんだよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "へえ、それで興味持ったんだ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "うん。一時期、専門学校も考えてた。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "え、じゃあなんでやめたの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "なんとなく、会社の方が安定してるかなって思って、別の道選んじゃった。でも、今でも趣味では作ってるよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "それ、めっちゃ気になる。今度作ってるとこ見てみたいな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "え、ほんとに？じゃあ今度作ってあげようか。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "楽しみにしてる。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "a-quiet-moment",
+      "title": "A quiet moment",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "なんか、こうやって黙ってるのも悪くないね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "だね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "そういえば、前に転勤でここに来たって言ってたよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "うん、そうだよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "また転勤になったりする可能性、あるの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "うーん、正直分からない。会社次第だから。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "でも、できればしばらくここにいたいなとは思ってる。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "そうなんだ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "ミカは？ずっとここに住むつもり？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "うーん、今のところはそのつもり。この辺、結構気に入ってるし。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "それ、なんか安心する。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "へえ、そう？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "いや…なんとなく。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "ふーん。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "そろそろ帰ろっか。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 15,
+          "text": "だね。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "heading-home",
+      "title": "Heading home",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "いや〜、今日来てよかった。ほんとにリラックスできた。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "でしょ？たまにはこういうのもいいよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "うん。あと、パティシエの話も聞けて良かった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "あはは、なんか恥ずかしいけどね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "全然。むしろもっと聞きたいくらい。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "なあ、いつか本当に作ってるとこ見てみたいな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "え、マジで？じゃあ今度、一緒に作る？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "いいの？めっちゃ楽しみ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "うん、約束。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "じゃあ、今日はありがとう。おやすみ, ミカ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "おやすみ、カイト。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    }
+  ]
+}

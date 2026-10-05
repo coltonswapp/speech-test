@@ -1,0 +1,455 @@
+{
+  "collectionId": "english-conversation-class",
+  "scenes": [
+    {
+      "sceneId": "the-invite",
+      "title": "The invite",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、そういえば、今週英会話のレッスンあるんだよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "え、英会話通ってるんだ。知らなかった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "うん、たまにね。気分転換にもなるし。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "どんな感じなの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "結構自由な感じ。先生と適当に話したり、たまにペアで練習したりする。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "へえ、面白そう。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "カイトも来る？一緒にどう？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "え、僕？英語そんなに自信ないんだけど。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "全然大丈夫だよ。みんな初心者みたいなもんだし。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "じゃあ、行ってみようかな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "いいね。水曜の夜なんだけど、大丈夫？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "うん、大丈夫。ちなみに、お金かかったりする？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "ううん、体験は無料だよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "え、そうなんだ。じゃあ気軽に行けるね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "でしょ？",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "walking-there",
+      "title": "Walking there",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "おっす。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "お、来た来た。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "待った？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "ううん、今来たとこ。じゃあ、行こっか。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "なんか、緊張してきた。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "あはは、そんなに緊張しなくていいのに。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "いや、発音とか下手だから、ちょっと恥ずかしいんだよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "そんなの気にしなくていいよ。みんなまだ勉強中なんだから。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "学生の時、先生によく笑われてたし。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "それ、ただのいじりじゃない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "かもしれないけど、地味にトラウマなんだよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "大丈夫だよ。今日は私がフォローするから。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "ありがとう。ちょっと安心した。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "あ、着いた。ここだよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "へえ、思ったより小さいね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 15,
+          "text": "アットホームな感じが売りらしいよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 16,
+          "text": "いいね。入ろっか。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "in-class-katakana-eigo",
+      "title": "In class: a katakana-eigo moment",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "「アイ・リブ・イン・ア・マンション」って言っちゃった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "違うよ！",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "「マンション」って、英語だと豪邸って意味になるよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "え、そうなの？日本語のマンションのつもりだったんだけど。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "だよね。英語だと普通のアパートは\"apartment\"とか\"apartment building\"って言うんだよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "マジか。この前、観光客に道聞かれた時、「アイ・リブ・イン・ア・マンション」って言っちゃったんだけど。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "え、その観光客、絶対誤解してるよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "だよね…英語って、ほんと難しいよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "あはは、みんな最初はそう思うよ。でも、こういう勘違い、一回は通る道だから。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "それ、なんか安心する。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "paired-conversation-practice",
+      "title": "Paired conversation practice",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、ペア、カイトだ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "だね。よろしく。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "三つも質問あるじゃん。順番にやってく？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "うん、そうしよう。じゃあ、最初の質問からいい？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "どうぞ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "お題、英語で言うと結構難しいな。\"weekend\"の言い方合ってる？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "うーん、ちょっと発音、ウィー、じゃなくてウィークエンドね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "あ、確かに。もう一回言ってみる。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "そう、それそれ。今のいい感じ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "よし。じゃあ、次はミカの番だね。好きな食べ物、何？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "たこ焼き、かな。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "それ、この前一緒に食べたやつじゃん。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "だね。あれ、本当に美味しかった。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "最後の質問。楽しかった思い出、何かある？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "うーん、野球観戦とか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 15,
+          "text": "それ、僕のことだよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 16,
+          "text": "さあ、どうでしょう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 17,
+          "text": "英語で何て言えばいいかな、あのジェット風船。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 18,
+          "text": "\"balloon release\"とかかな。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 19,
+          "text": "へえ、それっぽい。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 20,
+          "text": "なんか、これ普通に楽しいね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 21,
+          "text": "だね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 22,
+          "text": "あ、終わりみたい。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 23,
+          "text": "早かったね。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "walking-home",
+      "title": "Walking home",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "いや〜、思ったより楽しかった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "でしょ？また今度も来る？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "うん、来たい。マンションの話、みんなにめっちゃウケてたし。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "あはは、それは一生のネタだね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "やめてよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "今日のペア練習も、意外と楽しかったな。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "だね。ああいうの、一人だと絶対サボるけど、二人だと頑張れるよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "分かる。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "なんか、こうやって二人で何かやるの、結構好きかも。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "え。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "あ、いや、なんていうか、その…",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "ごめん、今のなし。忘れて。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "え、待って。ちゃんと最後まで言ってよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "え…",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "気になるし。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 15,
+          "text": "今度さ、二人だけでご飯とか行かない？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 16,
+          "text": "え、それって…",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    }
+  ]
+}

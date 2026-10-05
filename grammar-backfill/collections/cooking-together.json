@@ -1,0 +1,405 @@
+{
+  "collectionId": "cooking-together",
+  "scenes": [
+    {
+      "sceneId": "locking-in-the-plan",
+      "title": "Locking in the plan",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あのさ、この前の約束覚えてる？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "約束？何だっけ？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "一緒に料理作るって言ったやつ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "ああ、それね。もちろん覚えてるよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "じゃあ、いつやる？逃がさないからね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "あはは、分かってるって。今週末とかどう？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "いいね。うちでやる？それともミカの家？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "うちでやろっか。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "了解。何か持っていった方がいい？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "うーん、飲み物くらいでいいかな。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "分かった。ちなみに、何作るつもりなの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "それは秘密。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "え、教えてよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "だめ。楽しみは取っておかないと。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "ケチだな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 15,
+          "text": "ふふ、当日のお楽しみ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 16,
+          "text": "はいはい、分かったよ。楽しみにしてる。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "kaito-arrives-forgotten-ingredient",
+      "title": "Kaito arrives, forgotten ingredient",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "はいー、失礼しますー。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "あ、来た来た。入って入って。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "おお、なんかもう本格的じゃん。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "やろ？気合入れてみた。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "これ、飲み物。冷蔵庫入れとくね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "ありがとう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "あれ…ちょっと待って。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "どうしたの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "玉ねぎ、買い忘れてたかも。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "マジで？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "マジで。ごめん、ちょっとコンビニに行ってきますね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "あ、俺も行くよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "ほんとにごめんね！",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "いやいや、全然いいよ。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "at-the-grocery-store",
+      "title": "At the grocery store",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "玉ねぎ、たぶんこっちのコーナーだと思う。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "あ、あった。これでいい？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "うん、それで十分。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "あ、これも買っていかない？デザート用に。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "え、まだ何も作ってないのに気が早くない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "準備は大事でしょ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "それただ食べたいだけじゃん。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "バレたか。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "あはは、まあいいんじゃない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "やった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "会計、私が払うね。付き合ってくれたし。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "え、悪いよ。半分出すよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "いいから。今日は私がホストなんだから。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "じゃあ、ありがとう。ごちそうさま。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "cooking-together-in-kitchen",
+      "title": "Cooking together",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "じゃあ、カイトは玉ねぎ切ってくれる？私はお肉の下ごしらえするから。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "了解。薄切りでいい？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "うん、薄めで大丈夫。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "これ、目がしみるな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "あはは、玉ねぎあるあるだね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "わっ、危ない！",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "大丈夫？火、強すぎたかも。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "うん、平気。ちょっと弱めよう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "あ、ごめん。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "ふふ、ううんー、大丈夫。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "なんか、いい匂いしてきた。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "でしょ？もうすぐできるよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "楽しみ。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "cleaning-up-and-finishing-the-night",
+      "title": "Cleaning up and finishing the night",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "今日、ほんと楽しかった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "だね。まさかここまでちゃんとできると思わなかった。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "皿洗い、実はちょっと緊張するんだよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "え、なんで？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "割ったらどうしようって思っちゃって。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "あはは、丁寧すぎ。でも分かる、人の家だと余計にね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "これで終わりだね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "うん、お疲れさま。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "なんか、こういう普通の時間、いいなって思った。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "分かる。新しい土地に来てすぐ、ミカが友達になってくれて、それだけで結構救われたんだよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "今はもう、ここが結構落ち着く場所になったんじゃない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "うん、なった。ミカのおかげも大きいと思う。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "そう言ってもらえると嬉しい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "じゃあ、今日はありがとう。おやすみ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "おやすみ、カイト。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    }
+  ]
+}

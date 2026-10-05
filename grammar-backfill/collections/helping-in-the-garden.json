@@ -1,0 +1,391 @@
+{
+  "collectionId": "helping-in-the-garden",
+  "scenes": [
+    {
+      "sceneId": "watering-the-watermelons",
+      "title": "Watering the watermelons",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "エミちゃん、ちょっと手伝ってくれる？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "はい、何ですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "この水やりを手伝ってください。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "はい、分かりました。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "このスイカに、水をやってください。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "あ、これ、スイカなんですね！前に、おばあちゃんが言ってましたね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "そう、よく覚えてるわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "このスイカ、いつから育ててるんですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "そうねー、もう10年くらいになるかしら。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "え、10年も！長いですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "ふふ、気づいたら、そんなに経ってたわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "スイカの他にも、何か育ててるんですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 12,
+          "text": "うん、トマトとか、きゅうりとかもあるわよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 13,
+          "text": "わあ、いろいろあるんですね！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 14,
+          "text": "でしょう？ふふ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 15,
+          "text": "ふふ、楽しみにしてました。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 16,
+          "text": "そう、そんな感じ。ありがとう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 17,
+          "text": "はい。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜てください"
+        },
+        {
+          "label": "〜てる"
+        }
+      ]
+    },
+    {
+      "sceneId": "checking-on-the-vines",
+      "title": "Checking on the vines",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、見てください、花が咲いています。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 1,
+          "text": "あら、本当ね。かわいい花でしょう？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 2,
+          "text": "はい、きれいです。これは、何になるんですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 3,
+          "text": "それが、スイカになるのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 4,
+          "text": "わあ、そうなんですね！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "ほら、見て。もう、実がなってるわよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 6,
+          "text": "あ、本当だ！小さいですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "まだまだ、小さいわね。もう少し、時間がかかるわ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 8,
+          "text": "はい、楽しみです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 9,
+          "text": "おばあちゃんは、どうやって育て方を覚えたんですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "母はあまりガーデニングが好きじゃなくて、わたしのおばあちゃんが全部教えてくれたのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "へえ、そうだったんですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 12,
+          "text": "うん、もう何十年も前だけどね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 13,
+          "text": "ふふ、歴史がありますね。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ています"
+        },
+        {
+          "label": "〜てる"
+        }
+      ]
+    },
+    {
+      "sceneId": "a-memory-surfaces",
+      "title": "A memory surfaces",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "エミちゃん、本当にありがとうね、助けてくれて。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "いえいえ、そんなことないです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "ふふ、昔、誰かさんも、こうやって手伝ってくれたのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "え、誰ですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "エミちゃんのお母さんよ。小さい頃、よくここで一緒に作業したの。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "……そうだったんですね。知りませんでした。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "朝早く起きて、庭仕事の服に着替えてね。それで、庭を歩き回って、全部の植物に水をあげてたのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "ふふ、母らしいですね。母は、いつも、仕事があるのが好きなんです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "あの紫陽花も、お母さんが植えたのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "え、本当ですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "うん。もう何年も前なのに、今も咲いてるの。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "……素敵ですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 12,
+          "text": "そうね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 13,
+          "text": "……続けましょうか。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 14,
+          "text": "うん、そうね。",
+          "speaker": "Obaachan"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜てくれる"
+        },
+        {
+          "label": "〜てる"
+        }
+      ]
+    },
+    {
+      "sceneId": "the-harvest",
+      "title": "The harvest",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "これ、そろそろいいかもね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "え、本当ですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "うん、いい音がするわ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "わあ、真っ赤ですね！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "でしょう？少し食べる？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "いただきます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "わあ、甘い！すごく、おいしいです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "ふふ、よかった。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 8,
+          "text": "お母さんも、いつも、こうやって食べてたのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "ふふ、そうなんですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "うん。種、気をつけてね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "はい、気をつけます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 12,
+          "text": "じゃあ、残りは中に持っていきましょうか。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 13,
+          "text": "はい、そうですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 14,
+          "text": "ついでに、近所にも少し、分けてあげましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 15,
+          "text": "え、近所の人にもですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 16,
+          "text": "うん、この辺りでは、よく野菜や果物を近所と分け合うのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 17,
+          "text": "へえ、素敵な習慣ですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 18,
+          "text": "ふふ、そうでしょう？",
+          "speaker": "Obaachan"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ましょう"
+        },
+        {
+          "label": "〜てね"
+        }
+      ]
+    }
+  ]
+}

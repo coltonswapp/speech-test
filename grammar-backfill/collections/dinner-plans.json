@@ -1,0 +1,477 @@
+{
+  "collectionId": "dinner-plans",
+  "scenes": [
+    {
+      "sceneId": "planning-availability",
+      "title": "Planning / availability",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、ミカ。お疲れ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "お疲れ。今帰り？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "うん、そう。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "ね、聞きたかったんだけど。今度さ、ご飯行かない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "いいね。いつがいい？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "土曜とかどう？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "土曜か。ちょっと待って、金曜は予定あるけど、土曜は大丈夫だと思う。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "じゃあ土曜で。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "あ、そういえば、前から行ってみたいお店があるんだよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "え、どこ？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "駅の近くにある新しいレストラン。結構人気らしいよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "いいね、行ってみよう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "じゃあ、七時くらいに駅で集合でいい？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "うん、それで大丈夫。楽しみにしてる。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "うん、じゃあまた土曜に。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 15,
+          "text": "またね。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "meeting-up",
+      "title": "Meeting up",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "ごめん、待った？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "ちょっとだけ。大丈夫だよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "電車、混んでて遅れた。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "いいって、そんな気にしないで。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "待ってる間、暇じゃなかった？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "全然。実はこの辺、会社が近いから結構詳しいんだよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "へえ、知らなかった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "さっき歩いてたら、いい感じの居酒屋見つけたよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "お、いいじゃん。どんな感じの店？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "何か、雰囲気良さそうだった。値段も高くなさそうだし。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "それめっちゃ良さそう。行ってみよう。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "ああ、走ってきたから、ちょっと待って。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "ゆっくりでいいよ。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "choosing-where-to-eat",
+      "title": "Choosing where to eat",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、ここ。人気あるって言った通りだね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "え、めっちゃ並んでるじゃん。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "マジか…どれくらい待つんだろう。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "ちょっと聞いてみる？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "四十分待ちだって。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "うわ、それはちょっとキツいな。ずっと来たかったのに。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "分かる。でも、お腹空いたし、待つのはちょっとなあ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "だよね。じゃあ、また今度にする。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "さっき言ってた居酒屋、行ってみない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "ああ、いいね。そっちにしよう。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "よし、決まり。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "次はこっちのお店、当たりだといいけど。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "大丈夫だよ、たぶん。今度またあっちも一緒に来ようね。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "ordering-food",
+      "title": "Ordering food",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "何にする？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "うーん、迷うな。あ、これ何？聞いたことないんだけど。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "ああ、それ大阪名物だよ。ここでしか食べられないやつ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "え、そうなんだ。どんな味？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "甘辛くて美味しいよ。絶対気に入ると思う。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "じゃあ、それにしてみる。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "いいと思う。私はいつものにする。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "ミカのいつもの、気になるな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "今度教えてあげる。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "あ、飲み物どうする？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "とりあえずビールでよくない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "だね、それにしよう。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "すみません、これとこれと、ビール二つください。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "なんか、思ったよりすぐ注文できた。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "でしょ？そんなもんだよ。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "small-talk-during-the-meal",
+      "title": "Small talk during the meal",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "そういえば、最近どう？もう慣れた？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "うーん、大分慣れてきたけど、まだちょこちょこ大変なことあるよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "例えば？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "この前、ネットの工事で二時間も家で待ってたんだけど。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "ああ、あるある。あれ結構長いよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "それに、自転車も登録しないといけないの知らなくて、焦った。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "あはは、それ私も最初知らなかった。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "でしょ？意外と知らないこと多いよね、住んでみると。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "あ、これ美味しい。ミカの言った通りだ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "でしょ？言った通りでしょ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "完全に当たりだった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "だよね。また今度も来ようね。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "heading-home",
+      "title": "Heading home",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、お会計来た。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "いくらだった？半分ずつでいい？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "うん、それで。ええと…一人三千円くらいかな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "オッケー、了解。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "いや〜、今日は本当に楽しかった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "だよね。あのお店、当たりだったし。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "結局、並んでたお店より良かったかも。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "それな。次はどこ行く？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "考えとく。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "なんか、あっという間だったね、今日。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "ほんとだ。気づいたらもう着きそう。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "え、ちょっと歩くの遅くない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "あ…バレた？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "バレバレだよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "じゃあ、また。今日ありがとね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 15,
+          "text": "うん、こっちこそ。おやすみ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 16,
+          "text": "おやすみ。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    }
+  ]
+}

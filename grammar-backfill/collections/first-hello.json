@@ -1,0 +1,276 @@
+{
+  "collectionId": "first-hello",
+  "scenes": [
+    {
+      "sceneId": "shizuoka-tea",
+      "title": "Shizuoka tea",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみませんー。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "はいー。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "はじめまして。三〇二に越してきたカイトです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "あ、お隣さんですね。初めまして。ミカです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "ミカさん。よろしくお願いします。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "こちらこそ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "あの、引っ越しのとき、うるさくしてしまってすみませんでした。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "いえいえ、全然。気づかなかったくらいですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "これ、静岡のお茶です。よかったらどうぞ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "え、いいんですか？実家から送ってもらったんですか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "はい。実家からです。毎年たくさん届くんです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "そうなんですね。ありがとうございます。静岡のお茶、大好きなんです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "それはよかったです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "今度ゆっくり飲みますね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "はい。では、これで失礼します。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 15,
+          "text": "はい。わざわざ、ありがとうございました。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "です"
+        },
+        {
+          "label": "〜からです"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "nine-oclock",
+      "title": "Nine o'clock",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、カイトさん。おはようございます。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "おはようございます。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "お仕事ですか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "はい。今日はちょっと遅れそうで。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "え、何時からですか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "九時からなんです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "今、八時半ですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "そうなんですよね。ちゃんと間に合いますかね？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "駅まで近いから、大丈夫だと思いますよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "本当ですか？よかったです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "私もよく遅刻しそうになるので、気持ち分かります。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "え、ミカさんもですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "はい。特に月曜日は危ないんです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "分かります。今日が月曜日じゃなくて、本当によかったです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "本当ですね。じゃあ、いってらっしゃい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 15,
+          "text": "はい、いってきます。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "which-mailbox",
+      "title": "Which mailbox",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、カイトさん。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "あ、ミカさん。おはようございます。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "ポスト探してるんですか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "はい。302がどれか分からなくて。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "下の段の右側ですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "これですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "あ、それ私のです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "あ、すみません。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "302はその隣ですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "あ、本当だ。開きました。ありがとうございます。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "この鍵、部屋のとは形が違うので、分かりにくいですよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "あ、そうなんですね。だから、さっき開かなかったんですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "最初はみんな間違えますよ。私もそうでした。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "よかった。ちょっと安心しました。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "慣れれば大丈夫ですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 15,
+          "text": "はい。ありがとうございます。助かりました。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    }
+  ]
+}

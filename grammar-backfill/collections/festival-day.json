@@ -1,0 +1,360 @@
+{
+  "collectionId": "festival-day",
+  "scenes": [
+    {
+      "sceneId": "the-invite",
+      "title": "The invite",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、カイト。ねえ、知ってる？今週末、近くで祭りあるんだよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "え、そうなんだ。知らなかった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "私、友達と行く予定なんだけど、カイトも一緒に来ない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "え、いいの？邪魔じゃない？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "全然。みんな全然気にしないと思うよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "じゃあ、行きたい。予定確認してみるね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "うん、大丈夫そう。何時に集合とか決まってる？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "まだ詳しくは決めてないけど、午後の四時くらいかな。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "分かった。楽しみだな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "だよね。浴衣とか着てく人もいるらしいよ。楽しそうじゃない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "楽しそう。ちょっと気になるかも。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "じゃあ、詳しいことまた連絡するね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "うん、よろしく。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "meeting-up-to-head-out",
+      "title": "Meeting up to head out",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "お待たせ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "ううん、時間通りだよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "今日、他に誰か来るんだっけ？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "エミと、あとリョウも来るよ。二人とも大学の友達。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "へえ、楽しみ。会うの初めてかも。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "二人とも気さくだから、大丈夫だと思うよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "それなら安心。何時くらいに帰る予定？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "花火が終わったらすぐ帰ろうかなって思ってる。九時くらいかな。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "花火もあるんだ。それは楽しみすぎる。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "でしょ？結構有名な祭りなんだよ、これ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "あ、もう太鼓の音聞こえる。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "ほんとだ。行こう。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "takoyaki-booth",
+      "title": "Takoyaki booth",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、たこ焼きの匂いする。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "ほんとだ。あそこの屋台だ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "食べたくない？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "めっちゃ食べたい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "じゃあ、僕が買ってくるよ。ここで待ってて。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "はい、どうぞ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "ありがとう。すごい湯気。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "気をつけて、中めっちゃ熱いから。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "あっつ！言った通りだった。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "だから言ったのに。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "でも、めちゃくちゃ美味しい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "でしょ？ここの、当たりじゃない？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "当たりだね。もう一個食べよ。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "the-shrines-history",
+      "title": "The shrine's history",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "この神社、結構大きいね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "でしょ？結構古いんだよ、ここ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "え、どれくらい古いの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "確か、江戸時代からあるって聞いたことある。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "マジで？めっちゃ歴史あるじゃん。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "だよね。毎年この祭りも、ここが中心なんだって。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "へえ、そうなんだ。じゃあ、この祭りも結構長く続いてるってこと？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "たぶんね。詳しくは知らないけど。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "なんか、こうやって見ると雰囲気あるよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "分かる。夜の神社って、ちょっと特別な感じするよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "それな。お参りしていかない？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "いいね、行こう。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "heading-home",
+      "title": "Heading home",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "いや〜、花火すごかったね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "だよね。最後のやつ、特にすごかった。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "たこ焼きも美味しかったし、神社も良かったし。今日、当たりだったんじゃない？全部。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "ほんとそれ。エミとリョウも楽しんでたみたいだし。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "うん、二人とも良い人たちだった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "夏らしいこと、もっとしたいな。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "分かる。そういえば、阪神、今シーズンやってるんだよね。一回観に行こうよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "え、いいね。行きたい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "よし、今度予定合わせよう。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "楽しみにしてる。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "あー、疲れた。今日、誘ってくれてありがとう。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "こちらこそ。そろそろ帰ろっか。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "うん、おやすみ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "おやすみ。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    }
+  ]
+}

@@ -1,0 +1,336 @@
+{
+  "collectionId": "building-rules",
+  "scenes": [
+    {
+      "sceneId": "bike-rack-only",
+      "title": "Bike rack only",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません。自転車、どこに止めますか？今、入口のそばなんです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "あ、入口は、置いちゃいけません。裏の、置き場です。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "置いちゃいけませんか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "はい。みんなの、邪魔になるんです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "あ、わかりました。今日、動かします。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "はいー。夕方は、すぐ埋まるので。早めが、いいですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "へえ、そうなんですか。許可とか、いりますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "あ、いりません。空いてる所に、止めてください。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "わかりました。短くても、入口はダメですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "はい。前に、ちょっと、文句が出たんです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "あ、じゃあ、気をつけます。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "他は、大丈夫でしたか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "はい。これが、初めてです。ありがとうございます。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "ちゃいけない"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "quiet-hours",
+      "title": "Quiet hours",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません。この建物、夜は、静かにするルール、ありますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "はい。十時以降は、うるさくしちゃいけません。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "うるさくしちゃいけませんか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "はい。テレビとか、スピーカーの電話とか。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "あ、わかりました。気をつけます。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "そんなに、厳しくないです。隣の人に、迷惑にならなければ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "へえ、そうなんですか。週末も、同じですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "はい。毎日、同じです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "わかりました。前に、文句とか、ありましたか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "前に、一回、あったんです。それで、ルールになりました。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "あ、そうなんですか。僕は、大丈夫だと思います。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "はい、大丈夫ですよ。カイトさんの部屋は、夜、静かですか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "はい。意外と、静かです。よかったです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "よかったです。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "ちゃいけない"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "delivery-hours",
+      "title": "Delivery hours",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません。荷物が、夜に来るんですけど。大丈夫ですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "九時までなら、大丈夫です。九時以降は、呼び鈴、押しちゃいけません。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "押しちゃいけませんか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "はい。ロッカーか、再配達になります。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "あ、わかりました。九時、ですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "はい。家にいなくても、だいたい、ロッカーです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "へえ、そうなんですか。紙も、来ますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "はい。不在票が、ポストに入ります。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "じゃあ、一日遅れるくらい、ですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "はい。たいてい、大丈夫です。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "よかったです。九時以降は、全然ダメ、ですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "はい。鳴らしちゃいけません。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "ありがとうございます。ミカさんも、何か、来るんですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "あ、ただの、食材です。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "あ、そうなんですか。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "ちゃいけない"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "bike-lock",
+      "title": "Bike lock",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません。置き場でも、鍵、いりますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "はい。鍵なしで、置いちゃいけません。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "置いちゃいけませんか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "はい。ここは、だいたい安全です。でも、前に、一回、なくなったんです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "へえ、そうなんですか。最近ですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "少し前です。よくある話じゃないです。でも、あったんです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "わかりました。実は、まだ、鍵がないんです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "近くの、ホームセンターに、ありますよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "じゃあ、今週、買います。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "はい。安いので、その方が、いいです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "ミカさんは、前に、取られたこと、ありますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "私は、ないです。でも、友達が、あったので。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "あ、わかります。すぐ、買います。ありがとうございます。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "ちゃいけない"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    }
+  ]
+}

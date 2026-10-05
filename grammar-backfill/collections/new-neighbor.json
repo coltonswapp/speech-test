@@ -1,0 +1,449 @@
+{
+  "collectionId": "new-neighbor",
+  "scenes": [
+    {
+      "sceneId": "meeting-new-neighbor",
+      "title": "Meeting a New Neighbor",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "こんにちは。お隣のミカです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "こんにちは。カイトです。どうぞよろしくお願いします。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "こちらこそ。ようこそ、このアパートへ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "ありがとうございます。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "この辺りは静かで、とてもいい所ですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "そうですか。それはいいですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "あの、この近くにスーパーはありますか。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "はい、ありますよ。あそこがスーパーです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "あー　近いですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "ありがとうございます。これからよろしくお願いします。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜です"
+        },
+        {
+          "label": "ありますか"
+        },
+        {
+          "label": "ありますよ"
+        }
+      ]
+    },
+    {
+      "sceneId": "hometown-age-chat",
+      "title": "Hometown and Age Chat",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "ミカさん、こんにちは。どこからですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "こんにちは、カイトさん。私は大阪からです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "大阪ですか！いいところですね。私は東京からです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "そうですか。東京がいいよね。カイトさんは、何歳ですか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "私は三十歳です。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "三十歳ですか。私は二十五歳です。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜です"
+        },
+        {
+          "label": "〜からです"
+        },
+        {
+          "label": "〜ですか？"
+        }
+      ]
+    },
+    {
+      "sceneId": "trash-day-question",
+      "title": "When is Trash Day?",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません。このマンションのゴミの日、いつですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "このマンションのゴミは、燃えるゴミが月曜日と木曜日ですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "わかりました。出す時間はいつがいいですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "朝に出してくださいね。夜は出しちゃいけませんよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "夜は出しちゃいけないんですね。わかりました。ありがとうございます。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "はい。ほかに燃えないゴミは水曜日です。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "はい！覚えておきます！ありがとうございます！",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ちゃいけません"
+        },
+        {
+          "label": "〜の"
+        }
+      ]
+    },
+    {
+      "sceneId": "lightbulb-request",
+      "title": "Asking for a Lightbulb",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あっ　すみません。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "はい、なんでしょうか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "あの、もしかして電球がありますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "電球ですか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "はい。まだ買ってないです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "ああ、そうですね。ちょっと待ってください。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "はい、ありますよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "ありがとうございます.",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "なんでしょうか？"
+        },
+        {
+          "label": "電球がありますか？"
+        },
+        {
+          "label": "まだ買ってないです。"
+        }
+      ]
+    },
+    {
+      "sceneId": "natsu-matsuri-chat",
+      "title": "Summer Festival Chat",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "カイトさん、夏祭りあるの、知ってる？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "夏祭り？知らないな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "うん、この町に夏祭りがあるんだよ。来週の土曜日だ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "へえ、そうなんだ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "その日、カイトさん、暇かな？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "うん、暇だよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "じゃあ、一緒に行かない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "いいよ！楽しそう！",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜だよ。"
+        },
+        {
+          "label": "〜行かない？"
+        }
+      ]
+    },
+    {
+      "sceneId": "who-is-home",
+      "title": "Do you have a cat?",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "ミカさん、この傘、返します。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "あ、ありがとう。どうぞ、入って。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "あの、もしかして猫がいますか。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "猫？いいえ、いませんよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "よかった。ちょっと、アレルギーで。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "ああ、犬もいません。大丈夫ですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "すみません。じゃあ、失礼します。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "どうぞどうぞ。お茶、飲む？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "あ、お願いします。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "がいます"
+        },
+        {
+          "label": "〜がいますか"
+        },
+        {
+          "label": "〜で"
+        },
+        {
+          "label": "〜飲む？"
+        }
+      ]
+    },
+    {
+      "sceneId": "meet-at-konbini",
+      "title": "Out of milk",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "もしもし、カイトさん？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "あ、ミカさん。どうしたの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "牛乳、切れた。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "コンビニに行きませんか。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "いいよ。今から？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "うん。下で待つね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "わかった。すぐ行く。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "ありがとう！",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "に行きませんか"
+        },
+        {
+          "label": "ませんか"
+        }
+      ]
+    },
+    {
+      "sceneId": "wrong-apartment",
+      "title": "Wrong door",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "ミカさん、この荷物、見ましたか。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "え、どれ？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "三〇二の前です。名前は…ミカさん？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "あ、私の！でも、三〇二じゃないです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "そうですか。三〇一ですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "はい。宅配、よく間違えます。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "重いですね。持ちますよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "ありがとう！助かります。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "じゃないです"
+        }
+      ]
+    }
+  ]
+}

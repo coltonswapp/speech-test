@@ -104,6 +104,18 @@ function LessonBackLink({
   );
 }
 
+function ReviewQueueBackLink() {
+  return (
+    <Link
+      href="/tts/review"
+      className="inline-flex w-fit items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2.5 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
+    >
+      <ChevronLeft className="size-4" />
+      Back to review queue
+    </Link>
+  );
+}
+
 export function ScenarioEditor({
   collectionId,
   scenarioSlug,
@@ -114,6 +126,7 @@ export function ScenarioEditor({
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const fromReview = searchParams.get("from") === "review";
 
   const { data, isLoading } = useQuery({
     queryKey: ["dialogue-scenario", collectionId, scenarioSlug],
@@ -144,6 +157,8 @@ export function ScenarioEditor({
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     readCollapsedSections,
   );
+  // One-shot: review-queue → editor starts with only audio expanded.
+  const [appliedReviewCollapse, setAppliedReviewCollapse] = useState(false);
 
   function setSectionsCollapsed(ids: string[], collapsed: boolean) {
     const next = new Set(collapsedSections);
@@ -187,11 +202,31 @@ export function ScenarioEditor({
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (!tab) return;
+    const arrivedFromReview = searchParams.get("from") === "review";
+
+    /* Deep-link / review-queue entry: sync expand state from URL once. */
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (tab === "raw" || tab === "source") {
       setView(tab);
       return;
     }
+
+    // Review-queue deep link: collapse everything except audio (or ?tab=).
+    // In-memory only — do not write localStorage so other editor entry points
+    // keep their remembered expand/collapse preferences.
+    if (arrivedFromReview && !appliedReviewCollapse) {
+      const keepOpen =
+        tab && SECTION_IDS.includes(tab) ? tab : "audio";
+      setCollapsedSections(
+        new Set(SECTION_IDS.filter((id) => id !== keepOpen)),
+      );
+      setAppliedReviewCollapse(true);
+      setView("editor");
+      requestAnimationFrame(() => scrollToId(keepOpen));
+      return;
+    }
+
+    if (!tab) return;
     if (SECTION_IDS.includes(tab)) {
       setView("editor");
       // Deep link into a folded section: unfold it so there's something to land on.
@@ -203,7 +238,8 @@ export function ScenarioEditor({
       });
       requestAnimationFrame(() => scrollToId(tab));
     }
-  }, [searchParams]);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [searchParams, appliedReviewCollapse]);
 
   // Set when the scenario was created via the "write lines manually" path,
   // so a setting/grammar points filled in for context don't silently trigger
@@ -341,10 +377,14 @@ export function ScenarioEditor({
   if (isLoading || !draft) {
     return (
       <div className="flex flex-1 flex-col gap-4">
-        <LessonBackLink
-          collectionId={collectionId}
-          title={collectionData?.collection.title}
-        />
+        {fromReview ? (
+          <ReviewQueueBackLink />
+        ) : (
+          <LessonBackLink
+            collectionId={collectionId}
+            title={collectionData?.collection.title}
+          />
+        )}
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-48 w-full" />
       </div>
@@ -536,10 +576,13 @@ export function ScenarioEditor({
 
   return (
     <div className="flex flex-1 flex-col gap-6">
-      <LessonBackLink
-        collectionId={collectionId}
-        title={collectionData?.collection.title}
-      />
+      <div className="flex flex-wrap items-center gap-3">
+        {fromReview ? <ReviewQueueBackLink /> : null}
+        <LessonBackLink
+          collectionId={collectionId}
+          title={collectionData?.collection.title}
+        />
+      </div>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">

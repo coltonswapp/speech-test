@@ -2,7 +2,11 @@
 
 Hana’s mapping rules live in [`README.md`](./README.md). This file only covers generating dumps and applying approved mappings.
 
-## Prerequisites
+## Current dump in-repo
+
+`patterns.json` and `collections/*.json` were generated from Studio’s API by Hana (not via `DATABASE_URL` / the local dump script). Counts at last refresh: **173** patterns, **32** collections, **149** scenes. N4/N3 labels will mostly orphan until more catalog entries exist.
+
+## Regenerating (optional)
 
 From `webapp/` with Studio DB credentials:
 
@@ -47,5 +51,3 @@ pnpm dotenv -e .env.local -- tsx scripts/grammar-backfill-apply.ts --mapping ../
 ```
 
 Apply writes `patternId` + `sourceSpokenStart` / `sourceSpokenEnd` onto matching scene grammar highlights (matched by existing `label`, same order). It does **not** create Pattern catalog rows. Orphan / ambiguous mapping rows are skipped (see script output).
-
-If this cloud agent environment has no `DATABASE_URL`, leave `collections/` empty until someone with Studio credentials runs the dump.

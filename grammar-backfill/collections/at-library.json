@@ -1,0 +1,11 @@
+{
+  "collectionId": "at-library",
+  "scenes": [
+    {
+      "sceneId": "studying-quietely",
+      "title": "Starting to Study",
+      "spokenLines": [],
+      "grammar": []
+    }
+  ]
+}

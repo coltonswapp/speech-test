@@ -1,0 +1,366 @@
+{
+  "collectionId": "buying-a-bike",
+  "scenes": [
+    {
+      "sceneId": "the-old-bike",
+      "title": "The old bike",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あの、自転車ってありますか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 1,
+          "text": "自転車？どうしたの？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 2,
+          "text": "ちょっと、一人で近くを回ってみたいなと思って。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 3,
+          "text": "あら、そうなの。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 4,
+          "text": "はい。いつも一緒に歩いてもらって、申し訳ないので……自分で行けたら、便利かなと。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "ふふ、そんなこと、気にしなくていいのに。でも……",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 6,
+          "text": "あ、そうだ！昔使ってた自転車、物置にあったはずよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "本当ですか？見てみたいです！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "これよ！もう何年も置いてあるけどね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "わあ、自転車ですね！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "あれ、タイヤ、ちょっとおかしくないですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 11,
+          "text": "え、どれ？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 12,
+          "text": "……あら。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 13,
+          "text": "え、今、何か落ちましたよ！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 14,
+          "text": "ふふ、これはもう、だめねー。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 15,
+          "text": "ふふ、残念です……でも、おもしろかったです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 16,
+          "text": "じゃあ、新しいのを買いに行きましょうか。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 17,
+          "text": "はい、そうしましょう！",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ってありますか？"
+        },
+        {
+          "label": "〜てみたいなと思って。"
+        },
+        {
+          "label": "〜てもらって、申し訳ないので"
+        },
+        {
+          "label": "〜なくていいのに。"
+        },
+        {
+          "label": "〜あったはずよ。"
+        },
+        {
+          "label": "〜おかしくないですか？"
+        }
+      ]
+    },
+    {
+      "sceneId": "at-the-shop",
+      "title": "At the shop",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "わあ、結構あるわねー。どれがいい？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "うーん、迷いますね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "この青いのと、あの赤いの、どっちがいいと思いますか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 3,
+          "text": "そうねー、青いのの方が、軽そうね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 4,
+          "text": "あ、本当だ。持ってみます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "あ、本当に、青いのの方が軽いです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "でしょう？でも、赤いのの方が、かわいいと思わない？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "ふふ、確かに。どっちも、いいですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "あ、青いのは、一万二千円ですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 9,
+          "text": "赤いのは、一万五千円か。ちょっと高いわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 10,
+          "text": "でも、軽い方が、毎日乗るには、いいかもしれません。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 11,
+          "text": "そうね、エミちゃんが使うんだから、エミちゃんが決めていいのよ。",
+          "speaker": "Obaachan"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "どれがいい？"
+        },
+        {
+          "label": "〜と思いますか？"
+        },
+        {
+          "label": "〜のほうが"
+        },
+        {
+          "label": "〜そうね"
+        },
+        {
+          "label": "〜てみます"
+        },
+        {
+          "label": "〜ていいのよ"
+        }
+      ]
+    },
+    {
+      "sceneId": "deciding-and-paying",
+      "title": "Deciding and paying",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "じゃあ、青いのにします。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 1,
+          "text": "いいわね、決まったわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 2,
+          "text": "あの、お金、払います。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 3,
+          "text": "え、いいから、いいから。おばあちゃんが払うわよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 4,
+          "text": "いえいえ、自分で買いたいです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "ふふ、気持ちは嬉しいけど……これは、おばあちゃんからのプレゼントにさせて。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 6,
+          "text": "……本当に、いいんですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "もちろん。エミちゃんが、ここで自由に動けるように、ね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 8,
+          "text": "……ありがとうございます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 9,
+          "text": "さあ、エミちゃんの自転車よ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 10,
+          "text": "はい！大切にします。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜にします"
+        },
+        {
+          "label": "〜わね"
+        },
+        {
+          "label": "〜払います"
+        },
+        {
+          "label": "〜買いたいです"
+        },
+        {
+          "label": "〜にさせて"
+        },
+        {
+          "label": "〜ように"
+        }
+      ]
+    },
+    {
+      "sceneId": "first-ride",
+      "title": "First ride",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "じゃあ、ゆっくり乗ってみて。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "はい、やってみます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "うわっ……ちょっと、怖いです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 3,
+          "text": "ふふ、大丈夫、大丈夫。ゆっくりでいいから。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 4,
+          "text": "あ、なんか、乗れてきました！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "その調子よ！",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 6,
+          "text": "わあ、楽しいです！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "ふふ、よかったー。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 8,
+          "text": "これで、一人でも、いろいろな所に行けますね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 9,
+          "text": "そうね。でも、気をつけてね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 10,
+          "text": "はい、気をつけます！",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜てみて"
+        },
+        {
+          "label": "〜でいいから"
+        },
+        {
+          "label": "〜てきました"
+        },
+        {
+          "label": "〜できます"
+        },
+        {
+          "label": "〜てね"
+        }
+      ]
+    }
+  ]
+}

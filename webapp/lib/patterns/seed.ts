@@ -14,6 +14,11 @@ export const N5_PATTERNS_CSV = path.resolve(
   "content/seeds/n5-teaching-patterns.csv"
 );
 
+export const ADDED_PATTERNS_JSON = path.resolve(
+  process.cwd(),
+  "content/seeds/added-patterns.json"
+);
+
 export type TeachingPatternSeedRow = {
   id: string;
   form: string;
@@ -21,6 +26,7 @@ export type TeachingPatternSeedRow = {
   jlptBand: number;
   category: string;
   status: string;
+  notes?: string | null;
   orderIndex: number;
 };
 
@@ -158,6 +164,7 @@ export async function upsertTeachingPatterns(
         jlptBand: r.jlptBand,
         category: r.category,
         status: r.status,
+        notes: r.notes?.trim() ? r.notes.trim() : null,
         orderIndex: r.orderIndex,
         updatedAt: new Date(),
       }))
@@ -168,5 +175,6 @@ export async function upsertTeachingPatterns(
     inserted: toInsert.length,
     skipped: rows.length - toInsert.length,
     total: rows.length,
+    insertedIds: toInsert.map((r) => r.id),
   };
 }

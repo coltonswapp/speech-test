@@ -1,0 +1,301 @@
+{
+  "collectionId": "first-evening",
+  "scenes": [
+    {
+      "sceneId": "unpacking",
+      "title": "Unpacking",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "荷物、手伝おうか？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "あ、大丈夫です。自分でやります。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "そう？じゃあ、そこに座ってるわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "これ、どこに置いたらいいですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "それは、その引き出しでいいわよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "はい、分かりました。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "あ、これ、お土産です。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "あら、そうだった！何のお土産？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 8,
+          "text": "チョコレートです。カリフォルニアのです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 9,
+          "text": "わあ、楽しみー。晩ご飯の後に、食べましょうか。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 10,
+          "text": "はい、いいですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 11,
+          "text": "じゃあ、続き、頑張ってねー。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 12,
+          "text": "はい。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜おうか？"
+        },
+        {
+          "label": "〜たらいいですか？"
+        },
+        {
+          "label": "〜でいいわよ"
+        },
+        {
+          "label": "〜だった！"
+        },
+        {
+          "label": "〜のです"
+        },
+        {
+          "label": "〜ましょうか"
+        }
+      ]
+    },
+    {
+      "sceneId": "dinner",
+      "title": "Dinner",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "さあ、いただきましょうか。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "はい、いただきます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "わあ、美味しいです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 3,
+          "text": "それはよかったー。おじいちゃんの好物なのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 4,
+          "text": "そうなんですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "エミちゃんも、好き？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 6,
+          "text": "はい、大好きです。優しい味ですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "ふふ、ありがとう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 8,
+          "text": "ごちそうさまでした。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 9,
+          "text": "ごちそうさまー。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 10,
+          "text": "さあ、お待ちかねのやつ、開けましょうか。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "はい！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 12,
+          "text": "わあ、美味しそうー。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 13,
+          "text": "どうぞ、食べてください。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 14,
+          "text": "ありがとう。いただきまーす。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 15,
+          "text": "んー、美味しい！",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 16,
+          "text": "よかったです。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ましょうか"
+        },
+        {
+          "label": "〜です"
+        },
+        {
+          "label": "〜なのよ"
+        },
+        {
+          "label": "〜なんですね"
+        },
+        {
+          "label": "〜そうー"
+        },
+        {
+          "label": "〜てください"
+        }
+      ]
+    },
+    {
+      "sceneId": "bedtime",
+      "title": "Bedtime",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あら、眠そうねー。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "あ……はい、ちょっと眠いです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "そうよねー、今日は長い一日だったもんね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "はい……疲れました。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "もう寝ましょうか。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "はい、そうします。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "布団、あたたかいから、よく眠れると思うわよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "はい、ありがとうございます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "明日は、朝ご飯の後、散歩に行きましょうね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "はい、楽しみです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "おやすみなさい。今日はありがとうございました。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 11,
+          "text": "おやすみー。ゆっくり休んでね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 12,
+          "text": "はい。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜そうねー"
+        },
+        {
+          "label": "〜もんね"
+        },
+        {
+          "label": "〜ましょうか"
+        },
+        {
+          "label": "そうします"
+        },
+        {
+          "label": "〜から"
+        },
+        {
+          "label": "〜と思うわよ"
+        },
+        {
+          "label": "〜てね"
+        }
+      ]
+    }
+  ]
+}

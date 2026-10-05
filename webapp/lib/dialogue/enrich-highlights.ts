@@ -45,7 +45,8 @@ export function patternLabelFromCatalog(
 }
 
 function patternKey(pattern: GrammarPatternRef): string {
-  const label = pattern.label.trim();
+  if (pattern.patternId) return `pattern:${pattern.patternId}`;
+  const label = pattern.label?.trim() ?? "";
   const id = pattern.grammarPointID ?? "";
   return `${label}|${id}`;
 }
@@ -56,12 +57,15 @@ function dedupeGrammarPatterns(
   const seen = new Set<string>();
   const result: GrammarPatternRef[] = [];
   for (const pattern of patterns) {
-    const label = pattern.label.trim();
-    if (!label) continue;
-    const key = patternKey({ ...pattern, label });
+    const label = pattern.label?.trim() ?? "";
+    if (!label && !pattern.patternId) continue;
+    const normalized = label
+      ? { ...pattern, label }
+      : { ...pattern, label: undefined };
+    const key = patternKey(normalized);
     if (seen.has(key)) continue;
     seen.add(key);
-    result.push({ ...pattern, label });
+    result.push(normalized);
   }
   return result;
 }
@@ -76,8 +80,8 @@ export function ensureGrammarCoverage(
   const unlinked: GrammarPatternRef[] = [];
 
   for (const pattern of patterns) {
-    const label = pattern.label.trim();
-    if (!label) continue;
+    const label = pattern.label?.trim() ?? "";
+    if (!label && !pattern.patternId) continue;
     if (pattern.grammarPointID) {
       if (!byId.has(pattern.grammarPointID)) {
         byId.set(pattern.grammarPointID, pattern);
@@ -89,7 +93,7 @@ export function ensureGrammarCoverage(
 
   const covered: GrammarPatternRef[] = taggedGrammarIds.map((id) => {
     const existing = byId.get(id);
-    if (existing?.label.trim()) return existing;
+    if (existing?.label?.trim() || existing?.patternId) return existing!;
     return {
       label: patternLabelFromCatalog(id, pointMap),
       grammarPointID: id,
@@ -190,7 +194,7 @@ export function syncGrammarPatternsFromLines(
 
   const nextPatterns: GrammarPatternRef[] = taggedGrammarIds.map((id) => {
     const existing = existingById.get(id);
-    if (existing?.label.trim()) return existing;
+    if (existing?.label?.trim() || existing?.patternId) return existing!;
     return {
       label: patternLabelFromCatalog(id, pointMap),
       grammarPointID: id,
@@ -251,7 +255,7 @@ export function addMissingGrammarPatterns(
   };
 }
 
-/** Drop blank vocabulary rows before persisting scenario highlights. */
+/** Drop blank vocabulary / incomplete grammar rows before persisting. */
 export function sanitizeHighlightsForSave(
   highlights: DialogueHighlights | null
 ): DialogueHighlights | null {
@@ -259,9 +263,15 @@ export function sanitizeHighlightsForSave(
   const vocabulary = (highlights.vocabulary ?? [])
     .map((word) => word.trim())
     .filter((word) => word.length > 0);
+  const grammarPatterns = (highlights.grammarPatterns ?? [])
+    .map((pattern) => {
+      const label = pattern.label?.trim() || undefined;
+      return label ? { ...pattern, label } : { ...pattern, label: undefined };
+    })
+    .filter((pattern) => Boolean(pattern.label || pattern.patternId));
   return {
     vocabulary,
-    grammarPatterns: highlights.grammarPatterns ?? [],
+    grammarPatterns,
     contextNotes: highlights.contextNotes ?? [],
   };
 }

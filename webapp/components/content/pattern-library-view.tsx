@@ -72,8 +72,12 @@ export function PatternLibraryView() {
   const importMutation = useMutation({
     mutationFn: contentApi.importPatterns,
     onSuccess: (result) => {
+      const addedBit =
+        result.added != null
+          ? ` · added ${result.added.inserted} new / ${result.added.skipped} present`
+          : "";
       toast.success(
-        `Imported ${result.inserted} patterns (${result.skipped} already present)`
+        `Imported ${result.inserted} patterns (${result.skipped} already present)${addedBit}`
       );
       queryClient.invalidateQueries({ queryKey: ["teaching-patterns"] });
     },
@@ -148,7 +152,7 @@ export function PatternLibraryView() {
             onClick={() => importMutation.mutate()}
             disabled={importMutation.isPending}
           >
-            {importMutation.isPending ? "Importing…" : "Import N5 seed"}
+            {importMutation.isPending ? "Importing…" : "Import seed patterns"}
           </Button>
         </div>
       </div>
@@ -178,14 +182,14 @@ export function PatternLibraryView() {
       {!isLoading && empty && (
         <div className="flex flex-col items-center gap-3 rounded-md border border-dashed px-6 py-16 text-center">
           <p className="text-sm text-muted-foreground">
-            No teaching patterns yet. Import the curated N5 seed to populate
-            the coverage map.
+            No teaching patterns yet. Import the curated seed (N5 + added
+            drafts) to populate the coverage map.
           </p>
           <Button
             onClick={() => importMutation.mutate()}
             disabled={importMutation.isPending}
           >
-            {importMutation.isPending ? "Importing…" : "Import N5 seed"}
+            {importMutation.isPending ? "Importing…" : "Import seed patterns"}
           </Button>
         </div>
       )}

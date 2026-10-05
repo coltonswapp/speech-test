@@ -141,6 +141,20 @@ export type TeachingPatternImportResult = {
   inserted: number;
   skipped: number;
   total: number;
+  insertedIds?: string[];
+  n5?: { inserted: number; skipped: number; total: number };
+  added?: { inserted: number; skipped: number; total: number };
+};
+
+export type TeachingPatternWriteInput = {
+  id: string;
+  form: string;
+  gloss: string;
+  jlptBand?: number;
+  category?: string;
+  status?: string;
+  notes?: string | null;
+  orderIndex?: number;
 };
 
 export const contentApi = {
@@ -193,6 +207,18 @@ export const contentApi = {
     ),
   listPatterns: () =>
     request<TeachingPatternList>("/api/content/patterns"),
+  /** Insert-missing create. Pass one pattern, an array, or `{ patterns }`. */
+  createPatterns: (
+    body:
+      | TeachingPatternWriteInput
+      | TeachingPatternWriteInput[]
+      | { patterns: TeachingPatternWriteInput[] }
+  ) =>
+    request<TeachingPatternImportResult>("/api/content/patterns", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  /** Import on-server N5 CSV + added-patterns.json (insert-missing). */
   importPatterns: () =>
     request<TeachingPatternImportResult>("/api/content/patterns/import", {
       method: "POST",

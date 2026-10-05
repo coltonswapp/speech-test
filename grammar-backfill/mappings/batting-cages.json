@@ -1,0 +1,29 @@
+{
+  "collectionId": "batting-cages",
+  "scenes": [
+    {
+      "sceneId": "passing-by",
+      "items": []
+    },
+    {
+      "sceneId": "talked-into-it",
+      "items": []
+    },
+    {
+      "sceneId": "first-swings",
+      "items": []
+    },
+    {
+      "sceneId": "mikas-turn",
+      "items": []
+    },
+    {
+      "sceneId": "his-father",
+      "items": []
+    },
+    {
+      "sceneId": "a-different-perspective",
+      "items": []
+    }
+  ]
+}

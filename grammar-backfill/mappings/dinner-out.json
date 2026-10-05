@@ -1,0 +1,97 @@
+{
+  "collectionId": "dinner-out",
+  "scenes": [
+    {
+      "sceneId": "an-old-friends-place",
+      "items": [
+        {
+          "label": "〜にしましょう",
+          "patternId": "n5-ni-suru",
+          "sourceSpokenStart": 14,
+          "sourceSpokenEnd": 14,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "7時にしましょう: にする + ましょう."
+        },
+        {
+          "label": "〜かしら",
+          "patternId": null,
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜かしら — \"I wonder ~\" (feminine)."
+        }
+      ]
+    },
+    {
+      "sceneId": "deciding-what-to-eat",
+      "items": [
+        {
+          "label": "〜にします",
+          "patternId": "n5-ni-suru",
+          "sourceSpokenStart": 12,
+          "sourceSpokenEnd": 12,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 13. Line 13 is volitional 焼き魚にしようかな."
+        },
+        {
+          "label": "〜てみる",
+          "patternId": null,
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てみる — \"try doing ~\". Also on spoken line 1 (見てみましょう)."
+        }
+      ]
+    },
+    {
+      "sceneId": "getting-to-know-emi",
+      "items": [
+        {
+          "label": "〜をください",
+          "patternId": "n5-o-kudasai",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜んです",
+          "patternId": "n5-ndesu",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "sceneId": "the-toast",
+      "items": [
+        {
+          "label": "〜ましょう",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Line has 乾杯しましょうか (n5-mashouka also exists); no plain ましょう in this scene."
+        },
+        {
+          "label": "〜かもしれない",
+          "patternId": null,
+          "sourceSpokenStart": 15,
+          "sourceSpokenEnd": 15,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜かもしれない — \"might ~; maybe ~\"."
+        }
+      ]
+    }
+  ]
+}

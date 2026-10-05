@@ -1,0 +1,191 @@
+{
+  "collectionId": "first-evening",
+  "scenes": [
+    {
+      "sceneId": "unpacking",
+      "items": [
+        {
+          "label": "〜おうか？",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual volitional 〜おうか (手伝おうか) = plain form of ましょうか, used as an offer."
+        },
+        {
+          "label": "〜たらいいですか？",
+          "patternId": null,
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜たらいいですか — \"what/where should I ~?\" (asking for advice)."
+        },
+        {
+          "label": "〜でいいわよ",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜でいい — \"~ is fine/enough\" (その引き出しでいいわよ)."
+        },
+        {
+          "label": "〜だった！",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 7,
+          "sourceSpokenEnd": 7,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Past copula だった (そうだった！, \"oh right!\")."
+        },
+        {
+          "label": "〜のです",
+          "patternId": null,
+          "sourceSpokenStart": null,
+          "sourceSpokenEnd": null,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "Not in any spoken line: explanatory のです (n5-no-desu) does not occur. Line 8 カリフォルニアのです is pronoun の (\"the Californian one\") + です, closer to n5-no-possessive."
+        },
+        {
+          "label": "〜ましょうか",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 9,
+          "sourceSpokenEnd": 9,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Used as \"shall we ~?\" (suggestion)."
+        }
+      ]
+    },
+    {
+      "sceneId": "dinner",
+      "items": [
+        {
+          "label": "〜ましょうか",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 10. Used as \"shall we ~?\" (suggestion)."
+        },
+        {
+          "label": "〜です",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 4, 6, 16."
+        },
+        {
+          "label": "〜なのよ",
+          "patternId": "n5-no-desu",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual explanatory 〜なのよ."
+        },
+        {
+          "label": "〜なんですね",
+          "patternId": "n5-ndesu",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜そうー",
+          "patternId": null,
+          "sourceSpokenStart": 12,
+          "sourceSpokenEnd": 12,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜そう — \"looks/seems ~\" (appearance). (美味しそうー)"
+        },
+        {
+          "label": "〜てください",
+          "patternId": "n5-te-kudasai",
+          "sourceSpokenStart": 13,
+          "sourceSpokenEnd": 13,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "sceneId": "bedtime",
+      "items": [
+        {
+          "label": "〜そうねー",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜そう — \"looks/seems ~\" (appearance). (眠そうねー)"
+        },
+        {
+          "label": "〜もんね",
+          "patternId": null,
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜もん(ね) — \"because ~, you know\" (casual reason)."
+        },
+        {
+          "label": "〜ましょうか",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Used as \"shall we ~?\" (suggestion)."
+        },
+        {
+          "label": "そうします",
+          "patternId": null,
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: そうします — \"I'll do that\" (set phrase; そう + する)."
+        },
+        {
+          "label": "〜から",
+          "patternId": "n5-kara-because",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜と思うわよ",
+          "patternId": null,
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜と思う — \"I think ~\" (here with わよ)."
+        },
+        {
+          "label": "〜てね",
+          "patternId": "n5-te-kudasai",
+          "sourceSpokenStart": 11,
+          "sourceSpokenEnd": 11,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual て-form request + ね (休んでね), ください dropped."
+        }
+      ]
+    }
+  ]
+}

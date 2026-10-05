@@ -1,0 +1,74 @@
+{
+  "collectionId": "tea-at-mikas",
+  "scenes": [
+    {
+      "sceneId": "favorite-nearby",
+      "items": [
+        {
+          "label": "〜からです",
+          "patternId": "n5-kara-because",
+          "sourceSpokenStart": 11,
+          "sourceSpokenEnd": 11,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 12. Reason から (長いからです)."
+        },
+        {
+          "label": "か",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 12,
+          "sourceSpokenEnd": 12,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 2, 4, 8, 10, 15."
+        }
+      ]
+    },
+    {
+      "sceneId": "why-he-moved-here",
+      "items": [
+        {
+          "label": "〜からです",
+          "patternId": "n5-kara-from",
+          "sourceSpokenStart": 12,
+          "sourceSpokenEnd": 12,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 1, 7, 8, 13. Line 1 (仕事からです) reads as reason/cause rather than starting point (cf. n5-kara-because); lines 7/8 are source \"from the company\"."
+        },
+        {
+          "label": "か",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 2, 6, 13."
+        }
+      ]
+    },
+    {
+      "sceneId": "wheres-this-snack-from",
+      "items": [
+        {
+          "label": "〜からです",
+          "patternId": "n5-kara-from",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 2."
+        },
+        {
+          "label": "か",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 4, 6, 10. Line 7 has かも (\"maybe\"), not a question."
+        }
+      ]
+    }
+  ]
+}

@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { upsertTeachingPatternsFromSeedFile } from "@/lib/patterns/import";
+import { upsertAllTeachingPatternSeeds } from "@/lib/patterns/import";
 
-// Studio import: upsert N5 seed CSV from disk (insert-missing only).
+// Studio import: N5 CSV + added-patterns.json (both insert-missing only).
 
 export async function POST() {
   try {
-    const result = await upsertTeachingPatternsFromSeedFile(db);
-    return NextResponse.json(result, { status: 201 });
+    const result = await upsertAllTeachingPatternSeeds(db);
+    return NextResponse.json(result, {
+      status: result.inserted > 0 ? 201 : 200,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Import failed";
     return NextResponse.json({ error: message }, { status: 500 });

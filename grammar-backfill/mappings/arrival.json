@@ -1,0 +1,164 @@
+{
+  "collectionId": "arrival",
+  "scenes": [
+    {
+      "sceneId": "finding-grandma",
+      "items": [
+        {
+          "label": "〜より",
+          "patternId": "n5-wa-yori-desu",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "写真より、ずっと大人ね — より comparison without は."
+        },
+        {
+          "label": "〜ませんでした",
+          "patternId": null,
+          "sourceSpokenStart": 11,
+          "sourceSpokenEnd": 11,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜ませんでした — polite past negative (\"did not ~\")."
+        },
+        {
+          "label": "〜でしょう",
+          "patternId": "n5-deshou",
+          "sourceSpokenStart": 16,
+          "sourceSpokenEnd": 16,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜ましょう",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 18,
+          "sourceSpokenEnd": 18,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "sceneId": "baggage-claim",
+      "items": [
+        {
+          "label": "〜です",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 4, 9, 11."
+        },
+        {
+          "label": "〜ね",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 5, 6, 10, 12."
+        },
+        {
+          "label": "〜じゃないです",
+          "patternId": "n5-janai-dewa-nai",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜てます",
+          "patternId": "n5-te-iru",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Contracted 〜てます (似てます)."
+        },
+        {
+          "label": "〜てる",
+          "patternId": "n5-te-iru",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Contracted casual 〜てる (入ってる)."
+        },
+        {
+          "label": "〜ましょう",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 14,
+          "sourceSpokenEnd": 14,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "sceneId": "in-the-car",
+      "items": [
+        {
+          "label": "〜です",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 3, 5."
+        },
+        {
+          "label": "〜も",
+          "patternId": "n5-mo",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 3."
+        },
+        {
+          "label": "〜ね",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜より",
+          "patternId": "n5-wa-yori-desu",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "カリフォルニアより暑いです — より comparison without は."
+        },
+        {
+          "label": "〜ました",
+          "patternId": null,
+          "sourceSpokenStart": 7,
+          "sourceSpokenEnd": 7,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜ました — polite past (\"did ~\"). Also on spoken line 9."
+        },
+        {
+          "label": "〜ましょう",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    }
+  ]
+}

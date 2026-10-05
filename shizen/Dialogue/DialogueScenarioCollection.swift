@@ -25,12 +25,18 @@ struct DialogueScenarioCollection: Hashable {
     let unitTitle: String?
     /// 5 = N5 … 1 = N1. Nil when the lesson is unfiled or the export omitted it.
     let jlptLevel: Int?
+    /// Pattern library cards referenced by scene grammar highlights (`patternId`).
+    let patterns: [DialogueTeachingPattern]
     let scenarios: [Scenario]
 
     /// Thumbnail to show for a scenario: its own override when the CMS set
     /// one, otherwise the collection-wide thumbnail.
     func thumbnailURL(for scenario: Scenario) -> URL? {
         scenario.thumbnailURL ?? thumbnailURL
+    }
+
+    func teachingPattern(id: String) -> DialogueTeachingPattern? {
+        patterns.first { $0.id == id }
     }
 
     struct Scenario: Hashable {
@@ -71,7 +77,24 @@ private struct DialogueScenarioCollectionFile: Decodable {
     let unitId: String?
     let unitTitle: String?
     let jlptLevel: Int?
+    let patterns: [TeachingPatternRecord]?
     let scenarios: [ScenarioRecord]
+
+    struct TeachingPatternRecord: Decodable {
+        let id: String
+        let label: String
+        let shortMeaning: String?
+        let formNote: String?
+
+        var model: DialogueTeachingPattern {
+            DialogueTeachingPattern(
+                id: id,
+                label: label,
+                shortMeaning: shortMeaning,
+                formNote: formNote
+            )
+        }
+    }
 
     struct ScenarioRecord: Decodable {
         let id: String
@@ -328,22 +351,34 @@ private struct DialogueScenarioCollectionFile: Decodable {
 
     struct GrammarPatternRecord: Decodable {
         let label: String
+        let patternId: String?
         let grammarPointID: String?
+        let sourceSpokenStart: Int?
+        let sourceSpokenEnd: Int?
 
         init(from decoder: Decoder) throws {
             if let single = try? decoder.singleValueContainer(),
                let string = try? single.decode(String.self) {
                 label = string
+                patternId = nil
                 grammarPointID = nil
+                sourceSpokenStart = nil
+                sourceSpokenEnd = nil
                 return
             }
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            label = try container.decode(String.self, forKey: .label)
+            let decodedLabel = try container.decodeIfPresent(String.self, forKey: .label)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            patternId = try container.decodeIfPresent(String.self, forKey: .patternId)
             grammarPointID = try container.decodeIfPresent(String.self, forKey: .grammarPointID)
+            sourceSpokenStart = try container.decodeIfPresent(Int.self, forKey: .sourceSpokenStart)
+            sourceSpokenEnd = try container.decodeIfPresent(Int.self, forKey: .sourceSpokenEnd)
+            // Prefer stamped label; fall back to patternId so new writes without label still decode.
+            label = decodedLabel.isEmpty ? (patternId ?? "") : decodedLabel
         }
 
         private enum CodingKeys: String, CodingKey {
-            case label, grammarPointID
+            case label, patternId, grammarPointID, sourceSpokenStart, sourceSpokenEnd
         }
     }
 }
@@ -358,6 +393,11 @@ private extension DialogueScenarioCollection {
         unitId = file.unitId
         unitTitle = file.unitTitle
         jlptLevel = file.jlptLevel
+        let patternCatalog = (file.patterns ?? []).map(\.model)
+        patterns = patternCatalog
+        let patternLabelById = Dictionary(
+            uniqueKeysWithValues: patternCatalog.map { ($0.id, $0.label) }
+        )
         scenarios = file.scenarios.map { record in
             let taggedLines = record.scenario.lines.enumerated().compactMap { index, line in
                 line.taggedLine(scenarioID: record.id, fallbackIndex: index)
@@ -391,8 +431,23 @@ private extension DialogueScenarioCollection {
                     gainDb: record.ambienceGainDb
                 )
             )
-            let grammarPatterns = (record.highlights?.grammarPatterns ?? []).map {
-                DialogueGrammarPatternRef(label: $0.label, grammarPointID: $0.grammarPointID)
+            let grammarPatterns = (record.highlights?.grammarPatterns ?? []).map { pattern -> DialogueGrammarPatternRef in
+                let label: String = {
+                    let trimmed = pattern.label.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { return trimmed }
+                    if let patternId = pattern.patternId,
+                       let catalogLabel = patternLabelById[patternId] {
+                        return catalogLabel
+                    }
+                    return pattern.patternId ?? ""
+                }()
+                return DialogueGrammarPatternRef(
+                    label: label,
+                    patternId: pattern.patternId,
+                    grammarPointID: pattern.grammarPointID,
+                    sourceSpokenStart: pattern.sourceSpokenStart,
+                    sourceSpokenEnd: pattern.sourceSpokenEnd
+                )
             }
             let highlights = DialogueLearningHighlights(
                 vocabulary: record.highlights?.vocabulary ?? [],

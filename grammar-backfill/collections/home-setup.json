@@ -1,0 +1,401 @@
+{
+  "collectionId": "home-setup",
+  "scenes": [
+    {
+      "sceneId": "home-internet-installation",
+      "title": "Home internet installation",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、ミカさん。今日、ネットの工事の人、来るんです。ちょっと、落ち着かないです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "あ、そうなんですか。何時から、何時までですか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "十二時から、二時までです。長いですよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "はい。日本だと、その間はずっと、家にいないといけないですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "二時間ずっとですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "はい。でも、来る十分か十五分前に、電話くれます。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "あ、よかったです。じゃあ、ちょっと外に出ても、大丈夫ですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "電話の前に、戻ってれば、たぶん大丈夫です。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "わかりました。もし、いなかったら、どうなりますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "また予約になるんです。次の日が、すぐ取れないことも多いです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "あ、それは、困ります。じゃあ、ずっと、います。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "いいと思います。予約、大変でしたか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "いいえ。ネットで、すぐ取れました。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "へえ。私は、去年、すごく時間がかかりました。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "あ、もしかして、今、連絡かも。行きます。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 15,
+          "text": "はい。うまくいくといいですね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 16,
+          "text": "ありがとうございます。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "か"
+        },
+        {
+          "label": "〜から〜まで"
+        }
+      ]
+    },
+    {
+      "sceneId": "bicycle-registration",
+      "title": "Bicycle registration",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "ミカさん、このチラシ、見ましたか？自転車の登録、みたいな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "あ、防犯登録です。自転車には、シールがいるんです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "あ、僕のには、ないです。問題ですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "はい。ここだと、法律で必要なんです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "法律で必要ですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "はい。知らなかった人も、多いですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "へえ。中古で買ったから、たぶん、それです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "あ、なるほど。新品は、お店で、登録してくれることが多いです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "あ、じゃあ、中古だけ、抜けやすいんですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "はい。早めに、やった方がいいですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "どこに、行けばいいですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "自転車屋か、交番、どっちでも大丈夫です。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "わかりました。高いですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "いいえ。安くて、ちょっとで終わります。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "あ、よかったです。ミカさんの自転車は、登録してありますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 15,
+          "text": "はい。新品で買ったので、最初からシールがありました。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 16,
+          "text": "やっぱり、ないです。今週、行きます。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 17,
+          "text": "いいと思います。早めが、安心ですよ。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "か"
+        },
+        {
+          "label": "です"
+        }
+      ]
+    },
+    {
+      "sceneId": "hair-salon-reservation",
+      "title": "Hair salon reservation",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません。髪、切りたいんですけど。美容院って、予約なしでも、入れますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "だいたい、予約が必要ですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "予約が必要ですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "はい。当日でも、朝に電話すれば、取れることが多いです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "あ、思ったより、簡単ですね。飛び込みも、ありますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "少しは、あります。でも、待ち時間が、長いです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "じゃあ、予約にします。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "いいと思います。もう、お店、決まってますか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "いいえ。まだです。おすすめ、ありますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "はい。近くに、いつも行ってるお店があります。あとで、送りますね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "あ、ありがとうございます。お願いします。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "いえいえ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "行く前に、希望の髪型、言っておいた方がいいですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "いいえ。着いてからで大丈夫です。向こうから、聞いてくれます。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "あ、よかったです。思ったより、シンプルですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 15,
+          "text": "はい。考えすぎなくて、大丈夫ですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 16,
+          "text": "じゃあ、よろしくお願いします。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 17,
+          "text": "はい。あとで送りますね。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "か"
+        },
+        {
+          "label": "です"
+        }
+      ]
+    },
+    {
+      "sceneId": "furniture-delivery-scheduling",
+      "title": "Furniture delivery scheduling",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、ミカさん。机、注文したんです。配達の時間、さっき決めました。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "あ、そうなんですか。時間帯、少ないですよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "はい。午後の、二時から四時にしました。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "大丈夫だと思います。来る前に、電話くれることも多いですよ。ネットの工事と、同じ感じです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "へえ、そうなんですか。あ、よかったです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "遅れたこと、ありますか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "いいえ。引っ越してから、初めてです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "あ、そうなんですね。もし遅れたら、だいたい電話で謝ってくれます。十分でも、です。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "十分でもですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "はい。ここでは、けっこう真剣です。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "へえ、すごいですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "私も一回、遅れたことがあって。その人、三回くらい謝ってました。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "あ、本気なんですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "じゃあ、どうだったか、あとで言いますね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "はい。ぜひ、教えてください。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "か"
+        },
+        {
+          "label": "です"
+        }
+      ]
+    }
+  ]
+}

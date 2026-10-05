@@ -1,0 +1,25 @@
+{
+  "collectionId": "festival-day",
+  "scenes": [
+    {
+      "sceneId": "the-invite",
+      "items": []
+    },
+    {
+      "sceneId": "meeting-up-to-head-out",
+      "items": []
+    },
+    {
+      "sceneId": "takoyaki-booth",
+      "items": []
+    },
+    {
+      "sceneId": "the-shrines-history",
+      "items": []
+    },
+    {
+      "sceneId": "heading-home",
+      "items": []
+    }
+  ]
+}

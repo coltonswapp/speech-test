@@ -1,0 +1,399 @@
+{
+  "collectionId": "a-local-festival",
+  "scenes": [
+    {
+      "sceneId": "getting-ready",
+      "title": "Getting ready",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "これで、変じゃないですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 1,
+          "text": "ふふ、全然。すごく似合ってるわよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 2,
+          "text": "いえいえ、そんなことないです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 3,
+          "text": "本当よ。かわいいわ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 4,
+          "text": "ちょっと、苦しいです……",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "ふふ、最初はみんなそう言うのよ。すぐ慣れるから。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 6,
+          "text": "はい……頑張ります。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "あ、お祭り、あと十五分で始まるわよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 8,
+          "text": "え、もうすぐなんですね！この夏祭り、毎年あるんですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 9,
+          "text": "そうよ。もう、百年以上続いてるお祭りなの。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 10,
+          "text": "え、百年以上ですか！すごいですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 11,
+          "text": "近くの神社のお祭りでね、村の人たちが、ずっと大事にしてきたのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 12,
+          "text": "へえ、素敵ですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 13,
+          "text": "わあ、今日も暑いわねー。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 14,
+          "text": "はい、本当に暑いです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 15,
+          "text": "でも、夏祭りは、これくらい暑い方が、それらしいでしょう？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 16,
+          "text": "ふふ、そうですね。楽しみです！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 17,
+          "text": "じゃあ、行きましょうか。",
+          "speaker": "Obaachan"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "これで、変じゃないですか？"
+        },
+        {
+          "label": "似合ってるわよ。"
+        },
+        {
+          "label": "そんなことないです。"
+        },
+        {
+          "label": "もうすぐなんですね！"
+        },
+        {
+          "label": "暑い方が、それらしいでしょう？"
+        },
+        {
+          "label": "行きましょうか。"
+        }
+      ]
+    },
+    {
+      "sceneId": "arriving",
+      "title": "Arriving",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "わあ、にぎやかですね！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 1,
+          "text": "でしょう？毎年、こんな感じなのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 2,
+          "text": "人が多いですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 3,
+          "text": "そうねー、今年は特に多い気がするわ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 4,
+          "text": "いい匂いがしますね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "ふふ、お腹すいてきたでしょう？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 6,
+          "text": "はい、すごく。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "この提灯、きれいですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "そうね。夜になると、もっときれいよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "楽しみです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "じゃあ、少し見て回りましょうか。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "はーい！",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ですね！"
+        },
+        {
+          "label": "〜でしょう？"
+        },
+        {
+          "label": "〜気がする"
+        },
+        {
+          "label": "〜がします"
+        },
+        {
+          "label": "〜てきた"
+        },
+        {
+          "label": "〜ましょうか"
+        }
+      ]
+    },
+    {
+      "sceneId": "a-stall",
+      "title": "A stall",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、金魚すくい。やってみる？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "え、やったことないです。難しいですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "ちょっと難しいけど、楽しいわよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "わあ、思ったより難しいです……",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "ふふ、あ、破れちゃったね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "あー、残念です。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "大丈夫、大丈夫。もう一回、やってみる？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "はい、やってみます！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "あ、獲れました！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 9,
+          "text": "すごいじゃない！上手ねー。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 10,
+          "text": "ふふ、たまたまです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 11,
+          "text": "ふふ、そう？でも、かわいい金魚ね。",
+          "speaker": "Obaachan"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜てみる？"
+        },
+        {
+          "label": "〜たことないです。"
+        },
+        {
+          "label": "〜けど、"
+        },
+        {
+          "label": "〜ちゃったね。"
+        },
+        {
+          "label": "〜じゃない！"
+        },
+        {
+          "label": "〜ねー。"
+        }
+      ]
+    },
+    {
+      "sceneId": "a-quiet-moment",
+      "title": "A quiet moment",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "ねえ、エミちゃん。今日、すごく楽しいわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "はい、本当に楽しいです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "エミちゃんと一緒だと、何でも楽しく感じるのよね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "ふふ、私もです。おばあちゃんといると、安心します。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "……実はね、最近、あんまりこういう気持ちになれてなかったの。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "え、そうなんですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "うん。お母さんがアメリカに行ってから、前みたいに、近くに感じられなくて……。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "……そうだったんですね。知りませんでした。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "寂しい時も、正直あるの。でも、エミちゃんが来てくれて、本当に嬉しいの。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "はい……私も、嬉しいです。おばあちゃんと、もっと一緒にいたいです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "あ、花火が始まるわよ！",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "わあ、行きましょう！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 12,
+          "text": "きれいですね……",
+          "speaker": "Emi"
+        },
+        {
+          "i": 13,
+          "text": "そうね。本当に、きれい。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 14,
+          "text": "また来年も、一緒に来たいです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 15,
+          "text": "ふふ、約束ね。",
+          "speaker": "Obaachan"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜です"
+        },
+        {
+          "label": "〜と"
+        },
+        {
+          "label": "〜のよね"
+        },
+        {
+          "label": "〜てくれて"
+        },
+        {
+          "label": "〜たいです"
+        },
+        {
+          "label": "〜ましょう"
+        }
+      ]
+    }
+  ]
+}

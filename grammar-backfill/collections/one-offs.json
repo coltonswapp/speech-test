@@ -1,0 +1,643 @@
+{
+  "collectionId": "one-offs",
+  "scenes": [
+    {
+      "sceneId": "key-money",
+      "title": "Key money",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "いらっしゃいませ。",
+          "speaker": "Rika"
+        },
+        {
+          "i": 1,
+          "text": "あの、家を探しています。",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 2,
+          "text": "お部屋、ですね。こちら、どうですか？渋谷駅から徒歩八分です。",
+          "speaker": "Rika"
+        },
+        {
+          "i": 3,
+          "text": "家のお金、いくらですか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 4,
+          "text": "家賃は、十万円ですね。",
+          "speaker": "Rika"
+        },
+        {
+          "i": 5,
+          "text": "十万円、ですか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 6,
+          "text": "あと、礼金が十万円です。",
+          "speaker": "Rika"
+        },
+        {
+          "i": 7,
+          "text": "礼金、ですか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 8,
+          "text": "大家さんへの、お礼なんです。",
+          "speaker": "Rika"
+        },
+        {
+          "i": 9,
+          "text": "お礼… あの、果物とかで、大丈夫ですか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 10,
+          "text": "ちょっと、お金で払うんです。",
+          "speaker": "Rika"
+        },
+        {
+          "i": 11,
+          "text": "あ、そうなんですか？わかりました。",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 12,
+          "text": "ほかに、ありますか？",
+          "speaker": "Rika"
+        },
+        {
+          "i": 13,
+          "text": "見ていいですか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 14,
+          "text": "内見ですね。かしこまりました。",
+          "speaker": "Rika"
+        },
+        {
+          "i": 15,
+          "text": "はい、お願いします。",
+          "speaker": "Yuto"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "です"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "meal-ticket",
+      "title": "Meal ticket",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "いらっしゃいませ。味噌ラーメン、ですね。",
+          "speaker": "Nao"
+        },
+        {
+          "i": 1,
+          "text": "え、醤油なんですけど。",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 2,
+          "text": "食券、味噌ですよ。",
+          "speaker": "Nao"
+        },
+        {
+          "i": 3,
+          "text": "食券、ですか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 4,
+          "text": "この紙です。機械の。",
+          "speaker": "Nao"
+        },
+        {
+          "i": 5,
+          "text": "変えられますか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 6,
+          "text": "まだ、渡してないので。大丈夫です。",
+          "speaker": "Nao"
+        },
+        {
+          "i": 7,
+          "text": "あ、よかったです。お願いします。",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 8,
+          "text": "はい。少々お待ちくださいね！",
+          "speaker": "Nao"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "です"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "re-delivery",
+      "title": "Re-delivery",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "いらっしゃいませ。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 1,
+          "text": "荷物、受け取りたいです。",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 2,
+          "text": "不在票は、ありますか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 3,
+          "text": "不在票、ですか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 4,
+          "text": "ピンクの紙です。ポストに入ってます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "写真、あるんですけど。",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 6,
+          "text": "紙本体が、必要なんです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "",
+          "speaker": ""
+        },
+        {
+          "i": 8,
+          "text": "あ、部屋です。",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 9,
+          "text": "持ってきてください。今日も、再配達も、できます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "はい。取ってきます。",
+          "speaker": "Yuto"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "です"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "last-taxi",
+      "title": "Last Taxi",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "どちらまでですか？",
+          "speaker": "Masa"
+        },
+        {
+          "i": 1,
+          "text": "中野です。あの、中に、駅員さんがいなくて。電車のことが、聞きたかったんですけど。",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 2,
+          "text": "終電、出ましたよ。タクシーなら、だいたい四千円です。",
+          "speaker": "Masa"
+        },
+        {
+          "i": 3,
+          "text": "終電、ですか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 4,
+          "text": "はい。中野までなら、それくらいです。",
+          "speaker": "Masa"
+        },
+        {
+          "i": 5,
+          "text": "始発は、いつですか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 6,
+          "text": "五時です。",
+          "speaker": "Masa"
+        },
+        {
+          "i": 7,
+          "text": "ちょっと、高いですけど。じゃあ、タクシーでお願いします。",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 8,
+          "text": "中野の、どちらですか？",
+          "speaker": "Masa"
+        },
+        {
+          "i": 9,
+          "text": "中野駅の近くです。",
+          "speaker": "Yuto"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "です"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "hot-snack",
+      "title": "Hot snack",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "いらっしゃいませ。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 1,
+          "text": "これ、お願いします。",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 2,
+          "text": "はい、温めますか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 3,
+          "text": "温めるんですか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 4,
+          "text": "はいー。今、温めますね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "あ、お願いします。",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 6,
+          "text": "はい、肉まんとコーヒーで、430円です。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "はいー。",
+          "speaker": "Yuto"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "です"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "ticket-machine",
+      "title": "Ticket machine",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "はい、どうされましたか？",
+          "speaker": "Saki"
+        },
+        {
+          "i": 1,
+          "text": "あの、鎌倉まで、なんですけど。これ、違うんです。",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 2,
+          "text": "切符、ですね。横浜、になってますよ。",
+          "speaker": "Saki"
+        },
+        {
+          "i": 3,
+          "text": "切符ですか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 4,
+          "text": "払い戻し、できます。券売機で。すぐそこですよ。",
+          "speaker": "Saki"
+        },
+        {
+          "i": 5,
+          "text": "鎌倉のに、できますか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 6,
+          "text": "はい。券売機で、買い直してください。",
+          "speaker": "Saki"
+        },
+        {
+          "i": 7,
+          "text": "わかりました。 ありがとうございます。",
+          "speaker": "Yuto"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "です"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "south-gate",
+      "title": "South gate",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "何か、探してますか？",
+          "speaker": "Haru"
+        },
+        {
+          "i": 1,
+          "text": "あ、明治神宮、行きたいんですけど。",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 2,
+          "text": "表参道口ですよ。",
+          "speaker": "Haru"
+        },
+        {
+          "i": 3,
+          "text": "表参道口、ですか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 4,
+          "text": "はい、駅の向こうです。",
+          "speaker": "Haru"
+        },
+        {
+          "i": 5,
+          "text": "あ、この道、じゃないんですか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 6,
+          "text": "はい、そっちは、お店です。",
+          "speaker": "Haru"
+        },
+        {
+          "i": 7,
+          "text": "歩いて、行けますか？",
+          "speaker": "Yuto"
+        },
+        {
+          "i": 8,
+          "text": "はい。五分、くらいです。",
+          "speaker": "Haru"
+        },
+        {
+          "i": 9,
+          "text": "あ、わかりました。",
+          "speaker": "Yuto"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "です"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "fake-fluency",
+      "title": "Fake fluency",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、それ、私のです。",
+          "speaker": "Yui"
+        },
+        {
+          "i": 1,
+          "text": "あ、違う… すみません。",
+          "speaker": "Alex"
+        },
+        {
+          "i": 2,
+          "text": "大丈夫ですよ。",
+          "speaker": "Yui"
+        },
+        {
+          "i": 3,
+          "text": "メニューだけ、得意なんです。",
+          "speaker": "Alex"
+        },
+        {
+          "i": 4,
+          "text": "あはは。上手ですよ。",
+          "speaker": "Yui"
+        },
+        {
+          "i": 5,
+          "text": "隣、いいですか？ ちょっとだけ。",
+          "speaker": "Alex"
+        },
+        {
+          "i": 6,
+          "text": "はい。ちょっとだけ。",
+          "speaker": "Yui"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "です"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "upside-down-map",
+      "title": "Upside-down map",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、地図、逆さまですよ。",
+          "speaker": "Yui"
+        },
+        {
+          "i": 1,
+          "text": "え、逆さま、ですか？",
+          "speaker": "Alex"
+        },
+        {
+          "i": 2,
+          "text": "すみません。明治神宮、行きたいんですけど。",
+          "speaker": "Alex"
+        },
+        {
+          "i": 3,
+          "text": "はい。こうです。表参道口は、こっち。",
+          "speaker": "Yui"
+        },
+        {
+          "i": 4,
+          "text": "あ、ありがとうございます。",
+          "speaker": "Alex"
+        },
+        {
+          "i": 5,
+          "text": "このあと、迷ったら、また聞いていいですか？",
+          "speaker": "Alex"
+        },
+        {
+          "i": 6,
+          "text": "次があるかどうか、ですね。",
+          "speaker": "Yui"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "です"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "wrong-onigiri",
+      "title": "Wrong onigiri",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、それ、辛いですよ。",
+          "speaker": "Yui"
+        },
+        {
+          "i": 1,
+          "text": "辛い、ですか？",
+          "speaker": "Alex"
+        },
+        {
+          "i": 2,
+          "text": "はい。辛口のツナです。鮭、じゃないです。",
+          "speaker": "Yui"
+        },
+        {
+          "i": 3,
+          "text": "あ、鮭がいいんです。電車で、食べるつもりで。",
+          "speaker": "Alex"
+        },
+        {
+          "i": 4,
+          "text": "それ、最後の鮭です。",
+          "speaker": "Yui"
+        },
+        {
+          "i": 5,
+          "text": "最後、ですか？",
+          "speaker": "Alex"
+        },
+        {
+          "i": 6,
+          "text": "はい。五分後に、電車なんです。",
+          "speaker": "Yui"
+        },
+        {
+          "i": 7,
+          "text": "あ、どうぞ。僕、別のを探します。",
+          "speaker": "Alex"
+        },
+        {
+          "i": 8,
+          "text": "あ、後ろに、もう一つ。はい。",
+          "speaker": "Yui"
+        },
+        {
+          "i": 9,
+          "text": "あ、すみません。",
+          "speaker": "Alex"
+        },
+        {
+          "i": 10,
+          "text": "このあと、隣のカフェ、とか。",
+          "speaker": "Alex"
+        },
+        {
+          "i": 11,
+          "text": "ちょっとだけ。",
+          "speaker": "Alex"
+        },
+        {
+          "i": 12,
+          "text": "五分だけ、なら。そのあと、走ります。",
+          "speaker": "Yui"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "です"
+        },
+        {
+          "label": "か"
+        },
+        {
+          "label": "じゃない"
+        }
+      ]
+    }
+  ]
+}

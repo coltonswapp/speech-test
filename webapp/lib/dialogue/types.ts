@@ -192,13 +192,50 @@ export function formatDialogueTranscriptLine(
   return `${prefix}${line.speaker}: ${line.japanese}`;
 }
 
-// The Swift decoder accepts a bare string or {label, grammarPointID};
-// normalize to object form (export always emits objects).
+// Scene grammar highlight (inspect). Catalog meaning/form live on teaching
+// patterns — scenes only stamp patternId + spoken-line evidence.
+// Legacy label-only rows (`{"label":"〜ましょう"}` or a bare string) still
+// parse; new writes use patternId + sourceSpokenStart/End (spoken-only
+// indices, same space as quiz evidence).
+export const grammarPatternObjectSchema = z
+  .object({
+    label: z.string().optional(),
+    patternId: z.string().min(1).optional(),
+    grammarPointID: z.string().optional(),
+    sourceSpokenStart: z.number().int().nonnegative().optional(),
+    sourceSpokenEnd: z.number().int().nonnegative().optional(),
+  })
+  .superRefine((pattern, ctx) => {
+    const label = pattern.label?.trim() ?? "";
+    if (!label && !pattern.patternId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "grammar pattern requires label or patternId",
+        path: ["label"],
+      });
+    }
+    const start = pattern.sourceSpokenStart;
+    const end = pattern.sourceSpokenEnd;
+    if (end === undefined) return;
+    if (start === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "sourceSpokenEnd requires sourceSpokenStart",
+        path: ["sourceSpokenEnd"],
+      });
+      return;
+    }
+    if (end < start) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "sourceSpokenEnd must be >= sourceSpokenStart",
+        path: ["sourceSpokenEnd"],
+      });
+    }
+  });
+
 export const grammarPatternSchema = z
-  .union([
-    z.string(),
-    z.object({ label: z.string(), grammarPointID: z.string().optional() }),
-  ])
+  .union([z.string(), grammarPatternObjectSchema])
   .transform((value) => (typeof value === "string" ? { label: value } : value));
 export type GrammarPatternRef = z.output<typeof grammarPatternSchema>;
 
@@ -208,6 +245,19 @@ export const highlightsSchema = z.object({
   contextNotes: z.array(z.string()).optional(),
 });
 export type DialogueHighlights = z.output<typeof highlightsSchema>;
+
+// Pattern library card shipped with public/CMS dialogue export so iOS can
+// resolve grammar highlights without orphans. Maps from teaching_pattern:
+// form → label, gloss → shortMeaning, notes → formNote.
+export const exportedTeachingPatternSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  shortMeaning: z.string().optional(),
+  formNote: z.string().optional(),
+});
+export type ExportedTeachingPattern = z.infer<
+  typeof exportedTeachingPatternSchema
+>;
 
 // Who produced the stamps on a tokenSync. Absent means a legacy human take.
 //   human    — stamped by hand in Studio
@@ -366,6 +416,9 @@ export const collectionFileSchema = z.object({
   thumbnailUrl: z.string().url().optional(),
   thumbnailSmallUrl: z.string().url().optional(),
   scenarios: z.array(scenarioFileSchema),
+  // Teaching patterns referenced by scene grammar highlights (patternId).
+  // Omitted when none; ignored on Studio import (catalog lives in DB).
+  patterns: z.array(exportedTeachingPatternSchema).optional(),
 });
 export type CollectionFile = z.output<typeof collectionFileSchema>;
 

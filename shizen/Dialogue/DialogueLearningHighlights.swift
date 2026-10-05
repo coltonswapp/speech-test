@@ -7,9 +7,43 @@
 
 import Foundation
 
+/// Pattern library card shipped with CMS collection JSON (`patterns[]`).
+struct DialogueTeachingPattern: Hashable {
+    let id: String
+    let label: String
+    let shortMeaning: String?
+    let formNote: String?
+}
+
 struct DialogueGrammarPatternRef: Hashable {
     let label: String
+    let patternId: String?
     let grammarPointID: String?
+    /// Inclusive spoken-only line index (same space as quiz evidence).
+    let sourceSpokenStart: Int?
+    /// Inclusive spoken-only end; nil means same as start.
+    let sourceSpokenEnd: Int?
+
+    init(
+        label: String,
+        patternId: String? = nil,
+        grammarPointID: String? = nil,
+        sourceSpokenStart: Int? = nil,
+        sourceSpokenEnd: Int? = nil
+    ) {
+        self.label = label
+        self.patternId = patternId
+        self.grammarPointID = grammarPointID
+        self.sourceSpokenStart = sourceSpokenStart
+        self.sourceSpokenEnd = sourceSpokenEnd
+    }
+
+    /// Spoken-only indices for Hear / example lines.
+    var sourceSpokenIndices: [Int]? {
+        guard let start = sourceSpokenStart, start >= 0 else { return nil }
+        let end = max(start, sourceSpokenEnd ?? start)
+        return Array(start...end)
+    }
 }
 
 struct DialogueLearningHighlights: Hashable {

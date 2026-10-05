@@ -1,0 +1,528 @@
+{
+  "collectionId": "around-the-block",
+  "scenes": [
+    {
+      "sceneId": "convenience-store-run",
+      "title": "Convenience store run",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません。角のコンビニ、夜も、開いてますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "はい。あそこは、二十四時間です。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "二十四時間ですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "はい。遅くても、大丈夫ですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "あ、よかったです。困らないです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "二ブロック先にも、あります。でも、私は、こっちがいいです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "へえ、そうなんですか。何が、違うんですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "食べ物が、多いのと、ATMが、私のカードで使えます。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "あ、わかりました。ATM、大事ですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "はい。印刷も、できますよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "あ、近いうちに、使いたいです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "こっちの方が、ちょっと、早いです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "じゃあ、ここにします。ミカさんも、よく行きますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "はい。ちょっと、多いかも。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "あ、僕も、同じです。ありがとうございます。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "n5-ka-question"
+        },
+        {
+          "label": "n5-da-desu"
+        },
+        {
+          "label": "n5-ga-arimasu"
+        }
+      ]
+    },
+    {
+      "sceneId": "coin-laundry",
+      "title": "Coin laundry",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません。洗濯機がなくて。近くに、コインランドリー、ありますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "はい。五分くらいの所に、あります。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "あ、よかったです。いくらくらい、ですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "洗うのが、三百円くらいです。乾燥は、別です。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "わかりました。カード、使えますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "いいえ、硬貨だけです。カードは、ダメなんです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "硬貨だけですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "はい。初めて、カードで行って、困りました。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "あ、教えてくれて、よかったです。混んでますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "夜と週末は、混みます。朝は、空いてます。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "じゃあ、朝、行きます。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "それが、いいです。カイトさんは、よく使いますか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "いえ、これから、です。常連に、なりそうです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "あはは。ようこそ。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "n5-ka-question"
+        },
+        {
+          "label": "n5-da-desu"
+        },
+        {
+          "label": "n5-ga-arimasu"
+        }
+      ]
+    },
+    {
+      "sceneId": "recycling-sorting",
+      "title": "Recycling sorting",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません。リサイクルで、ペットボトルのラベル、はがしますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "はい。ラベルも、キャップも、はずしてください。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "はずすんですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "はい。キャップは、別の所です。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "あ、わかりました。ボトルと、キャップと、ラベル、別々ですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "はい。缶は、洗って、つぶせると、いいです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "へえ、思ったより、細かいです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "私も、引っ越した時、慣れました。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "間違えたら、どうなりますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "だいたい、そのまま、置いてあります。また、持って帰るんです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "あ、恥ずかしいです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "私も、前に、ありました。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "じゃあ、気をつけます。ありがとうございます。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "すぐ、慣れますよ。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "n5-ka-question"
+        },
+        {
+          "label": "n5-da-desu"
+        },
+        {
+          "label": "n5-te-kudasai"
+        }
+      ]
+    },
+    {
+      "sceneId": "supermarket-point-card",
+      "title": "Supermarket point card",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "さっきスーパーで、レジの人にポイントカードのこと聞かれて、何て言えばいいか分からなかったです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "あ、それ最初はみんな困りますよ。ただのポイントが貯まるカードです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "へえ、ポイント制なんですね。作った方がいいですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "別になくても大丈夫ですよ。「持ってないです」って言えばいいだけなので。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "それを聞いて安心しました。あの時、ちょっと固まってしまって。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "大体の人は断ってますよ。作るなら無料のところが多いですけどね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "作る価値、ありますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "よく行くお店なら便利だと思います。私もよく行くスーパーのだけ作りました。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "なるほど、よく行くお店だけ作ればいいんですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "そうですね。それ以外は財布の中で邪魔になるだけです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "確かに。ミカさんは何枚くらい持ってるんですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "正直、多すぎます。財布、整理しないと。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "僕のもそれくらい増えたら、また聞きますね。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "か"
+        },
+        {
+          "label": "です"
+        }
+      ]
+    },
+    {
+      "sceneId": "vending-machine-hot-drinks",
+      "title": "Vending machine hot drinks",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "え、この自動販売機、温かい飲み物もあるんですか？全部冷たいと思ってました。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "ありますよ。特にこの季節は。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "どうやって見分けるんですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "赤いラベルが温かくて、青いラベルが冷たいんです。慣れれば簡単ですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "それは便利ですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "どうやって、温かいままにしてるんですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "たぶん、その部分だけ機械の中で温めてるんだと思います。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "へえ、そんなこと考えたことなかったです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "ここでは普通のことなので、みんな気にしてないですね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "なるほど。赤が温かい、青が冷たい、覚えました。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "それでバッチリです。すぐ慣れますよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "ミカさんは、いつも何を選ぶんですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "冬は大体、温かい缶コーヒーですね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "今度、僕も試してみます。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "か"
+        },
+        {
+          "label": "あります"
+        }
+      ]
+    },
+    {
+      "sceneId": "after-work-drinks-invite",
+      "title": "After-work drinks invite",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "ちょっと聞きたいんですけど、会社の人に飲みに誘われて。何か気をつけることありますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "あ、飲み会ですか。いくつかコツがありますよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "へえ、例えばどんな感じですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "自分のグラスは自分で注がないで、大体は他の人に注いでもらうんです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "そうなんですね。知りませんでした。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "じゃあ、誰かが注いでくれるのを待てばいいんですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "そうですね。それと、近くの人にも注いであげるといいですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "分かりました。もし行きたくない時は、断っても失礼じゃないですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "大丈夫ですよ。「また今度」みたいな感じで断れば問題ないです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "それなら気が楽です。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "お金の方は心配した方がいいですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "大体は割り勘なので、そこもあまり気にしなくていいですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "あ、よかったです。ミカさんは最近、飲み会行きました？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "はい、実は数週間前に、前の会社の人たちと行きました。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "どうでした？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 15,
+          "text": "楽しかったですよ。ただ、夜遅くまでになってしまいましたけど。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "か"
+        },
+        {
+          "label": "です"
+        }
+      ]
+    }
+  ]
+}

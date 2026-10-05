@@ -1,0 +1,25 @@
+{
+  "collectionId": "cooking-together",
+  "scenes": [
+    {
+      "sceneId": "locking-in-the-plan",
+      "items": []
+    },
+    {
+      "sceneId": "kaito-arrives-forgotten-ingredient",
+      "items": []
+    },
+    {
+      "sceneId": "at-the-grocery-store",
+      "items": []
+    },
+    {
+      "sceneId": "cooking-together-in-kitchen",
+      "items": []
+    },
+    {
+      "sceneId": "cleaning-up-and-finishing-the-night",
+      "items": []
+    }
+  ]
+}

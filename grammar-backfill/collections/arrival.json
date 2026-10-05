@@ -1,0 +1,307 @@
+{
+  "collectionId": "arrival",
+  "scenes": [
+    {
+      "sceneId": "finding-grandma",
+      "title": "Finding grandma",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "おばあちゃん！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 1,
+          "text": "エミちゃん！こっちよ！",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 2,
+          "text": "久しぶりね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "久しぶりです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "大きくなったね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "え、そうですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "写真より、ずっと大人ね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "ふふ、ありがとうございます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "飛行機、どうだった？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "長かったです。でも、大丈夫です。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "眠れた？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "あまり眠れませんでした。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 12,
+          "text": "日本は、初めて？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 13,
+          "text": "いいえ、初めてじゃないです。子供のとき、来ました。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 14,
+          "text": "そうよね！小さかったもんね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 15,
+          "text": "はい。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 16,
+          "text": "そう、疲れたでしょう。今日はゆっくりしてね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 17,
+          "text": "はい、ありがとうございます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 18,
+          "text": "さあ、行きましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 19,
+          "text": "はい。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜より"
+        },
+        {
+          "label": "〜ませんでした"
+        },
+        {
+          "label": "〜でしょう"
+        },
+        {
+          "label": "〜ましょう"
+        }
+      ]
+    },
+    {
+      "sceneId": "baggage-claim",
+      "title": "Baggage claim",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、あれです。私の荷物。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 1,
+          "text": "どれ？ああ、あれね。黒いやつね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 2,
+          "text": "はい、黒いスーツケースです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 3,
+          "text": "これも、エミちゃんの？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 4,
+          "text": "いいえ、それは私のじゃないです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "あら、じゃあ違う人のね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 6,
+          "text": "すみません、似てますね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "ふふ、大丈夫よ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 8,
+          "text": "重い？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "ちょっと重いです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "荷物、多いね。何が入ってるの？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "服と、お土産です。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 12,
+          "text": "あら、お土産？楽しみね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 13,
+          "text": "ふふ、はい。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 14,
+          "text": "じゃあ、車に行きましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 15,
+          "text": "はい。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜です"
+        },
+        {
+          "label": "〜ね"
+        },
+        {
+          "label": "〜じゃないです"
+        },
+        {
+          "label": "〜てます"
+        },
+        {
+          "label": "〜てる"
+        },
+        {
+          "label": "〜ましょう"
+        }
+      ]
+    },
+    {
+      "sceneId": "in-the-car",
+      "title": "In the car",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "お母さんは元気？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "はい、元気です。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "お父さんも元気？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "はい、父も元気です。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "そう、よかった。今日は暑いね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "はい、暑いです。カリフォルニアより暑いです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "あら、そうなの？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "はい、驚きました。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "家まで、三十分くらいよ。荷物を車に入れて、行きましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "はい、わかりました。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜です"
+        },
+        {
+          "label": "〜も"
+        },
+        {
+          "label": "〜ね"
+        },
+        {
+          "label": "〜より"
+        },
+        {
+          "label": "〜ました"
+        },
+        {
+          "label": "〜ましょう"
+        }
+      ]
+    }
+  ]
+}

@@ -67,12 +67,21 @@ enum GeminiGrammarUsage {
         guard !spoken.isEmpty else { return nil }
 
         let fixedText = patternFixedText(pattern.label)
+        let evidence: Set<Int> = {
+            guard let indices = pattern.sourceSpokenIndices else { return [] }
+            return Set(indices.filter { spoken.indices.contains($0) })
+        }()
         let tagged: Set<Int> = pattern.grammarPointID.map { id in
             Set(spoken.indices.filter { spoken[$0].grammarPointIDs.contains(id) })
         } ?? []
-        let matched = tagged.isEmpty && !fixedText.isEmpty
-            ? Set(spoken.indices.filter { spoken[$0].japanese.contains(fixedText) })
-            : tagged
+        let matched: Set<Int> = {
+            if !evidence.isEmpty { return evidence }
+            if !tagged.isEmpty { return tagged }
+            if !fixedText.isEmpty {
+                return Set(spoken.indices.filter { spoken[$0].japanese.contains(fixedText) })
+            }
+            return []
+        }()
 
         let window = linesWindow(count: spoken.count, around: matched)
         let lines = window.map { index in

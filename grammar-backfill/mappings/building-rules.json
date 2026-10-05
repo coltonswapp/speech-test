@@ -1,0 +1,97 @@
+{
+  "collectionId": "building-rules",
+  "scenes": [
+    {
+      "sceneId": "bike-rack-only",
+      "items": [
+        {
+          "label": "ちゃいけない",
+          "patternId": "n5-cha-ikenai",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 2."
+        },
+        {
+          "label": "か",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 6, 11."
+        }
+      ]
+    },
+    {
+      "sceneId": "quiet-hours",
+      "items": [
+        {
+          "label": "ちゃいけない",
+          "patternId": "n5-cha-ikenai",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 2."
+        },
+        {
+          "label": "か",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 6, 8, 10, 11."
+        }
+      ]
+    },
+    {
+      "sceneId": "delivery-hours",
+      "items": [
+        {
+          "label": "ちゃいけない",
+          "patternId": "n5-cha-ikenai",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 2, 11."
+        },
+        {
+          "label": "か",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 6, 12, 14. Line 3 has か as \"or\" (ロッカーか、再配達), not a question."
+        }
+      ]
+    },
+    {
+      "sceneId": "bike-lock",
+      "items": [
+        {
+          "label": "ちゃいけない",
+          "patternId": "n5-cha-ikenai",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 2."
+        },
+        {
+          "label": "か",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 4, 10."
+        }
+      ]
+    }
+  ]
+}

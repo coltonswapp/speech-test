@@ -1,0 +1,257 @@
+{
+  "collectionId": "first-day",
+  "scenes": [
+    {
+      "sceneId": "new-coworker",
+      "title": "New Coworker",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、もしかして転勤の方ですか？",
+          "speaker": "Sato"
+        },
+        {
+          "i": 1,
+          "text": "はい、そうです。カイトです。今日からお世話になります。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "ようこそ！サトです。よろしくお願いします。",
+          "speaker": "Sato"
+        },
+        {
+          "i": 3,
+          "text": "よろしくお願いします。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "カイトさんはどちらから来たんですか？",
+          "speaker": "Sato"
+        },
+        {
+          "i": 5,
+          "text": "大阪から来ました。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "そうなんですね！遠いところから、お疲れ様です",
+          "speaker": "Sato"
+        },
+        {
+          "i": 7,
+          "text": "分からないことがあったら、いつでも聞いてくださいね。",
+          "speaker": "Sato"
+        },
+        {
+          "i": 8,
+          "text": "ありがとうございます。心強いです。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜んですか"
+        },
+        {
+          "label": "〜たら"
+        },
+        {
+          "label": "〜てください"
+        }
+      ]
+    },
+    {
+      "sceneId": "meeting-katio",
+      "title": "Meet Kaito",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "おはようございます。今日は皆さんにあなたをきちんと紹介します。",
+          "speaker": "Tanaka"
+        },
+        {
+          "i": 1,
+          "text": "ありがとうございます。カイトです、よろしくお願いします。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "大阪から転勤してきたんですよね？",
+          "speaker": "Tanaka"
+        },
+        {
+          "i": 3,
+          "text": "はい、そうです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "この業界で働いて、どのくらいですか？",
+          "speaker": "Tanaka"
+        },
+        {
+          "i": 5,
+          "text": "5年ぐらいです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "そうですか。前はどんな仕事をしていましたか？",
+          "speaker": "Tanaka"
+        },
+        {
+          "i": 7,
+          "text": "商社で営業をしていました。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "いい経験ですね。ここでもきっと役に立ちますよ。",
+          "speaker": "Tanaka"
+        },
+        {
+          "i": 9,
+          "text": "ありがとうございます、頑張ります。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "質問があれば、私に直接聞いてください。",
+          "speaker": "Tanaka"
+        },
+        {
+          "i": 11,
+          "text": "分かりました、ありがとうございます。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "それでは、今日のミーティングを始めます。",
+          "speaker": "Tanaka"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜んですよね？"
+        },
+        {
+          "label": "〜て、どのくらいですか？"
+        }
+      ]
+    },
+    {
+      "sceneId": "sato-lunch-invite",
+      "title": "Sato Invites Kaito to Lunch",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "カイトさん、一緒にお昼、行きませんか？",
+          "speaker": "Sato"
+        },
+        {
+          "i": 1,
+          "text": "はい、ぜひ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "会社の近くに、おいしいラーメン屋がありますよ。ラーメン、好きですか？",
+          "speaker": "Sato"
+        },
+        {
+          "i": 3,
+          "text": "はい、大好きです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "じゃあ、そこに行きましょう。",
+          "speaker": "Sato"
+        },
+        {
+          "i": 5,
+          "text": "ところで、佐藤さんはここでどのくらい働いていますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "もう7年ぐらいですね。",
+          "speaker": "Sato"
+        },
+        {
+          "i": 7,
+          "text": "わあ、長いですね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "そうですね、でも皆さん優しいから、居心地がいいですよ。",
+          "speaker": "Sato"
+        },
+        {
+          "i": 9,
+          "text": "それを聞いて、安心しました。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "仕事はいつもこんなに忙しいですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "いつもじゃないですよ。今月は少し忙しいだけです。",
+          "speaker": "Sato"
+        },
+        {
+          "i": 12,
+          "text": "そうなんですね、よかったです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "大丈夫ですよ、すぐ慣れますから。",
+          "speaker": "Sato"
+        },
+        {
+          "i": 14,
+          "text": "そうだといいです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 15,
+          "text": "とにかく、列が長くなる前に食べましょう。",
+          "speaker": "Sato"
+        },
+        {
+          "i": 16,
+          "text": "いいですね、行きましょう。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ませんか？"
+        },
+        {
+          "label": "〜ましょう"
+        },
+        {
+          "label": "〜ていますか？"
+        },
+        {
+          "label": "〜から"
+        },
+        {
+          "label": "〜だけです"
+        },
+        {
+          "label": "〜といいです"
+        }
+      ]
+    }
+  ]
+}

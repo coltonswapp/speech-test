@@ -1,0 +1,442 @@
+{
+  "collectionId": "batting-cages",
+  "scenes": [
+    {
+      "sceneId": "passing-by",
+      "title": "Passing By",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "今日、買い物付き合ってくれてありがとう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "いや、全然。荷物重かったし、ちょうどよかった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "あはは、それもそうか。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "うわ、球速っ。あんなの打てるの、普通？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "練習すれば、そんなに難しくないよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "へえ、意外。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "どうしたの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "あ、いや。何でもない。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "今、ちょっと固まってたよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "そう？気のせいじゃない？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "信じないけど、まあいいや。ねえ、打ってみない？",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "talked-into-it",
+      "title": "Talked Into It",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "いや、いいよ。別に興味ないし。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "ほんとに？さっき、めっちゃ反応してたじゃん。気になるんじゃない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "反応って、大げさだな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "じゃあ、入っても平気だよね？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "まあ、平気だけど...",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "よし、決まり。行こう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "え、ちょっと待って。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "はぁ、分かったよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "これ、どうやって使うの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "あ、お金入れて、球数選ぶだけだよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "へえ、球速も選べるんだ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "うん。初心者用の遅いコースもあるし。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "カイトは、どのコースにするの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "うーん、一番速いのは、さすがにきついかも。真ん中くらいにしとく。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "私は、遅いコースにしよっと。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 15,
+          "text": "よし、セットした。行こう。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 16,
+          "text": "うん。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "first-swings",
+      "title": "First Swings",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "うわ、なんか懐かしい重さ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "頑張って。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "...うそ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "あはは、今の盛大に外したね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "ちょっと待って、体が忘れてる。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "おっ、ちょっと当たった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "おお、進歩。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "あ、今のいい感じ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "おお、今のすごいじゃん！",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "だろ？まだ覚えてるもんだな、体。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "なんか、めっちゃ楽しそう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "うん、正直、めっちゃ楽しい。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "mikas-turn",
+      "title": "Mika's Turn",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "よし、私の番。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "構え、こんな感じでいいよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "え、思ったより速い！",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "あはは、だよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "ちょっと待って、もう一回。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "おお、当たった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "やった！",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "もうちょっと、タイミング早めに振ってみて。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "え、今の結構良くなかった？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "うん、めっちゃ良かった。筋いいかも。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "ふふ、褒められた。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "素直に褒めてるだけだよ。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "his-father",
+      "title": "His Father",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "さっきの「タイミング早めに」ってやつ、地味に効いた。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "だろ？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "なんか、コーチっぽかったよ、今の。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "...実は、うちの父さん、昔プロで野球やってたんだ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "え、そうなの！？知らなかった。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "うん。引退した後、僕のチームのコーチになってさ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "それって、なんか複雑そう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "複雑だったよ、正直。野球やってる間、ずっと父さんに認めてもらいたくて。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "だから、あのセレクション、そんなに引きずってたんだ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "うん。落ちたって伝えた時、父さん、「そうか」しか言わなかった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "それだけ？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "それだけ。怒られるより、なんか、こたえた。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "...そっか。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "だから、野球のこと考えると、今でもちょっと苦しいんだよね。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "a-different-perspective",
+      "title": "A Different Perspective",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "ねえ、さっき打った時の顔、見てた？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "え、顔？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "めちゃくちゃ楽しそうだったよ。誰かに見せるためとか、証明するためとかじゃなくて。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "...そうかな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "うん。なんか、今日のカイト見てて思ったんだけど。野球って、別に父さんのためだけじゃなくてもいいんじゃない？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "それ、考えたことなかった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "今日楽しかったの、父さんのおかげでも、証明するためでもなくて、ただカイトが楽しかったからだと思うよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "...うん。そうかも。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "なんか、ちょっと楽になった気がする。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "それは良かった。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "ありがとう、今日付き合ってくれて。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "うん、また来ようね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "うん。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    }
+  ]
+}

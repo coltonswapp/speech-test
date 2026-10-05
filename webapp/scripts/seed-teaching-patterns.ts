@@ -1,15 +1,15 @@
-// Seed teaching_pattern from content/seeds/n5-teaching-patterns.csv.
-// Run with: npm run db:seed-patterns
+// Seed teaching_pattern from N5 CSV + added-patterns.json.
+// Run with: pnpm db:seed-patterns
 //
 // Idempotent — inserts missing ids only; never overwrites existing rows.
 
 import { db } from "../lib/db/standalone-client";
-import { upsertTeachingPatternsFromSeedFile } from "../lib/patterns/import";
+import { upsertAllTeachingPatternSeeds } from "../lib/patterns/import";
 
 async function main() {
-  const result = await upsertTeachingPatternsFromSeedFile(db);
+  const result = await upsertAllTeachingPatternSeeds(db);
   console.log(
-    `Teaching patterns: inserted ${result.inserted}, skipped ${result.skipped}, total ${result.total}.`,
+    `Teaching patterns: N5 inserted ${result.n5.inserted} / skipped ${result.n5.skipped}; added inserted ${result.added.inserted} / skipped ${result.added.skipped}; total inserted ${result.inserted}.`,
   );
   process.exit(0);
 }

@@ -1,0 +1,17 @@
+{
+  "collectionId": "everyone-says-something-different",
+  "scenes": [
+    {
+      "sceneId": "quit-now",
+      "items": []
+    },
+    {
+      "sceneId": "yes-but",
+      "items": []
+    },
+    {
+      "sceneId": "not-quite-asking",
+      "items": []
+    }
+  ]
+}

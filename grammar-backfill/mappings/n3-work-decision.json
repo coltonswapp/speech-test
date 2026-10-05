@@ -1,0 +1,350 @@
+{
+  "collectionId": "n3-work-decision",
+  "scenes": [
+    {
+      "sceneId": "closing-shift",
+      "items": [
+        {
+          "label": "〜っぱなし",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜っぱなし — \"leaving ~ as is; continuously ~\". Also on spoken line 5 (立ちっぱなし)."
+        },
+        {
+          "label": "〜てしまって",
+          "patternId": null,
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てしまう — \"end up ~; ~ completely (often with regret)\". Also on spoken lines 3, 4."
+        },
+        {
+          "label": "〜てへんかったん？",
+          "patternId": null,
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜へん (Kansai negative) — 取ってへんかったん = 取っていなかったの (\"you didn't take ~?\"). n5-te-iru covers only the ている part."
+        },
+        {
+          "label": "〜のはよくない",
+          "patternId": "n5-no-nominalizer",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "〜のはよくない: nominalizer の + は (\"doing ~ is not good\")."
+        },
+        {
+          "label": "〜たばっかり",
+          "patternId": null,
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜たばかり (〜たばっかり) — \"have just done ~\"."
+        },
+        {
+          "label": "〜すぎないように",
+          "patternId": "n5-sugiru",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "〜すぎないように: すぎる + ないように (\"so as not to overdo\"); ように has no catalog entry."
+        }
+      ]
+    },
+    {
+      "sceneId": "something-is-off",
+      "items": [
+        {
+          "label": "どうしたん？",
+          "patternId": "n5-ndesu",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Kansai/casual explanatory question どうしたん = どうしたの / どうしたんですか."
+        },
+        {
+          "label": "〜し",
+          "patternId": null,
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜し — \"and (what's more); listing reasons\". Also on spoken line 11."
+        },
+        {
+          "label": "〜ってわけじゃない",
+          "patternId": null,
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜わけじゃない — \"it's not that ~; it doesn't mean ~\". Also on spoken line 6."
+        },
+        {
+          "label": "〜ないで",
+          "patternId": "n5-naide-kudasai",
+          "sourceSpokenStart": 11,
+          "sourceSpokenEnd": 11,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual 〜ないで request (謝らないで), ください dropped; not n5-naide (\"without doing\")."
+        },
+        {
+          "label": "〜てくれてありがとう",
+          "patternId": null,
+          "sourceSpokenStart": 12,
+          "sourceSpokenEnd": 12,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てくれてありがとう — \"thanks for ~ing (for me)\" (〜てくれる)."
+        }
+      ]
+    },
+    {
+      "sceneId": "whats-actually-going-on",
+      "items": [
+        {
+          "label": "とはいえ、〜",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: とはいえ — \"that said; even so\"."
+        },
+        {
+          "label": "〜される",
+          "patternId": null,
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: passive 〜(ら)れる — \"be ~ed\". (変更される)"
+        },
+        {
+          "label": "〜せいで、〜",
+          "patternId": null,
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜せいで — \"because of ~ (blame)\". Also on spoken line 10."
+        },
+        {
+          "label": "〜ばっかり",
+          "patternId": null,
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜ばかり (〜ばっかり) — \"nothing but ~; only ~\" (cf. n5-dake, which is neutral \"only\"). Also on spoken lines 4, 12."
+        },
+        {
+          "label": "〜てもらえてない",
+          "patternId": null,
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てもらえる — \"be able to have someone ~\" (negative: 聞いてもらえてない)."
+        },
+        {
+          "label": "〜感じだね",
+          "patternId": null,
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜感じ — \"feels like ~; seems ~\". Also on spoken line 3 (入ってる感じで)."
+        }
+      ]
+    },
+    {
+      "sceneId": "is-it-the-job-or-you",
+      "items": [
+        {
+          "label": "〜みたいやな",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜みたい — \"seems like ~; looks like ~\". (Kansai やな ending)"
+        },
+        {
+          "label": "〜てもいい？",
+          "patternId": "n5-temo-ii",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual 〜てもいい？ (asking permission)."
+        },
+        {
+          "label": "〜だけなん？",
+          "patternId": "n5-dake",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Kansai casual question 〜だけなん？; line 11 has だけ in a statement (悪くなっただけ)."
+        },
+        {
+          "label": "〜わけじゃなくて",
+          "patternId": null,
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜わけじゃない — \"it's not that ~; it doesn't mean ~\". Also on spoken lines 9, 11."
+        },
+        {
+          "label": "〜気がして",
+          "patternId": null,
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜気がする — \"I feel like ~; I have a feeling ~\"."
+        },
+        {
+          "label": "〜んよ",
+          "patternId": "n5-ndesu",
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Kansai casual explanatory 〜んよ (= 〜んだよ)."
+        }
+      ]
+    },
+    {
+      "sceneId": "new-neighbor-konbini",
+      "items": [
+        {
+          "label": "〜の方ですよね",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜の方 (かた) — \"the person from ~\" (polite \"person\"); n5-kata is \"way of doing\", a different 方. Also on spoken line 1."
+        },
+        {
+          "label": "お〜ですか？",
+          "patternId": "n5-o-go-honorific",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "お仕事帰りですか."
+        },
+        {
+          "label": "〜てしまいました",
+          "patternId": null,
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てしまう — \"end up ~; ~ completely (often with regret)\". Also on spoken line 3 (疲れてしまって)."
+        },
+        {
+          "label": "〜みたいですね",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜みたい — \"seems like ~; looks like ~\"."
+        },
+        {
+          "label": "〜ないでくださいね",
+          "patternId": "n5-naide-kudasai",
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜れました",
+          "patternId": null,
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: passive 〜(ら)れる — \"be ~ed\". (呼ばれました)"
+        }
+      ]
+    },
+    {
+      "sceneId": "maybe-i-should-quit",
+      "items": [
+        {
+          "label": "〜ごめん。",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: ごめん — \"sorry\" (casual apology; こんな時間にごめん)."
+        },
+        {
+          "label": "〜てさ。",
+          "patternId": null,
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜さ — casual sentence-final particle (light emphasis/filler)."
+        },
+        {
+          "label": "〜ことになって。",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜ことになる — \"it ends up that ~; it's been decided that ~\"."
+        },
+        {
+          "label": "〜気がする。",
+          "patternId": null,
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜気がする — \"I feel like ~; I have a feeling ~\". Also on spoken line 12."
+        },
+        {
+          "label": "〜方がいいのかな、って。",
+          "patternId": "n5-hou-ga-ii",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Label adds のかな、って (\"I wonder if I should ~\")."
+        },
+        {
+          "label": "〜たらええと思う。",
+          "patternId": null,
+          "sourceSpokenStart": 13,
+          "sourceSpokenEnd": 13,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜たらいい (Kansai 〜たらええ) — \"you should ~; it'd be good to ~\"; with と思う."
+        }
+      ]
+    }
+  ]
+}

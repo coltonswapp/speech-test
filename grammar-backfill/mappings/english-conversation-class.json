@@ -1,0 +1,25 @@
+{
+  "collectionId": "english-conversation-class",
+  "scenes": [
+    {
+      "sceneId": "the-invite",
+      "items": []
+    },
+    {
+      "sceneId": "walking-there",
+      "items": []
+    },
+    {
+      "sceneId": "in-class-katakana-eigo",
+      "items": []
+    },
+    {
+      "sceneId": "paired-conversation-practice",
+      "items": []
+    },
+    {
+      "sceneId": "walking-home",
+      "items": []
+    }
+  ]
+}

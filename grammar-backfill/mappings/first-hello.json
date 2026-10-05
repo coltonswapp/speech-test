@@ -1,0 +1,45 @@
+{
+  "collectionId": "first-hello",
+  "scenes": [
+    {
+      "sceneId": "shizuoka-tea",
+      "items": [
+        {
+          "label": "です",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 3, 7, 8, 9, 10, 11, 12."
+        },
+        {
+          "label": "〜からです",
+          "patternId": "n5-kara-from",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "か",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 9,
+          "sourceSpokenEnd": 9,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Two questions on the same line (いいんですか？ / もらったんですか？)."
+        }
+      ]
+    },
+    {
+      "sceneId": "nine-oclock",
+      "items": []
+    },
+    {
+      "sceneId": "which-mailbox",
+      "items": []
+    }
+  ]
+}

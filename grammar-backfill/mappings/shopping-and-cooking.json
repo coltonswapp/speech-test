@@ -1,0 +1,223 @@
+{
+  "collectionId": "shopping-and-cooking",
+  "scenes": [
+    {
+      "sceneId": "making-the-list",
+      "items": [
+        {
+          "label": "〜ましょうか",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 6, 15. Used as \"shall we ~?\" (suggestion)."
+        },
+        {
+          "label": "〜ましょう",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 2."
+        },
+        {
+          "label": "〜はどう？",
+          "patternId": "n5-wa-dou-desu-ka",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual 〜はどう？."
+        },
+        {
+          "label": "〜んですけど",
+          "patternId": "n5-ndesu",
+          "sourceSpokenStart": 9,
+          "sourceSpokenEnd": 9,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "〜んですけど: んです + trailing けど (softening)."
+        },
+        {
+          "label": "〜しか〜ない",
+          "patternId": null,
+          "sourceSpokenStart": 9,
+          "sourceSpokenEnd": 9,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜しか〜ない — \"only ~; nothing but ~\" (英語しか書けない)."
+        },
+        {
+          "label": "〜でもいい",
+          "patternId": "n5-temo-ii",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Noun + でもいい (\"English is fine too\") — the noun form of 〜てもいい."
+        }
+      ]
+    },
+    {
+      "sceneId": "at-the-store",
+      "items": [
+        {
+          "label": "〜にある",
+          "patternId": "n5-ni-location-time",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Location に + ある (\"is located here\"); cf. n5-ga-arimasu."
+        },
+        {
+          "label": "〜にしましょう",
+          "patternId": "n5-ni-suru",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "にする + ましょう."
+        },
+        {
+          "label": "〜でいいですか",
+          "patternId": null,
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜でいい — \"~ is fine/enough\". Also on spoken line 7 (それでいいわよ)."
+        },
+        {
+          "label": "〜ましょうか",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Offer/suggestion 買いましょうか？."
+        }
+      ]
+    },
+    {
+      "sceneId": "cooking-together",
+      "items": [
+        {
+          "label": "〜しましょうか",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Used as \"shall we ~?\" (suggestion)."
+        },
+        {
+          "label": "〜てください",
+          "patternId": "n5-te-kudasai",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜ちゃいました",
+          "patternId": null,
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜ちゃう (〜てしまう) — \"end up ~; ~ by accident\" (落としちゃいました). n5-cha-ikenai is a different pattern."
+        },
+        {
+          "label": "〜ないで",
+          "patternId": "n5-naide-kudasai",
+          "sourceSpokenStart": 9,
+          "sourceSpokenEnd": 9,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual 〜ないで request (気にしないで), ください dropped."
+        },
+        {
+          "label": "〜わね",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜わ(ね) — feminine sentence-ending わ (soft emphasis), here with ね. Also on spoken lines 9, 16."
+        },
+        {
+          "label": "〜てきました",
+          "patternId": null,
+          "sourceSpokenStart": 17,
+          "sourceSpokenEnd": 17,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てくる (〜てきた) — \"change that has come about / started to ~\". Also on spoken line 16 (なってきたわね)."
+        }
+      ]
+    },
+    {
+      "sceneId": "eating-together",
+      "items": [
+        {
+          "label": "〜ましょう",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜から",
+          "patternId": "n5-kara-because",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 4, 7."
+        },
+        {
+          "label": "〜じゃない",
+          "patternId": null,
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match by meaning. Suggested: 〜じゃない (rhetorical) — \"isn't it ~!; you're ~!\" (praise: 上手じゃない). n5-janai-dewa-nai is the negative copula, which this is not."
+        },
+        {
+          "label": "〜てくれた",
+          "patternId": null,
+          "sourceSpokenStart": 7,
+          "sourceSpokenEnd": 7,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てくれる — \"someone does ~ (for me)\"."
+        },
+        {
+          "label": "〜たいです",
+          "patternId": "n5-tai",
+          "sourceSpokenStart": 9,
+          "sourceSpokenEnd": 9,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 11."
+        },
+        {
+          "label": "〜ようか",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual volitional 〜(よ)うか (作ろうか) = plain form of ましょうか, used as \"shall we ~?\"."
+        }
+      ]
+    }
+  ]
+}

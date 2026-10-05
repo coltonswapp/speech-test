@@ -1,0 +1,225 @@
+{
+  "collectionId": "new-neighbor",
+  "scenes": [
+    {
+      "sceneId": "meeting-new-neighbor",
+      "items": [
+        {
+          "label": "〜です",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 1, 4, 5, 7, 8."
+        },
+        {
+          "label": "ありますか",
+          "patternId": "n5-ga-arimasu",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "ありますよ",
+          "patternId": "n5-ga-arimasu",
+          "sourceSpokenStart": 7,
+          "sourceSpokenEnd": 7,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "ありますよ: あります + よ."
+        }
+      ]
+    },
+    {
+      "sceneId": "hometown-age-chat",
+      "items": [
+        {
+          "label": "〜です",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 1, 2, 3, 5."
+        },
+        {
+          "label": "〜からです",
+          "patternId": "n5-kara-from",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 2."
+        },
+        {
+          "label": "〜ですか？",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 2, 3, 5. Line 2 (大阪ですか！) is exclamatory and line 5 (三十歳ですか。) is an echo."
+        }
+      ]
+    },
+    {
+      "sceneId": "trash-day-question",
+      "items": [
+        {
+          "label": "〜ちゃいけません",
+          "patternId": "n5-cha-ikenai",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 4."
+        },
+        {
+          "label": "〜の",
+          "patternId": "n5-no-possessive",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 1."
+        }
+      ]
+    },
+    {
+      "sceneId": "lightbulb-request",
+      "items": [
+        {
+          "label": "なんでしょうか？",
+          "patternId": "n5-deshou",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Polite question なんでしょうか (\"what is it?\")."
+        },
+        {
+          "label": "電球がありますか？",
+          "patternId": "n5-ga-arimasu",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "まだ買ってないです。",
+          "patternId": "n5-mada-te-imasen",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual form まだ〜てない(です)."
+        }
+      ]
+    },
+    {
+      "sceneId": "natsu-matsuri-chat",
+      "items": [
+        {
+          "label": "〜だよ。",
+          "patternId": "n5-yo",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 2. だ + よ; the だ part is n5-da-desu."
+        },
+        {
+          "label": "〜行かない？",
+          "patternId": "n5-masen-ka",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual invitation 〜ない？ = plain form of ませんか."
+        }
+      ]
+    },
+    {
+      "sceneId": "who-is-home",
+      "items": [
+        {
+          "label": "がいます",
+          "patternId": "n5-ga-imasu",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜がいますか",
+          "patternId": "n5-ga-imasu",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Same line and pattern as the preceding がいます highlight."
+        },
+        {
+          "label": "〜で",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match by meaning. Suggested: 〜で (cause/reason) — \"because of ~\" (アレルギーで). n5-de-location / n5-de-means do not fit."
+        },
+        {
+          "label": "〜飲む？",
+          "patternId": null,
+          "sourceSpokenStart": 7,
+          "sourceSpokenEnd": 7,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: plain-form casual question — dictionary form with rising intonation (お茶、飲む？)."
+        }
+      ]
+    },
+    {
+      "sceneId": "meet-at-konbini",
+      "items": [
+        {
+          "label": "に行きませんか",
+          "patternId": "n5-ni-e-direction",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "に marks destination (コンビニに行きませんか); not n5-ni-iku (purpose). The ませんか part is the next highlight."
+        },
+        {
+          "label": "ませんか",
+          "patternId": "n5-masen-ka",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "sceneId": "wrong-apartment",
+      "items": [
+        {
+          "label": "じゃないです",
+          "patternId": "n5-janai-dewa-nai",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    }
+  ]
+}

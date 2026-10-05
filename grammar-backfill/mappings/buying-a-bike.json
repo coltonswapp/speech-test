@@ -1,0 +1,232 @@
+{
+  "collectionId": "buying-a-bike",
+  "scenes": [
+    {
+      "sceneId": "the-old-bike",
+      "items": [
+        {
+          "label": "〜ってありますか？",
+          "patternId": "n5-ga-arimasu",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual って stands in for が/は (自転車ってありますか)."
+        },
+        {
+          "label": "〜てみたいなと思って。",
+          "patternId": null,
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てみたい(な)と思って — \"I was thinking I'd like to try ~\" (〜てみる + たい + と思う). n5-tai covers only たい."
+        },
+        {
+          "label": "〜てもらって、申し訳ないので",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てもらう — \"have someone do ~ for me\" (with 申し訳ない, \"sorry for having you ~\"). n5-node covers only ので."
+        },
+        {
+          "label": "〜なくていいのに。",
+          "patternId": "n5-nakutemo-ii",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "〜なくていい is the short form of なくてもいい; trailing のに (\"even though\") has no catalog entry."
+        },
+        {
+          "label": "〜あったはずよ。",
+          "patternId": null,
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜はず — \"should be; is supposed to be (expectation)\"."
+        },
+        {
+          "label": "〜おかしくないですか？",
+          "patternId": "n5-i-adjectives",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Negative i-adjective おかしくない used as a \"isn't it ~?\" question."
+        }
+      ]
+    },
+    {
+      "sceneId": "at-the-shop",
+      "items": [
+        {
+          "label": "どれがいい？",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: どれがいい？ — \"which one is good/do you want?\" (どれ = which, of 3+)."
+        },
+        {
+          "label": "〜と思いますか？",
+          "patternId": null,
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜と思いますか — \"do you think ~?\" (〜と思う)."
+        },
+        {
+          "label": "〜のほうが",
+          "patternId": "n5-yori-hou-ga",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 3, 6, 10. Comparative 〜の方が used without より."
+        },
+        {
+          "label": "〜そうね",
+          "patternId": null,
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜そう — \"looks/seems ~\" (appearance; 軽そうね)."
+        },
+        {
+          "label": "〜てみます",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てみる — \"try doing ~\"."
+        },
+        {
+          "label": "〜ていいのよ",
+          "patternId": "n5-temo-ii",
+          "sourceSpokenStart": 11,
+          "sourceSpokenEnd": 11,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Short form 〜ていい (permission) + のよ."
+        }
+      ]
+    },
+    {
+      "sceneId": "deciding-and-paying",
+      "items": [
+        {
+          "label": "〜にします",
+          "patternId": "n5-ni-suru",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜わね",
+          "patternId": null,
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜わ(ね) — feminine sentence-ending わ (soft emphasis), here with ね."
+        },
+        {
+          "label": "〜払います",
+          "patternId": null,
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Label is a plain polite verb (払います); suggested: 〜ます — polite non-past verb form."
+        },
+        {
+          "label": "〜買いたいです",
+          "patternId": "n5-tai",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜にさせて",
+          "patternId": null,
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜にさせて — \"let me make it ~\" (causative of にする; cf. n5-ni-suru)."
+        },
+        {
+          "label": "〜ように",
+          "patternId": null,
+          "sourceSpokenStart": 7,
+          "sourceSpokenEnd": 7,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜ように — \"so that ~ (purpose/goal)\"."
+        }
+      ]
+    },
+    {
+      "sceneId": "first-ride",
+      "items": [
+        {
+          "label": "〜てみて",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てみる — \"try doing ~\". Also on spoken line 1."
+        },
+        {
+          "label": "〜でいいから",
+          "patternId": null,
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜でいい — \"~ is fine/enough\" (ゆっくりでいいから)."
+        },
+        {
+          "label": "〜てきました",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てくる (〜てきた) — \"change that has come about / started to ~\"."
+        },
+        {
+          "label": "〜できます",
+          "patternId": null,
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match, and できます is not literally in any line; line 8 has the potential form 行けます. Suggested: potential form (〜える/〜られる) — \"can ~\"."
+        },
+        {
+          "label": "〜てね",
+          "patternId": "n5-te-kudasai",
+          "sourceSpokenStart": 9,
+          "sourceSpokenEnd": 9,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual て-form request + ね (気をつけてね), ください dropped."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,170 @@
+{
+  "collectionId": "around-the-block",
+  "scenes": [
+    {
+      "sceneId": "convenience-store-run",
+      "items": [
+        {
+          "label": "n5-ka-question",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 6, 12. Label text is the pattern id itself, not a display label. Line 13 has かも, not a question."
+        },
+        {
+          "label": "n5-da-desu",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 2, 3, 4, 5, 6, 8, 10, 11, 14. Label text is the pattern id itself, not a display label."
+        },
+        {
+          "label": "n5-ga-arimasu",
+          "patternId": "n5-ga-arimasu",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Label text is the pattern id itself, not a display label. Line uses も instead of が (二ブロック先にも、あります)."
+        }
+      ]
+    },
+    {
+      "sceneId": "coin-laundry",
+      "items": [
+        {
+          "label": "n5-ka-question",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 2, 4, 8, 11. Label text is the pattern id itself, not a display label."
+        },
+        {
+          "label": "n5-da-desu",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 2, 5, 6, 8, 11, 12. Label text is the pattern id itself, not a display label."
+        },
+        {
+          "label": "n5-ga-arimasu",
+          "patternId": "n5-ga-arimasu",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 0. Label text is the pattern id itself, not a display label. が is dropped on both lines."
+        }
+      ]
+    },
+    {
+      "sceneId": "recycling-sorting",
+      "items": [
+        {
+          "label": "n5-ka-question",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 8. Label text is the pattern id itself, not a display label."
+        },
+        {
+          "label": "n5-da-desu",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 2, 4, 5, 6, 9, 10. Label text is the pattern id itself, not a display label."
+        },
+        {
+          "label": "n5-te-kudasai",
+          "patternId": "n5-te-kudasai",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Label text is the pattern id itself, not a display label."
+        }
+      ]
+    },
+    {
+      "sceneId": "supermarket-point-card",
+      "items": [
+        {
+          "label": "か",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 2, 10. Line 0 has an embedded question (何て言えばいいか)."
+        },
+        {
+          "label": "です",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 2, 3, 5, 8, 9, 10."
+        }
+      ]
+    },
+    {
+      "sceneId": "vending-machine-hot-drinks",
+      "items": [
+        {
+          "label": "か",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 5, 11."
+        },
+        {
+          "label": "あります",
+          "patternId": "n5-ga-arimasu",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "ありますよ (が omitted); line 0 has plain あるんですか."
+        }
+      ]
+    },
+    {
+      "sceneId": "after-work-drinks-invite",
+      "items": [
+        {
+          "label": "か",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 1, 5, 7, 10."
+        },
+        {
+          "label": "です",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 9,
+          "sourceSpokenEnd": 9,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 15."
+        }
+      ]
+    }
+  ]
+}

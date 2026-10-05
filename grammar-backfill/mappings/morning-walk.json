@@ -1,0 +1,241 @@
+{
+  "collectionId": "morning-walk",
+  "scenes": [
+    {
+      "sceneId": "good-morning",
+      "items": [
+        {
+          "label": "よく眠れた？",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: potential form 〜(ら)れる — \"can ~\" (よく眠れた？ \"did you sleep well?\")."
+        },
+        {
+          "label": "〜もんね",
+          "patternId": null,
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜もん(ね) — \"because ~, you know\" (casual reason)."
+        },
+        {
+          "label": "〜なかったので",
+          "patternId": "n5-node",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Past negative + ので (眠れなかったので)."
+        },
+        {
+          "label": "〜ましょうか",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Used as \"shall we ~?\" (suggestion)."
+        },
+        {
+          "label": "行きたいです",
+          "patternId": "n5-tai",
+          "sourceSpokenStart": 7,
+          "sourceSpokenEnd": 7,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜うちに行った方がいい",
+          "patternId": "n5-hou-ga-ii",
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "〜うちに (\"while ~\") in the label has no catalog entry; mapped to 〜た方がいい."
+        }
+      ]
+    },
+    {
+      "sceneId": "heading-out",
+      "items": [
+        {
+          "label": "美味しかった？",
+          "patternId": "n5-i-adjectives",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Past i-adjective 美味しかった as a casual question; line 1 repeats 美味しかったです."
+        },
+        {
+          "label": "涼しくて",
+          "patternId": "n5-i-adjectives",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "i-adjective て-form 涼しくて."
+        },
+        {
+          "label": "気持ちいいねー",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Lengthened ねー."
+        },
+        {
+          "label": "わんこがいる！",
+          "patternId": "n5-ga-imasu",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual plain form 〜がいる."
+        },
+        {
+          "label": "犬、好き？",
+          "patternId": "n5-na-adjectives",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "好き (na-adjective) as a casual question with が dropped."
+        },
+        {
+          "label": "いないんですけど。",
+          "patternId": "n5-ndesu",
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "〜んですけど: んです + trailing けど (softening; cf. n5-kedo)."
+        }
+      ]
+    },
+    {
+      "sceneId": "in-the-park",
+      "items": [
+        {
+          "label": "〜よ",
+          "patternId": "n5-yo",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 6, 8."
+        },
+        {
+          "label": "〜ですね",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 1, 7, 9, 12."
+        },
+        {
+          "label": "〜でしょう？",
+          "patternId": "n5-deshou",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 8."
+        },
+        {
+          "label": "〜ましょうか",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 17. Used as \"shall we ~?\" (suggestion)."
+        },
+        {
+          "label": "〜がいます",
+          "patternId": "n5-ga-imasu",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜なんだって",
+          "patternId": null,
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜んだって — \"I heard that ~; they say ~\" (hearsay って)."
+        }
+      ]
+    },
+    {
+      "sceneId": "at-the-conbini",
+      "items": [
+        {
+          "label": "〜たい？",
+          "patternId": "n5-tai",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜ましょう。",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Line 14 has 〜ましょうか (separate pattern n5-mashouka)."
+        },
+        {
+          "label": "〜はどこですか？",
+          "patternId": null,
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜はどこですか — \"where is ~?\" (n5-wa-topic and n5-ka-question cover only parts)."
+        },
+        {
+          "label": "〜わよ。",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜わ(よ) — feminine sentence-ending わ (soft emphasis), here with よ."
+        },
+        {
+          "label": "〜ね。",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 7,
+          "sourceSpokenEnd": 7,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 12."
+        },
+        {
+          "label": "〜方",
+          "patternId": "n5-kata",
+          "sourceSpokenStart": 12,
+          "sourceSpokenEnd": 12,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "選び方 (\"way of choosing\")."
+        }
+      ]
+    }
+  ]
+}

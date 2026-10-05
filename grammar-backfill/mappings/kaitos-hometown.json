@@ -1,0 +1,29 @@
+{
+  "collectionId": "kaitos-hometown",
+  "scenes": [
+    {
+      "sceneId": "a-package-arrives",
+      "items": []
+    },
+    {
+      "sceneId": "sharing-the-contents",
+      "items": []
+    },
+    {
+      "sceneId": "talking-about-shizuoka",
+      "items": []
+    },
+    {
+      "sceneId": "why-he-left",
+      "items": []
+    },
+    {
+      "sceneId": "do-you-miss-it",
+      "items": []
+    },
+    {
+      "sceneId": "a-small-gesture",
+      "items": []
+    }
+  ]
+}

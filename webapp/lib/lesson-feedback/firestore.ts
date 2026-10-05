@@ -66,7 +66,7 @@ export async function readScenarioFeedback(
       .orderBy("createdAt", "desc")
       .limit(recentLimit)
       .get();
-    recent = query.docs.map((doc) =>
+    recent = query.docs.map((doc: { id: string; data: () => Record<string, unknown> }) =>
       parseLessonFeedbackEntry(doc.id, doc.data() as Record<string, unknown>),
     );
   } catch (err) {

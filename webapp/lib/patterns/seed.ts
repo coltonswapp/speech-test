@@ -142,9 +142,9 @@ export async function loadSeedRowsFromDisk(
 export async function upsertTeachingPatterns(
   db: Db,
   rows: TeachingPatternSeedRow[]
-): Promise<{ inserted: number; skipped: number; total: number }> {
+): Promise<{ inserted: number; skipped: number; total: number; insertedIds: string[] }> {
   if (rows.length === 0) {
-    return { inserted: 0, skipped: 0, total: 0 };
+    return { inserted: 0, skipped: 0, total: 0, insertedIds: [] };
   }
 
   const ids = rows.map((r) => r.id);

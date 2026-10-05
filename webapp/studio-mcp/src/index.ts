@@ -94,8 +94,11 @@ function toPatchLine(line: PatchLineInput, index: number): Record<string, unknow
 const grammarPatternSchema = z.union([
   z.string(),
   z.object({
-    label: z.string(),
+    label: z.string().optional(),
+    patternId: z.string().optional(),
     grammarPointID: z.string().optional(),
+    sourceSpokenStart: z.number().int().nonnegative().optional(),
+    sourceSpokenEnd: z.number().int().nonnegative().optional(),
   }),
 ]);
 

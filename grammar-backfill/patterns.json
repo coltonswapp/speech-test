@@ -1,0 +1,447 @@
+[
+  {
+    "id": "n5-da-desu",
+    "label": "だ／です",
+    "shortMeaning": "to be (copula: am, is, are)"
+  },
+  {
+    "id": "n5-janai-dewa-nai",
+    "label": "じゃない／ではない",
+    "shortMeaning": "to not be (negative copula)"
+  },
+  {
+    "id": "n5-wa-topic",
+    "label": "は",
+    "shortMeaning": "topic marker"
+  },
+  {
+    "id": "n5-ga-subject",
+    "label": "が",
+    "shortMeaning": "subject marker"
+  },
+  {
+    "id": "n5-o-wo",
+    "label": "を",
+    "shortMeaning": "object marker"
+  },
+  {
+    "id": "n5-ni-location-time",
+    "label": "に",
+    "shortMeaning": "location/time particle; in; at; on"
+  },
+  {
+    "id": "n5-ni-e-direction",
+    "label": "に／へ",
+    "shortMeaning": "to (direction / destination)"
+  },
+  {
+    "id": "n5-de-location",
+    "label": "で",
+    "shortMeaning": "at; in (place of action)"
+  },
+  {
+    "id": "n5-de-means",
+    "label": "で",
+    "shortMeaning": "by; with; via (means/instrument)"
+  },
+  {
+    "id": "n5-to-and-with",
+    "label": "と",
+    "shortMeaning": "and; with; quoting/connecting particle"
+  },
+  {
+    "id": "n5-mo",
+    "label": "も",
+    "shortMeaning": "too; also; as well"
+  },
+  {
+    "id": "n5-ya",
+    "label": "や",
+    "shortMeaning": "and; or (non-exhaustive list)"
+  },
+  {
+    "id": "n5-no-possessive",
+    "label": "の",
+    "shortMeaning": "possessive / attributive particle (of)"
+  },
+  {
+    "id": "n5-no-nominalizer",
+    "label": "の",
+    "shortMeaning": "nominalizer (turns clause/verb into noun)"
+  },
+  {
+    "id": "n5-ne",
+    "label": "ね",
+    "shortMeaning": "isn't it?; right?; seeking agreement"
+  },
+  {
+    "id": "n5-yo",
+    "label": "よ",
+    "shortMeaning": "you know; emphatic sentence-ending particle"
+  },
+  {
+    "id": "n5-naa",
+    "label": "なあ／な",
+    "shortMeaning": "sentence-ending particle (confirmation, admiration)"
+  },
+  {
+    "id": "n5-o-go-honorific",
+    "label": "お／ご",
+    "shortMeaning": "polite/honorific prefix"
+  },
+  {
+    "id": "n5-ga-arimasu",
+    "label": "があります",
+    "shortMeaning": "there is (non-living things)"
+  },
+  {
+    "id": "n5-ga-imasu",
+    "label": "がいます",
+    "shortMeaning": "there is; to be (living things)"
+  },
+  {
+    "id": "n5-i-adjectives",
+    "label": "い形容詞",
+    "shortMeaning": "i-adjective conjugation patterns"
+  },
+  {
+    "id": "n5-na-adjectives",
+    "label": "な形容詞",
+    "shortMeaning": "na-adjective conjugation patterns"
+  },
+  {
+    "id": "n5-naru",
+    "label": "なる",
+    "shortMeaning": "to become"
+  },
+  {
+    "id": "n5-ni-suru",
+    "label": "にする",
+    "shortMeaning": "to decide on ~"
+  },
+  {
+    "id": "n5-ni-iku",
+    "label": "に行く（にいく）",
+    "shortMeaning": "go to do ~ (purpose)"
+  },
+  {
+    "id": "n5-kata",
+    "label": "方（かた）",
+    "shortMeaning": "the way of doing ~; how to do ~"
+  },
+  {
+    "id": "n5-naide",
+    "label": "ないで",
+    "shortMeaning": "without doing ~; do B without doing A"
+  },
+  {
+    "id": "n5-tai",
+    "label": "たい",
+    "shortMeaning": "want to do ~ (verb stem + たい)"
+  },
+  {
+    "id": "n5-ga-hoshii",
+    "label": "がほしい",
+    "shortMeaning": "to want something"
+  },
+  {
+    "id": "n5-no-ga-suki",
+    "label": "のが好き",
+    "shortMeaning": "to like doing something"
+  },
+  {
+    "id": "n5-tsumori",
+    "label": "つもり",
+    "shortMeaning": "plan to ~; intend to ~"
+  },
+  {
+    "id": "n5-te-kudasai",
+    "label": "てください",
+    "shortMeaning": "please do ~"
+  },
+  {
+    "id": "n5-naide-kudasai",
+    "label": "ないでください",
+    "shortMeaning": "please don't do ~"
+  },
+  {
+    "id": "n5-o-kudasai",
+    "label": "をください",
+    "shortMeaning": "please give me ~"
+  },
+  {
+    "id": "n5-temo-ii",
+    "label": "てもいいです",
+    "shortMeaning": "may I ~?; is OK to ~; permission"
+  },
+  {
+    "id": "n5-nakutemo-ii",
+    "label": "なくてもいい",
+    "shortMeaning": "don't have to ~ (no need)"
+  },
+  {
+    "id": "n5-tewa-ikenai",
+    "label": "てはいけない",
+    "shortMeaning": "must not; may not; cannot"
+  },
+  {
+    "id": "n5-cha-ikenai",
+    "label": "ちゃいけない／じゃいけない",
+    "shortMeaning": "must not do (spoken contraction)"
+  },
+  {
+    "id": "n5-nakute-wa-ikenai",
+    "label": "なくてはいけない",
+    "shortMeaning": "must do; need to do"
+  },
+  {
+    "id": "n5-nakute-wa-naranai",
+    "label": "なくてはならない",
+    "shortMeaning": "must do; need to do ~"
+  },
+  {
+    "id": "n5-naito-ikenai",
+    "label": "ないといけない",
+    "shortMeaning": "must do; have an obligation to do ~"
+  },
+  {
+    "id": "n5-nakucha",
+    "label": "なくちゃ",
+    "shortMeaning": "must do; gotta do ~ (casual)"
+  },
+  {
+    "id": "n5-mashou",
+    "label": "ましょう",
+    "shortMeaning": "let's ~; shall we ~"
+  },
+  {
+    "id": "n5-mashouka",
+    "label": "ましょうか",
+    "shortMeaning": "shall I ~? (offer help)"
+  },
+  {
+    "id": "n5-masen-ka",
+    "label": "ませんか",
+    "shortMeaning": "won't you ~?; shall we ~? (invitation)"
+  },
+  {
+    "id": "n5-hou-ga-ii",
+    "label": "ほうがいい",
+    "shortMeaning": "had better; it'd be better to; should ~"
+  },
+  {
+    "id": "n5-wa-dou-desu-ka",
+    "label": "はどうですか",
+    "shortMeaning": "how about ~?; how is ~?"
+  },
+  {
+    "id": "n5-te-iru",
+    "label": "ている",
+    "shortMeaning": "ongoing action or resulting/current state"
+  },
+  {
+    "id": "n5-te-aru",
+    "label": "てある",
+    "shortMeaning": "is/has been done (resulting state; intentional prep)"
+  },
+  {
+    "id": "n5-ta-koto-ga-aru",
+    "label": "たことがある",
+    "shortMeaning": "to have done something before (experience)"
+  },
+  {
+    "id": "n5-mada-te-imasen",
+    "label": "まだ～ていません",
+    "shortMeaning": "have not yet ~"
+  },
+  {
+    "id": "n5-tari-tari",
+    "label": "たり～たり",
+    "shortMeaning": "do such things as A and B"
+  },
+  {
+    "id": "n5-ichiban",
+    "label": "一番（いちばん）",
+    "shortMeaning": "the most; the best"
+  },
+  {
+    "id": "n5-no-naka-de-ichiban",
+    "label": "の中で［A］が一番",
+    "shortMeaning": "out of this group, [A] is the best"
+  },
+  {
+    "id": "n5-wa-yori-desu",
+    "label": "は〜より・・・です",
+    "shortMeaning": "[N1] is more ~ than [N2]"
+  },
+  {
+    "id": "n5-yori-hou-ga",
+    "label": "より～ほうが",
+    "shortMeaning": "[B] is more ~ than [A]"
+  },
+  {
+    "id": "n5-mae-ni",
+    "label": "前に（まえに）",
+    "shortMeaning": "before; in front of ~"
+  },
+  {
+    "id": "n5-te-kara",
+    "label": "てから",
+    "shortMeaning": "after doing ~"
+  },
+  {
+    "id": "n5-toki",
+    "label": "とき",
+    "shortMeaning": "when; at the time when ~"
+  },
+  {
+    "id": "n5-made",
+    "label": "まで",
+    "shortMeaning": "until; as far as; to (an extent)"
+  },
+  {
+    "id": "n5-kara-from",
+    "label": "から",
+    "shortMeaning": "from (starting point in time/place)"
+  },
+  {
+    "id": "n5-sore-kara",
+    "label": "それから",
+    "shortMeaning": "and then; after that; since then"
+  },
+  {
+    "id": "n5-soshite",
+    "label": "そして",
+    "shortMeaning": "and; and then; thus"
+  },
+  {
+    "id": "n5-mada",
+    "label": "まだ",
+    "shortMeaning": "still; not yet"
+  },
+  {
+    "id": "n5-mou",
+    "label": "もう",
+    "shortMeaning": "already; anymore; again"
+  },
+  {
+    "id": "n5-kara-because",
+    "label": "から",
+    "shortMeaning": "because; since (reason)"
+  },
+  {
+    "id": "n5-node",
+    "label": "ので",
+    "shortMeaning": "because of; given that; since ~"
+  },
+  {
+    "id": "n5-ga-but",
+    "label": "が",
+    "shortMeaning": "but; however (clause connector)"
+  },
+  {
+    "id": "n5-demo",
+    "label": "でも",
+    "shortMeaning": "but; however; though ~"
+  },
+  {
+    "id": "n5-kedo",
+    "label": "けど",
+    "shortMeaning": "but; however; although ~"
+  },
+  {
+    "id": "n5-keredo-mo",
+    "label": "けれども",
+    "shortMeaning": "but; however; although ~"
+  },
+  {
+    "id": "n5-shikashi",
+    "label": "しかし",
+    "shortMeaning": "but; however ~"
+  },
+  {
+    "id": "n5-dake",
+    "label": "だけ",
+    "shortMeaning": "only; just; as much as ~"
+  },
+  {
+    "id": "n5-sugiru",
+    "label": "すぎる",
+    "shortMeaning": "too much; excessively ~"
+  },
+  {
+    "id": "n5-kurai-gurai",
+    "label": "くらい／ぐらい",
+    "shortMeaning": "about; approximately; to the extent that ~"
+  },
+  {
+    "id": "n5-ka-question",
+    "label": "か",
+    "shortMeaning": "question particle"
+  },
+  {
+    "id": "n5-ka-ka-or",
+    "label": "か～か",
+    "shortMeaning": "A or B (choice)"
+  },
+  {
+    "id": "n5-donna",
+    "label": "どんな",
+    "shortMeaning": "what kind of; what sort of"
+  },
+  {
+    "id": "n5-doushite",
+    "label": "どうして",
+    "shortMeaning": "why; for what reason"
+  },
+  {
+    "id": "n5-douyatte",
+    "label": "どうやって",
+    "shortMeaning": "how; in what way; by what means"
+  },
+  {
+    "id": "n5-darou",
+    "label": "だろう",
+    "shortMeaning": "I think; it seems; probably; right?"
+  },
+  {
+    "id": "n5-deshou",
+    "label": "でしょう",
+    "shortMeaning": "I think; it seems; probably; right?"
+  },
+  {
+    "id": "n5-ndesu",
+    "label": "んです",
+    "shortMeaning": "explanatory/emphasis form (〜んです)"
+  },
+  {
+    "id": "n5-no-desu",
+    "label": "のです",
+    "shortMeaning": "explanatory/emphasis form (〜のです)"
+  },
+  {
+    "id": "n5-no-ga-jouzu",
+    "label": "のが上手（のがじょうず）",
+    "shortMeaning": "to be good at doing something"
+  },
+  {
+    "id": "n5-no-ga-heta",
+    "label": "のが下手（のがへた）",
+    "shortMeaning": "to be bad at doing something"
+  },
+  {
+    "id": "n5-issho-ni",
+    "label": "一緒に（いっしょに）",
+    "shortMeaning": "together"
+  },
+  {
+    "id": "n5-itsumo",
+    "label": "いつも",
+    "shortMeaning": "always; usually; habitually"
+  },
+  {
+    "id": "n5-totemo",
+    "label": "とても",
+    "shortMeaning": "very; awfully; exceedingly"
+  }
+]

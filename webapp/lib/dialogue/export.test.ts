@@ -243,3 +243,78 @@ describe("buildCollectionFile subtitle and unit export", () => {
     assert.equal(json.includes("freeform"), false);
   });
 });
+
+describe("grammar highlight + pattern catalog export", () => {
+  it("exports patternId and spoken range; keeps legacy label", () => {
+    const file = buildScenarioFile(
+      baseScenario({
+        highlights: {
+          vocabulary: [],
+          grammarPatterns: [
+            {
+              label: "〜ましょう",
+              patternId: "n5-mashou",
+              sourceSpokenStart: 0,
+              sourceSpokenEnd: 0,
+            },
+            { label: "legacy-only" },
+          ],
+          contextNotes: [],
+        },
+      })
+    );
+    assert.deepEqual(file.highlights?.grammarPatterns, [
+      {
+        label: "〜ましょう",
+        patternId: "n5-mashou",
+        sourceSpokenStart: 0,
+        sourceSpokenEnd: 0,
+      },
+      { label: "legacy-only" },
+    ]);
+  });
+
+  it("attaches referenced teaching patterns on the collection file", () => {
+    const parsed = collectionFileSchema.parse(
+      buildCollectionFile(
+        {
+          id: "ball-game",
+          title: "Ball game",
+          subtitle: null,
+          sceneImage: null,
+          thumbnailUrl: null,
+          thumbnailSmallUrl: null,
+        },
+        [
+          baseScenario({
+            highlights: {
+              grammarPatterns: [
+                {
+                  patternId: "n5-mashou",
+                  sourceSpokenStart: 0,
+                  sourceSpokenEnd: 0,
+                },
+              ],
+            },
+          }),
+        ],
+        [
+          {
+            id: "n5-mashou",
+            label: "〜ましょう",
+            shortMeaning: "let's…",
+            formNote: "volitional",
+          },
+        ]
+      )
+    );
+    assert.deepEqual(parsed.patterns, [
+      {
+        id: "n5-mashou",
+        label: "〜ましょう",
+        shortMeaning: "let's…",
+        formNote: "volitional",
+      },
+    ]);
+  });
+});

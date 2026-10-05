@@ -13,6 +13,8 @@
     "db:seed-content": "dotenv -e .env.local -- tsx scripts/seed-content.ts",
     "db:seed-dialogues": "dotenv -e .env.local -- tsx scripts/seed-dialogues.ts",
     "db:seed-patterns": "dotenv -e .env.local -- tsx scripts/seed-teaching-patterns.ts",
+    "db:grammar-backfill-dump": "dotenv -e .env.local -- tsx scripts/grammar-backfill-dump.ts",
+    "db:grammar-backfill-apply": "dotenv -e .env.local -- tsx scripts/grammar-backfill-apply.ts",
     "db:cleanup-scenario-links": "dotenv -e .env.local -- tsx scripts/cleanup-scenario-links.ts",
     "db:migrate-thumbnails": "dotenv -e .env.local -- tsx scripts/migrate-thumbnails.ts",
     "db:seed-voice-previews": "dotenv -e .env.local -- tsx scripts/seed-voice-previews.ts",

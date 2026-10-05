@@ -23,7 +23,7 @@ export type DeterministicAuditResult = {
 };
 
 function patternKey(pattern: GrammarPatternRef): string {
-  const label = pattern.label.trim();
+  const label = (pattern.label ?? "").trim();
   const id = pattern.grammarPointID ?? "";
   return `${label}|${id}`;
 }
@@ -49,7 +49,7 @@ export function runDeterministicAudit(
 
   for (let index = 0; index < grammarPatterns.length; index++) {
     const pattern = grammarPatterns[index];
-    const label = pattern.label.trim();
+    const label = (pattern.label ?? "").trim();
 
     if (!label) {
       issues.push({

@@ -1,0 +1,173 @@
+{
+  "collectionId": "airport",
+  "scenes": [
+    {
+      "sceneId": "checking-luggage",
+      "items": [
+        {
+          "label": "〜たいんですけど。。。",
+          "patternId": "n5-tai",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Full form is 〜たいんですけど (たい + んです + けど, softened request); mapped to たい as the core pattern."
+        }
+      ]
+    },
+    {
+      "sceneId": "gate-change",
+      "items": [
+        {
+          "label": "n5-nakucha",
+          "patternId": "n5-nakucha",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Label text is the pattern id itself (\"n5-nakucha\"), not a display label; same line as the 行かなくちゃ highlight."
+        },
+        {
+          "label": "一番近い",
+          "patternId": "n5-ichiban",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "行かなくちゃ",
+          "patternId": "n5-nakucha",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Duplicates the \"n5-nakucha\" highlight on the same line."
+        }
+      ]
+    },
+    {
+      "sceneId": "taxi-to-airport",
+      "items": [
+        {
+          "label": "〜てはいけません",
+          "patternId": "n5-tewa-ikenai",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜までですね？",
+          "patternId": "n5-made",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "空港までですね; まで also appears on line 6 (空港まで安全運転で) but not as 〜までですね."
+        },
+        {
+          "label": "お願いします",
+          "patternId": null,
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: お願いします — \"please (polite request set phrase)\"."
+        },
+        {
+          "label": "〜ので、〜",
+          "patternId": "n5-node",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜してください",
+          "patternId": "n5-te-kudasai",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Label says 〜してください; line has シートベルトをしてくださいね."
+        },
+        {
+          "label": "〜ましょう",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "sceneId": "choosing-airport-food",
+      "items": [
+        {
+          "label": "〜ましたね",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Polite past 〜ました + ね; 〜ました alone has no catalog entry."
+        },
+        {
+          "label": "〜ましょうか",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Used as \"shall we ~?\" (suggestion)."
+        },
+        {
+          "label": "〜ですか",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜かな",
+          "patternId": null,
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜かな — \"I wonder ~\" (n5-naa is a different particle)."
+        },
+        {
+          "label": "〜に行こうか",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual volitional 〜(よ)うか (そこに行こうか) = plain form of ましょうか, used as \"shall we ~?\". Not n5-ni-iku: に here marks destination, not purpose."
+        },
+        {
+          "label": "〜ましょう",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "sceneId": "finding-our-gate",
+      "items": []
+    }
+  ]
+}

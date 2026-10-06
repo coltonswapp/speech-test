@@ -1,0 +1,25 @@
+{
+  "collectionId": "ashiyu",
+  "scenes": [
+    {
+      "sceneId": "planning",
+      "items": []
+    },
+    {
+      "sceneId": "arriving-and-settling-in",
+      "items": []
+    },
+    {
+      "sceneId": "mikas-turn",
+      "items": []
+    },
+    {
+      "sceneId": "a-quiet-moment",
+      "items": []
+    },
+    {
+      "sceneId": "heading-home",
+      "items": []
+    }
+  ]
+}

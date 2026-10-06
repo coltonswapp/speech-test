@@ -1,0 +1,517 @@
+{
+  "collectionId": "kaitos-hometown",
+  "scenes": [
+    {
+      "sceneId": "a-package-arrives",
+      "title": "A Package Arrives",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、ちょうど一緒になったね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "ほんとだ。今帰り？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "うん、そう。今日ちょっと疲れた。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "お疲れ様。明日は休み？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "うん、休み。ゆっくりするつもり。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "いいね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "あ、これ実家から。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "...懐かしいな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "どうしたの？なんか、複雑そうな顔してる。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "いや、別に。ただ、実家から荷物届くと、ちょっと変な気分になるんだよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "変な気分？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "なんて言うか、嬉しいのと、ちょっと恥ずかしいのが混ざってる感じ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "あはは、分かる気がする。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "親、いまだに子供扱いしてくるからさ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "それ、親あるあるだよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 15,
+          "text": "だよね。まあ、ありがたいんだけどさ。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "sharing-the-contents",
+      "title": "Sharing the Contents",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "中で開けてみない？なんか、お菓子とか入ってるかもしれないし。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "いいね、行く。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "これ、静岡のお茶。あと、これは母が作ったみたらし団子。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "え、手作りなんだ。すごい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "昔からよく作ってくれてたんだよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "いただきます。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "え、これめっちゃ美味しい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "でしょ？昔から変わらない味なんだよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "お茶も飲んでみるね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "これも美味しい。渋すぎなくて飲みやすい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "静岡のお茶、結構自慢なんだ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "それ、分かる気がする。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "talking-about-shizuoka",
+      "title": "Talking About Shizuoka",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "そういえば、静岡ってどんなところなの？ちゃんと聞いたことなかったかも。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "うーん、お茶畑がすごく多くてさ。あと、天気が良い日は富士山もよく見える。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "いいね。実家の周りって、どんな感じなの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "田舎の方だから、周り田んぼだらけだよ。あと、海も近くて、桜えびとか有名なんだ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "桜えび？初めて聞いた。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "小さいピンク色のエビなんだけど、静岡でしか獲れないんだよね。かき揚げとかにするとめちゃくちゃ美味しい。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "え、それ食べてみたい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "今度お土産で買ってくるよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "やった、楽しみ。学校とかは、どんな感じだったの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "のんびりしてたよ。田舎だから、みんな自転車で通学してたし。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "いいね、なんか映画みたい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "うん、のんびりしてる街だよ。ここに比べると、断然田舎だけど。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "田舎の方が落ち着くとか、ある？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "あるかも。夜とか、星がめちゃくちゃ綺麗に見えるんだよね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "え、いいなそれ。見てみたい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 15,
+          "text": "今度連れてってあげようか。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 16,
+          "text": "え、ほんとに？行きたい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 17,
+          "text": "うん、約束。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "why-he-left",
+      "title": "Why He Left",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "そういえば、前に転勤でこっち来たって言ってたよね。あれ、結構急だったの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "うん、かなり急だった。辞令出たの、引っ越しの一ヶ月前くらいだったから。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "え、一ヶ月？それは焦るね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "マジで焦った。部屋探しも、引っ越し準備も、全部バタバタで。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "選べたりはしなかったの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "一応、候補は何ヶ所かあったんだけど、最終的には会社が決めた感じ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "それって、嫌じゃなかった？自分で選べないの。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "正直、最初はちょっと納得いかなかったかな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "だよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "でも、来てみたら意外と悪くなかったし。今はそんなに気にしてない。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "そう考えられるの、なんかカイトらしいね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "まあ、正直、うちの会社だと若手のうちは、会社の言うこと聞かないと厳しいっていうのもあるんだけどね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "え、そうなの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "うん。断ったら、次のチャンス回ってこなくなるかもしれないし。入ってまだ数年だから、余計にね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "それ、結構シビアだね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 15,
+          "text": "だから、正直、選べるようで選べなかった感じかな。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "do-you-miss-it",
+      "title": "Do You Miss It?",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "ね、正直に聞いていい？地元、恋しくなったりする？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "うーん...正直、たまになる。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "そうなんだ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "特に、こういう荷物届いた時とかね。家族とか、友達とか、ふと思い出すし。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "だよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "でも、最近は、ここもだいぶ自分の場所になってきた気がする。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "それ、嬉しいこと言うね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "いや、ほんとにそう思うから。ミカとかもいるし。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "なにそれ、急に。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "あはは、ごめん、変なこと言った。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "ううん、嬉しかったよ。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "a-small-gesture",
+      "title": "A Small Gesture",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "ね、そういえば、うちの親に何か送り返そうと思ってるんだけど。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "いいね。何にするか、もう決めてる？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "いや、まだなんだけど、この辺で有名な物を送りたいなとは思ってて。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "いいね。何か候補ある？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "いや、まだ全然。何かおすすめある？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "あの商店街の和菓子屋さん、結構有名だよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "あ、それいいね。行ってみようか。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "うん、行こう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "なんか、実家に送り返すの初めてだから、ちょっと新鮮な感じ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "そうだよね。でも、絶対喜んでくれると思うよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "だといいけど。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "わあ、綺麗に並んでるね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "ほんとだ。どれがいいかな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "これとか、季節限定って書いてあるよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "お、いいね。これにしようかな。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 15,
+          "text": "よし、買えた。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 16,
+          "text": "良かったね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 17,
+          "text": "ありがとう、付き合ってくれて。一人だったら、絶対決められなかった。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 18,
+          "text": "全然。楽しかったよ、こういうの。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 19,
+          "text": "だね。また今度、付き合ってよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 20,
+          "text": "うん、いつでも。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    }
+  ]
+}

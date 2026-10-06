@@ -1,0 +1,223 @@
+{
+  "collectionId": "exercise-class",
+  "scenes": [
+    {
+      "sceneId": "planning",
+      "items": [
+        {
+          "label": "〜ない？",
+          "patternId": "n5-masen-ka",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual invitation 〜ない？ (一緒に行かない？) = plain form of ませんか."
+        },
+        {
+          "label": "〜のよ",
+          "patternId": "n5-no-desu",
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 4. Casual explanatory 〜のよ. Line 2 also has bare explanatory の (あるの)."
+        },
+        {
+          "label": "〜と思います",
+          "patternId": null,
+          "sourceSpokenStart": 7,
+          "sourceSpokenEnd": 7,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜と思います — \"I think ~\" (〜と思う)."
+        },
+        {
+          "label": "〜しないと",
+          "patternId": "n5-naito-ikenai",
+          "sourceSpokenStart": 11,
+          "sourceSpokenEnd": 11,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Clipped 〜ないと (準備しないとですね), いけない omitted."
+        }
+      ]
+    },
+    {
+      "sceneId": "on-the-train",
+      "items": [
+        {
+          "label": "〜も",
+          "patternId": "n5-mo",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 9."
+        },
+        {
+          "label": "〜のよ",
+          "patternId": "n5-no-desu",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual explanatory 〜のよ."
+        },
+        {
+          "label": "〜ですか？",
+          "patternId": "n5-ka-question",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜くらい",
+          "patternId": "n5-kurai-gurai",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜ですね",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 6, 8."
+        },
+        {
+          "label": "〜より",
+          "patternId": "n5-wa-yori-desu",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "日本より、少ないです — より comparison without は."
+        }
+      ]
+    },
+    {
+      "sceneId": "exercise-class",
+      "items": [
+        {
+          "label": "〜ますよ",
+          "patternId": "n5-yo",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜なんですね",
+          "patternId": "n5-ndesu",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜するわね",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜わ(ね) — feminine sentence-ending わ (soft emphasis), here 紹介するわね."
+        },
+        {
+          "label": "〜ましょう",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜から",
+          "patternId": "n5-kara-because",
+          "sourceSpokenStart": 11,
+          "sourceSpokenEnd": 11,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜けど",
+          "patternId": "n5-kedo",
+          "sourceSpokenStart": 12,
+          "sourceSpokenEnd": 12,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "sceneId": "heading-home",
+      "items": [
+        {
+          "label": "〜ねー",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 8, 10. Lengthened ねー only on line 0."
+        },
+        {
+          "label": "〜より",
+          "patternId": "n5-wa-yori-desu",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Set phrase 思ったより (\"more than I expected\")."
+        },
+        {
+          "label": "〜でしょう？",
+          "patternId": "n5-deshou",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜ましょうか",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Used as \"shall we ~?\" (suggestion). Line 5 has plain ましょう."
+        },
+        {
+          "label": "〜たい",
+          "patternId": "n5-tai",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜たら",
+          "patternId": null,
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜たら — \"when/after ~; if ~\"."
+        }
+      ]
+    }
+  ]
+}

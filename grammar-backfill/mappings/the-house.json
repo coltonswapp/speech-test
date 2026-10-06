@@ -1,0 +1,182 @@
+{
+  "collectionId": "the-house",
+  "scenes": [
+    {
+      "sceneId": "grandpas-arrival",
+      "items": [
+        {
+          "label": "〜くなった",
+          "patternId": "n5-naru",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "i-adjective + なる (大きくなった)."
+        },
+        {
+          "label": "〜です",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 1, 7, 9."
+        },
+        {
+          "label": "〜だろう",
+          "patternId": "n5-darou",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Contracted 〜たろう (疲れたろう？ = 疲れただろう)."
+        },
+        {
+          "label": "〜な",
+          "patternId": "n5-naa",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 0. Line 0 is lengthened なあ."
+        },
+        {
+          "label": "〜てやる",
+          "patternId": null,
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てやる — \"do ~ for someone (casual/downward)\" (持ってやろう)."
+        },
+        {
+          "label": "〜よう",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 12,
+          "sourceSpokenEnd": 12,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 8. Plain volitional 〜(よ)う (入ろう) = casual form of ましょう; line 8 is the offer やろう."
+        }
+      ]
+    },
+    {
+      "sceneId": "around-the-house",
+      "items": [
+        {
+          "label": "〜てね",
+          "patternId": "n5-te-kudasai",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual て-form request + ね, ください dropped. (脱いでね)"
+        },
+        {
+          "label": "〜から、どうぞ",
+          "patternId": "n5-kara-because",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Reason から + どうぞ."
+        },
+        {
+          "label": "〜てるの",
+          "patternId": "n5-te-iru",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Contracted 〜てる + explanatory の."
+        },
+        {
+          "label": "〜でしょう？",
+          "patternId": "n5-deshou",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜ましょうね",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 12. 〜ましょうね."
+        },
+        {
+          "label": "〜たり、〜たりする",
+          "patternId": "n5-tari-tari",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "sceneId": "emis-room",
+      "items": [
+        {
+          "label": "〜よ",
+          "patternId": "n5-yo",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 5, 7."
+        },
+        {
+          "label": "〜ですね",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 4, 6, 8."
+        },
+        {
+          "label": "〜ておく",
+          "patternId": null,
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜ておく — \"do ~ in advance / for later\" (敷いておいた)."
+        },
+        {
+          "label": "〜でしょう？",
+          "patternId": "n5-deshou",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜てね",
+          "patternId": "n5-te-kudasai",
+          "sourceSpokenStart": 11,
+          "sourceSpokenEnd": 11,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 13. Casual て-form request + ね, ください dropped."
+        },
+        {
+          "label": "〜から",
+          "patternId": "n5-kara-because",
+          "sourceSpokenStart": 13,
+          "sourceSpokenEnd": 13,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 2."
+        }
+      ]
+    }
+  ]
+}

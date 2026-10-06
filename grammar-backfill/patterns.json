@@ -1,0 +1,1386 @@
+[
+  {
+    "id": "cha-ikenai-ja-ikenai",
+    "label": "ちゃいけない・じゃいけない",
+    "shortMeaning": "must not do (spoken)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "da-desu",
+    "label": "だ / です",
+    "shortMeaning": "to be",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-da-desu",
+    "label": "だ／です",
+    "shortMeaning": "to be (copula: am, is, are)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "dake",
+    "label": "だけ",
+    "shortMeaning": "only; just",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-janai-dewa-nai",
+    "label": "じゃない／ではない",
+    "shortMeaning": "to not be (negative copula)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "darou",
+    "label": "だろう",
+    "shortMeaning": "I think; probably",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-wa-topic",
+    "label": "は",
+    "shortMeaning": "topic marker",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "de",
+    "label": "で",
+    "shortMeaning": "in; at; by; with",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ga-subject",
+    "label": "が",
+    "shortMeaning": "subject marker",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "demo",
+    "label": "でも",
+    "shortMeaning": "but; however",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-o-wo",
+    "label": "を",
+    "shortMeaning": "object marker",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "deshou",
+    "label": "でしょう",
+    "shortMeaning": "I think; probably",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ni-location-time",
+    "label": "に",
+    "shortMeaning": "location/time particle; in; at; on",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "donna",
+    "label": "どんな",
+    "shortMeaning": "what kind of",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ni-e-direction",
+    "label": "に／へ",
+    "shortMeaning": "to (direction / destination)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "doushite",
+    "label": "どうして",
+    "shortMeaning": "why",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-de-location",
+    "label": "で",
+    "shortMeaning": "at; in (place of action)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "douyatte",
+    "label": "どうやって",
+    "shortMeaning": "how; by what means",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-de-means",
+    "label": "で",
+    "shortMeaning": "by; with; via (means/instrument)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ga",
+    "label": "が",
+    "shortMeaning": "subject marker; but",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-to-and-with",
+    "label": "と",
+    "shortMeaning": "and; with; quoting/connecting particle",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ga-arimasu",
+    "label": "があります",
+    "shortMeaning": "there is (non-living)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-mo",
+    "label": "も",
+    "shortMeaning": "too; also; as well",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ga-hoshii",
+    "label": "がほしい",
+    "shortMeaning": "to want something",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ya",
+    "label": "や",
+    "shortMeaning": "and; or (non-exhaustive list)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ga-imasu",
+    "label": "がいます",
+    "shortMeaning": "there is (living)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-no-possessive",
+    "label": "の",
+    "shortMeaning": "possessive / attributive particle (of)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "hou-ga-ii",
+    "label": "ほうがいい",
+    "shortMeaning": "had better; should",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-no-nominalizer",
+    "label": "の",
+    "shortMeaning": "nominalizer (turns clause/verb into noun)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "i-adjectives",
+    "label": "い-adjectives",
+    "shortMeaning": "i-adjectives",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ne",
+    "label": "ね",
+    "shortMeaning": "isn't it?; right?; seeking agreement",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ichiban",
+    "label": "一番",
+    "shortMeaning": "the most; the best",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-yo",
+    "label": "よ",
+    "shortMeaning": "you know; emphatic sentence-ending particle",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "issho-ni",
+    "label": "一緒に",
+    "shortMeaning": "together",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-naa",
+    "label": "なあ／な",
+    "shortMeaning": "sentence-ending particle (confirmation, admiration)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "itsumo",
+    "label": "いつも",
+    "shortMeaning": "always",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-o-go-honorific",
+    "label": "お／ご",
+    "shortMeaning": "polite/honorific prefix",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "janai-dewa-nai",
+    "label": "じゃない・ではない",
+    "shortMeaning": "to not be",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ga-arimasu",
+    "label": "があります",
+    "shortMeaning": "there is (non-living things)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ka",
+    "label": "か",
+    "shortMeaning": "question particle",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ga-imasu",
+    "label": "がいます",
+    "shortMeaning": "there is; to be (living things)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ka-ka",
+    "label": "か～か",
+    "shortMeaning": "or",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-i-adjectives",
+    "label": "い形容詞",
+    "shortMeaning": "i-adjective conjugation patterns",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "kara",
+    "label": "から",
+    "shortMeaning": "because; since; from",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-na-adjectives",
+    "label": "な形容詞",
+    "shortMeaning": "na-adjective conjugation patterns",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "kata",
+    "label": "方",
+    "shortMeaning": "how to do; way of doing",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-naru",
+    "label": "なる",
+    "shortMeaning": "to become",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "kedo",
+    "label": "けど",
+    "shortMeaning": "but; although",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ni-suru",
+    "label": "にする",
+    "shortMeaning": "to decide on ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "keredo-mo",
+    "label": "けれども",
+    "shortMeaning": "but; although",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ni-iku",
+    "label": "に行く（にいく）",
+    "shortMeaning": "go to do ~ (purpose)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "mada",
+    "label": "まだ",
+    "shortMeaning": "still; not yet",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-kata",
+    "label": "方（かた）",
+    "shortMeaning": "the way of doing ~; how to do ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "mada-te-imasen",
+    "label": "まだ～ていません",
+    "shortMeaning": "have not yet",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-naide",
+    "label": "ないで",
+    "shortMeaning": "without doing ~; do B without doing A",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "made",
+    "label": "まで",
+    "shortMeaning": "until; as far as",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-tai",
+    "label": "たい",
+    "shortMeaning": "want to do ~ (verb stem + たい)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "mae-ni",
+    "label": "前に",
+    "shortMeaning": "before; in front of",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ga-hoshii",
+    "label": "がほしい",
+    "shortMeaning": "to want something",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "masen-ka",
+    "label": "ませんか",
+    "shortMeaning": "would you; shall we",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-no-ga-suki",
+    "label": "のが好き",
+    "shortMeaning": "to like doing something",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "mashou",
+    "label": "ましょう",
+    "shortMeaning": "let's",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-tsumori",
+    "label": "つもり",
+    "shortMeaning": "plan to ~; intend to ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "mashouka",
+    "label": "ましょうか",
+    "shortMeaning": "shall I (offer)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-te-kudasai",
+    "label": "てください",
+    "shortMeaning": "please do ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "mo",
+    "label": "も",
+    "shortMeaning": "too; also",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-naide-kudasai",
+    "label": "ないでください",
+    "shortMeaning": "please don't do ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "mou",
+    "label": "もう",
+    "shortMeaning": "already; anymore",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-o-kudasai",
+    "label": "をください",
+    "shortMeaning": "please give me ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-temo-ii",
+    "label": "てもいいです",
+    "shortMeaning": "may I ~?; is OK to ~; permission",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "na-adjectives",
+    "label": "な-adjectives",
+    "shortMeaning": "na-adjectives",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-nakutemo-ii",
+    "label": "なくてもいい",
+    "shortMeaning": "don't have to ~ (no need)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "naa",
+    "label": "なあ",
+    "shortMeaning": "sentence ending; confirmation",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-tewa-ikenai",
+    "label": "てはいけない",
+    "shortMeaning": "must not; may not; cannot",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "naide",
+    "label": "ないで",
+    "shortMeaning": "without doing",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-cha-ikenai",
+    "label": "ちゃいけない／じゃいけない",
+    "shortMeaning": "must not do (spoken contraction)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "naide-kudasai",
+    "label": "ないでください",
+    "shortMeaning": "please don't",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-nakute-wa-ikenai",
+    "label": "なくてはいけない",
+    "shortMeaning": "must do; need to do",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "naito-ikenai",
+    "label": "ないといけない",
+    "shortMeaning": "must do",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-nakute-wa-naranai",
+    "label": "なくてはならない",
+    "shortMeaning": "must do; need to do ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "naku-temo-ii",
+    "label": "なくてもいい",
+    "shortMeaning": "don't have to",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-naito-ikenai",
+    "label": "ないといけない",
+    "shortMeaning": "must do; have an obligation to do ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "nakucha",
+    "label": "なくちゃ",
+    "shortMeaning": "must; gotta (spoken)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-nakucha",
+    "label": "なくちゃ",
+    "shortMeaning": "must do; gotta do ~ (casual)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "nakute-wa-ikenai",
+    "label": "なくてはいけない",
+    "shortMeaning": "must do",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-mashou",
+    "label": "ましょう",
+    "shortMeaning": "let's ~; shall we ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "nakute-wa-naranai",
+    "label": "なくてはならない",
+    "shortMeaning": "must do",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-mashouka",
+    "label": "ましょうか",
+    "shortMeaning": "shall I ~? (offer help)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "naru",
+    "label": "なる",
+    "shortMeaning": "to become",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-masen-ka",
+    "label": "ませんか",
+    "shortMeaning": "won't you ~?; shall we ~? (invitation)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ndesu",
+    "label": "んです",
+    "shortMeaning": "explanatory; emphasis",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-hou-ga-ii",
+    "label": "ほうがいい",
+    "shortMeaning": "had better; it'd be better to; should ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ne",
+    "label": "ね",
+    "shortMeaning": "isn't it?",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-wa-dou-desu-ka",
+    "label": "はどうですか",
+    "shortMeaning": "how about ~?; how is ~?",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ni",
+    "label": "に",
+    "shortMeaning": "destination; in; at; to",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-te-iru",
+    "label": "ている",
+    "shortMeaning": "ongoing action or resulting/current state",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ni-iku",
+    "label": "に行く",
+    "shortMeaning": "go to do",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-te-aru",
+    "label": "てある",
+    "shortMeaning": "is/has been done (resulting state; intentional prep)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ni-suru",
+    "label": "にする",
+    "shortMeaning": "to decide on",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ta-koto-ga-aru",
+    "label": "たことがある",
+    "shortMeaning": "to have done something before (experience)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ni-e",
+    "label": "に/へ",
+    "shortMeaning": "direction / destination",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-mada-te-imasen",
+    "label": "まだ～ていません",
+    "shortMeaning": "have not yet ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "no",
+    "label": "の",
+    "shortMeaning": "possessive",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-tari-tari",
+    "label": "たり～たり",
+    "shortMeaning": "do such things as A and B",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "no-desu",
+    "label": "のです",
+    "shortMeaning": "explanatory; emphasis",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ichiban",
+    "label": "一番（いちばん）",
+    "shortMeaning": "the most; the best",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "no-ga-heta",
+    "label": "のが下手",
+    "shortMeaning": "bad at doing",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-no-naka-de-ichiban",
+    "label": "の中で［A］が一番",
+    "shortMeaning": "out of this group, [A] is the best",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "no-ga-jouzu",
+    "label": "のが上手",
+    "shortMeaning": "good at",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-wa-yori-desu",
+    "label": "は〜より・・・です",
+    "shortMeaning": "[N1] is more ~ than [N2]",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "no-ga-suki",
+    "label": "のが好き",
+    "shortMeaning": "like doing",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-yori-hou-ga",
+    "label": "より～ほうが",
+    "shortMeaning": "[B] is more ~ than [A]",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "no-naka-de-ichiban",
+    "label": "の中で[A]が一番",
+    "shortMeaning": "out of group, A is best",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-mae-ni",
+    "label": "前に（まえに）",
+    "shortMeaning": "before; in front of ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "node",
+    "label": "ので",
+    "shortMeaning": "because; since",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-te-kara",
+    "label": "てから",
+    "shortMeaning": "after doing ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "o-go",
+    "label": "お / ご",
+    "shortMeaning": "honorific prefix",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-toki",
+    "label": "とき",
+    "shortMeaning": "when; at the time when ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "o-wo",
+    "label": "を",
+    "shortMeaning": "object marker",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-made",
+    "label": "まで",
+    "shortMeaning": "until; as far as; to (an extent)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "o-kudasai",
+    "label": "をください",
+    "shortMeaning": "please give me",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-kara-from",
+    "label": "から",
+    "shortMeaning": "from (starting point in time/place)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "shikashi",
+    "label": "しかし",
+    "shortMeaning": "but; however",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-sore-kara",
+    "label": "それから",
+    "shortMeaning": "and then; after that; since then",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "sore-kara",
+    "label": "それから",
+    "shortMeaning": "and then; after that",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-soshite",
+    "label": "そして",
+    "shortMeaning": "and; and then; thus",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "soshite",
+    "label": "そして",
+    "shortMeaning": "and; and then",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-mada",
+    "label": "まだ",
+    "shortMeaning": "still; not yet",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "sugiru",
+    "label": "すぎる",
+    "shortMeaning": "too much",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-mou",
+    "label": "もう",
+    "shortMeaning": "already; anymore; again",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ta-koto-ga-aru",
+    "label": "たことがある",
+    "shortMeaning": "have done before",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-kara-because",
+    "label": "から",
+    "shortMeaning": "because; since (reason)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "tai",
+    "label": "たい",
+    "shortMeaning": "want to do",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-node",
+    "label": "ので",
+    "shortMeaning": "because of; given that; since ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "tari-tari",
+    "label": "たり～たり",
+    "shortMeaning": "do things like A and B",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ga-but",
+    "label": "が",
+    "shortMeaning": "but; however (clause connector)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "te-aru",
+    "label": "てある",
+    "shortMeaning": "resulting state (has been done)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-demo",
+    "label": "でも",
+    "shortMeaning": "but; however; though ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "te-iru",
+    "label": "ている",
+    "shortMeaning": "ongoing / current state",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-kedo",
+    "label": "けど",
+    "shortMeaning": "but; however; although ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "te-kara",
+    "label": "てから",
+    "shortMeaning": "after doing",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-keredo-mo",
+    "label": "けれども",
+    "shortMeaning": "but; however; although ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "te-kudasai",
+    "label": "てください",
+    "shortMeaning": "please do",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-shikashi",
+    "label": "しかし",
+    "shortMeaning": "but; however ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "te-wa-ikenai",
+    "label": "てはいけない",
+    "shortMeaning": "must not",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-dake",
+    "label": "だけ",
+    "shortMeaning": "only; just; as much as ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "temo-ii-desu",
+    "label": "てもいいです",
+    "shortMeaning": "may; is OK to",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-sugiru",
+    "label": "すぎる",
+    "shortMeaning": "too much; excessively ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "to",
+    "label": "と",
+    "shortMeaning": "and; with",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-kurai-gurai",
+    "label": "くらい／ぐらい",
+    "shortMeaning": "about; approximately; to the extent that ~",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "toki",
+    "label": "とき",
+    "shortMeaning": "when",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ka-question",
+    "label": "か",
+    "shortMeaning": "question particle",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "totemo",
+    "label": "とても",
+    "shortMeaning": "very",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ka-ka-or",
+    "label": "か～か",
+    "shortMeaning": "A or B (choice)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "tsumori",
+    "label": "つもり",
+    "shortMeaning": "plan to; intend to",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-donna",
+    "label": "どんな",
+    "shortMeaning": "what kind of; what sort of",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "wa-topic",
+    "label": "は",
+    "shortMeaning": "topic marker",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-doushite",
+    "label": "どうして",
+    "shortMeaning": "why; for what reason",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "wa-yori-desu",
+    "label": "は〜より・・・です",
+    "shortMeaning": "more than",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-douyatte",
+    "label": "どうやって",
+    "shortMeaning": "how; in what way; by what means",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "wa-dou-desu-ka",
+    "label": "はどうですか",
+    "shortMeaning": "how about; how is",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-darou",
+    "label": "だろう",
+    "shortMeaning": "I think; it seems; probably; right?",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "ya",
+    "label": "や",
+    "shortMeaning": "and; or (incomplete list)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-deshou",
+    "label": "でしょう",
+    "shortMeaning": "I think; it seems; probably; right?",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "yo",
+    "label": "よ",
+    "shortMeaning": "emphasis ending",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-ndesu",
+    "label": "んです",
+    "shortMeaning": "explanatory/emphasis form (〜んです)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "yori-hou-ga",
+    "label": "より～ほうが",
+    "shortMeaning": "more than",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-no-desu",
+    "label": "のです",
+    "shortMeaning": "explanatory/emphasis form (〜のです)",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-no-ga-jouzu",
+    "label": "のが上手（のがじょうず）",
+    "shortMeaning": "to be good at doing something",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-no-ga-heta",
+    "label": "のが下手（のがへた）",
+    "shortMeaning": "to be bad at doing something",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-issho-ni",
+    "label": "一緒に（いっしょに）",
+    "shortMeaning": "together",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-itsumo",
+    "label": "いつも",
+    "shortMeaning": "always; usually; habitually",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  },
+  {
+    "id": "n5-totemo",
+    "label": "とても",
+    "shortMeaning": "very; awfully; exceedingly",
+    "formNote": null,
+    "jlptBand": 5,
+    "status": "seed"
+  }
+]

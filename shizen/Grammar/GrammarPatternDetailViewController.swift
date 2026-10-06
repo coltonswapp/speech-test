@@ -2,22 +2,40 @@
 //  GrammarPatternDetailViewController.swift
 //  shizen
 //
-//  Destination for a grammar pill on the dialogue highlights page. Laid out like
-//  the word dictionary screen: pattern header, How to use card, then the curriculum
-//  lesson when the pattern is tagged.
+//  Destination for a grammar pill on the dialogue highlights page. Inspect card:
+//  Pattern catalog meaning (when patternId resolves), this scene's tagged spoken
+//  line as the example, optional Hear for that spoken range, then curriculum /
+//  Gemini usage when available.
 //
 
 import UIKit
 
 enum GrammarPatternDetailPresenter {
 
+    struct HearContext {
+        let publishedAudioUrl: String?
+        let audioKey: String?
+        let cacheMetadata: RemoteAudioCacheMetadata?
+        let spokenJapaneseTexts: [String]
+        let tokenSync: DialogueTokenSync?
+    }
+
     /// Pushes onto the navigation stack, or presents in a navigation controller when there is none.
     static func push(
         pattern: DialogueGrammarPatternRef,
+        catalogPattern: DialogueTeachingPattern?,
+        exampleLines: [GrammarScenarioLine],
+        hearContext: HearContext?,
         request: GeminiGrammarUsage.Request?,
         from viewController: UIViewController
     ) {
-        let detail = GrammarPatternDetailViewController(pattern: pattern, request: request)
+        let detail = GrammarPatternDetailViewController(
+            pattern: pattern,
+            catalogPattern: catalogPattern,
+            exampleLines: exampleLines,
+            hearContext: hearContext,
+            request: request
+        )
         if let nav = viewController.navigationController {
             nav.pushViewController(detail, animated: true)
         } else {
@@ -31,6 +49,9 @@ final class GrammarPatternDetailViewController: UIViewController {
     private static let maxLessonExamples = 2
 
     private let pattern: DialogueGrammarPatternRef
+    private let catalogPattern: DialogueTeachingPattern?
+    private let exampleLines: [GrammarScenarioLine]
+    private let hearContext: GrammarPatternDetailPresenter.HearContext?
     private let request: GeminiGrammarUsage.Request?
     private let point: GrammarPoint?
 
@@ -38,11 +59,23 @@ final class GrammarPatternDetailViewController: UIViewController {
     private let contentStack = UIStackView()
     private let patternLabel = FuriganaTranscriptLabel()
     private let definitionLabel = UILabel()
+    private let formNoteLabel = UILabel()
     private let usageCard = DialogueGrammarUsageCardView()
+    private let audioPlayer = GrammarAudioPlayer()
     private var loadTask: Task<Void, Never>?
+    private var isHearing = false
 
-    init(pattern: DialogueGrammarPatternRef, request: GeminiGrammarUsage.Request?) {
+    init(
+        pattern: DialogueGrammarPatternRef,
+        catalogPattern: DialogueTeachingPattern?,
+        exampleLines: [GrammarScenarioLine],
+        hearContext: GrammarPatternDetailPresenter.HearContext?,
+        request: GeminiGrammarUsage.Request?
+    ) {
         self.pattern = pattern
+        self.catalogPattern = catalogPattern
+        self.exampleLines = exampleLines
+        self.hearContext = hearContext
         self.request = request
         point = pattern.grammarPointID.flatMap { GrammarCurriculum.point(id: $0) }
         super.init(nibName: nil, bundle: nil)
@@ -54,6 +87,7 @@ final class GrammarPatternDetailViewController: UIViewController {
         super.viewDidDisappear(animated)
         if isMovingFromParent || isBeingDismissed || navigationController?.isBeingDismissed == true {
             loadTask?.cancel()
+            audioPlayer.stop()
         }
     }
 
@@ -87,6 +121,7 @@ final class GrammarPatternDetailViewController: UIViewController {
         ])
 
         configureHeader()
+        configureExampleSection()
         contentStack.addArrangedSubview(Self.makeHairlineDivider())
         contentStack.addArrangedSubview(usageCard)
         configureLessonSection()
@@ -104,6 +139,12 @@ final class GrammarPatternDetailViewController: UIViewController {
 
     // MARK: Header
 
+    private var displayLabel: String {
+        let stamped = pattern.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !stamped.isEmpty { return stamped }
+        return catalogPattern?.label ?? pattern.patternId ?? ""
+    }
+
     private func configureHeader() {
         let font: UIFont = {
             let base = UIFont.preferredFont(forTextStyle: .largeTitle)
@@ -117,7 +158,11 @@ final class GrammarPatternDetailViewController: UIViewController {
         patternLabel.accessibilityTraits = .header
         JapaneseFuriganaBuilder.applyScrubDisplay(
             to: patternLabel,
-            attributed: JapaneseFuriganaBuilder.attributedString(for: pattern.label, font: font, textColor: .label),
+            attributed: JapaneseFuriganaBuilder.attributedString(
+                for: displayLabel,
+                font: font,
+                textColor: .label
+            ),
             contentInsets: UIEdgeInsets(
                 top: JapaneseFuriganaBuilder.wordDetailRubyTopInset(for: font),
                 left: 0,
@@ -129,15 +174,168 @@ final class GrammarPatternDetailViewController: UIViewController {
         definitionLabel.font = .preferredFont(forTextStyle: .subheadline)
         definitionLabel.textColor = .secondaryLabel
         definitionLabel.numberOfLines = 0
-        let definition = point?.shortDefinition.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let catalogMeaning = catalogPattern?.shortMeaning?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let lessonDefinition = point?.shortDefinition
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let definition = !catalogMeaning.isEmpty ? catalogMeaning : lessonDefinition
         definitionLabel.text = definition.isEmpty ? nil : definition
         definitionLabel.isHidden = definition.isEmpty
 
-        let header = UIStackView(arrangedSubviews: [patternLabel, definitionLabel])
+        formNoteLabel.font = .preferredFont(forTextStyle: .footnote)
+        formNoteLabel.textColor = .tertiaryLabel
+        formNoteLabel.numberOfLines = 0
+        let formNote = catalogPattern?.formNote?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        formNoteLabel.text = formNote.isEmpty ? nil : formNote
+        formNoteLabel.isHidden = formNote.isEmpty
+
+        let header = UIStackView(arrangedSubviews: [patternLabel, definitionLabel, formNoteLabel])
         header.axis = .vertical
         header.alignment = .fill
         header.spacing = 2
         contentStack.addArrangedSubview(header)
+    }
+
+    // MARK: Scene example + Hear
+
+    private var exampleSpokenLines: [GrammarScenarioLine] {
+        let spoken = exampleLines.filter(\.isSpokenLine)
+        guard let indices = pattern.sourceSpokenIndices, !indices.isEmpty else {
+            return []
+        }
+        return indices.compactMap { index in
+            spoken.indices.contains(index) ? spoken[index] : nil
+        }
+    }
+
+    private func configureExampleSection() {
+        let lines = exampleSpokenLines
+        guard !lines.isEmpty else { return }
+
+        let title = UILabel()
+        title.text = "IN THIS SCENE"
+        title.font = .preferredFont(forTextStyle: .subheadline)
+        title.textColor = .secondaryLabel
+
+        let section = UIStackView(arrangedSubviews: [title])
+        section.axis = .vertical
+        section.alignment = .fill
+        section.spacing = 10
+        section.setCustomSpacing(8, after: title)
+
+        for line in lines {
+            section.addArrangedSubview(Self.makeSceneExampleRow(line))
+        }
+
+        if canHear {
+            var config = UIButton.Configuration.glass()
+            config.cornerStyle = .capsule
+            config.title = "Hear"
+            config.image = UIImage(
+                systemName: "speaker.wave.2.fill",
+                withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+            )
+            config.imagePadding = 6
+            config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+                var outgoing = incoming
+                outgoing.font = .systemFont(ofSize: 15, weight: .semibold)
+                return outgoing
+            }
+            let hearButton = UIButton(configuration: config)
+            hearButton.accessibilityLabel = "Hear this pattern in the scene"
+            hearButton.addAction(UIAction { [weak self] _ in
+                self?.toggleHear()
+            }, for: .touchUpInside)
+            let buttonRow = UIStackView(arrangedSubviews: [hearButton, UIView()])
+            buttonRow.axis = .horizontal
+            section.addArrangedSubview(buttonRow)
+        }
+
+        contentStack.addArrangedSubview(Self.makeHairlineDivider())
+        contentStack.addArrangedSubview(section)
+    }
+
+    private var canHear: Bool {
+        guard let hearContext,
+              let indices = pattern.sourceSpokenIndices,
+              !indices.isEmpty
+        else { return false }
+        let hasAudio =
+            !(hearContext.publishedAudioUrl?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            || !(hearContext.audioKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        return hasAudio
+    }
+
+    private func toggleHear() {
+        guard let hearContext,
+              let indices = pattern.sourceSpokenIndices,
+              let first = indices.first
+        else { return }
+
+        if isHearing {
+            audioPlayer.stop()
+            isHearing = false
+            return
+        }
+
+        let dialogueLines = hearContext.spokenJapaneseTexts
+        let fallback = dialogueLines.indices.contains(first)
+            ? dialogueLines[first]
+            : (exampleSpokenLines.first?.japanese ?? displayLabel)
+
+        isHearing = true
+        let finished = { [weak self] in
+            self?.isHearing = false
+        }
+
+        if indices.count == 1 {
+            audioPlayer.playDialogueLine(
+                at: first,
+                publishedAudioUrl: hearContext.publishedAudioUrl,
+                audioKey: hearContext.audioKey,
+                cacheMetadata: hearContext.cacheMetadata,
+                dialogueLines: dialogueLines,
+                fallbackText: fallback,
+                tokenSync: hearContext.tokenSync,
+                onFinished: finished
+            )
+        } else {
+            audioPlayer.playDialogueSequence(
+                spokenIndices: indices,
+                publishedAudioUrl: hearContext.publishedAudioUrl,
+                audioKey: hearContext.audioKey,
+                cacheMetadata: hearContext.cacheMetadata,
+                dialogueLines: dialogueLines,
+                fallbackText: fallback,
+                tokenSync: hearContext.tokenSync,
+                onSpokenIndexStart: { _ in },
+                onFinished: finished
+            )
+        }
+    }
+
+    private static func makeSceneExampleRow(_ line: GrammarScenarioLine) -> UIView {
+        let japanese = UILabel()
+        japanese.font = .preferredFont(forTextStyle: .body)
+        japanese.textColor = .label
+        japanese.numberOfLines = 0
+        let speaker = line.speaker.trimmingCharacters(in: .whitespacesAndNewlines)
+        japanese.text = speaker.isEmpty ? line.japanese : "\(speaker): \(line.japanese)"
+
+        let english = UILabel()
+        english.font = .preferredFont(forTextStyle: .subheadline)
+        english.textColor = .secondaryLabel
+        english.numberOfLines = 0
+        let englishText = line.english?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        english.text = englishText.isEmpty ? nil : englishText
+        english.isHidden = englishText.isEmpty
+
+        let row = UIStackView(arrangedSubviews: [japanese, english])
+        row.axis = .vertical
+        row.alignment = .fill
+        row.spacing = 2
+        return row
     }
 
     // MARK: Lesson

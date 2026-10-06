@@ -1,0 +1,507 @@
+{
+  "collectionId": "family-roots",
+  "scenes": [
+    {
+      "sceneId": "a-call-from-home",
+      "title": "A Call From Home",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あ、ミカさん。お疲れ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "お疲れ。今帰り？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "うん、そう。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "そういえば、今日お母さんから電話あったんだ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "そうなんだ。何の話だったの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "もうすぐおばあちゃんの誕生日なんだって。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "へえ、いくつになるの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "確か、九十だったかな。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "それはめでたいね。会いに行くの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "うーん、どうしようかな。最近全然会ってなくて。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "おばあちゃんの家、遠いの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "いや、実は電車で一時間くらいなんだよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "え、そんなに近いの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "だよね。それなのに、もう二、三ヶ月くらい帰ってなくて、ちょっと罪悪感ある。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "それは行った方がいいかもね。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "deciding-to-go",
+      "title": "Deciding to Go",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "そういえば、おばあちゃんのところ、結局どうするの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "うーん、まだ迷ってる。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "何が引っかかってるの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "実は、今週末カイトとご飯行けたらいいなって思ってたんだよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "あ、それは別にいつでもできるじゃん。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "それはそうなんだけど。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "おばあちゃんの誕生日は今しかないし。ご飯は僕、逃げないから。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "それ、なんか安心する。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "行っておいでよ。帰ってきたら、ゆっくりご飯行こう。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "うん、そうする。じゃあ、今週末、金曜の夜から泊まりで行ってこようかな。でも、ほんとにいいの？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "全然いいって。おばあちゃんの誕生日の方が大事でしょ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "そう言ってもらえると助かる。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "いいね。気をつけて行ってきて。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "ありがとう。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "seeing-her-off",
+      "title": "Seeing Her Off",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "何時の電車乗るんだっけ？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "七時のに乗る予定。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "じゃあ、帰りは日曜くらい？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "たぶんね。日曜の夕方くらいには戻ると思う。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "あ、そういえば、おばあちゃんに何か持っていく？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "あ、そうだ。忘れてた。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "あそこのお店、良さそうだよ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "これにしよう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "いいと思う。喜んでくれそう。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "じゃあ、気をつけて。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "うん、行ってきます。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "行ってらっしゃい。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "あ、ちゃんと戻ってきてよ。ご飯食べに行きたいから。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "やめてよ、もう。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "a-phone-call",
+      "title": "A Phone Call",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "もしもし。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "あ、カイト。今大丈夫？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "うん、全然大丈夫だよ。どう、そっちは？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "うん、楽しくやってる。おばあちゃん、めちゃくちゃ喜んでくれて。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "それは良かった。最近どんな感じで過ごしてるの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "うーん、色々だよ。散歩したり、一緒にご飯食べたり。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "いいね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "昨日は、おじいちゃんのお墓参りにも行ったんだ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "そうなんだ。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "おばあちゃん、私が帰ってきたの、本当に喜んでくれてる感じ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "へえ、それは嬉しいね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "でしょ？あと、家にいる間ずっとお菓子作ってくれて。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "それ、絶対美味しいやつじゃん。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "うん。実は、帰る時に何か持って帰ろうと思ってる。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "え、何持って帰るの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 15,
+          "text": "うーん、まだ決めてない。楽しみにしてて。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 16,
+          "text": "いいね、楽しみにしてる。日曜には戻ってくるんだよね？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 17,
+          "text": "うん、予定通り。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 18,
+          "text": "了解。気をつけて帰ってきてね。駅まで迎えに行くから。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 19,
+          "text": "え、いいの？ありがとう。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 20,
+          "text": "うん、じゃあ日曜に。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 21,
+          "text": "うん、またね。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "back-sunday-evening",
+      "title": "Back Sunday Evening",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "おかえりー。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "ただいまー。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "なんか、顔明るいね。良い週末だった？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "うん、すごく良かった。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "見て、これ。おばあちゃんのどら焼きのレシピ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "え、本当に書いてもらったの？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "うん。一緒に作ってる時に、初めてちゃんと教えてもらったんだ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "なんか、いいエピソードだね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "でしょ？小さい頃から見てたのに、レシピはちゃんと聞いたことなかったから。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "それ、今度一緒に作ってみない？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "いいね。じゃあ、来週末とかどう？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "賛成。楽しみにしてる。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": []
+    },
+    {
+      "sceneId": "eating-together",
+      "title": "Eating Together",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "はいー、いただきますー。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "いただきます。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "これ、めっちゃ美味しい。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "ほんとに？よかった。おばあちゃんのレシピ通りにできたかな。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "完璧だと思う。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "そういえば、週末のこと、まだちゃんと話してなかったよね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "そうだね、聞きたい。どうだった？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "楽しかったよ。ただ…",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "おばあちゃん、前より疲れやすくなってた気がして。物忘れも、ちょっと増えた気がする。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "そっか…それ、ちょっと心配だね。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "うん。どうしたらいいのか、正直よく分からなくて。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "今すぐ解決できることじゃないかもしれないけど、一人で抱えなくていいから。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "ありがとう。それだけで、ちょっと楽になる。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "いつでも話して。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "うん。",
+          "speaker": "Mika"
+        }
+      ],
+      "grammar": []
+    }
+  ]
+}

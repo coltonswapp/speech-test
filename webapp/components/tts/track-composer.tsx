@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { ChevronLeft } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +26,8 @@ type CompositionMode = "narration" | "conversation";
 
 export function TrackComposer({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const fromReview = searchParams.get("from") === "review";
 
   const { data, isLoading } = useQuery({
     queryKey: ["tts-project", projectId],
@@ -130,6 +135,15 @@ export function TrackComposer({ projectId }: { projectId: string }) {
   if (isLoading || !data) {
     return (
       <div className="flex flex-1 flex-col gap-4">
+        {fromReview && (
+          <Link
+            href="/tts/review"
+            className="inline-flex w-fit items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2.5 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
+          >
+            <ChevronLeft className="size-4" />
+            Back to review queue
+          </Link>
+        )}
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -152,6 +166,15 @@ export function TrackComposer({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6">
+      {fromReview && (
+        <Link
+          href="/tts/review"
+          className="inline-flex w-fit items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2.5 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
+        >
+          <ChevronLeft className="size-4" />
+          Back to review queue
+        </Link>
+      )}
       {sourceScenarioId && (
         <div className="flex flex-col gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <span className="text-muted-foreground">

@@ -1,0 +1,29 @@
+{
+  "collectionId": "dinner-plans",
+  "scenes": [
+    {
+      "sceneId": "planning-availability",
+      "items": []
+    },
+    {
+      "sceneId": "meeting-up",
+      "items": []
+    },
+    {
+      "sceneId": "choosing-where-to-eat",
+      "items": []
+    },
+    {
+      "sceneId": "ordering-food",
+      "items": []
+    },
+    {
+      "sceneId": "small-talk-during-the-meal",
+      "items": []
+    },
+    {
+      "sceneId": "heading-home",
+      "items": []
+    }
+  ]
+}

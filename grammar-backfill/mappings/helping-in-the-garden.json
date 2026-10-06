@@ -1,0 +1,97 @@
+{
+  "collectionId": "helping-in-the-garden",
+  "scenes": [
+    {
+      "sceneId": "watering-the-watermelons",
+      "items": [
+        {
+          "label": "〜てください",
+          "patternId": "n5-te-kudasai",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 4."
+        },
+        {
+          "label": "〜てる",
+          "patternId": "n5-te-iru",
+          "sourceSpokenStart": 7,
+          "sourceSpokenEnd": 7,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 5, 6, 10, 11. Contracted 〜てる; line 5 is 〜てました and line 10 is past 〜てた."
+        }
+      ]
+    },
+    {
+      "sceneId": "checking-on-the-vines",
+      "items": [
+        {
+          "label": "〜ています",
+          "patternId": "n5-te-iru",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜てる",
+          "patternId": "n5-te-iru",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Contracted 〜てる (なってるわよ)."
+        }
+      ]
+    },
+    {
+      "sceneId": "a-memory-surfaces",
+      "items": [
+        {
+          "label": "〜てくれる",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てくれる — \"someone does ~ (for me)\". Also on spoken line 2 (手伝ってくれたのよ)."
+        },
+        {
+          "label": "〜てる",
+          "patternId": "n5-te-iru",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 6. Contracted 〜てる; line 6 is past 〜てた."
+        }
+      ]
+    },
+    {
+      "sceneId": "the-harvest",
+      "items": [
+        {
+          "label": "〜ましょう",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 14,
+          "sourceSpokenEnd": 14,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Line 12 has 〜ましょうか (separate pattern n5-mashouka)."
+        },
+        {
+          "label": "〜てね",
+          "patternId": "n5-te-kudasai",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual て-form request + ね (気をつけてね), ください dropped."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,235 @@
+{
+  "description": "Draft teaching patterns prepared for grammar backfill (insert-missing). Does not replace the N5 CSV seed.",
+  "patterns": [
+    {
+      "id": "te-shimau",
+      "form": "〜てしまう",
+      "gloss": "end up ~; accidentally ~",
+      "jlptBand": 4,
+      "category": "experience_aspect",
+      "status": "seed",
+      "notes": "Attach to the て-form. Casual speech often contracts to 〜ちゃう or 〜じゃう.",
+      "orderIndex": 200
+    },
+    {
+      "id": "te-kuru",
+      "form": "〜てくる",
+      "gloss": "come to ~; go and ~",
+      "jlptBand": 4,
+      "category": "time_sequence",
+      "status": "seed",
+      "notes": "Attach to the て-form for a change that arrives, or for going to do something and coming back.",
+      "orderIndex": 201
+    },
+    {
+      "id": "te-miru",
+      "form": "〜てみる",
+      "gloss": "try ~",
+      "jlptBand": 4,
+      "category": "suggestion_invitation",
+      "status": "seed",
+      "notes": "Attach to the て-form when trying something to see what happens.",
+      "orderIndex": 202
+    },
+    {
+      "id": "te-kureru",
+      "form": "〜てくれる",
+      "gloss": "someone does ~ for me",
+      "jlptBand": 4,
+      "category": "request",
+      "status": "seed",
+      "notes": "Attach to the て-form when someone does a favor for the speaker.",
+      "orderIndex": 203
+    },
+    {
+      "id": "to-omou",
+      "form": "〜と思う",
+      "gloss": "I think ~",
+      "jlptBand": 4,
+      "category": "other",
+      "status": "seed",
+      "notes": "Put after a plain-form clause to say what you think.",
+      "orderIndex": 204
+    },
+    {
+      "id": "wa-feminine",
+      "form": "〜わ",
+      "gloss": "soft feminine ending",
+      "jlptBand": 4,
+      "category": "particle",
+      "status": "seed",
+      "notes": "Soft sentence-ending particle, often used by women; can soften or emphasize.",
+      "orderIndex": 205
+    },
+    {
+      "id": "sou-looks",
+      "form": "〜そう",
+      "gloss": "looks ~; seems ~",
+      "jlptBand": 4,
+      "category": "other",
+      "status": "seed",
+      "notes": "Attach to an adjective stem or verb stem for how something looks or seems.",
+      "orderIndex": 206
+    },
+    {
+      "id": "de-ii",
+      "form": "〜でいい",
+      "gloss": "~ is fine",
+      "jlptBand": 4,
+      "category": "permission",
+      "status": "seed",
+      "notes": "Use after a noun or て-form to accept something as good enough.",
+      "orderIndex": 207
+    },
+    {
+      "id": "tara",
+      "form": "〜たら",
+      "gloss": "when ~; if ~",
+      "jlptBand": 4,
+      "category": "time_sequence",
+      "status": "seed",
+      "notes": "Conditional or \"when\" built from the past た-form. 〜たらいい asks or suggests what would be good.",
+      "orderIndex": 208
+    },
+    {
+      "id": "honorific-o-kudasai",
+      "form": "お〜ください",
+      "gloss": "please (honorific)",
+      "jlptBand": 4,
+      "category": "request",
+      "status": "seed",
+      "notes": "Polite request with お plus stem plus ください. A softer ask uses お〜いただけます.",
+      "orderIndex": 209
+    },
+    {
+      "id": "ki-ga-suru",
+      "form": "〜気がする",
+      "gloss": "I feel like ~",
+      "jlptBand": 4,
+      "category": "other",
+      "status": "seed",
+      "notes": "Put after a clause or noun plus の to say you have a feeling or hunch.",
+      "orderIndex": 210
+    },
+    {
+      "id": "kana",
+      "form": "〜かな",
+      "gloss": "I wonder",
+      "jlptBand": 4,
+      "category": "question",
+      "status": "seed",
+      "notes": "Soft wondering at the end of a clause. 〜かしら is a similar, often feminine, form.",
+      "orderIndex": 211
+    },
+    {
+      "id": "mashita",
+      "form": "〜ました",
+      "gloss": "polite past",
+      "jlptBand": 5,
+      "category": "conjugation",
+      "status": "seed",
+      "notes": "Polite past affirmative. The negative past is 〜ませんでした.",
+      "orderIndex": 212
+    },
+    {
+      "id": "te-morau",
+      "form": "〜てもらう",
+      "gloss": "have someone do ~ for me",
+      "jlptBand": 4,
+      "category": "request",
+      "status": "seed",
+      "notes": "Attach to the て-form when you receive an action from someone.",
+      "orderIndex": 213
+    },
+    {
+      "id": "bakari",
+      "form": "〜ばかり",
+      "gloss": "just did ~; only ~",
+      "jlptBand": 4,
+      "category": "quantity_extent",
+      "status": "seed",
+      "notes": "After た means \"just did\"; after a noun or stem can mean \"nothing but\". Spoken ばっかり is common.",
+      "orderIndex": 214
+    },
+    {
+      "id": "wake-janai",
+      "form": "〜わけじゃない",
+      "gloss": "it's not that ~",
+      "jlptBand": 4,
+      "category": "contrast",
+      "status": "seed",
+      "notes": "Denies a conclusion or implication after a clause.",
+      "orderIndex": 215
+    },
+    {
+      "id": "passive-rareru",
+      "form": "〜(ら)れる",
+      "gloss": "passive (be ~ed)",
+      "jlptBand": 4,
+      "category": "conjugation",
+      "status": "seed",
+      "notes": "Passive form: ichidan verbs take られる; godan take れる.",
+      "orderIndex": 216
+    },
+    {
+      "id": "mitai",
+      "form": "〜みたい",
+      "gloss": "seems ~; like ~",
+      "jlptBand": 4,
+      "category": "comparison",
+      "status": "seed",
+      "notes": "After a noun or plain clause for resemblance or hearsay-like seeming.",
+      "orderIndex": 217
+    },
+    {
+      "id": "koto-ni-suru",
+      "form": "〜ことにする",
+      "gloss": "decide to ~",
+      "jlptBand": 4,
+      "category": "other",
+      "status": "seed",
+      "notes": "After a dictionary-form verb, you decide to do it. Related 〜ことになる means it has been decided or turns out that way.",
+      "orderIndex": 218
+    },
+    {
+      "id": "shika-nai",
+      "form": "〜しかない",
+      "gloss": "only ~; nothing but ~",
+      "jlptBand": 4,
+      "category": "quantity_extent",
+      "status": "seed",
+      "notes": "しか replaces が or を and pairs with a negative: only X exists or is possible.",
+      "orderIndex": 219
+    },
+    {
+      "id": "te-oku",
+      "form": "〜ておく",
+      "gloss": "do ~ in advance",
+      "jlptBand": 4,
+      "category": "time_sequence",
+      "status": "seed",
+      "notes": "Attach to the て-form for doing something ahead of time or leaving it done.",
+      "orderIndex": 220
+    },
+    {
+      "id": "te-yokatta",
+      "form": "〜てよかった",
+      "gloss": "I'm glad I ~",
+      "jlptBand": 4,
+      "category": "other",
+      "status": "seed",
+      "notes": "Attach to the て-form to say you're glad something happened.",
+      "orderIndex": 221
+    },
+    {
+      "id": "kamoshirenai",
+      "form": "〜かもしれない",
+      "gloss": "might ~; maybe ~",
+      "jlptBand": 4,
+      "category": "other",
+      "status": "seed",
+      "notes": "Put after a plain-form clause for possibility.",
+      "orderIndex": 222
+    }
+  ]
+}

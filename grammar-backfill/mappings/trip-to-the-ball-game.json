@@ -1,0 +1,197 @@
+{
+  "collectionId": "trip-to-the-ball-game",
+  "scenes": [
+    {
+      "sceneId": "setup-and-planning",
+      "items": [
+        {
+          "label": "〜んだけど",
+          "patternId": "n5-ndesu",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual 〜んだけど: んだ (= んです) + けど."
+        },
+        {
+          "label": "〜くない？",
+          "patternId": "n5-i-adjectives",
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Negative i-adjective 楽しくない？ used as a rhetorical \"isn't it ~?\"."
+        },
+        {
+          "label": "〜ておく",
+          "patternId": null,
+          "sourceSpokenStart": 11,
+          "sourceSpokenEnd": 11,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜ておく (〜とく) — \"do ~ in advance\" (連絡しとく)."
+        },
+        {
+          "label": "〜なくても",
+          "patternId": "n5-nakutemo-ii",
+          "sourceSpokenStart": 12,
+          "sourceSpokenEnd": 12,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "いい omitted (無理しなくても)."
+        }
+      ]
+    },
+    {
+      "sceneId": "arriving-and-scanning-tickets",
+      "items": [
+        {
+          "label": "〜てよかった",
+          "patternId": null,
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てよかった — \"I'm glad ~\"."
+        },
+        {
+          "label": "〜てきた",
+          "patternId": null,
+          "sourceSpokenStart": 9,
+          "sourceSpokenEnd": 9,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てくる (〜てきた) — \"change that has come about / started to ~\"."
+        },
+        {
+          "label": "〜じゃん",
+          "patternId": null,
+          "sourceSpokenStart": 12,
+          "sourceSpokenEnd": 12,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜じゃん — \"isn't it ~; you know\" (casual じゃないか)."
+        }
+      ]
+    },
+    {
+      "sceneId": "finding-seats-and-beer",
+      "items": [
+        {
+          "label": "〜くない？",
+          "patternId": "n5-i-adjectives",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 8. Negative i-adjective 〜くない？ used as a rhetorical \"isn't it ~?\"."
+        },
+        {
+          "label": "〜てくる",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てくる — \"go and do ~ (and come back)\" (買ってくる)."
+        },
+        {
+          "label": "〜ことにする",
+          "patternId": null,
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜ことにする — \"decide to ~; treat it as ~\" (そういうことにしとく)."
+        }
+      ]
+    },
+    {
+      "sceneId": "kaitos-baseball-history",
+      "items": [
+        {
+          "label": "〜たことがある",
+          "patternId": "n5-ta-koto-ga-aru",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual 〜てたことある (やってたことあるの)."
+        },
+        {
+          "label": "〜たかったんだけど",
+          "patternId": "n5-tai",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Past たかった + んだけど."
+        },
+        {
+          "label": "〜ちゃう",
+          "patternId": null,
+          "sourceSpokenStart": 7,
+          "sourceSpokenEnd": 7,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜ちゃう (〜てしまう) — \"end up ~ (with regret)\" (落ちちゃって)."
+        }
+      ]
+    },
+    {
+      "sceneId": "seventh-inning-stretch",
+      "items": [
+        {
+          "label": "〜たタイミングで",
+          "patternId": null,
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜たタイミングで — \"at the moment ~\"."
+        },
+        {
+          "label": "〜しかない",
+          "patternId": null,
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜しかない — \"have no choice but to ~\"."
+        }
+      ]
+    },
+    {
+      "sceneId": "heading-home",
+      "items": [
+        {
+          "label": "〜てよかった",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てよかった — \"I'm glad ~\". Also on spoken line 4."
+        },
+        {
+          "label": "〜じゃないし",
+          "patternId": "n5-janai-dewa-nai",
+          "sourceSpokenStart": 6,
+          "sourceSpokenEnd": 6,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Negative copula + reason/list し (〜じゃないし); し has no catalog entry."
+        },
+        {
+          "label": "〜てね",
+          "patternId": "n5-te-kudasai",
+          "sourceSpokenStart": 9,
+          "sourceSpokenEnd": 9,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual て-form request + ね (誘ってね), ください dropped."
+        }
+      ]
+    }
+  ]
+}

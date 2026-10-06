@@ -1,0 +1,308 @@
+{
+  "collectionId": "train-station",
+  "scenes": [
+    {
+      "sceneId": "buying-a-ticket",
+      "title": "Buying a ticket",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "東京に行きたいんですけど。。。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 1,
+          "text": "はい、わかりました。こちらへどうぞ。",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 2,
+          "text": "まずはきっぷですよね。一人ですか？",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 3,
+          "text": "はい、一人です。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 4,
+          "text": "かしこまりました。少々お待ちください。",
+          "speaker": "Attendant"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜たいんですけど。。。"
+        },
+        {
+          "label": "へ (direction)"
+        },
+        {
+          "label": "〜よね"
+        },
+        {
+          "label": "〜です"
+        },
+        {
+          "label": "お〜ください"
+        }
+      ]
+    },
+    {
+      "sceneId": "asking-the-price",
+      "title": "Asking the price & paying",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません、いくらですか。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 1,
+          "text": "東京までは、二千三百円です。",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 2,
+          "text": "二千三百円ですね。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 3,
+          "text": "お支払いは現金ですか、カードですか。",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 4,
+          "text": "現金でお願いします。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 5,
+          "text": "ありがとうございます。少々お待ちください。",
+          "speaker": "Attendant"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "まで (endpoint)"
+        },
+        {
+          "label": "〜ね"
+        },
+        {
+          "label": "AですかBですか"
+        },
+        {
+          "label": "〜でお願いします"
+        }
+      ]
+    },
+    {
+      "sceneId": "which-platform",
+      "title": "Which platform / directions",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "東京行きは、何番線ですか。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 1,
+          "text": "三番線です。",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 2,
+          "text": "三番線は、どこですか。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 3,
+          "text": "あちらの階段を上って、右側です。",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 4,
+          "text": "階段を上って、右ですね。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 5,
+          "text": "はい、そうです。",
+          "speaker": "Attendant"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜行き (bound for)"
+        },
+        {
+          "label": "どこ (where)"
+        },
+        {
+          "label": "〜て、〜 (sequence)"
+        },
+        {
+          "label": "〜ね"
+        }
+      ]
+    },
+    {
+      "sceneId": "next-train",
+      "title": "Time & the next train",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "次の電車は、何時ですか。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 1,
+          "text": "次の急行は、十時十五分です。",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 2,
+          "text": "急行ですか。普通もありますか。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 3,
+          "text": "はい。普通は、十時半に出ます。",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 4,
+          "text": "じゃあ、急行でお願いします。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 5,
+          "text": "かしこまりました。",
+          "speaker": "Attendant"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜時〜分 (telling time)"
+        },
+        {
+          "label": "〜も (also)"
+        },
+        {
+          "label": "〜に出ます"
+        },
+        {
+          "label": "〜でお願いします"
+        }
+      ]
+    },
+    {
+      "sceneId": "missed-train",
+      "title": "A complication (missed train)",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません、電車に乗り遅れてしまいました。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 1,
+          "text": "あ、それは大変でしたね。大丈夫ですよ。",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 2,
+          "text": "このきっぷは、まだ使えますか。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 3,
+          "text": "はい、次の電車にお乗りいただけます。",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 4,
+          "text": "よかった。ありがとうございます。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 5,
+          "text": "次は十一時です。お気をつけて。",
+          "speaker": "Attendant"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜てしまいました"
+        },
+        {
+          "label": "〜よ"
+        },
+        {
+          "label": "使える (potential)"
+        },
+        {
+          "label": "お〜いただけます"
+        }
+      ]
+    },
+    {
+      "sceneId": "shinkansen-platform-guidance",
+      "title": "Shinkansen Platform Guidance",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません、新幹線（しんかんせん）のりばはどこですか？",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 1,
+          "text": "どちらの新幹線（しんかんせん）ですか？ どこへ行（い）きますか？",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 2,
+          "text": "東京（とうきょう）へ行（い）きたいです。",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 3,
+          "text": "東京（とうきょう）行（ゆ）きは14番線（じゅうよんばんせん）です。15番線（じゅうごばんせん）には行（い）ってはいけません。",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 4,
+          "text": "14番線（じゅうよんばんせん）ですね。あの、13番線（じゅうさんばんせん）で待（ま）っていてもいいですか？",
+          "speaker": "Tourist"
+        },
+        {
+          "i": 5,
+          "text": "いいえ、13番線（じゅうさんばんせん）で待（ま）ってはいけません。14番線（じゅうよんばんせん）でお待（ま）ちください。",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 6,
+          "text": "わかりました。ありがとうございます。",
+          "speaker": "Tourist"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜てはいけません"
+        },
+        {
+          "label": "〜ていてもいいですか？"
+        },
+        {
+          "label": "〜たいです"
+        },
+        {
+          "label": "お〜ください"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,277 @@
+{
+  "collectionId": "tea-at-mikas",
+  "scenes": [
+    {
+      "sceneId": "favorite-nearby",
+      "title": "Favorite nearby",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "この辺で、いいラーメン屋、ありますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "はい。角に、小さい店があります。おじいさんが、やってるんです。安いですよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "あ、いいですね。名前は、何ですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "看板は、ないと思います。みんな、「おじいちゃんの店」って、呼んでます。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "へえ、いいですね。いつも、混んでますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "あまり。静かです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "よかったです。並ぶのは、ちょっと…",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "通りの方にも、あります。そっちは、にぎやかです。若い人とか、会社の人とか。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "へえ、そうなんですか。何が、違うんですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "そっちは、にぎやかで、みんなで行く感じです。おじいちゃんの店は、静かで、昔の感じです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "なんで、そんなに安いんですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "長いからです。ずっと、やってるので。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "長いからですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 13,
+          "text": "はい。値段を、あまり上げないんです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 14,
+          "text": "あ、なるほど。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 15,
+          "text": "今度、場所、教えますか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 16,
+          "text": "はい。お願いします。ありがとうございます。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜からです"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "why-he-moved-here",
+      "title": "Why he moved here",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "カイトさん、どうして、この辺に引っ越したんですか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 1,
+          "text": "仕事からです。転勤なんです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 2,
+          "text": "転勤ですか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 3,
+          "text": "はい。一ヶ月前に、決まりました。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 4,
+          "text": "へえ、急ですね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 5,
+          "text": "はい。ちょっと、びっくりしました。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 6,
+          "text": "この町は、自分で選んだんですか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 7,
+          "text": "あまり…会社からです。でも、二つの中から、選べました。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 8,
+          "text": "会社からですか？",
+          "speaker": "Mika"
+        },
+        {
+          "i": 9,
+          "text": "はい。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 10,
+          "text": "いい所だと思いますよ。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 11,
+          "text": "あ、よかったです。ミカさんは、いつから、ここに？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 12,
+          "text": "三年前からです。私も、仕事で。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 13,
+          "text": "三年前からですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 14,
+          "text": "はい。だから、似てますね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 15,
+          "text": "本当ですね。ありがとうございます。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜からです"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    },
+    {
+      "sceneId": "wheres-this-snack-from",
+      "title": "Where's this snack from",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "これ、何ですか？初めて見ました。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 1,
+          "text": "あ、お土産です。同僚が、旅行から持ってきてくれたんです。京都からです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 2,
+          "text": "京都からですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 3,
+          "text": "はい。そこでしか、あまりないと思います。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 4,
+          "text": "へえ、そうなんですか。彼女、よく旅行するんですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 5,
+          "text": "はい。仕事で、二ヶ月に一回、くらい。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 6,
+          "text": "近くでも、買えますか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 7,
+          "text": "駅前のお店に、似たのがあるかも。ちょっと、わからないです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 8,
+          "text": "あ、じゃあ、見てみます。おいしいです。",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 9,
+          "text": "今度、彼女に聞いてみますね。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 10,
+          "text": "ありがとうございます。ミカさんも、好きですか？",
+          "speaker": "Kaito"
+        },
+        {
+          "i": 11,
+          "text": "はい。来るたびに、嬉しいです。",
+          "speaker": "Mika"
+        },
+        {
+          "i": 12,
+          "text": "それはわかりますねー。",
+          "speaker": "Kaito"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜からです"
+        },
+        {
+          "label": "か"
+        }
+      ]
+    }
+  ]
+}

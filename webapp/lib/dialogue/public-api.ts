@@ -8,11 +8,13 @@ import {
 } from "@/lib/db/schema";
 import {
   buildCollectionFile,
+  referencedPatternIdsFromScenarios,
   type ExportableCollection,
   type ExportableScenario,
 } from "@/lib/dialogue/export";
 import { learnerTokenSyncForPublishedTake } from "@/lib/dialogue/publish-lockstep";
 import { estimatedWavDurationSeconds } from "@/lib/dialogue/token-sync";
+import { fetchExportedTeachingPatterns } from "@/lib/patterns/export";
 import { isPublishedR2Configured } from "@/lib/storage/published-r2";
 import { clampAmbienceGainDb, layersFromScenario } from "@/lib/tts/ambience";
 import { publishedAmbiencePublicUrl } from "@/lib/tts/published-ambience-url";
@@ -254,8 +256,13 @@ export async function getPublicDialogueCollectionFile(collectionId: string) {
     thumbnailSmallUrl: collection.thumbnailSmallUrl,
   };
 
+  const exportableScenarios = await toLearnerExportableScenarios(scenarios);
+  const patternIds = referencedPatternIdsFromScenarios(exportableScenarios);
+  const patterns = await fetchExportedTeachingPatterns(db, patternIds);
+
   return buildCollectionFile(
     exportableCollection,
-    await toLearnerExportableScenarios(scenarios)
+    exportableScenarios,
+    patterns
   );
 }

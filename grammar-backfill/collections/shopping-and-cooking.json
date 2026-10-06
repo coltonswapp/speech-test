@@ -1,0 +1,418 @@
+{
+  "collectionId": "shopping-and-cooking",
+  "scenes": [
+    {
+      "sceneId": "making-the-list",
+      "title": "Making the list",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "うーん、あんまり材料、ないわねー。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "そうなんですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "じゃあ、買い物に行きましょうか。一緒に作りましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "はーい、いいですね！何を作るんですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "そうねー、簡単に、うどんはどう？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "うどん、大好きです！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "ふふ、よかった。じゃあ、何を買うか、考えましょうか。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "はーい。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "うどんと、卵と、ねぎを買いましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "あ、メモしますね。でも、英語しか書けないんですけど……ふふ。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "ふふ、大丈夫よ。英語でもいいわよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "エミちゃん、字、きれいねー。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 12,
+          "text": "いえいえ、そんなことないです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 13,
+          "text": "ふふ、謙遜しなくても。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 14,
+          "text": "ふふ、ありがとうございます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 15,
+          "text": "じゃあ、行きましょうか。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 16,
+          "text": "はーい。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ましょうか"
+        },
+        {
+          "label": "〜ましょう"
+        },
+        {
+          "label": "〜はどう？"
+        },
+        {
+          "label": "〜んですけど"
+        },
+        {
+          "label": "〜しか〜ない"
+        },
+        {
+          "label": "〜でもいい"
+        }
+      ]
+    },
+    {
+      "sceneId": "at-the-store",
+      "title": "At the store",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "うどんは、ここにあるわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "あ、本当だ。いろいろな味がありますね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "そうね。今日は、これにしましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "はーい。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "あの、ねぎは、どこですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "ねぎは、あっちの棚よ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 6,
+          "text": "これでいいですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "うん、それでいいわよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 8,
+          "text": "あの、これは何ですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 9,
+          "text": "それは、天かすよ。うどんに入れると、美味しいの。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 10,
+          "text": "へえ、知りませんでした。買いましょうか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 11,
+          "text": "そうね、買いましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 12,
+          "text": "全部、揃ったわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 13,
+          "text": "はーい、揃いました。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜にある"
+        },
+        {
+          "label": "〜にしましょう"
+        },
+        {
+          "label": "〜でいいですか"
+        },
+        {
+          "label": "〜ましょうか"
+        }
+      ]
+    },
+    {
+      "sceneId": "cooking-together",
+      "title": "Cooking together",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "じゃあ、そろそろ料理しましょうか。まず、ねぎを切ってください。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "はい、切ります。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "上手ねー。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "ふふ、ありがとうございます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "私は、麺を茹でるわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "はーい、お願いします。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "あ……落としちゃいました。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "ふふ、大丈夫、大丈夫。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 8,
+          "text": "すみません……気をつけます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 9,
+          "text": "ふふ、気にしないで。一緒に作るの、楽しいわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 10,
+          "text": "はい、楽しいです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 11,
+          "text": "お母さんが小さい頃も、よくここで一緒に作ったのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 12,
+          "text": "え、お母さんと？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 13,
+          "text": "ええ。お母さんも、よくねぎを落としてたわ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 14,
+          "text": "えー、本当に？お母さんも？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 15,
+          "text": "ふふ、そっくりね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 16,
+          "text": "いい匂いになってきたわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 17,
+          "text": "はい、お腹すいてきました。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜しましょうか"
+        },
+        {
+          "label": "〜てください"
+        },
+        {
+          "label": "〜ちゃいました"
+        },
+        {
+          "label": "〜ないで"
+        },
+        {
+          "label": "〜わね"
+        },
+        {
+          "label": "〜てきました"
+        }
+      ]
+    },
+    {
+      "sceneId": "eating-together",
+      "title": "Eating together",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "さあ、食べましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "はーい、いただきます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "いただきます。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "わあ、美味しいです！自分で作ったから、余計に美味しく感じます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "ふふ、そうね。一緒に作ったからね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "そうですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "エミちゃん、料理、上手じゃない。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "いえいえ、おばあちゃんが教えてくれたからです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "ふふ、そんなこと言って。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "また、一緒に作りたいです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "もちろん。今度は、何、作ろうか。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "うーん……お母さんが好きだったもの、作りたいです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 12,
+          "text": "あら……いいわね。じゃあ、考えておくわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 13,
+          "text": "ふふ、楽しみにしてるわ。",
+          "speaker": "Obaachan"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ましょう"
+        },
+        {
+          "label": "〜から"
+        },
+        {
+          "label": "〜じゃない"
+        },
+        {
+          "label": "〜てくれた"
+        },
+        {
+          "label": "〜たいです"
+        },
+        {
+          "label": "〜ようか"
+        }
+      ]
+    }
+  ]
+}

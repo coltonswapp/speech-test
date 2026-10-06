@@ -2061,9 +2061,38 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         }
         highlightsContentView.onSelectGrammar = { [weak self] pattern in
             guard let self else { return }
-            let lines = self.currentScenarioItem?.example.scenario?.lines ?? []
+            let item = self.currentScenarioItem
+            let lines = item?.example.scenario?.lines ?? []
+            let spokenTexts = lines.filter(\.isSpokenLine).map(\.japanese)
+            let catalog: DialogueTeachingPattern? = {
+                guard let patternId = pattern.patternId else { return nil }
+                return self.collection?.teachingPattern(id: patternId)
+            }()
+            let hear: GrammarPatternDetailPresenter.HearContext? = {
+                guard let item else { return nil }
+                let hasAudio =
+                    !(item.example.publishedAudioUrl?
+                        .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                    || !(item.example.audioKey?
+                        .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                guard hasAudio, !spokenTexts.isEmpty else { return nil }
+                return GrammarPatternDetailPresenter.HearContext(
+                    publishedAudioUrl: item.example.publishedAudioUrl,
+                    audioKey: item.example.audioKey,
+                    cacheMetadata: item.example.remoteAudioCacheMetadata,
+                    spokenJapaneseTexts: spokenTexts,
+                    tokenSync: DialogueTokenSync.validated(
+                        item.example.tokenSync,
+                        spokenTexts: spokenTexts,
+                        publishedContentHash: item.example.publishedContentHash
+                    )
+                )
+            }()
             GrammarPatternDetailPresenter.push(
                 pattern: pattern,
+                catalogPattern: catalog,
+                exampleLines: lines,
+                hearContext: hear,
                 request: GeminiGrammarUsage.request(for: pattern, in: lines),
                 from: self
             )

@@ -1,0 +1,241 @@
+{
+  "collectionId": "a-local-festival",
+  "scenes": [
+    {
+      "sceneId": "getting-ready",
+      "items": [
+        {
+          "label": "これで、変じゃないですか？",
+          "patternId": "n5-janai-dewa-nai",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "似合ってるわよ。",
+          "patternId": "n5-te-iru",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Contracted 〜てる (似合ってる) + sentence-final わよ."
+        },
+        {
+          "label": "そんなことないです。",
+          "patternId": null,
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: そんなことない — \"not at all; that's not true\" (modest denial)."
+        },
+        {
+          "label": "もうすぐなんですね！",
+          "patternId": "n5-ndesu",
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "〜なんですね: んです + ね."
+        },
+        {
+          "label": "暑い方が、それらしいでしょう？",
+          "patternId": "n5-deshou",
+          "sourceSpokenStart": 15,
+          "sourceSpokenEnd": 15,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Label also contains comparative 〜方が (no より; cf. n5-yori-hou-ga); mapped to でしょう as the sentence-level pattern."
+        },
+        {
+          "label": "行きましょうか。",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 17,
+          "sourceSpokenEnd": 17,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Used as \"shall we go?\" (suggestion), not an offer."
+        }
+      ]
+    },
+    {
+      "sceneId": "arriving",
+      "items": [
+        {
+          "label": "〜ですね！",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 2, 7."
+        },
+        {
+          "label": "〜でしょう？",
+          "patternId": "n5-deshou",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 1. Line 1 is bare でしょう？."
+        },
+        {
+          "label": "〜気がする",
+          "patternId": null,
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜気がする — \"I feel like ~; I have a feeling ~\"."
+        },
+        {
+          "label": "〜がします",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜がする — \"to perceive (smell/sound/taste) ~\" (いい匂いがします)."
+        },
+        {
+          "label": "〜てきた",
+          "patternId": null,
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てくる (〜てきた) — \"change that has come about / started to ~\"."
+        },
+        {
+          "label": "〜ましょうか",
+          "patternId": "n5-mashouka",
+          "sourceSpokenStart": 10,
+          "sourceSpokenEnd": 10,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Used as \"shall we ~?\" (suggestion)."
+        }
+      ]
+    },
+    {
+      "sceneId": "a-stall",
+      "items": [
+        {
+          "label": "〜てみる？",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てみる — \"try doing ~\". Also on spoken lines 6, 7."
+        },
+        {
+          "label": "〜たことないです。",
+          "patternId": "n5-ta-koto-ga-aru",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Negative casual form 〜たことない."
+        },
+        {
+          "label": "〜けど、",
+          "patternId": "n5-kedo",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜ちゃったね。",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜ちゃう (〜てしまう) — \"end up ~; ~ completely (often with regret)\". n5-cha-ikenai is a different pattern."
+        },
+        {
+          "label": "〜じゃない！",
+          "patternId": null,
+          "sourceSpokenStart": 9,
+          "sourceSpokenEnd": 9,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match by meaning. Suggested: 〜じゃない！(rhetorical) — \"isn't it ~!; how ~!\" (exclamation/praise). n5-janai-dewa-nai is the negative copula, which this is not."
+        },
+        {
+          "label": "〜ねー。",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 9,
+          "sourceSpokenEnd": 9,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 4, 11."
+        }
+      ]
+    },
+    {
+      "sceneId": "a-quiet-moment",
+      "items": [
+        {
+          "label": "〜です",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 3, 5, 7, 9, 12, 14."
+        },
+        {
+          "label": "〜と",
+          "patternId": "n5-to-and-with",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 3. Lines 2 and 3 also contain conditional と (一緒だと / いると), which has no catalog entry; confirm which と the label intends."
+        },
+        {
+          "label": "〜のよね",
+          "patternId": "n5-no-desu",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Casual feminine explanatory 〜のよね."
+        },
+        {
+          "label": "〜てくれて",
+          "patternId": null,
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てくれる — \"someone does ~ (for me)\"."
+        },
+        {
+          "label": "〜たいです",
+          "patternId": "n5-tai",
+          "sourceSpokenStart": 9,
+          "sourceSpokenEnd": 9,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 14."
+        },
+        {
+          "label": "〜ましょう",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 11,
+          "sourceSpokenEnd": 11,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    }
+  ]
+}

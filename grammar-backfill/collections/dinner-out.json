@@ -1,0 +1,431 @@
+{
+  "collectionId": "dinner-out",
+  "scenes": [
+    {
+      "sceneId": "an-old-friends-place",
+      "title": "An old friend's place",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "エミちゃん、今日は、どうだった？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "ちょっと疲れました。庭の手伝い、頑張ったので。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "ふふ、お疲れ様。今夜は、きっとぐっすり眠れるわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "はい、ありがとうございます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "ねえ、エミちゃん、今日の夜、外で食べない？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "え、いいですね！どこに行くんですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "ちょっと、知り合いのお店があるのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "知り合いのお店、ですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "うん、昔からの友達が、やってるお店なの。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "へえ、そうなんですか。何年来の友達なんですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "もう、30年くらいになるかしら。学生時代からの友達なのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "わあ、長い付き合いですね！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 12,
+          "text": "ふふ、そうなの。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 13,
+          "text": "何時に行きますか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 14,
+          "text": "そうね、7時にしましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 15,
+          "text": "はい、分かりました。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜にしましょう"
+        },
+        {
+          "label": "〜かしら"
+        }
+      ]
+    },
+    {
+      "sceneId": "deciding-what-to-eat",
+      "title": "Deciding what to eat",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "わあ、落ち着いた雰囲気のお店ですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 1,
+          "text": "でしょう？メニュー、見てみましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 2,
+          "text": "うわあ、メニュー、結構ありますね。何がおすすめですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 3,
+          "text": "そうねー、ここは、焼き物が、特に美味しいのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 4,
+          "text": "焼き物、いいですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "これ、この辺りの名物なんだけど、食べてみる？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 6,
+          "text": "え、何ですか、これ？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "ホルモン焼きよ。ちょっと、珍しいかもしれないけど。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 8,
+          "text": "ホルモン焼き……初めて聞きました。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 9,
+          "text": "ふふ、気になる？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 10,
+          "text": "はい、気になります。でも、ちょっと、ドキドキします。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 11,
+          "text": "ふふ、大丈夫よ。ここの料理は、何でも美味しいから。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 12,
+          "text": "はい、それにします！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 13,
+          "text": "いいわね。じゃあ、私は、いつもの焼き魚にしようかな。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 14,
+          "text": "いつもの、ですか？よく来るんですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 15,
+          "text": "うん、たまにね。お友達の顔も見たいし。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 16,
+          "text": "ふふ、素敵ですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 17,
+          "text": "さあ、決まったし、注文しましょうか。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 18,
+          "text": "はい、決まりですね。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜にします"
+        },
+        {
+          "label": "〜てみる"
+        }
+      ]
+    },
+    {
+      "sceneId": "getting-to-know-emi",
+      "title": "Getting to know Emi",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません、ホルモン焼きと、焼き魚をください。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "ふふ、注文できましたね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "うん。さて、料理が来るまで、ちょっと待ちましょう。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 3,
+          "text": "ねえ、エミちゃん、大学では、何を勉強したいの？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 4,
+          "text": "うーん、実は、まだ決めてないんです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 5,
+          "text": "そうなの？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 6,
+          "text": "はい、興味があることが多すぎて……。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 7,
+          "text": "ふふ、それも、いいじゃない。興味があることが多いのは、いいことよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 8,
+          "text": "え、本当ですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 9,
+          "text": "うん。じゃあ、今、一番興味があることは、何？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 10,
+          "text": "うーん、やっぱり、日本語とか、日本の文化ですね。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 11,
+          "text": "あら、そうなの？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 12,
+          "text": "はい。あとは、心理学にも、興味があります。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 13,
+          "text": "へえ、面白そうね。どっちも、エミちゃんらしいわ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 14,
+          "text": "ふふ、ありがとうございます。まだ、ゆっくり考えます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 15,
+          "text": "うん。ゆっくり、決めればいいのよ。",
+          "speaker": "Obaachan"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜をください"
+        },
+        {
+          "label": "〜んです"
+        }
+      ]
+    },
+    {
+      "sceneId": "the-toast",
+      "title": "The toast",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "じゃあ、乾杯しましょうか。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 1,
+          "text": "はい、乾杯！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 2,
+          "text": "いただきます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 3,
+          "text": "あ、思ったより、おいしいです！",
+          "speaker": "Emi"
+        },
+        {
+          "i": 4,
+          "text": "ふふ、よかった。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 5,
+          "text": "あの、お金、払います。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 6,
+          "text": "いいから、いいから。今日は、おばあちゃんがごちそうするから。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 7,
+          "text": "……ありがとうございます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 8,
+          "text": "エミちゃん、自転車で自由に動けるようになって、大学のことも、自分で考えてる……本当に、成長したわね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 9,
+          "text": "ふふ、おばあちゃんのおかげです。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 10,
+          "text": "ふふ、そんなことないわよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 11,
+          "text": "ねえ、エミちゃん、日本の大学も、考えてみない？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 12,
+          "text": "え、日本の大学、ですか？",
+          "speaker": "Emi"
+        },
+        {
+          "i": 13,
+          "text": "うん。日本語も、好きなんでしょう？",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 14,
+          "text": "……そうですね。考えたことなかったですけど、ちょっと、興味あります。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 15,
+          "text": "それに、エミちゃんは、二重国籍でしょう？だから、学費も、安くなるかもしれないわよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 16,
+          "text": "え、そうなんですか？知りませんでした。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 17,
+          "text": "うん。それに、いい大学も、たくさんあるのよ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 18,
+          "text": "へえ、ちょっと、調べてみようかな。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 19,
+          "text": "でも、結局は、エミちゃんが決めることだからね。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 20,
+          "text": "はい、分かってます。ゆっくり考えます。",
+          "speaker": "Emi"
+        },
+        {
+          "i": 21,
+          "text": "ふふ、それでいいのよ。今日は、一緒に食べられて、本当に楽しかったわ。",
+          "speaker": "Obaachan"
+        },
+        {
+          "i": 22,
+          "text": "はい、私も、すごく楽しかったです。",
+          "speaker": "Emi"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ましょう"
+        },
+        {
+          "label": "〜かもしれない"
+        }
+      ]
+    }
+  ]
+}

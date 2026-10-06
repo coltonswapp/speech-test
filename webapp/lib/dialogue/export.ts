@@ -1,9 +1,12 @@
 import {
+  highlightsSchema,
   isInlineQuestionLine,
   isStageLine,
   type CollectionFile,
   type DialogueHighlights,
   type DialogueLine,
+  type ExportedTeachingPattern,
+  type GrammarPatternRef,
   type PublishedTokenSync,
   type QuizQuestion,
   type ScenarioFile,
@@ -110,15 +113,31 @@ function exportLine(
   };
 }
 
+function exportGrammarPattern(pattern: GrammarPatternRef): GrammarPatternRef {
+  const label = pattern.label?.trim() || undefined;
+  return {
+    ...(label ? { label } : {}),
+    ...(pattern.patternId ? { patternId: pattern.patternId } : {}),
+    ...(pattern.grammarPointID
+      ? { grammarPointID: pattern.grammarPointID }
+      : {}),
+    ...(pattern.sourceSpokenStart !== undefined
+      ? { sourceSpokenStart: pattern.sourceSpokenStart }
+      : {}),
+    ...(pattern.sourceSpokenEnd !== undefined
+      ? { sourceSpokenEnd: pattern.sourceSpokenEnd }
+      : {}),
+  };
+}
+
 function exportHighlights(
   highlights: DialogueHighlights | null
 ): DialogueHighlights | undefined {
   if (!highlights) return undefined;
   const vocabulary = highlights.vocabulary ?? [];
-  const grammarPatterns = (highlights.grammarPatterns ?? []).map((pattern) => ({
-    label: pattern.label,
-    grammarPointID: pattern.grammarPointID || undefined,
-  }));
+  const grammarPatterns = (highlights.grammarPatterns ?? [])
+    .map(exportGrammarPattern)
+    .filter((pattern) => pattern.label || pattern.patternId);
   const contextNotes = highlights.contextNotes ?? [];
   if (
     vocabulary.length === 0 &&
@@ -128,6 +147,25 @@ function exportHighlights(
     return undefined;
   }
   return { vocabulary, grammarPatterns, contextNotes };
+}
+
+/** Collect patternId values stamped on scene grammar highlights. */
+export function referencedPatternIdsFromScenarios(
+  scenarios: ExportableScenario[]
+): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const scenario of scenarios) {
+    const parsed = highlightsSchema.safeParse(scenario.highlights);
+    if (!parsed.success) continue;
+    for (const pattern of parsed.data.grammarPatterns ?? []) {
+      const id = pattern.patternId?.trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
 }
 
 // jsonb loses key insertion order, so rebuild quiz objects in file order.
@@ -195,7 +233,8 @@ export function buildScenarioFile(scenario: ExportableScenario): ScenarioFile {
 
 export function buildCollectionFile(
   collection: ExportableCollection,
-  scenarios: ExportableScenario[]
+  scenarios: ExportableScenario[],
+  patterns?: ExportedTeachingPattern[]
 ): CollectionFile {
   return {
     id: collection.id,
@@ -212,6 +251,7 @@ export function buildCollectionFile(
       .slice()
       .sort((a, b) => a.orderIndex - b.orderIndex)
       .map(buildScenarioFile),
+    ...(patterns && patterns.length > 0 ? { patterns } : {}),
   };
 }
 

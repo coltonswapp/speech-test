@@ -1,0 +1,119 @@
+{
+  "collectionId": "first-day",
+  "scenes": [
+    {
+      "sceneId": "new-coworker",
+      "items": [
+        {
+          "label": "〜んですか",
+          "patternId": "n5-ndesu",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜たら",
+          "patternId": null,
+          "sourceSpokenStart": 7,
+          "sourceSpokenEnd": 7,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜たら — \"when/after ~; if ~\"."
+        },
+        {
+          "label": "〜てください",
+          "patternId": "n5-te-kudasai",
+          "sourceSpokenStart": 7,
+          "sourceSpokenEnd": 7,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "sceneId": "meeting-katio",
+      "items": [
+        {
+          "label": "〜んですよね？",
+          "patternId": "n5-ndesu",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "〜んですよね？ (seeking confirmation)."
+        },
+        {
+          "label": "〜て、どのくらいですか？",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜て、どのくらいですか — \"how long have you been ~ing?\" (どのくらい = how long/how much)."
+        }
+      ]
+    },
+    {
+      "sceneId": "sato-lunch-invite",
+      "items": [
+        {
+          "label": "〜ませんか？",
+          "patternId": "n5-masen-ka",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜ましょう",
+          "patternId": "n5-mashou",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 15, 16."
+        },
+        {
+          "label": "〜ていますか？",
+          "patternId": "n5-te-iru",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜から",
+          "patternId": "n5-kara-because",
+          "sourceSpokenStart": 8,
+          "sourceSpokenEnd": 8,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 13."
+        },
+        {
+          "label": "〜だけです",
+          "patternId": "n5-dake",
+          "sourceSpokenStart": 11,
+          "sourceSpokenEnd": 11,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜といいです",
+          "patternId": null,
+          "sourceSpokenStart": 14,
+          "sourceSpokenEnd": 14,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜といい — \"I hope ~; it would be good if ~\"."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,262 @@
+{
+  "collectionId": "airport",
+  "scenes": [
+    {
+      "sceneId": "checking-luggage",
+      "title": "Checking in luggage",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません、荷物を預けたいんですけど、重さの制限はありますか？",
+          "speaker": "Traveler"
+        },
+        {
+          "i": 1,
+          "text": "はい、いらっしゃいませ。お荷物ですね。エコノミークラスですと、お一人様20キロまでとなっております。",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 2,
+          "text": "20キロですか。もしオーバーしてしまったら、追加料金はかかりますか？ 前に一度、超過料金を払ったことがあるんですけど。",
+          "speaker": "Traveler"
+        },
+        {
+          "i": 3,
+          "text": "はい、20キロを超えますと、追加料金がかかります。1キロにつき1000円ですけど、最大で30キロまでお預けいただけます。",
+          "speaker": "Attendant"
+        },
+        {
+          "i": 4,
+          "text": "1キロ1000円ですね。わかりました。ありがとうございます。",
+          "speaker": "Traveler"
+        },
+        {
+          "i": 5,
+          "text": "いいえ、どういたしまして。他にご質問はございますか？",
+          "speaker": "Attendant"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜たいんですけど。。。"
+        }
+      ]
+    },
+    {
+      "sceneId": "gate-change",
+      "title": "Gate change",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "すみません。私の飛行機、ゲートが変わったみたいです。急いで行かなくちゃ。",
+          "speaker": "Traveler"
+        },
+        {
+          "i": 1,
+          "text": "どちらの飛行機ですか？",
+          "speaker": "Airport Staff"
+        },
+        {
+          "i": 2,
+          "text": "JL123便です。",
+          "speaker": "Traveler"
+        },
+        {
+          "i": 3,
+          "text": "少々お待ちください。新しいゲートはA5です。",
+          "speaker": "Airport Staff"
+        },
+        {
+          "i": 4,
+          "text": "A5ですね。ありがとうございます。A5はここから一番近いですか？",
+          "speaker": "Traveler"
+        },
+        {
+          "i": 5,
+          "text": "はい、すぐそこですよ！",
+          "speaker": "Airport Staff"
+        },
+        {
+          "i": 6,
+          "text": "わかりました。ありがとうございます！",
+          "speaker": "Traveler"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "n5-nakucha"
+        },
+        {
+          "label": "一番近い"
+        },
+        {
+          "label": "行かなくちゃ"
+        }
+      ]
+    },
+    {
+      "sceneId": "taxi-to-airport",
+      "title": "Taxi to Airport",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "こんにちは！空港までですね？",
+          "speaker": "Taxi Driver"
+        },
+        {
+          "i": 1,
+          "text": "はい、そうです。お願いします。",
+          "speaker": "Traveler"
+        },
+        {
+          "i": 2,
+          "text": "荷物は後ろのトランクに入れますか？",
+          "speaker": "Taxi Driver"
+        },
+        {
+          "i": 3,
+          "text": "あ、大丈夫です。小さいので、足元に置きます。",
+          "speaker": "Traveler"
+        },
+        {
+          "i": 4,
+          "text": "わかりました。では、シートベルトをしてくださいね。走行中に外してはいけませんよ。",
+          "speaker": "Taxi Driver"
+        },
+        {
+          "i": 5,
+          "text": "はい、わかりました。",
+          "speaker": "Traveler"
+        },
+        {
+          "i": 6,
+          "text": "よし、出発！空港まで安全運転で行きましょう！",
+          "speaker": "Taxi Driver"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜てはいけません"
+        },
+        {
+          "label": "〜までですね？"
+        },
+        {
+          "label": "お願いします"
+        },
+        {
+          "label": "〜ので、〜"
+        },
+        {
+          "label": "〜してください"
+        },
+        {
+          "label": "〜ましょう"
+        }
+      ]
+    },
+    {
+      "sceneId": "choosing-airport-food",
+      "title": "Choosing Airport Food",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "お腹が空きましたね。",
+          "speaker": "Ami"
+        },
+        {
+          "i": 1,
+          "text": "ええ、私も。何か食べましょうか。",
+          "speaker": "Ken"
+        },
+        {
+          "i": 2,
+          "text": "そうですね。何がいいですか？",
+          "speaker": "Ami"
+        },
+        {
+          "i": 3,
+          "text": "うーん、ラーメンがいいかな。",
+          "speaker": "Ken"
+        },
+        {
+          "i": 4,
+          "text": "ラーメン? あそこにラーメン屋さんがありますよ。そこに行こうか？",
+          "speaker": "Ami"
+        },
+        {
+          "i": 5,
+          "text": "うん、いいよ！",
+          "speaker": "Ken"
+        },
+        {
+          "i": 6,
+          "text": "じゃあ、行きましょう！",
+          "speaker": "Ami"
+        }
+      ],
+      "grammar": [
+        {
+          "label": "〜ましたね"
+        },
+        {
+          "label": "〜ましょうか"
+        },
+        {
+          "label": "〜ですか"
+        },
+        {
+          "label": "〜かな"
+        },
+        {
+          "label": "〜に行こうか"
+        },
+        {
+          "label": "〜ましょう"
+        }
+      ]
+    },
+    {
+      "sceneId": "finding-our-gate",
+      "title": "Finding Our Gate",
+      "spokenLines": [
+        {
+          "i": 0,
+          "text": "あっ、もう時間だ！",
+          "speaker": "Aki"
+        },
+        {
+          "i": 1,
+          "text": "え、ほんとだ！飛行機、もうすぐ出るよ。",
+          "speaker": "Yūta"
+        },
+        {
+          "i": 2,
+          "text": "ゲート、どこだっけ？早く探しに行かないと！",
+          "speaker": "Aki"
+        },
+        {
+          "i": 3,
+          "text": "えーと、チケット見せて。あ、これだ。15番ゲート。",
+          "speaker": "Yūta"
+        },
+        {
+          "i": 4,
+          "text": "15番！遠いよ。急ごう！",
+          "speaker": "Aki"
+        },
+        {
+          "i": 5,
+          "text": "うん。まず、あっちの案内板を見てから行こう。",
+          "speaker": "Yūta"
+        },
+        {
+          "i": 6,
+          "text": "そうだね！走ろう！",
+          "speaker": "Aki"
+        }
+      ],
+      "grammar": []
+    }
+  ]
+}

@@ -1,0 +1,260 @@
+{
+  "collectionId": "train-station",
+  "scenes": [
+    {
+      "sceneId": "buying-a-ticket",
+      "items": [
+        {
+          "label": "〜たいんですけど。。。",
+          "patternId": "n5-tai",
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Full form is 〜たいんですけど (たい + んです + けど, softened request); mapped to たい as the core pattern."
+        },
+        {
+          "label": "へ (direction)",
+          "patternId": "n5-ni-e-direction",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "こちらへどうぞ."
+        },
+        {
+          "label": "〜よね",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "よね = よ + ね (confirmation); n5-yo also partially applies."
+        },
+        {
+          "label": "〜です",
+          "patternId": "n5-da-desu",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken lines 0, 2."
+        },
+        {
+          "label": "お〜ください",
+          "patternId": null,
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: お〜ください — \"please ~\" (honorific request, e.g. お待ちください). n5-o-go-honorific and n5-te-kudasai each cover only part of it."
+        }
+      ]
+    },
+    {
+      "sceneId": "asking-the-price",
+      "items": [
+        {
+          "label": "まで (endpoint)",
+          "patternId": "n5-made",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜ね",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "AですかBですか",
+          "patternId": "n5-ka-ka-or",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜でお願いします",
+          "patternId": "n5-de-means",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "で marks the means of payment (現金でお願いします)."
+        }
+      ]
+    },
+    {
+      "sceneId": "which-platform",
+      "items": [
+        {
+          "label": "〜行き (bound for)",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜行き — \"bound for ~\" (東京行き)."
+        },
+        {
+          "label": "どこ (where)",
+          "patternId": null,
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: どこ — \"where\" (question word)."
+        },
+        {
+          "label": "〜て、〜 (sequence)",
+          "patternId": null,
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: て-form sequence (〜て、〜) — \"do A, then B\" (cf. n5-te-kara \"after doing\"). Also on spoken line 4."
+        },
+        {
+          "label": "〜ね",
+          "patternId": "n5-ne",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "sceneId": "next-train",
+      "items": [
+        {
+          "label": "〜時〜分 (telling time)",
+          "patternId": null,
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜時〜分 — telling time (\"~ o'clock, ~ minutes\"). Also on spoken line 3 (十時半)."
+        },
+        {
+          "label": "〜も (also)",
+          "patternId": "n5-mo",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "〜に出ます",
+          "patternId": "n5-ni-location-time",
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "Time に (十時半に出ます)."
+        },
+        {
+          "label": "〜でお願いします",
+          "patternId": "n5-de-means",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "で marks the chosen option/means (急行でお願いします)."
+        }
+      ]
+    },
+    {
+      "sceneId": "missed-train",
+      "items": [
+        {
+          "label": "〜てしまいました",
+          "patternId": null,
+          "sourceSpokenStart": 0,
+          "sourceSpokenEnd": 0,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: 〜てしまう — \"end up ~; ~ (with regret)\" (乗り遅れてしまいました)."
+        },
+        {
+          "label": "〜よ",
+          "patternId": "n5-yo",
+          "sourceSpokenStart": 1,
+          "sourceSpokenEnd": 1,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "使える (potential)",
+          "patternId": null,
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: potential form 〜える/〜られる — \"can ~\" (使えますか)."
+        },
+        {
+          "label": "お〜いただけます",
+          "patternId": null,
+          "sourceSpokenStart": 3,
+          "sourceSpokenEnd": 3,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: お〜いただけます — \"you can ~\" (honorific; お乗りいただけます)."
+        }
+      ]
+    },
+    {
+      "sceneId": "shinkansen-platform-guidance",
+      "items": [
+        {
+          "label": "〜てはいけません",
+          "patternId": "n5-tewa-ikenai",
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": false,
+          "ambiguous": true,
+          "note": "Also on spoken line 3."
+        },
+        {
+          "label": "〜ていてもいいですか？",
+          "patternId": "n5-temo-ii",
+          "sourceSpokenStart": 4,
+          "sourceSpokenEnd": 4,
+          "orphan": false,
+          "ambiguous": false,
+          "note": "ている + てもいいですか (待っていてもいいですか)."
+        },
+        {
+          "label": "〜たいです",
+          "patternId": "n5-tai",
+          "sourceSpokenStart": 2,
+          "sourceSpokenEnd": 2,
+          "orphan": false,
+          "ambiguous": false,
+          "note": null
+        },
+        {
+          "label": "お〜ください",
+          "patternId": null,
+          "sourceSpokenStart": 5,
+          "sourceSpokenEnd": 5,
+          "orphan": true,
+          "ambiguous": false,
+          "note": "No catalog match. Suggested: お〜ください — \"please ~\" (honorific request, e.g. お待ちください). n5-o-go-honorific and n5-te-kudasai each cover only part of it."
+        }
+      ]
+    }
+  ]
+}

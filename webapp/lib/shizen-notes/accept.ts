@@ -18,6 +18,7 @@ export async function acceptNote(note: ShizenNote): Promise<string> {
     agent: note.agent,
     url: note.metadata.url,
     noteCreatedAt: new Date(note.metadata.created_at),
+    screenshotJpeg: note.metadata.screenshot_jpeg ?? null,
   });
   after(() => deliverToShohei(jobId));
   return jobId;

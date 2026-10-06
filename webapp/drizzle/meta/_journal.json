@@ -120,6 +120,13 @@
       "when": 1790300000000,
       "tag": "0016_shizen_note_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790400000000,
+      "tag": "0017_shizen_note_screenshot",
+      "breakpoints": true
     }
   ]
 }

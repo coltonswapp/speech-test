@@ -83,16 +83,20 @@ enum ContentCMSClient {
         struct Metadata: Encodable {
             let url: String
             let createdAt: Date
+            /// Base64 JPEG of the lesson under the note sheet. No `data:` prefix. Omitted when capture fails.
+            let screenshotJPEG: String?
 
             private enum CodingKeys: String, CodingKey {
                 case url
                 case createdAt = "created_at"
+                case screenshotJPEG = "screenshot_jpeg"
             }
 
             func encode(to encoder: Encoder) throws {
                 var container = encoder.container(keyedBy: CodingKeys.self)
                 try container.encode(url, forKey: .url)
                 try container.encode(ISO8601DateFormatter().string(from: createdAt), forKey: .createdAt)
+                try container.encodeIfPresent(screenshotJPEG, forKey: .screenshotJPEG)
             }
         }
 

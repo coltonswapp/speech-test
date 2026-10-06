@@ -31,12 +31,14 @@ The future iOS/staff review client marks a **scene checked off** via:
 
 ## Shizen notes (QA notes to Shohei)
 
-Two endpoints, one contract (`source`, `source_id`, `title?`, `note`, `agent?`, `metadata.url`, `metadata.created_at`):
+Two endpoints, one contract (`source`, `source_id`, `title?`, `note`, `agent?`, `metadata.url`, `metadata.created_at`, optional `metadata.screenshot_jpeg`):
 
 - `POST /api/client/content-qa/notes`: the iOS QA Note sheet. Bearer `CONTENT_QA_CLIENT_TOKEN` only.
 - `POST /hooks/shizen-note`: other callers (Studio, MCP, scripts). Bearer `SHIZEN_NOTE_WEBHOOK_TOKEN` only; this token never ships in the app. Both paths skip the Studio proxy so each route's own token check applies.
 
 Auth is checked before the body is read. Errors are plain text (`401` bad token, `400` e.g. `missing note`, `unknown source`, `bad created_at`). Accepted notes are stored in `shizen_note_job` and return `202 { "job_id": "job_…" }`; the job is then POSTed to `SHOHEI_DELIVERY_URL` with `Authorization: Bearer $SHOHEI_WEBHOOK_KEY` and marked `delivered` or `failed`. Missing `SHOHEI_DELIVERY_URL` or `SHOHEI_WEBHOOK_KEY` leaves the job `queued` with a clear error and does not POST. `agent` defaults to `shohei` and is passed through; Studio does no triage, Shohei's routine routes to Vikram or Hana.
+
+`metadata.screenshot_jpeg` is an optional base64 JPEG (no `data:` prefix) of the lesson view under the QA sheet. Callers that omit it are unchanged. When it is present, the Shohei POST also includes `metadata.screenshot_jpeg_instructions`. The webhook body is text, so that field tells the routine to write the bytes to a `.jpg` and read the image before acting. The base64 string itself is not shown to the vision model.
 
 ## Cron
 

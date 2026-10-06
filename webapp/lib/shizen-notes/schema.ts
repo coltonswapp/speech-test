@@ -3,6 +3,9 @@ import { z } from "zod";
 export const NOTE_SOURCES = ["dialogue", "quiz"] as const;
 export const NOTE_AGENTS = ["shohei", "vikram", "hana"] as const;
 
+/** Base64 JPEG, no `data:` prefix. ~1.1MB binary. Matches the iOS snapshot cap. */
+export const SCREENSHOT_JPEG_MAX_CHARS = 1_500_000;
+
 export const shizenNoteSchema = z.object({
   source: z.enum(NOTE_SOURCES),
   source_id: z.string().trim().min(1),
@@ -12,6 +15,13 @@ export const shizenNoteSchema = z.object({
   metadata: z.object({
     url: z.string().trim().min(1),
     created_at: z.iso.datetime({ offset: true }),
+    screenshot_jpeg: z
+      .string()
+      .trim()
+      .min(1)
+      .max(SCREENSHOT_JPEG_MAX_CHARS)
+      .regex(/^\/9j\/[A-Za-z0-9+/]*={0,2}$/)
+      .optional(),
   }),
 });
 

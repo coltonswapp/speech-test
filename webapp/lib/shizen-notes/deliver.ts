@@ -2,6 +2,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { shizenNoteJob } from "@/lib/db/schema";
+import { shoheiDeliveryPayload } from "./payload";
 import { resolveShoheiDeliveryTarget } from "./delivery-target";
 
 const DELIVERY_TIMEOUT_MS = 15_000;
@@ -17,18 +18,7 @@ export async function deliverToShohei(jobId: string): Promise<void> {
     return;
   }
 
-  const payload = {
-    job_id: job.id,
-    source: job.source,
-    source_id: job.sourceId,
-    ...(job.title ? { title: job.title } : {}),
-    note: job.note,
-    agent: job.agent,
-    metadata: {
-      url: job.url,
-      created_at: job.noteCreatedAt.toISOString(),
-    },
-  };
+  const payload = shoheiDeliveryPayload(job);
 
   try {
     const response = await fetch(target.url, {

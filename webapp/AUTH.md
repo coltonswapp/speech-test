@@ -38,7 +38,7 @@ Two endpoints, one contract (`source`, `source_id`, `title?`, `note`, `agent?`, 
 
 Auth is checked before the body is read. Errors are plain text (`401` bad token, `400` e.g. `missing note`, `unknown source`, `bad created_at`). Accepted notes are stored in `shizen_note_job` and return `202 { "job_id": "job_…" }`; the job is then POSTed to `SHOHEI_DELIVERY_URL` with `Authorization: Bearer $SHOHEI_WEBHOOK_KEY` and marked `delivered` or `failed`. Missing `SHOHEI_DELIVERY_URL` or `SHOHEI_WEBHOOK_KEY` leaves the job `queued` with a clear error and does not POST. `agent` defaults to `shohei` and is passed through; Studio does no triage, Shohei's routine routes to Vikram or Hana.
 
-`metadata.screenshot_jpeg` is an optional base64 JPEG (no `data:` prefix) of the lesson view under the QA sheet. Callers that omit it are unchanged. When it is present, the Shohei POST also includes `metadata.screenshot_jpeg_instructions`. The webhook body is text, so that field tells the routine to write the bytes to a `.jpg` and read the image before acting. The base64 string itself is not shown to the vision model.
+`metadata.screenshot_jpeg` is an optional base64 JPEG (no `data:` prefix) of the lesson view under the QA sheet. Callers that omit it are unchanged. Studio uploads it to the private R2 bucket (`R2_BUCKET_NAME`) under `shizen-notes/<job>-<random>.jpg` and stores only the key. The base64 never goes to Shohei: his webhook ingest may strip large fields. Instead the Shohei POST carries `metadata.screenshot_url`, a signed R2 link valid for about 3 days, plus `metadata.screenshot_instructions` telling the routine to `curl -o screenshot.jpg` and read the file. If the upload fails, the note is still delivered without a screenshot.
 
 ## Cron
 

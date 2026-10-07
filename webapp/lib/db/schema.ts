@@ -412,7 +412,8 @@ export const shizenNoteJob = pgTable("shizen_note_job", {
   agent: text("agent").notNull().default("shohei"), // shohei | vikram | hana
   url: text("url").notNull(),
   noteCreatedAt: timestamp("note_created_at", { withTimezone: true }).notNull(),
-  screenshotJpeg: text("screenshot_jpeg"),
+  screenshotJpeg: text("screenshot_jpeg"), // legacy inline base64; new notes use screenshotObjectKey
+  screenshotObjectKey: text("screenshot_object_key"), // private R2 key, sent to Shohei as a signed URL
   status: text("status").notNull().default("queued"), // queued | delivered | failed
   error: text("error"),
 });

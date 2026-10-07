@@ -2,7 +2,8 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { shizenNoteJob } from "@/lib/db/schema";
-import { shoheiDeliveryPayload } from "./payload";
+import { getSignedDownloadUrl } from "@/lib/storage/r2";
+import { SCREENSHOT_URL_TTL_SECONDS, shoheiDeliveryPayload } from "./payload";
 import { resolveShoheiDeliveryTarget } from "./delivery-target";
 
 const DELIVERY_TIMEOUT_MS = 15_000;
@@ -18,9 +19,11 @@ export async function deliverToShohei(jobId: string): Promise<void> {
     return;
   }
 
-  const payload = shoheiDeliveryPayload(job);
-
   try {
+    const screenshotUrl = job.screenshotObjectKey
+      ? await getSignedDownloadUrl(job.screenshotObjectKey, SCREENSHOT_URL_TTL_SECONDS)
+      : null;
+    const payload = shoheiDeliveryPayload(job, screenshotUrl);
     const response = await fetch(target.url, {
       method: "POST",
       headers: target.headers,

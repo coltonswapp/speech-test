@@ -1,9 +1,13 @@
+/** Signed R2 links stay valid this long. SigV4 presigning caps at 7 days. */
+export const SCREENSHOT_URL_TTL_SECONDS = 3 * 24 * 60 * 60;
+
 /**
- * Shohei receives the webhook as text. This sentence sits next to the bytes so
- * the routine writes a file and reads the image instead of staring at base64.
+ * Shohei's webhook ingest may strip large fields, so the image travels as a
+ * short signed link. Fetching a URL is not the same as seeing the image; the
+ * routine has to download to a file and read that file.
  */
-export const SCREENSHOT_JPEG_INSTRUCTIONS =
-  "screenshot_jpeg is a base64-encoded JPEG with no data: prefix. It is a snapshot of the lesson view under the QA note sheet. Write those bytes to a .jpg file and read that image before acting on the note. The base64 text is not the picture.";
+export const SCREENSHOT_URL_INSTRUCTIONS =
+  "screenshot_url is a signed link to a JPEG of the lesson view under the QA note sheet. It expires in about 3 days. Run `curl -fsSL -o screenshot.jpg \"<screenshot_url>\"`, then read screenshot.jpg as an image before acting on the note.";
 
 export type ShoheiNoteJob = {
   id: string;
@@ -14,11 +18,15 @@ export type ShoheiNoteJob = {
   agent: string;
   url: string;
   noteCreatedAt: Date;
-  screenshotJpeg: string | null;
 };
 
+/** Object key for a note screenshot. The random suffix keeps keys unguessable. */
+export function screenshotObjectKey(jobId: string, randomSuffix: string): string {
+  return `shizen-notes/${jobId}-${randomSuffix}.jpg`;
+}
+
 /** JSON body posted to SHOHEI_DELIVERY_URL. */
-export function shoheiDeliveryPayload(job: ShoheiNoteJob) {
+export function shoheiDeliveryPayload(job: ShoheiNoteJob, screenshotUrl: string | null) {
   return {
     job_id: job.id,
     source: job.source,
@@ -29,10 +37,10 @@ export function shoheiDeliveryPayload(job: ShoheiNoteJob) {
     metadata: {
       url: job.url,
       created_at: job.noteCreatedAt.toISOString(),
-      ...(job.screenshotJpeg
+      ...(screenshotUrl
         ? {
-            screenshot_jpeg: job.screenshotJpeg,
-            screenshot_jpeg_instructions: SCREENSHOT_JPEG_INSTRUCTIONS,
+            screenshot_url: screenshotUrl,
+            screenshot_instructions: SCREENSHOT_URL_INSTRUCTIONS,
           }
         : {}),
     },

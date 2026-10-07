@@ -127,6 +127,13 @@
       "when": 1790400000000,
       "tag": "0017_shizen_note_screenshot",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790500000000,
+      "tag": "0018_shizen_note_screenshot_key",
+      "breakpoints": true
     }
   ]
 }

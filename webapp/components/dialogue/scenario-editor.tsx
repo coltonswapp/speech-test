@@ -36,6 +36,7 @@ import { ScenarioAuditPanel } from "@/components/dialogue/scenario-audit-panel";
 import { ScenarioMinimap } from "@/components/dialogue/scenario-minimap";
 import { SourceScriptPanel } from "@/components/dialogue/source-script-panel";
 import { SceneFeedbackCard } from "@/components/lesson-feedback/scene-feedback-card";
+import { SceneReportsCard } from "@/components/lesson-feedback/scene-reports-card";
 import {
   hasSpokenJapanese,
   type AuditScenarioResult,
@@ -640,6 +641,12 @@ export function ScenarioEditor({
       />
 
       <SceneFeedbackCard
+        collectionId={collectionId}
+        scenarioSlug={scenarioSlug}
+        currentVariantId={draft.publishedVariantId}
+      />
+
+      <SceneReportsCard
         collectionId={collectionId}
         scenarioSlug={scenarioSlug}
         currentVariantId={draft.publishedVariantId}

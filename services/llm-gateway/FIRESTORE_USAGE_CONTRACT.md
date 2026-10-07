@@ -374,3 +374,53 @@ updatedAt
 Average for a dimension is `sum / n`. Treat missing numbers as 0. A histogram bucket appears only after its first rating.
 
 Hourly caps: `lessonFeedbackRate/{uid}/hours/{YYYY-MM-DDTHH}` (20 per hour). Not a Studio surface.
+
+---
+
+## Lesson reports (`lessonReports`, `lessonReportStats`)
+
+Writer: `recordLessonReport` in `services/llm-gateway/src/lesson-report.ts`, behind `POST /v1/lesson-report`. iOS offers "Report a problem" in the dialogue lesson menu on every page, so a learner can flag wrong audio, bad timing, an off translation, or a broken screen while it is happening.
+
+Categories (open set): `audio`, `timing`, `translation`, `content`, `quiz`, `bug`, `other`. A report has at least one category or a note. `sceneKey` follows the lesson feedback rules above.
+
+### Report documents
+
+```
+lessonReports/{reportId}
+```
+
+`reportId` is a client UUID. A retry of the same report is a no-op.
+
+| Field | When |
+| --- | --- |
+| `uid`, `sceneKey`, `collectionId`, `scenarioId` | every report |
+| `status` | `open` on create; Studio sets `resolved` or `wontfix` |
+| `categories` | array of category ids, may be empty when a note is present |
+| `note` | optional learner text, up to 2000 chars |
+| `page` | `dialogue`, `quiz`, or `highlights` |
+| `focusTitle`, `focusDetails` | what was on screen: line number, speaker, Japanese/English, playback state, quiz question |
+| `sessionMode`, `quizQuestionNumber` | optional |
+| `publishedVariantId`, `publishedContentHash` | when the scene had a published take |
+| `appVersion`, `osVersion`, `deviceHash` | optional |
+| `statusUpdatedAt` | set by Studio when the status changes |
+| `createdAt`, `expiresAt` | every report; `expiresAt` uses `LLM_FEEDBACK_RETENTION_DAYS` |
+
+Studio lists recent reports for one scene with `where("sceneKey", "==", key).orderBy("createdAt", "desc")`, which uses the composite index in `firestore.indexes.json`. Add a TTL policy on `lessonReports.expiresAt` the same way as `llmFeedback`.
+
+### Stats documents
+
+```
+lessonReportStats/{sceneKey}
+```
+
+All-time totals per scene, literal dotted field names (`set`+merge):
+
+```
+count                     // accepted reports
+open                      // reports still open; Studio decrements on resolve / won't fix
+categories.audio … categories.other
+collectionId, scenarioId
+lastReportedAt, updatedAt
+```
+
+Hourly caps: `lessonReportRate/{uid}/hours/{YYYY-MM-DDTHH}` (10 per hour). Not a Studio surface.

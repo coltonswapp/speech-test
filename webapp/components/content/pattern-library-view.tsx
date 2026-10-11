@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import {
   contentApi,
   type TeachingPatternRow,
@@ -40,7 +42,67 @@ function matchesSearch(pattern: TeachingPatternRow, search: string): boolean {
     pattern.id.toLowerCase().includes(needle) ||
     pattern.form.toLowerCase().includes(needle) ||
     pattern.gloss.toLowerCase().includes(needle) ||
+    (pattern.description ?? "").toLowerCase().includes(needle) ||
     pattern.category.toLowerCase().includes(needle)
+  );
+}
+
+function PatternEditor({ pattern }: { pattern: TeachingPatternRow }) {
+  const queryClient = useQueryClient();
+  const [description, setDescription] = useState(pattern.description ?? "");
+
+  useEffect(() => {
+    setDescription(pattern.description ?? "");
+  }, [pattern.id, pattern.description]);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      contentApi.updatePattern(pattern.id, {
+        description: description.trim() ? description.trim() : null,
+      }),
+    onSuccess: () => {
+      toast.success(`Saved ${pattern.form}`);
+      queryClient.invalidateQueries({ queryKey: ["teaching-patterns"] });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Save failed");
+    },
+  });
+
+  const dirty =
+    (description.trim() || "") !== (pattern.description?.trim() || "");
+
+  return (
+    <div className="flex w-full flex-col gap-3 border-t border-border/60 px-4 pb-4 pt-3">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${pattern.id}-gloss`}>Gloss</Label>
+        <Input
+          id={`${pattern.id}-gloss`}
+          value={pattern.gloss}
+          readOnly
+          className="bg-muted/40"
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${pattern.id}-description`}>Description</Label>
+        <Textarea
+          id={`${pattern.id}-description`}
+          rows={3}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="1–2 sentence learner-friendly definition, e.g. Used to ask for or give permission to do something ('Is it OK if I…?' / 'You may…')."
+        />
+      </div>
+      <div className="flex items-center justify-end">
+        <Button
+          size="sm"
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending || !dirty}
+        >
+          {saveMutation.isPending ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -62,6 +124,7 @@ function statusVariant(
 export function PatternLibraryView() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const debouncedSearch = useDebouncedValue(search, 250);
 
   const { data, isLoading } = useQuery({
@@ -214,39 +277,59 @@ export function PatternLibraryView() {
                 <div
                   key={pattern.id}
                   className={cn(
-                    "flex flex-wrap items-center gap-2 px-4 py-3",
                     pattern.linkedScenarioCount === 0 && "bg-muted/20"
                   )}
                 >
-                  <span className="min-w-[8rem] font-medium tracking-tight">
-                    {pattern.form}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-                    {pattern.gloss}
-                  </span>
-                  <Badge variant="secondary" className="text-[10px]">
-                    N{pattern.jlptBand}
-                  </Badge>
-                  <Badge
-                    variant={statusVariant(pattern.status)}
-                    className="text-[10px] capitalize"
-                  >
-                    {pattern.status}
-                  </Badge>
-                  <Badge
-                    variant={
-                      pattern.linkedScenarioCount === 0
-                        ? "outline"
-                        : "secondary"
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedId((current) =>
+                        current === pattern.id ? null : pattern.id
+                      )
                     }
-                    className="text-[10px] tabular-nums"
+                    className={cn(
+                      "flex w-full flex-wrap items-center gap-2 px-4 py-3 text-left",
+                      selectedId === pattern.id && "bg-muted/40"
+                    )}
                   >
-                    {pattern.linkedScenarioCount === 0
-                      ? "0 scenarios"
-                      : `${pattern.linkedScenarioCount} scenario${
-                          pattern.linkedScenarioCount === 1 ? "" : "s"
-                        }`}
-                  </Badge>
+                    <span className="min-w-[8rem] font-medium tracking-tight">
+                      {pattern.form}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                      {pattern.gloss}
+                    </span>
+                    <Badge variant="secondary" className="text-[10px]">
+                      N{pattern.jlptBand}
+                    </Badge>
+                    <Badge
+                      variant={statusVariant(pattern.status)}
+                      className="text-[10px] capitalize"
+                    >
+                      {pattern.status}
+                    </Badge>
+                    {!pattern.description?.trim() && (
+                      <Badge variant="outline" className="text-[10px]">
+                        no description
+                      </Badge>
+                    )}
+                    <Badge
+                      variant={
+                        pattern.linkedScenarioCount === 0
+                          ? "outline"
+                          : "secondary"
+                      }
+                      className="text-[10px] tabular-nums"
+                    >
+                      {pattern.linkedScenarioCount === 0
+                        ? "0 scenarios"
+                        : `${pattern.linkedScenarioCount} scenario${
+                            pattern.linkedScenarioCount === 1 ? "" : "s"
+                          }`}
+                    </Badge>
+                  </button>
+                  {selectedId === pattern.id && (
+                    <PatternEditor pattern={pattern} />
+                  )}
                 </div>
               ))}
             </div>

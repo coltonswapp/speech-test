@@ -248,12 +248,14 @@ export type DialogueHighlights = z.output<typeof highlightsSchema>;
 
 // Pattern library card shipped with public/CMS dialogue export so iOS can
 // resolve grammar highlights without orphans. Maps from teaching_pattern:
-// form → label, gloss → shortMeaning, notes → formNote.
+// form → label, gloss → shortMeaning, notes → formNote,
+// description → description (omitted when empty).
 export const exportedTeachingPatternSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
   shortMeaning: z.string().optional(),
   formNote: z.string().optional(),
+  description: z.string().optional(),
 });
 export type ExportedTeachingPattern = z.infer<
   typeof exportedTeachingPatternSchema

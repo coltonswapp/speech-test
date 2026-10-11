@@ -23,6 +23,7 @@ export type TeachingPatternSeedRow = {
   id: string;
   form: string;
   gloss: string;
+  description?: string | null;
   jlptBand: number;
   category: string;
   status: string;
@@ -161,6 +162,7 @@ export async function upsertTeachingPatterns(
         id: r.id,
         form: r.form,
         gloss: r.gloss,
+        description: r.description?.trim() ? r.description.trim() : null,
         jlptBand: r.jlptBand,
         category: r.category,
         status: r.status,

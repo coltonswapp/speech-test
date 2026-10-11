@@ -317,4 +317,32 @@ describe("grammar highlight + pattern catalog export", () => {
       },
     ]);
   });
+
+  it("keeps an optional pattern description when present", () => {
+    const parsed = collectionFileSchema.parse(
+      buildCollectionFile(
+        {
+          id: "ball-game",
+          title: "Ball game",
+          subtitle: null,
+          sceneImage: null,
+          thumbnailUrl: null,
+          thumbnailSmallUrl: null,
+        },
+        [baseScenario()],
+        [
+          {
+            id: "n5-mashou",
+            label: "〜ましょう",
+            shortMeaning: "let's…",
+            description: "Used to invite someone to do something together.",
+          },
+        ]
+      )
+    );
+    assert.equal(
+      parsed.patterns?.[0]?.description,
+      "Used to invite someone to do something together."
+    );
+  });
 });

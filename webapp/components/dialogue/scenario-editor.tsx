@@ -42,18 +42,23 @@ import {
   type DialogueHighlights,
   type DialogueLine,
 } from "@/lib/dialogue/types";
+import {
+  scenarioEditorDeepLink,
+  SCENARIO_EDITOR_SECTION_IDS,
+  type ScenarioEditorSectionId,
+} from "@/lib/dialogue/scenario-editor-deep-link";
 
 // Sections within the "editor" view; "raw" is a separate top-level view, not
 // a scrollable section, since editing raw JSON alongside the rest doesn't
 // make sense.
-const SECTIONS = [
+const SECTIONS: { id: ScenarioEditorSectionId; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "lines", label: "Lines" },
   { id: "audio", label: "Audio" },
   { id: "highlights", label: "Highlights" },
   { id: "quiz", label: "Quiz" },
 ];
-const SECTION_IDS = SECTIONS.map((section) => section.id);
+const SECTION_IDS = [...SCENARIO_EDITOR_SECTION_IDS];
 
 // Which sections the user has folded away. Remembered across scenarios so
 // e.g. "Lines collapsed, Audio open" survives moving to the next scene.
@@ -157,8 +162,11 @@ export function ScenarioEditor({
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     readCollapsedSections,
   );
-  // One-shot: review-queue → editor starts with only audio expanded.
-  const [appliedReviewCollapse, setAppliedReviewCollapse] = useState(false);
+  // Last exclusive-expand target from `?tab=` / review-queue. Skip re-applying
+  // the same section so the user can unfold others without the URL fighting back.
+  const [appliedDeepLinkKeepOpen, setAppliedDeepLinkKeepOpen] = useState<
+    string | null
+  >(null);
 
   function setSectionsCollapsed(ids: string[], collapsed: boolean) {
     const next = new Set(collapsedSections);
@@ -211,35 +219,22 @@ export function ScenarioEditor({
       return;
     }
 
-    // Review-queue deep link: collapse everything except audio (or ?tab=).
-    // In-memory only — do not write localStorage so other editor entry points
-    // keep their remembered expand/collapse preferences.
-    if (arrivedFromReview && !appliedReviewCollapse) {
-      const keepOpen =
-        tab && SECTION_IDS.includes(tab) ? tab : "audio";
-      setCollapsedSections(
-        new Set(SECTION_IDS.filter((id) => id !== keepOpen)),
-      );
-      setAppliedReviewCollapse(true);
-      setView("editor");
-      requestAnimationFrame(() => scrollToId(keepOpen));
-      return;
-    }
+    // Curriculum chips, review-queue, and other `?tab=` entries: expand only
+    // the target section. In-memory only — do not write localStorage so a
+    // normal visit (no section tab) keeps remembered expand/collapse defaults.
+    const deepLink = scenarioEditorDeepLink({
+      tab,
+      fromReview: arrivedFromReview,
+    });
+    if (!deepLink) return;
+    if (appliedDeepLinkKeepOpen === deepLink.keepOpen) return;
 
-    if (!tab) return;
-    if (SECTION_IDS.includes(tab)) {
-      setView("editor");
-      // Deep link into a folded section: unfold it so there's something to land on.
-      setCollapsedSections((current) => {
-        if (!current.has(tab)) return current;
-        const next = new Set(current);
-        next.delete(tab);
-        return next;
-      });
-      requestAnimationFrame(() => scrollToId(tab));
-    }
+    setCollapsedSections(new Set(deepLink.collapsed));
+    setAppliedDeepLinkKeepOpen(deepLink.keepOpen);
+    setView("editor");
+    requestAnimationFrame(() => scrollToId(deepLink.keepOpen));
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [searchParams, appliedReviewCollapse]);
+  }, [searchParams, appliedDeepLinkKeepOpen]);
 
   // Set when the scenario was created via the "write lines manually" path,
   // so a setting/grammar points filled in for context don't silently trigger

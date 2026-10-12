@@ -17,29 +17,13 @@ import {
   reviewChipLabel,
   thumbnailChipLabel,
 } from "@/lib/dialogue/scenario-readiness";
+import {
+  readinessChipHref,
+  type ReadinessChipKey,
+} from "@/lib/dialogue/scenario-editor-deep-link";
 import { cn } from "@/lib/utils";
 
-/** Scenario editor section ids used by `?tab=` deep links. */
-export type ReadinessChipTab = "audio" | "quiz" | "overview";
-
-const CHIP_TAB: Record<
-  | "audio"
-  | "align"
-  | "review"
-  | "published"
-  | "quiz"
-  | "thumbnail"
-  | "contentQa",
-  ReadinessChipTab
-> = {
-  audio: "audio",
-  align: "audio",
-  review: "audio",
-  published: "audio",
-  quiz: "quiz",
-  thumbnail: "overview",
-  contentQa: "overview",
-};
+export type { ReadinessChipTab } from "@/lib/dialogue/scenario-editor-deep-link";
 
 function readinessChipClass(
   tone: "ok" | "warn" | "muted" | "draft",
@@ -63,13 +47,13 @@ function stopChipNavigation(event: SyntheticEvent) {
 
 function ReadinessChip({
   hrefBase,
-  tab,
+  chip,
   tone,
   title,
   children,
 }: {
   hrefBase?: string;
-  tab: ReadinessChipTab;
+  chip: ReadinessChipKey;
   tone: "ok" | "warn" | "muted" | "draft";
   title: string;
   children: ReactNode;
@@ -91,7 +75,7 @@ function ReadinessChip({
       title={title}
       render={
         <Link
-          href={`${hrefBase}?tab=${tab}`}
+          href={readinessChipHref(hrefBase, chip)}
           onClick={stopChipNavigation}
           onPointerDown={stopChipNavigation}
         />
@@ -194,7 +178,7 @@ export function ScenarioReadinessChips({
     >
       <ReadinessChip
         hrefBase={hrefBase}
-        tab={CHIP_TAB.audio}
+        chip="audio"
         tone={audioTone}
         title={
           audioTitle ??
@@ -209,7 +193,7 @@ export function ScenarioReadinessChips({
       </ReadinessChip>
       <ReadinessChip
         hrefBase={hrefBase}
-        tab={CHIP_TAB.align}
+        chip="align"
         tone={alignTone}
         title={
           align === "done"
@@ -227,7 +211,7 @@ export function ScenarioReadinessChips({
       </ReadinessChip>
       <ReadinessChip
         hrefBase={hrefBase}
-        tab={CHIP_TAB.review}
+        chip="review"
         tone={reviewTone}
         title={
           review === "reviewed"
@@ -241,7 +225,7 @@ export function ScenarioReadinessChips({
       </ReadinessChip>
       <ReadinessChip
         hrefBase={hrefBase}
-        tab={CHIP_TAB.published}
+        chip="published"
         tone={publishedTone}
         title={
           published === "unpublished"
@@ -259,7 +243,7 @@ export function ScenarioReadinessChips({
       </ReadinessChip>
       <ReadinessChip
         hrefBase={hrefBase}
-        tab={CHIP_TAB.quiz}
+        chip="quiz"
         tone={quizTone}
         title={
           quizStatus === "missing"
@@ -279,7 +263,7 @@ export function ScenarioReadinessChips({
       </ReadinessChip>
       <ReadinessChip
         hrefBase={hrefBase}
-        tab={CHIP_TAB.thumbnail}
+        chip="thumbnail"
         tone={thumbnailTone}
         title={
           thumbnail === "own"
@@ -293,7 +277,7 @@ export function ScenarioReadinessChips({
       </ReadinessChip>
       <ReadinessChip
         hrefBase={hrefBase}
-        tab={CHIP_TAB.contentQa}
+        chip="contentQa"
         tone={contentQaTone}
         title={
           contentQa === "done"

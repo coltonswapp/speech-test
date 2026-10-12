@@ -299,7 +299,12 @@ export function VariantList({
     // overflow-hidden for corner clipping).
     <Card className="overflow-visible">
       <CardHeader>
-        <CardTitle className="text-base font-medium">Takes</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-base font-medium">
+          Takes
+          <Badge variant="secondary" className="font-normal tabular-nums">
+            {variants.length}
+          </Badge>
+        </CardTitle>
         <CardAction>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {headerActions}

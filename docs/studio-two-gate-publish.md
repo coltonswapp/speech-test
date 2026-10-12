@@ -9,8 +9,8 @@
 
 | Area | Phase 1 (this PR) | Phase 2 (deferred) |
 |---|---|---|
-| Thumbnail chip on Curriculum | Own / inherited / missing alongside audio·timing·sync·quiz | Thumb “stale” when a future staging model exists |
-| Review queue pipeline | Staged → In database → Client-visible derived from flags / published take / `isActive` | Richer change-set staging |
+| Thumbnail chip on Curriculum | Own / inherited / missing alongside audio·align·review·published·quiz | Thumb “stale” when a future staging model exists |
+| Review queue pipeline | Staged → In database → Live in app / Hidden from app (Gate B `isActive`) | Richer change-set staging |
 | Publish & mark complete | Select → Gate A publish → mark reviewed; never flips `isActive` | Bulk Gate A from Staging desk |
 | Collapsible lessons | Expand opened/first; collapse others with waiting count | Remember preference server-side |
 | Gate B clarity | Curriculum + lesson editor: emerald “Visible to learners” (not white/inverted fill) | Confirm modal + change summary |
@@ -27,7 +27,7 @@ Today Studio has **three loosely related axes**, not one pipeline:
 | Axis | What it is today | Where |
 |---|---|---|
 | Take review | Auto-stamp flags cleared; `source: reviewed`; `reviewedAt` telemetry | Review queue / Token timing |
-| Scenario “publish” | CDN clip + lockstep snapshot (`publishedAt`, audio/timing/sync/quiz chips go green) | Scenario Audio panel |
+| Scenario “publish” | CDN clip + lockstep snapshot (`publishedAt`, audio/align/published chips go green) | Scenario Audio panel |
 | Lesson live | `dialogueCollection.isActive` — public CMS only serves active lessons | Curriculum “Visible to learners” (Gate B) |
 | Content QA (learner client) | Dialogue + quiz looked over from the app; freeform note | Readiness `qa` chip — see `docs/studio-content-qa-review.md` |
 
@@ -149,8 +149,8 @@ Two placement options (prefer A for scanability):
 
 Thumbnails stay on the **existing Curriculum** (and scenario editor) surfaces. **Do not** add a Thumbnails tab.
 
-Today readiness chips: **audio · timing · sync · quiz · thumb · qa**  
-(`scenario-readiness-chips.tsx` / `scenario-readiness.ts`).
+Today readiness chips: **audio · align · review · published · quiz · thumb · qa**  
+(`scenario-readiness-chips.tsx` / `scenario-readiness.ts`). `align` is the aligner rollup (line timing + karaoke); `review` is the human-ear pass (`tokenSync.source: reviewed`); `published` is Gate A (scene has a published take).
 
 **Thumbnail chip** (Phase 1): own-vs-inherited semantics (already partially in scenario editor: “own thumbnail” / “inherits lesson”).
 
@@ -167,10 +167,10 @@ Today readiness chips: **audio · timing · sync · quiz · thumb · qa**
 ```
 Curriculum row chips (existing + new):
 
-  [audio ✓] [timing ✓] [sync ✓] [quiz 3] [thumb ↓]
+  [audio ✓] [align] [review ✓] [published] [quiz 3] [thumb ↓]
                                       ▲
                                       └── inherit (no scene override)
-  [audio ✓] [timing ✓] [sync ✓] [quiz 3] [thumb own]
+  [audio ✓] [align] [review] [pub —] [quiz 3] [thumb own]
                                       ▲
                                       └── custom scene thumbnail
 ```
@@ -229,7 +229,7 @@ Fold publish position into each take / lesson group:
 |---|---|
 | **Staged** | Reviewed (or ready) but not Gate-A’d |
 | **In database** | Gate A done for this take/scene (`publishedAt` / scenario published) |
-| **Client-visible** | Parent lesson `isActive` (or successor) |
+| **Live in app / Hidden from app** | Parent lesson `isActive` (Gate B) |
 
 ```
 ┌─ Review queue ──────────────────────────────────────────────────────────┐
@@ -238,7 +238,7 @@ Fold publish position into each take / lesson group:
 │  ▼ Lesson: Train station                    pipeline: Staged → In DB     │
 │    ┌ Take card ───────────────────────────────────────────────────────┐ │
 │    │  Platform 1 · 4 flagged · selected                                │ │
-│    │  Pipeline:  ● Staged  ○ In DB  ○ Client-visible                   │ │
+│    │  Pipeline:  ● Staged  ○ In DB  ○ Hidden from app                  │ │
 │    │  [ Play ] [ Approve take ] [ Publish & mark complete ] [ Open ]   │ │
 │    └───────────────────────────────────────────────────────────────────┘ │
 │                                                                          │
@@ -267,10 +267,10 @@ Curriculum
 ════════════════════════════════════════════════════════════════
 Unit 1 — Getting around
   ▾ Train station                          [In the app ○]   ← Gate B today
-      Scene          audio  timing  sync  quiz   thumb
-      Platform 1      ✓      ✓      ✓    3     ↓ inherit
-      Ticket booth    ✓      ready  ✓    —     own
-      Exit            draft  —      —    —     —
+      Scene          audio  align  review  published  quiz   thumb
+      Platform 1      ✓      ✓      ✓       published  3     ↓ inherit
+      Ticket booth    ✓      ready  pending pub —      —     own
+      Exit            draft  —      —       pub —      —     —
 ```
 
 ### 7.2 Staging desk (both gates)
@@ -312,7 +312,7 @@ Summary card (unchanged metrics)
 ▾ Train station — reviewing
   Take · Platform 1
     flags: stamp-in-silence ×2
-    pipeline: [Staged●] [In DB○] [Client-visible○]
+    pipeline: [Staged●] [In DB○] [Hidden from app]
     actions: Play | Approve | Publish & mark complete | Open
 
 ▷ Grocery — 2 waiting (collapsed)

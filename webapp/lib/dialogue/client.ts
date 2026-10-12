@@ -38,8 +38,16 @@ export type ScenarioAudioStatus = {
 
 export type ScenarioReadinessSummary = {
   audio: "published" | "stale" | "draft";
+  /** Lockstep fallbacks; chips prefer `align`. */
   timing: "missing" | "partial" | "ready" | "done";
   sync: "missing" | "stale" | "tokens-only" | "ready" | "complete";
+  /** Combined aligner (timing + karaoke). */
+  align?: "missing" | "partial" | "ready" | "done" | "stale";
+  /** Human-ear review of the selected take alignment. */
+  review?: "pending" | "flagged" | "reviewed";
+  /** Gate A: scene has a published take. */
+  published?: "unpublished" | "published" | "stale";
+  publishedAt?: string | null;
   quiz?: "missing" | "ready" | "published";
   quizCount: number;
   quizWithEvidence: number;

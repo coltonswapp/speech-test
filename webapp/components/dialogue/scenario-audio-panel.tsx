@@ -465,7 +465,12 @@ export function ScenarioAudioPanel({
       ) : speakableLineCount > 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base font-medium">Takes</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base font-medium">
+              Takes
+              <Badge variant="secondary" className="font-normal tabular-nums">
+                0
+              </Badge>
+            </CardTitle>
             <CardAction>
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <GenerateTakeControl

@@ -43,6 +43,7 @@ import {
   type DialogueLine,
 } from "@/lib/dialogue/types";
 import {
+  isScenarioEditorSectionId,
   scenarioEditorDeepLink,
   SCENARIO_EDITOR_SECTION_IDS,
   type ScenarioEditorSectionId,
@@ -71,8 +72,8 @@ function readCollapsedSections(): Set<string> {
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return new Set();
     return new Set(
-      parsed.filter(
-        (id): id is string => typeof id === "string" && SECTION_IDS.includes(id),
+      parsed.filter((id): id is ScenarioEditorSectionId =>
+        isScenarioEditorSectionId(typeof id === "string" ? id : null),
       ),
     );
   } catch {

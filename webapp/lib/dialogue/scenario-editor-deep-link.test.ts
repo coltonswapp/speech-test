@@ -59,7 +59,7 @@ describe("readiness chips → exclusive section", () => {
     { chip: "contentQa", tab: "overview" },
   ];
 
-  it("each chip deep-links to one section and leaves Lines collapsed unless that is the target", () => {
+  it("each chip deep-links to one section and leaves Lines collapsed", () => {
     const hrefBase = "/content/dialogues/col/scene";
     for (const { chip, tab } of chips) {
       assert.equal(READINESS_CHIP_TAB[chip], tab);
@@ -69,9 +69,10 @@ describe("readiness chips → exclusive section", () => {
       assert.ok(deep, `missing deep link for chip ${chip}`);
       assert.equal(deep.keepOpen, tab);
       assert.deepEqual(expandedOf(deep.collapsed), [tab]);
-      if (tab !== "lines") {
-        assert.ok(deep.collapsed.includes("lines"), `${chip} should collapse Lines`);
-      }
+      assert.ok(
+        deep.collapsed.includes("lines"),
+        `${chip} should collapse Lines`,
+      );
     }
   });
 });

@@ -132,6 +132,7 @@ export type ReviewQueueResult = {
     }>;
     isPublishedTake: boolean;
     isSelectedTake: boolean;
+    scenarioPublishedAt?: string | null;
     flagCount: number;
     flagsByCode: Partial<Record<TokenSyncFlag["code"], number>>;
     flaggedLines: Array<{

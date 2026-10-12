@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -18,24 +19,41 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LessonPlaythroughButton } from "@/components/dialogue/lesson-playthrough";
-import { dialogueApi } from "@/lib/dialogue/client";
+import { dialogueApi, formatPublishedAt } from "@/lib/dialogue/client";
 import { derivePublishPipeline } from "@/lib/dialogue/publish-pipeline";
+import { formatCurriculumUpdatedAt } from "@/lib/dialogue/scenario-readiness";
 import {
   dismissReviewTake,
   readReviewDismissals,
   readReviewExpanded,
+  readReviewJlpt,
   readReviewRetained,
+  readReviewShowOlderTakes,
   retainReviewTake,
   undismissReviewTake,
   writeReviewDismissals,
   writeReviewExpanded,
+  writeReviewJlpt,
+  writeReviewShowOlderTakes,
   type ReviewDismissals,
   type ReviewRetainedTakes,
 } from "@/lib/studio/nav-persistence";
 import { ttsApi, type ReviewQueueResult } from "@/lib/tts/client";
 import type { TokenSyncFlag } from "@/lib/dialogue/types";
 import { activeTokenIndexInLine } from "@/lib/dialogue/token-sync";
+import {
+  REVIEW_JLPT_TRACKS,
+  countTakesByTrack,
+  gateAButtonState,
+  latestQueuedTakeIds,
+  newerTakesThan,
+  parseReviewJlptTrack,
+  reviewQueueTrack,
+  takeIsSuperseded,
+  type ReviewJlptTrackLevel,
+} from "@/lib/tts/review-queue-view";
 import { cn } from "@/lib/utils";
 
 const FLAG_LABEL: Record<TokenSyncFlag["code"], string> = {
@@ -158,7 +176,10 @@ function groupTakesByLesson(takes: Take[]): LessonGroup[] {
 /** Clear amber QA flags on a queue card after Approve / Publish (take stays listed). */
 function withFlagsCleared(
   take: Take,
-  patch?: Partial<Pick<Take, "isPublishedTake" | "isSelectedTake">>,
+  patch?: Partial<
+    Pick<Take, "isPublishedTake" | "isSelectedTake" | "scenarioPublishedAt">
+  >,
+  publishedAt?: string,
 ): Take {
   const reviewedAt =
     take.timing?.reviewedAt ?? new Date().toISOString();
@@ -169,6 +190,7 @@ function withFlagsCleared(
     lineCodes: [] as TokenSyncFlag["code"][],
     tokens: line.tokens.map((token) => ({ ...token, codes: [] as TokenSyncFlag["code"][] })),
   }));
+  const published = patch?.isPublishedTake === true;
   return {
     ...take,
     ...patch,
@@ -182,8 +204,31 @@ function withFlagsCleared(
     timing: {
       ...(take.timing ?? {}),
       reviewedAt,
+      ...(publishedAt ? { publishedAt } : {}),
     },
+    siblings: take.siblings.map((sib) =>
+      published
+        ? {
+            ...sib,
+            isPublishedTake: sib.variantId === take.variantId,
+            isSelectedTake: sib.variantId === take.variantId,
+          }
+        : sib,
+    ),
   };
+}
+
+function remapTakesAfterPublish(takes: Take[], published: Take): Take[] {
+  return takes.map((row) => {
+    if (row.variantId === published.variantId) return published;
+    if (row.projectId !== published.projectId) return row;
+    return {
+      ...row,
+      isPublishedTake: false,
+      isSelectedTake: false,
+      siblings: published.siblings,
+    };
+  });
 }
 
 function isRetainedTakeSnapshot(value: unknown): value is Take {
@@ -204,28 +249,45 @@ function PipelineSteps({ take }: { take: Take }) {
     isPublishedTake: take.isPublishedTake,
     collectionIsActive: take.collectionIsActive,
   });
+  const gateBLive = take.collectionIsActive === true;
+  const gateBHidden = take.collectionIsActive === false;
+  const gateBLabel = gateBLive
+    ? "Live in app"
+    : gateBHidden
+      ? "Hidden from app"
+      : "No lesson";
   const steps: Array<{
-    key: keyof typeof pipeline.reached;
+    key: string;
     label: string;
     reached: boolean;
+    title: string;
+    tone: "ok" | "muted" | "live" | "hidden";
   }> = [
-    { key: "staged", label: "Staged", reached: pipeline.reached.staged },
+    {
+      key: "staged",
+      label: "Staged",
+      reached: pipeline.reached.staged,
+      title: "Staged in Studio — waiting for Gate A and/or review.",
+      tone: "ok",
+    },
     {
       key: "inDatabase",
       label: "In database",
       reached: pipeline.reached.inDatabase,
+      title: "Gate A: this take is the scene's published clip in CDN/DB.",
+      tone: "ok",
     },
     {
       key: "clientVisible",
-      label: "Client-visible",
-      reached: pipeline.reached.clientVisible,
+      label: gateBLabel,
+      reached: gateBLive,
+      title:
+        "Gate B: lesson collection isActive — whether learners can see this lesson in the app. Separate from Gate A (publish to database).",
+      tone: gateBLive ? "live" : "hidden",
     },
   ];
   return (
-    <div
-      className="flex flex-wrap items-center gap-1.5 text-[11px]"
-      title="Publish pipeline: Gate A lands in the database; Gate B makes the lesson visible to learners."
-    >
+    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
       <span className="text-muted-foreground">Pipeline</span>
       {steps.map((step, index) => (
         <span key={step.key} className="inline-flex items-center gap-1.5">
@@ -235,13 +297,16 @@ function PipelineSteps({ take }: { take: Take }) {
             </span>
           )}
           <span
+            title={step.title}
             className={cn(
               "inline-flex items-center gap-1 rounded border px-1.5 py-0.5",
-              step.reached
-                ? step.key === "clientVisible"
-                  ? "border-foreground/40 bg-foreground text-background"
-                  : "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                : "border-border/60 text-muted-foreground",
+              step.tone === "live"
+                ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
+                : step.tone === "hidden"
+                  ? "border-border/80 bg-muted/50 text-muted-foreground"
+                  : step.reached
+                    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                    : "border-border/60 text-muted-foreground",
             )}
           >
             <span aria-hidden>{step.reached ? "●" : "○"}</span>
@@ -682,10 +747,17 @@ function TakeCard({
         onSuccess: (result) => {
           const scrollY =
             typeof window !== "undefined" ? window.scrollY : null;
-          const cleared = withFlagsCleared(take, {
-            isPublishedTake: true,
-            isSelectedTake: true,
-          });
+          const publishedAt =
+            result.scenario.publishedAt ?? new Date().toISOString();
+          const cleared = withFlagsCleared(
+            take,
+            {
+              isPublishedTake: true,
+              isSelectedTake: true,
+              scenarioPublishedAt: publishedAt,
+            },
+            publishedAt,
+          );
           onKeepInQueue(cleared);
           queryClient.setQueryData<ReviewQueueResult>(
             ["tts-review-queue"],
@@ -693,9 +765,7 @@ function TakeCard({
               if (!prev) return prev;
               return {
                 ...prev,
-                takes: prev.takes.map((row) =>
-                  row.variantId === cleared.variantId ? cleared : row,
-                ),
+                takes: remapTakesAfterPublish(prev.takes, cleared),
               };
             },
           );
@@ -915,6 +985,12 @@ function TakeCard({
   const uncheckedCount = queueLines.length - checkedCount;
   const actionBusy =
     approveMutation.isPending || publishAndCompleteMutation.isPending;
+  const generatedRelative = formatCurriculumUpdatedAt(take.createdAt);
+  const generatedExact = new Date(take.createdAt).toLocaleString();
+  const superseded = takeIsSuperseded(take);
+  const newerTake = newerTakesThan(take)[0];
+  const gateA = gateAButtonState(take);
+  const publishedAtLabel = formatPublishedAt(gateA.publishedAt);
 
   return (
     <Card>
@@ -957,9 +1033,27 @@ function TakeCard({
           {take.isSelectedTake && !take.isPublishedTake && (
             <Badge variant="secondary">selected</Badge>
           )}
+          {superseded && (
+            <Badge
+              variant="outline"
+              className="border-amber-500/50 font-normal text-amber-700 dark:text-amber-300"
+              title={
+                newerTake
+                  ? `A newer take exists (Take ${newerTake.takeIndex} · ${new Date(newerTake.createdAt).toLocaleString()}). This queued take is not the latest generated for the scene.`
+                  : "A newer take exists for this scene."
+              }
+            >
+              superseded by newer take
+            </Badge>
+          )}
+          <span
+            className="text-xs font-normal text-muted-foreground"
+            title={generatedExact}
+          >
+            Generated {generatedRelative || generatedExact}
+          </span>
           <span className="ml-auto text-xs font-normal text-muted-foreground">
-            {take.lineCount} lines · {take.tokenCount} tokens · {take.voice} ·{" "}
-            {new Date(take.createdAt).toLocaleString()}
+            {take.lineCount} lines · {take.tokenCount} tokens · {take.voice}
             {opened
               ? ` · opened ${new Date(opened).toLocaleString()}`
               : " · not opened yet"}
@@ -1042,20 +1136,45 @@ function TakeCard({
             type="button"
             size="sm"
             variant="outline"
-            className="min-h-11 touch-manipulation md:min-h-8"
-            disabled={actionBusy || !canPublishAndComplete}
+            className={cn(
+              "min-h-11 touch-manipulation md:min-h-8",
+              gateA.kind === "published" &&
+                "border-emerald-500/60 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
+            )}
+            disabled={
+              actionBusy ||
+              !canPublishAndComplete ||
+              gateA.kind === "published"
+            }
             onClick={() => publishAndCompleteMutation.mutate()}
             title={
-              canPublishAndComplete
-                ? "Select this take, publish audio to the database (Gate A), then clear flags. Stays in the queue until you Remove it. Does not make the lesson visible to learners (Gate B)."
-                : "Needs a linked dialogue scene and take audio"
+              !canPublishAndComplete
+                ? "Needs a linked dialogue scene and take audio"
+                : gateA.kind === "published"
+                  ? `Selected take is already published (Gate A)${
+                      publishedAtLabel ? ` · ${publishedAtLabel}` : ""
+                    }. Does not change lesson visibility (Gate B).`
+                  : gateA.kind === "republish"
+                    ? "Selected take differs from the published take. Republish this take to the database (Gate A), then clear flags. Does not make the lesson visible to learners (Gate B)."
+                    : "Select this take, publish audio to the database (Gate A), then clear flags. Stays in the queue until you Remove it. Does not make the lesson visible to learners (Gate B)."
             }
           >
-            <Upload className="size-3.5" />
+            {gateA.kind === "published" &&
+            !publishAndCompleteMutation.isPending ? (
+              <Check className="size-3.5" />
+            ) : (
+              <Upload className="size-3.5" />
+            )}
             <span className="ml-1.5">
               {publishAndCompleteMutation.isPending
                 ? "Publishing…"
-                : "Publish to database"}
+                : gateA.kind === "published"
+                  ? publishedAtLabel
+                    ? `Published · ${publishedAtLabel}`
+                    : "Published"
+                  : gateA.kind === "republish"
+                    ? "Republish"
+                    : "Publish to database"}
             </span>
           </Button>
           <Button
@@ -1084,7 +1203,7 @@ function TakeCard({
           <span className="font-medium text-foreground/80">
             Publish to database
           </span>{" "}
-          is Gate A (CDN + DB) — never flips learner visibility.{" "}
+          / Republish is Gate A (CDN + DB) — never flips learner visibility.{" "}
           <span className="font-medium text-foreground/80">Remove</span> is the
           only way to leave this queue; undo from the toast.
         </p>
@@ -1221,6 +1340,41 @@ function LessonGroupSection({
 }
 
 export function ReviewQueue() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const jlptParam = searchParams.get("jlpt");
+  const jlptTrack = parseReviewJlptTrack(jlptParam);
+  const [showOlderTakes, setShowOlderTakes] = useState(
+    () => readReviewShowOlderTakes(),
+  );
+
+  useEffect(() => {
+    if (jlptParam != null) {
+      writeReviewJlpt(parseReviewJlptTrack(jlptParam));
+      return;
+    }
+    const saved = readReviewJlpt();
+    if (saved == null || saved === 5) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("jlpt", String(saved));
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [jlptParam, pathname, router, searchParams]);
+
+  function setJlptTrack(level: ReviewJlptTrackLevel) {
+    writeReviewJlpt(level);
+    const params = new URLSearchParams(searchParams.toString());
+    if (level === 5) params.delete("jlpt");
+    else params.set("jlpt", String(level));
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
+  function setShowOlder(next: boolean) {
+    writeReviewShowOlderTakes(next);
+    setShowOlderTakes(next);
+  }
+
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["tts-review-queue"],
     queryFn: () => ttsApi.reviewQueue(),
@@ -1298,7 +1452,27 @@ export function ReviewQueue() {
       .filter((take) => !dismissals[take.variantId]);
   }, [mergedById, stableOrder, dismissals]);
 
-  const lessonGroups = useMemo(() => groupTakesByLesson(takes), [takes]);
+  const trackCounts = useMemo(() => countTakesByTrack(takes), [takes]);
+  const latestIds = useMemo(() => latestQueuedTakeIds(takes), [takes]);
+  const olderTakeCount = takes.length - latestIds.size;
+  const visibleTakes = useMemo(() => {
+    const onTrack = takes.filter(
+      (take) => reviewQueueTrack(take.jlptLevel) === jlptTrack,
+    );
+    if (showOlderTakes) return onTrack;
+    return onTrack.filter((take) => latestIds.has(take.variantId));
+  }, [takes, jlptTrack, showOlderTakes, latestIds]);
+  const hiddenOlderOnTrack = useMemo(() => {
+    const onTrack = takes.filter(
+      (take) => reviewQueueTrack(take.jlptLevel) === jlptTrack,
+    );
+    return onTrack.filter((take) => !latestIds.has(take.variantId)).length;
+  }, [takes, jlptTrack, latestIds]);
+
+  const lessonGroups = useMemo(
+    () => groupTakesByLesson(visibleTakes),
+    [visibleTakes],
+  );
 
   // Default expand: lessons with any opened take, else the first lesson only.
   // Remember expand preference across Review ↔ editor navigation.
@@ -1391,7 +1565,7 @@ export function ReviewQueue() {
         <h1 className="text-xl font-semibold">Review queue</h1>
         <p className="text-sm text-muted-foreground">
           Auto-stamped takes awaiting review. Pipeline: Staged → In database
-          (Gate A) → Client-visible (Gate B).{" "}
+          (Gate A) → Live in app (Gate B).{" "}
           <span className="font-medium text-foreground">Approve</span> clears
           flags only — the scene stays here until{" "}
           <span className="font-medium text-foreground">Remove from queue</span>.{" "}
@@ -1401,6 +1575,44 @@ export function ReviewQueue() {
           lands Gate A and clears flags — never flips lesson visibility. Per-line
           checks are optional.
         </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Tabs
+            value={String(jlptTrack)}
+            onValueChange={(value) => {
+              if (value == null) return;
+              setJlptTrack(parseReviewJlptTrack(String(value)));
+            }}
+          >
+            <TabsList variant="default" aria-label="JLPT review track">
+              {REVIEW_JLPT_TRACKS.map((track) => (
+                <TabsTrigger
+                  key={track.level}
+                  value={String(track.level)}
+                  className="min-w-12 px-3"
+                >
+                  {track.label}
+                  <span className="ml-1 tabular-nums text-[10px] text-muted-foreground">
+                    {trackCounts[track.level]}
+                  </span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          {olderTakeCount > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              variant={showOlderTakes ? "secondary" : "outline"}
+              className="h-8"
+              onClick={() => setShowOlder(!showOlderTakes)}
+              title="By default only the latest take per scene is listed. Older flagged takes stay in the queue and are marked superseded."
+            >
+              {showOlderTakes
+                ? "Showing older takes"
+                : `Show older takes (${olderTakeCount})`}
+            </Button>
+          )}
+        </div>
         {dismissedCount > 0 && (
           <p className="mt-2 text-xs text-muted-foreground">
             {dismissedCount} take{dismissedCount === 1 ? "" : "s"} hidden via
@@ -1414,6 +1626,13 @@ export function ReviewQueue() {
             </button>
           </p>
         )}
+        {!showOlderTakes && hiddenOlderOnTrack > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Showing the latest take per scene on this track.{" "}
+            {hiddenOlderOnTrack} older take
+            {hiddenOlderOnTrack === 1 ? "" : "s"} hidden.
+          </p>
+        )}
       </div>
       <TimingSummary timing={data.timing} />
       {takes.length === 0 && (
@@ -1421,6 +1640,11 @@ export function ReviewQueue() {
           {dismissedCount > 0
             ? "Nothing visible — all waiting takes are hidden via Remove."
             : "Nothing waiting for review."}
+        </p>
+      )}
+      {takes.length > 0 && visibleTakes.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          Nothing waiting on this track.
         </p>
       )}
       <div className="flex flex-col gap-3">

@@ -5,6 +5,14 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /*
+   * Persistent lesson/scene outline (w-80) + scene minimap from this width up.
+   * 80rem = Tailwind `xl` = 1280 CSS px. Tesla Model 3/Y landscape sits below
+   * this (~1100–1254 CSS px after the Chromium DPR bump; chrome can shrink
+   * the inner window to ~773×601), so those viewports use the off-canvas
+   * Lessons drawer instead of a 320px rail.
+   */
+  --breakpoint-studio-split: 80rem;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans), var(--font-noto-sans-jp), sans-serif;

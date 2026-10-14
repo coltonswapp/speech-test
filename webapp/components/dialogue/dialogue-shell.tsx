@@ -16,9 +16,10 @@ type DialogueShellProps = {
    */
   scope?: DialogueListScope;
   /**
-   * When true (scenario / collection editor routes), hide the w-80 sidebar on
-   * small screens by default and offer a Lessons drawer to reopen it.
-   * On md+ the side-by-side layout is unchanged.
+   * When true (scenario / collection / unit editor routes), hide the w-80
+   * lesson outline below `studio-split` (1280px) and offer a Lessons drawer
+   * to reopen it. At `studio-split`+ the side-by-side desktop layout is
+   * unchanged.
    */
   collapseSidebarOnMobile?: boolean;
   children?: ReactNode;
@@ -31,11 +32,13 @@ export function DialogueShell({
   children,
 }: DialogueShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [drawerForId, setDrawerForId] = useState(activeId);
 
   // Close the drawer after navigating to another lesson/collection.
-  useEffect(() => {
+  if (drawerForId !== activeId) {
+    setDrawerForId(activeId);
     setMobileOpen(false);
-  }, [activeId]);
+  }
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -47,15 +50,15 @@ export function DialogueShell({
   }, [mobileOpen]);
 
   return (
-    <div className="relative flex min-w-0 flex-1 flex-col gap-4 md:flex-row md:gap-6">
-      {/* Desktop / tablet: persistent sidebar */}
-      <div className="hidden md:block">
+    <div className="relative flex min-w-0 flex-1 flex-col gap-4 studio-split:flex-row studio-split:gap-6">
+      {/* Wide desktop: persistent sidebar */}
+      <div className="hidden studio-split:block">
         <DialogueList activeId={activeId} scope={scope} />
       </div>
 
-      {/* Phone index route: full-width list (no editor competing for space) */}
+      {/* Narrow / Tesla / tablet index: full-width list (no editor competing) */}
       {!collapseSidebarOnMobile && (
-        <div className="md:hidden">
+        <div className="studio-split:hidden">
           <DialogueList
             activeId={activeId}
             scope={scope}
@@ -64,16 +67,16 @@ export function DialogueShell({
         </div>
       )}
 
-      {/* Phone editor routes: slide-over lessons drawer (mounted only while open) */}
+      {/* Editor routes: slide-over lessons drawer (mounted only while open) */}
       {collapseSidebarOnMobile && mobileOpen && (
         <>
           <div
-            className="fixed inset-0 z-40 bg-black/40 md:hidden"
+            className="fixed inset-0 z-40 bg-black/40 studio-split:hidden"
             onClick={() => setMobileOpen(false)}
             aria-hidden="true"
           />
           <div
-            className="fixed inset-y-0 left-0 z-50 flex w-[min(20rem,85vw)] translate-x-0 flex-col bg-background p-4 shadow-xl md:hidden"
+            className="fixed inset-y-0 left-0 z-50 flex w-[min(20rem,85vw)] max-w-xs translate-x-0 flex-col bg-background p-4 shadow-xl studio-split:hidden"
             role="dialog"
             aria-modal="true"
             aria-label="Lessons"
@@ -104,7 +107,7 @@ export function DialogueShell({
 
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         {collapseSidebarOnMobile && (
-          <div className="flex md:hidden">
+          <div className="flex studio-split:hidden">
             <Button
               type="button"
               variant="outline"

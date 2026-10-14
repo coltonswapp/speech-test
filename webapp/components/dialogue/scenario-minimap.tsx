@@ -13,6 +13,9 @@ export type MinimapSection = {
  * Sticky side nav for a long scrollable page of sections. Tracks which
  * section is nearest the top of the viewport via IntersectionObserver and
  * highlights it; clicking an entry smooth-scrolls to that section.
+ *
+ * Shown from `studio-split` (1280px) up so Tesla / tablet scene editors
+ * keep the outline width for dialogue content instead of a second rail.
  */
 export function ScenarioMinimap({
   sections,
@@ -56,7 +59,7 @@ export function ScenarioMinimap({
   return (
     <nav
       aria-label="Section navigation"
-      className="sticky top-20 hidden h-fit w-40 shrink-0 flex-col gap-1 lg:flex"
+      className="sticky top-20 hidden h-fit w-40 shrink-0 flex-col gap-1 studio-split:flex"
     >
       {sections.map((section) => (
         <a

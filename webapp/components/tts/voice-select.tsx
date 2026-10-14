@@ -51,7 +51,7 @@ export function VoiceSelect({
   const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
 
   const previewForVoice = (voice: string) =>
-    data?.previews.find((p) => p.provider === provider && p.voice === voice);
+    data?.previews?.find((p) => p.provider === provider && p.voice === voice);
 
   const handlePreview = (voice: string) => {
     const preview = previewForVoice(voice);

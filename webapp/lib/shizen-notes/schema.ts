@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const NOTE_SOURCES = ["dialogue", "quiz"] as const;
+export const NOTE_SOURCES = ["dialogue", "quiz", "screen"] as const;
 export const NOTE_AGENTS = ["shohei", "vikram", "hana"] as const;
 
 /** Base64 JPEG, no `data:` prefix. ~1.1MB binary. Matches the iOS snapshot cap. */

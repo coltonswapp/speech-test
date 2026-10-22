@@ -1,14 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Download, MoreHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,7 +63,13 @@ export function LessonThumbnailViewer({
   const [sessionKey, setSessionKey] = useState<string | null>(null);
   const [brokenId, setBrokenId] = useState<string | null>(null);
   const [zipping, setZipping] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const filmstripRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  if (!mounted && typeof document !== "undefined") {
+    setMounted(true);
+  }
 
   const nextSessionKey = open ? (initialId ?? "") : null;
   if (nextSessionKey !== sessionKey) {
@@ -97,7 +99,17 @@ export function LessonThumbnailViewer({
   }, [index, open]);
 
   useEffect(() => {
-    if (!open || items.length === 0) return;
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     function onKey(event: KeyboardEvent) {
       const target = event.target;
       if (
@@ -106,11 +118,16 @@ export function LessonThumbnailViewer({
       ) {
         return;
       }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onOpenChange(false);
+        return;
+      }
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       event.preventDefault();
-      event.stopPropagation();
       const delta = event.key === "ArrowLeft" ? -1 : 1;
       setIndex((value) => {
+        if (items.length === 0) return value;
         const next = value + delta;
         if (next < 0) return items.length - 1;
         if (next >= items.length) return 0;
@@ -119,7 +136,7 @@ export function LessonThumbnailViewer({
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, items.length]);
+  }, [open, items.length, onOpenChange]);
 
   const canDownloadCurrent = !!current?.thumbnailUrl && !broken;
   const canDownloadAll = hasDownloadableThumbnails(items);
@@ -150,7 +167,10 @@ export function LessonThumbnailViewer({
       const blob = await res.blob();
       triggerBlobDownload(
         blob,
-        filenameFromDisposition(res.headers.get("content-disposition"), `${collectionId}-thumbnails.zip`)
+        filenameFromDisposition(
+          res.headers.get("content-disposition"),
+          `${collectionId}-thumbnails.zip`
+        )
       );
       toast.success("Downloaded all lesson thumbnails.");
     } catch (error) {
@@ -162,92 +182,95 @@ export function LessonThumbnailViewer({
     }
   }
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={false}
-        className="fixed inset-0 top-0 left-0 flex h-dvh max-h-dvh w-full max-w-none transform-none flex-col gap-0 rounded-none bg-black p-0 text-white ring-0 sm:max-w-none data-open:zoom-in-100 data-closed:zoom-out-100"
-      >
-        <DialogTitle className="sr-only">
-          {current?.caption ?? "Lesson thumbnails"}
-        </DialogTitle>
+  if (!open || !mounted) return null;
 
-        <div className="flex shrink-0 items-center justify-between px-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-3">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-11 text-white hover:bg-white/10 hover:text-white md:size-10"
-            onClick={() => onOpenChange(false)}
-            aria-label="Close thumbnail viewer"
-          >
-            <X className="size-6" />
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-11 text-white hover:bg-white/10 hover:text-white md:size-10"
-                  aria-label="Thumbnail actions"
-                >
-                  <MoreHorizontal className="size-6" />
-                </Button>
-              }
-            />
-            <DropdownMenuContent
-              align="end"
-              className="min-w-44 bg-neutral-900 text-white ring-white/20"
-            >
-              <DropdownMenuItem
-                onClick={downloadCurrent}
-                disabled={!canDownloadCurrent}
-              >
-                <Download />
-                Download
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={downloadAll} disabled={!canDownloadAll || zipping}>
-                <Download />
-                {zipping ? "Preparing zip…" : "Download all"}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-2 sm:px-8">
-          {current?.thumbnailUrl && !broken ? (
-            // eslint-disable-next-line @next/next/no-img-element -- CDN lesson thumbs; arbitrary host
-            <img
-              src={current.thumbnailUrl}
-              alt={current.caption}
-              onError={() => setBrokenId(current.id)}
-              className="max-h-full max-w-full rounded-3xl object-contain shadow-[0_20px_60px_rgba(0,0,0,0.45)]"
-            />
-          ) : (
-            <div className="flex aspect-square w-full max-w-md items-center justify-center rounded-3xl border border-white/15 bg-neutral-950 text-sm text-white/50">
-              No thumbnail
-            </div>
-          )}
-        </div>
-
-        <p className="shrink-0 px-4 pb-2 text-center text-sm text-white/85 sm:text-base">
-          {current?.caption ?? "No thumbnails"}
-          {current?.inherited ? (
-            <span className="mt-0.5 block text-xs text-white/45">
-              Inherits the lesson thumbnail
-            </span>
-          ) : null}
-        </p>
-
-        <div
-          ref={filmstripRef}
-          className="shrink-0 overflow-x-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))] [scrollbar-width:none] sm:px-8 [&::-webkit-scrollbar]:hidden"
-          role="listbox"
-          aria-label="Lesson thumbnails"
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={current?.caption ?? "Lesson thumbnails"}
+      className="fixed inset-0 z-50 flex h-dvh w-screen flex-col bg-black text-white"
+    >
+      <div className="flex shrink-0 items-center justify-between px-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-3">
+        <Button
+          ref={closeRef}
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-11 text-white hover:bg-white/10 hover:text-white md:size-10"
+          onClick={() => onOpenChange(false)}
+          aria-label="Close thumbnail viewer"
         >
-          <div className="flex w-max min-w-full items-center justify-center gap-2">
+          <X className="size-6" />
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-11 text-white hover:bg-white/10 hover:text-white md:size-10"
+                aria-label="Thumbnail actions"
+              >
+                <MoreHorizontal className="size-6" />
+              </Button>
+            }
+          />
+          <DropdownMenuContent
+            align="end"
+            className="min-w-44 bg-neutral-900 text-white ring-white/20"
+          >
+            <DropdownMenuItem
+              onClick={downloadCurrent}
+              disabled={!canDownloadCurrent}
+            >
+              <Download />
+              Download
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={downloadAll}
+              disabled={!canDownloadAll || zipping}
+            >
+              <Download />
+              {zipping ? "Preparing zip…" : "Download all"}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-2 sm:px-8">
+        {current?.thumbnailUrl && !broken ? (
+          // eslint-disable-next-line @next/next/no-img-element -- CDN lesson thumbs; arbitrary host
+          <img
+            src={current.thumbnailUrl}
+            alt={current.caption}
+            onError={() => setBrokenId(current.id)}
+            className="max-h-full max-w-full rounded-3xl object-contain shadow-[0_20px_60px_rgba(0,0,0,0.45)]"
+          />
+        ) : (
+          <div className="flex aspect-square w-full max-w-md items-center justify-center rounded-3xl border border-white/15 bg-neutral-950 text-sm text-white/50">
+            No thumbnail
+          </div>
+        )}
+      </div>
+
+      <p className="shrink-0 px-4 pb-2 text-center text-sm text-white/85 sm:text-base">
+        {current?.caption ?? "No thumbnails"}
+        {current?.inherited ? (
+          <span className="mt-0.5 block text-xs text-white/45">
+            Inherits the lesson thumbnail
+          </span>
+        ) : null}
+      </p>
+
+      <div
+        ref={filmstripRef}
+        className="shrink-0 overflow-x-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))] [scrollbar-width:none] sm:px-8 [&::-webkit-scrollbar]:hidden"
+        role="listbox"
+        aria-label="Lesson thumbnails"
+      >
+        <div className="flex w-max min-w-full items-center justify-center gap-2">
           {items.map((item, itemIndex) => {
             const selected = itemIndex === index;
             const src = item.thumbnailSmallUrl ?? item.thumbnailUrl;
@@ -269,11 +292,7 @@ export function LessonThumbnailViewer({
               >
                 {src ? (
                   // eslint-disable-next-line @next/next/no-img-element -- CDN lesson thumbs; arbitrary host
-                  <img
-                    src={src}
-                    alt=""
-                    className="size-full object-cover"
-                  />
+                  <img src={src} alt="" className="size-full object-cover" />
                 ) : (
                   <span className="flex size-full items-center justify-center text-[10px] text-white/35">
                     —
@@ -282,9 +301,9 @@ export function LessonThumbnailViewer({
               </button>
             );
           })}
-          </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>,
+    document.body
   );
 }

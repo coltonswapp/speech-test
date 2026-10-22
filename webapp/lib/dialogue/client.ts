@@ -610,4 +610,14 @@ export const dialogueApi = {
     `/api/content/dialogues/${collectionId}/export`,
   exportZipUrl: (collectionId: string) =>
     `/api/content/dialogues/${collectionId}/export-zip`,
+  thumbnailFileUrl: (
+    collectionId: string,
+    item: { kind: "lesson" | "scene"; slug: string | null },
+  ) => {
+    const params = new URLSearchParams({ kind: item.kind });
+    if (item.kind === "scene" && item.slug) params.set("slug", item.slug);
+    return `/api/content/dialogues/${encodeURIComponent(collectionId)}/thumbnails/file?${params}`;
+  },
+  thumbnailZipUrl: (collectionId: string) =>
+    `/api/content/dialogues/${encodeURIComponent(collectionId)}/thumbnails/zip`,
 };

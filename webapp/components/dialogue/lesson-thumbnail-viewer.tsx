@@ -99,16 +99,26 @@ export function LessonThumbnailViewer({
   useEffect(() => {
     if (!open || items.length === 0) return;
     function onKey(event: KeyboardEvent) {
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        setIndex((value) => (value <= 0 ? items.length - 1 : value - 1));
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault();
-        setIndex((value) => (value >= items.length - 1 ? 0 : value + 1));
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest("[data-slot='dropdown-menu-content']")
+      ) {
+        return;
       }
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      event.stopPropagation();
+      const delta = event.key === "ArrowLeft" ? -1 : 1;
+      setIndex((value) => {
+        const next = value + delta;
+        if (next < 0) return items.length - 1;
+        if (next >= items.length) return 0;
+        return next;
+      });
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [open, items.length]);
 
   const canDownloadCurrent = !!current?.thumbnailUrl && !broken;
@@ -156,7 +166,7 @@ export function LessonThumbnailViewer({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="fixed inset-0 top-0 left-0 flex h-dvh max-h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none bg-black p-0 text-white ring-0 sm:max-w-none data-open:zoom-in-100 data-closed:zoom-out-100"
+        className="fixed inset-0 top-0 left-0 flex h-dvh max-h-dvh w-full max-w-none transform-none flex-col gap-0 rounded-none bg-black p-0 text-white ring-0 sm:max-w-none data-open:zoom-in-100 data-closed:zoom-out-100"
       >
         <DialogTitle className="sr-only">
           {current?.caption ?? "Lesson thumbnails"}
@@ -187,7 +197,10 @@ export function LessonThumbnailViewer({
                 </Button>
               }
             />
-            <DropdownMenuContent align="end" className="min-w-44">
+            <DropdownMenuContent
+              align="end"
+              className="min-w-44 bg-neutral-900 text-white ring-white/20"
+            >
               <DropdownMenuItem
                 onClick={downloadCurrent}
                 disabled={!canDownloadCurrent}
@@ -248,7 +261,7 @@ export function LessonThumbnailViewer({
                 aria-label={item.caption}
                 onClick={() => setIndex(itemIndex)}
                 className={cn(
-                  "size-12 shrink-0 overflow-hidden rounded-xl border-2 bg-neutral-900 transition-colors sm:size-14",
+                  "size-12 shrink-0 overflow-hidden rounded-lg border-2 bg-neutral-900 transition-colors sm:size-14",
                   selected
                     ? "border-white"
                     : "border-transparent opacity-70 hover:opacity-100"

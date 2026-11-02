@@ -11,6 +11,7 @@ import {
   GEMINI_TTS_DEFAULT_MODEL,
 } from "@/lib/tts/gemini-tts";
 import { getGeminiTtsModelSetting } from "@/lib/tts/tts-model-setting";
+import { geminiVoiceSupportsModel } from "@/lib/tts/gemini-voice-catalog";
 import { pcm16ToFloat32, pcm16ToWav } from "@/lib/tts/wav";
 import { align } from "@/lib/tts/alignment";
 import { putObject } from "@/lib/storage/r2";
@@ -99,6 +100,13 @@ async function generateConversation(
   // without regenerating a narration take first — use the Studio-wide
   // Gemini TTS setting (Settings → Voices) rather than trusting it.
   const model = await getGeminiTtsModelSetting();
+  for (const voice of [speaker1Voice, speaker2Voice]) {
+    if (!geminiVoiceSupportsModel(voice, model)) {
+      throw new UserFacingError(
+        `${voice} is a 3.8-only library voice; pick a 3.8 TTS model in Settings → Voices.`
+      );
+    }
+  }
   const pcm = await synthesizeGeminiConversation({
     lines,
     speaker1Voice,

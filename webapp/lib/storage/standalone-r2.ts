@@ -1,7 +1,7 @@
 // R2 upload for use in standalone scripts run outside the Next.js runtime —
 // lib/storage/r2.ts imports "server-only", which throws when required from a
 // plain Node process via tsx. Mirrors lib/db/standalone-client.ts.
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 function requiredEnv(name: string): string {
   const value = process.env[name];
@@ -43,4 +43,22 @@ export async function putObject(
       ContentType: contentType,
     })
   );
+}
+
+export async function objectExists(key: string): Promise<boolean> {
+  try {
+    await getClient().send(new HeadObjectCommand({ Bucket: getBucket(), Key: key }));
+    return true;
+  } catch (error) {
+    const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+    if (status === 404) return false;
+    throw error;
+  }
+}
+
+export async function getObject(key: string): Promise<Buffer> {
+  const result = await getClient().send(new GetObjectCommand({ Bucket: getBucket(), Key: key }));
+  const bytes = await result.Body?.transformToByteArray();
+  if (!bytes) throw new Error(`Object not found: ${key}`);
+  return Buffer.from(bytes);
 }

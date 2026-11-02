@@ -25,6 +25,7 @@ import {
   type VoicePreview,
 } from "@/lib/tts/client";
 import { cn } from "@/lib/utils";
+import { VoiceTakesPanel } from "@/components/tts/voice-takes-panel";
 import {
   GEMINI_TTS_DEFAULT_MODEL,
   GEMINI_TTS_MODELS,
@@ -838,6 +839,8 @@ export function VoicesSettings() {
   return (
     <div className="flex flex-col gap-6">
       <TtsModelCard />
+
+      <VoiceTakesPanel />
 
       <Card>
         <CardHeader>

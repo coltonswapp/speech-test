@@ -1,0 +1,47 @@
+// Side-by-side voice takes for Settings → Voices: N takes of one sample line
+// per Gemini voice, stored in Studio's normal R2 bucket under
+// tts/voice-takes/<model>/ with a manifest.json listing them. No DB rows.
+// Seeded by scripts/seed-voice-takes.ts. Client-safe.
+
+import { z } from "zod";
+
+export const VOICE_TAKES_MODEL = "gemini-3.8-flash-tts";
+export const VOICE_TAKES_PER_VOICE = 2;
+export const VOICE_TAKES_SAMPLE_TEXT =
+  "あ、おはようございます。今朝はちょっと寒いですね。駅まで一緒に歩きませんか？";
+
+export function voiceTakesPrefix(model: string = VOICE_TAKES_MODEL): string {
+  return `tts/voice-takes/${model}/`;
+}
+
+export function voiceTakeObjectKey(voice: string, take: number, model: string = VOICE_TAKES_MODEL): string {
+  return `${voiceTakesPrefix(model)}${voice}/take-${take}.wav`;
+}
+
+export function voiceTakesManifestKey(model: string = VOICE_TAKES_MODEL): string {
+  return `${voiceTakesPrefix(model)}manifest.json`;
+}
+
+export const voiceTakeSchema = z.object({
+  take: z.number().int().positive(),
+  /** Object key relative to the takes root (same layout locally and in R2). */
+  key: z.string(),
+  seconds: z.number(),
+  bytes: z.number().int(),
+  sha256: z.string(),
+});
+
+export const voiceTakesManifestSchema = z.object({
+  model: z.string(),
+  sampleText: z.string(),
+  generatedAt: z.string(),
+  voices: z.array(
+    z.object({
+      voice: z.string(),
+      source: z.enum(["studio", "library"]),
+      takes: z.array(voiceTakeSchema),
+    })
+  ),
+});
+
+export type VoiceTakesManifest = z.infer<typeof voiceTakesManifestSchema>;

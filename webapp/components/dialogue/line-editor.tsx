@@ -540,7 +540,10 @@ export function LineEditor({
       <p className="-mt-1 text-xs text-muted-foreground">
         Renaming a speaker here updates every line using that name. Assign
         each line&apos;s speaker from the dropdown below. Optional delivery
-        tags (e.g. [softly]) steer Gemini TTS only — not shown in the app.
+        tags steer Gemini TTS only — not shown in the app. Mood tags like
+        [softly] or [warmly] set the line&apos;s style; sound tags like
+        [laughs], [sighs] or [giggling] become a vocal sound at the start of
+        the line.
         Stage lines and inline questions sit between spoken lines, skip TTS,
         and do not consume a line-switch beat.
       </p>
@@ -749,7 +752,7 @@ export function LineEditor({
                 placeholder="optional"
                 className="h-8 w-36 text-xs"
                 aria-label={`Delivery tag for line ${index + 1}`}
-                title="Gemini TTS audio tag — Studio only, not shown in the app"
+                title="Gemini TTS delivery tag, e.g. [softly] (style) or [laughs] (sound) — Studio only, not shown in the app"
               />
               {reviseEnabled && (
                 <Button

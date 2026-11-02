@@ -1,5 +1,6 @@
 import type { TokenSyncFlag } from "@/lib/dialogue/types";
 import { formatApiError } from "@/lib/api-error";
+import type { GeminiTtsModel } from "@/lib/gemini/models";
 import type { VariantTokenSync } from "@/lib/dialogue/types";
 
 export type ProjectSummary = {
@@ -253,6 +254,13 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const ttsApi = {
+  getTtsSettings: () =>
+    request<{ geminiTtsModel: GeminiTtsModel }>("/api/tts/settings"),
+  updateTtsSettings: (geminiTtsModel: GeminiTtsModel) =>
+    request<{ geminiTtsModel: GeminiTtsModel }>("/api/tts/settings", {
+      method: "PUT",
+      body: JSON.stringify({ geminiTtsModel }),
+    }),
   listProjects: () =>
     request<{ projects: ProjectSummary[] }>("/api/tts/projects"),
   getProject: (id: string) =>

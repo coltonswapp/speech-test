@@ -3,6 +3,10 @@
 // "server-only" (via lib/secrets.ts), which throws when required from a
 // plain Node process via tsx. Mirrors lib/db/standalone-client.ts.
 
+import { GEMINI_TTS_DEFAULT_MODEL } from "./gemini-voices";
+import { geminiAudioToPcm16 } from "./wav";
+import { buildGeminiSinglePayload } from "./gemini-tts-request";
+
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -42,33 +46,15 @@ export async function synthesizeOpenAIStandalone(params: {
 
 export const OPENAI_STANDALONE_SAMPLE_RATE = 24_000;
 
-/** Strips a 44-byte WAV header if the response happens to be WAV-wrapped. */
-function stripWavHeaderIfPresent(data: Buffer): Buffer {
-  if (data.length > 44 && data.toString("ascii", 0, 4) === "RIFF") {
-    return data.subarray(44);
-  }
-  return data;
-}
-
 export async function synthesizeGeminiSingleStandalone(params: {
   text: string;
   voice: string;
   model?: string;
 }): Promise<Buffer> {
   const apiKey = requiredEnv("GEMINI_API_KEY");
-  const model = params.model ?? "gemini-3.1-flash-tts-preview";
+  const model = params.model ?? GEMINI_TTS_DEFAULT_MODEL;
 
-  const payload = {
-    contents: [{ role: "user", parts: [{ text: params.text }] }],
-    generationConfig: {
-      responseModalities: ["AUDIO"],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: params.voice },
-        },
-      },
-    },
-  };
+  const payload = buildGeminiSinglePayload({ text: params.text, voice: params.voice });
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
@@ -96,7 +82,7 @@ export async function synthesizeGeminiSingleStandalone(params: {
   for (const part of parts) {
     const base64 = part?.inlineData?.data;
     if (typeof base64 === "string" && base64.length > 0) {
-      return stripWavHeaderIfPresent(Buffer.from(base64, "base64"));
+      return geminiAudioToPcm16(Buffer.from(base64, "base64"));
     }
   }
 

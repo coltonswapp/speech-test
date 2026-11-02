@@ -1,7 +1,11 @@
 import "server-only";
 import type { z } from "zod";
 import { getProviderKey } from "@/lib/secrets";
-import { geminiGenerateContentUrl, geminiTextModel } from "@/lib/gemini/text-model";
+import {
+  geminiGenerateContentUrl,
+  geminiTextModel,
+  geminiThinkingConfig,
+} from "@/lib/gemini/text-model";
 import {
   dialogueDifficultyPrompt,
   type DialogueDifficulty,
@@ -140,8 +144,10 @@ export async function requestGemini(
   apiKey: string,
   prompt: string
 ): Promise<string> {
+  const model = geminiTextModel();
+  const thinkingConfig = geminiThinkingConfig(model, "low");
   const response = await fetch(
-    geminiGenerateContentUrl(geminiTextModel()),
+    geminiGenerateContentUrl(model),
     {
       method: "POST",
       headers: {
@@ -154,7 +160,7 @@ export async function requestGemini(
         // validation feedback appended to the prompt instead.
         generationConfig: {
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingLevel: "low" },
+          ...(thinkingConfig ? { thinkingConfig } : {}),
         },
       }),
     }

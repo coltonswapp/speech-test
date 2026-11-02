@@ -14,3 +14,17 @@ export type GeminiThinkingLevel = "minimal" | "low" | "medium" | "high";
 export function geminiGenerateContentUrl(model: string): string {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 }
+
+/**
+ * `generationConfig.thinkingConfig` for `model`, or undefined to omit it.
+ * 2.x models predate thinkingLevel (400 if sent); "minimal" is Flash-Lite
+ * only (gemini-3.8-flash rejects it), so it falls back to "low" elsewhere.
+ */
+export function geminiThinkingConfig(
+  model: string,
+  level: GeminiThinkingLevel
+): { thinkingLevel: GeminiThinkingLevel } | undefined {
+  if (model.startsWith("gemini-2.")) return undefined;
+  if (level === "minimal" && !model.includes("flash-lite")) return { thinkingLevel: "low" };
+  return { thinkingLevel: level };
+}

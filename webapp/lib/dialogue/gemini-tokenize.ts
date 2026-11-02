@@ -2,7 +2,12 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getProviderKey } from "@/lib/secrets";
-import { geminiGenerateContentUrl, geminiTextModel } from "@/lib/gemini/text-model";
+import {
+  geminiGenerateContentUrl,
+  geminiTextModel,
+  geminiThinkingConfig,
+  type GeminiThinkingLevel,
+} from "@/lib/gemini/text-model";
 import { db } from "@/lib/db/client";
 import { appSettings } from "@/lib/db/schema";
 import { DialogueGenerationError } from "@/lib/dialogue/gemini-generate";
@@ -67,9 +72,14 @@ export async function requestTokenSurfaces(
   apiKey: string,
   text: string,
   isRetry: boolean,
-  options: { model?: string; onUsage?: (usage: TokenizeUsage) => void } = {}
+  options: {
+    model?: string;
+    thinkingLevel?: GeminiThinkingLevel;
+    onUsage?: (usage: TokenizeUsage) => void;
+  } = {}
 ): Promise<RawToken[]> {
   const model = options.model ?? geminiTextModel();
+  const thinkingConfig = geminiThinkingConfig(model, options.thinkingLevel ?? "minimal");
   const base = `${INSTRUCTIONS_TEXT}${READING_INSTRUCTIONS}`;
   const prompt = isRetry
     ? `${base}${RETRY_SUFFIX}\n\nInput:\n${text}`
@@ -89,7 +99,7 @@ export async function requestTokenSurfaces(
         // the seed plus schema keep output stable enough for the line cache.
         generationConfig: {
           seed: DETERMINISTIC_SEED,
-          thinkingConfig: { thinkingLevel: "minimal" },
+          ...(thinkingConfig ? { thinkingConfig } : {}),
           responseMimeType: "application/json",
           responseSchema: {
             type: "object",

@@ -1,6 +1,10 @@
 import "server-only";
 import { getProviderKey } from "@/lib/secrets";
-import { geminiGenerateContentUrl, geminiTextModel } from "@/lib/gemini/text-model";
+import {
+  geminiGenerateContentUrl,
+  geminiTextModel,
+  geminiThinkingConfig,
+} from "@/lib/gemini/text-model";
 import { grammarPointSchema, type GrammarPointInput } from "@/lib/content/types";
 import { validatePoint } from "@/lib/content/validator";
 
@@ -43,8 +47,10 @@ async function requestGemini(
   apiKey: string,
   prompt: string
 ): Promise<string> {
+  const model = geminiTextModel();
+  const thinkingConfig = geminiThinkingConfig(model, "low");
   const response = await fetch(
-    geminiGenerateContentUrl(geminiTextModel()),
+    geminiGenerateContentUrl(model),
     {
       method: "POST",
       headers: {
@@ -57,7 +63,7 @@ async function requestGemini(
         // validation feedback appended to the prompt instead.
         generationConfig: {
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingLevel: "low" },
+          ...(thinkingConfig ? { thinkingConfig } : {}),
         },
       }),
     }

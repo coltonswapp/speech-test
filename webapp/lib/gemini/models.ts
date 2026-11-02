@@ -7,6 +7,13 @@
 
 export const GEMINI_TEXT_MODEL_DEFAULT = "gemini-3.5-flash-lite";
 
+/**
+ * Tokenize + readings model. Provisional default: a 40-line eval (Nov 2) had
+ * 3.5 Flash-Lite splitting verbs/words learners tap (多|い, 聞か|れた); a
+ * prompt-tuning eval is deciding between it and 3.8 Flash.
+ */
+export const GEMINI_TOKENIZE_MODEL_DEFAULT = "gemini-3.8-flash";
+
 export const GEMINI_TTS_MODELS = [
   { id: "gemini-3.8-flash-tts", label: "3.8 Flash TTS" },
   { id: "gemini-3.8-flash-lite-tts", label: "3.8 Flash-Lite TTS" },

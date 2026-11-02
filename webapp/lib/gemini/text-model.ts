@@ -1,12 +1,20 @@
 import "server-only";
-import { GEMINI_TEXT_MODEL_DEFAULT } from "@/lib/gemini/models";
+import {
+  GEMINI_TEXT_MODEL_DEFAULT,
+  GEMINI_TOKENIZE_MODEL_DEFAULT,
+} from "@/lib/gemini/models";
 
 /**
- * The one Gemini text model Studio uses for generation, revision, grammar and
- * tokenize calls. Override with GEMINI_TEXT_MODEL (e.g. gemini-3.8-flash).
+ * Gemini text model for dialogue generation/revision and grammar generation.
+ * Override with GEMINI_TEXT_MODEL (e.g. gemini-3.8-flash).
  */
 export function geminiTextModel(): string {
   return process.env.GEMINI_TEXT_MODEL?.trim() || GEMINI_TEXT_MODEL_DEFAULT;
+}
+
+/** Gemini model for tokenize + readings. Override with GEMINI_TOKENIZE_MODEL. */
+export function geminiTokenizeModel(): string {
+  return process.env.GEMINI_TOKENIZE_MODEL?.trim() || GEMINI_TOKENIZE_MODEL_DEFAULT;
 }
 
 export type GeminiThinkingLevel = "minimal" | "low" | "medium" | "high";

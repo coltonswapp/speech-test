@@ -22,13 +22,18 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 ## Gemini models
 
-Studio's text calls (dialogue generation and revision, grammar generation,
-tokenize + readings) all use one model, `GEMINI_TEXT_MODEL`, defaulting to
-`gemini-3.5-flash-lite` (see `lib/gemini/text-model.ts`). Gemini 3+ ignores
-`temperature`/`topP`/`topK` and rejects `candidateCount`, so requests send only
-`thinkingConfig.thinkingLevel` (`minimal` for tokenize, `low` for generation).
-Published per-1M-token rates, including the 2027-01-01 rate changes, live in
-`lib/gemini/models.ts`. See `.env.example`.
+- **Text** (dialogue generation and revision, grammar generation):
+  `GEMINI_TEXT_MODEL`, default `gemini-3.5-flash-lite`, thinking level `low`.
+- **Tokenize + readings**: `GEMINI_TOKENIZE_MODEL`, default `gemini-3.8-flash`
+  (provisional), thinking level `low`. The prompt and thinking level live in
+  `lib/dialogue/tokenize-prompt.ts`; results are cached per line text.
+- **TTS**: chosen in Settings → Voices (3.8 Flash TTS by default, or 3.8
+  Flash-Lite TTS).
+
+Gemini 3+ ignores `temperature`/`topP`/`topK` and rejects `candidateCount`, so
+requests send only `thinkingConfig.thinkingLevel` (adapted per model in
+`lib/gemini/text-model.ts`). Published per-1M-token rates, including the
+2027-01-01 rate changes, live in `lib/gemini/models.ts`. See `.env.example`.
 
 ## Learn More
 

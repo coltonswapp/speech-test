@@ -1,6 +1,7 @@
 import "server-only";
 import type { z } from "zod";
 import { getProviderKey } from "@/lib/secrets";
+import { geminiGenerateContentUrl, geminiTextModel } from "@/lib/gemini/text-model";
 import {
   dialogueDifficultyPrompt,
   type DialogueDifficulty,
@@ -20,9 +21,8 @@ import {
 
 // Gemini text generation for dialogue lines. Prompt structure and retry loop
 // ported from GrammarContentKit/GrammarSectionGenerator.swift +
-// GeminiClient.swift (temperature 0.4, retries at 0.2, up to 3 attempts).
+// GeminiClient.swift (up to 3 attempts). Model comes from GEMINI_TEXT_MODEL.
 
-const GEMINI_TEXT_MODEL = "gemini-2.5-flash";
 const MAX_ATTEMPTS = 3;
 
 export class DialogueGenerationError extends Error {}
@@ -138,11 +138,10 @@ function buildPrompt(params: GenerateLinesParams): string {
 
 export async function requestGemini(
   apiKey: string,
-  prompt: string,
-  temperature: number
+  prompt: string
 ): Promise<string> {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`,
+    geminiGenerateContentUrl(geminiTextModel()),
     {
       method: "POST",
       headers: {
@@ -151,9 +150,11 @@ export async function requestGemini(
       },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
+        // Gemini 3+ ignores sampling params; retries rely on the
+        // validation feedback appended to the prompt instead.
         generationConfig: {
-          temperature,
           responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: "low" },
         },
       }),
     }
@@ -176,8 +177,8 @@ export async function requestGemini(
   return text;
 }
 
-// Generic JSON-with-retries wrapper around the Gemini text model: temperature
-// 0.4 then 0.2, up to 3 attempts, feeding the previous validation failure back
+// Generic JSON-with-retries wrapper around the Gemini text model: up to 3
+// attempts, feeding the previous validation failure back
 // into the retry prompt. Shared by dialogue generation and revision.
 export async function generateJsonWithRetries<T>(
   basePrompt: string,
@@ -195,11 +196,10 @@ export async function generateJsonWithRetries<T>(
       attempt === 0
         ? basePrompt
         : `${basePrompt}\n\nPrevious attempt failed: ${lastError}. Fix the problem and return valid JSON matching the schema.`;
-    const temperature = attempt === 0 ? 0.4 : 0.2;
 
     let text: string;
     try {
-      text = await requestGemini(apiKey, prompt, temperature);
+      text = await requestGemini(apiKey, prompt);
     } catch (error) {
       if (attempt === MAX_ATTEMPTS - 1) throw error;
       lastError = error instanceof Error ? error.message : String(error);

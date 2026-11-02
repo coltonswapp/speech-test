@@ -2,6 +2,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getProviderKey } from "@/lib/secrets";
+import { geminiGenerateContentUrl, geminiTextModel } from "@/lib/gemini/text-model";
 import { db } from "@/lib/db/client";
 import { appSettings } from "@/lib/db/schema";
 import { DialogueGenerationError } from "@/lib/dialogue/gemini-generate";
@@ -14,7 +15,6 @@ import {
 } from "@/lib/dialogue/token-readings";
 import type { TokenizedToken } from "@/lib/dialogue/types";
 
-const GEMINI_TOKENIZE_MODEL = "gemini-2.5-flash";
 const DETERMINISTIC_SEED = 42;
 
 const segmentationPayloadSchema = z.object({
@@ -60,18 +60,23 @@ const RETRY_SUFFIX = `
 
 CRITICAL: Copy tokens exactly from the input string. For 歩いて use 歩いて or 歩い and て in Japanese script — never invent arui, aruite, or te in Latin letters. Latin/digits are allowed only when copied exactly from the input (e.g. ATM).`;
 
-async function requestTokenSurfaces(
+export type TokenizeUsage = { promptTokens: number; outputTokens: number };
+
+/** One tokenize round-trip. Exported for scripts/eval-tokenize-model.ts. */
+export async function requestTokenSurfaces(
   apiKey: string,
   text: string,
-  isRetry: boolean
+  isRetry: boolean,
+  options: { model?: string; onUsage?: (usage: TokenizeUsage) => void } = {}
 ): Promise<RawToken[]> {
+  const model = options.model ?? geminiTextModel();
   const base = `${INSTRUCTIONS_TEXT}${READING_INSTRUCTIONS}`;
   const prompt = isRetry
     ? `${base}${RETRY_SUFFIX}\n\nInput:\n${text}`
     : `${base}\n\nInput:\n${text}`;
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TOKENIZE_MODEL}:generateContent`,
+    geminiGenerateContentUrl(model),
     {
       method: "POST",
       headers: {
@@ -80,12 +85,11 @@ async function requestTokenSurfaces(
       },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
+        // Gemini 3+ ignores temperature/topP/topK and rejects candidateCount;
+        // the seed plus schema keep output stable enough for the line cache.
         generationConfig: {
-          temperature: 0,
-          topP: 1,
-          topK: 1,
           seed: DETERMINISTIC_SEED,
-          candidateCount: 1,
+          thinkingConfig: { thinkingLevel: "minimal" },
           responseMimeType: "application/json",
           responseSchema: {
             type: "object",
@@ -117,6 +121,14 @@ async function requestTokenSurfaces(
   }
 
   const json = await response.json();
+  const usage = json?.usageMetadata;
+  options.onUsage?.({
+    promptTokens: Number(usage?.promptTokenCount ?? 0),
+    outputTokens: Math.max(
+      Number(usage?.candidatesTokenCount ?? 0),
+      Number(usage?.totalTokenCount ?? 0) - Number(usage?.promptTokenCount ?? 0)
+    ),
+  });
   const raw = json?.candidates?.[0]?.content?.parts
     ?.map((part: { text?: string }) => part?.text ?? "")
     .join("");
@@ -138,7 +150,7 @@ async function requestTokenSurfaces(
 }
 
 /** Validated segments plus whichever readings survive the split/merge pass. */
-function tokensWithReadings(raw: RawToken[], text: string): TokenizedToken[] | null {
+export function tokensWithReadings(raw: RawToken[], text: string): TokenizedToken[] | null {
   const segments = validatedTokens(
     raw.map((token) => token.text),
     text

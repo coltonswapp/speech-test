@@ -20,6 +20,16 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Gemini models
+
+Studio's text calls (dialogue generation and revision, grammar generation,
+tokenize + readings) all use one model, `GEMINI_TEXT_MODEL`, defaulting to
+`gemini-3.5-flash-lite` (see `lib/gemini/text-model.ts`). Gemini 3+ ignores
+`temperature`/`topP`/`topK` and rejects `candidateCount`, so requests send only
+`thinkingConfig.thinkingLevel` (`minimal` for tokenize, `low` for generation).
+Published per-1M-token rates, including the 2027-01-01 rate changes, live in
+`lib/gemini/models.ts`. See `.env.example`.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

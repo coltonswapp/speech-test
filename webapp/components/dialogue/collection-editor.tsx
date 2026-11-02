@@ -768,48 +768,53 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
                 </span>
               )}
             </button>
-            <div className="flex min-w-0 flex-1 flex-col">
-              <Link
-                href={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
-                className="truncate text-sm font-medium hover:underline"
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <div className="min-w-0">
+                <Link
+                  href={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
+                  className="line-clamp-2 text-sm font-medium leading-snug break-words hover:underline"
+                >
+                  {scenario.menuTitle}
+                </Link>
+                <span className="mt-0.5 block break-all text-xs text-muted-foreground">
+                  {scenario.id}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                <ScenarioUpdatedLabel updatedAt={scenario.updatedAt} />
+                <ScenarioReadinessChips
+                  readiness={scenario.readiness}
+                  hrefBase={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
+                  audioTitle={audioStatusTooltip(
+                    audioStatusById.get(scenario.id),
+                    scenario.readiness.audio !== "draft",
+                  )}
+                  className="max-w-none justify-start"
+                />
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center self-center">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => move(index, -1)}
+                disabled={index === 0 || reorderMutation.isPending}
+                aria-label="Move up"
               >
-                {scenario.menuTitle}
-              </Link>
-              <span className="truncate text-xs text-muted-foreground">
-                {scenario.id}
-              </span>
+                <ArrowUp className="size-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => move(index, 1)}
+                disabled={
+                  index === scenarios.length - 1 || reorderMutation.isPending
+                }
+                aria-label="Move down"
+              >
+                <ArrowDown className="size-3.5" />
+              </Button>
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-              <ScenarioUpdatedLabel updatedAt={scenario.updatedAt} />
-              <ScenarioReadinessChips
-                readiness={scenario.readiness}
-                hrefBase={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
-                audioTitle={audioStatusTooltip(
-                  audioStatusById.get(scenario.id),
-                  scenario.readiness.audio !== "draft",
-                )}
-              />
-            </div>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => move(index, -1)}
-              disabled={index === 0 || reorderMutation.isPending}
-              aria-label="Move up"
-            >
-              <ArrowUp className="size-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => move(index, 1)}
-              disabled={
-                index === scenarios.length - 1 || reorderMutation.isPending
-              }
-              aria-label="Move down"
-            >
-              <ArrowDown className="size-3.5" />
-            </Button>
           </div>
         ))}
       </div>

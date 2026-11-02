@@ -46,7 +46,7 @@ let generated = 0;
 async function synthesize(voice: string): Promise<Buffer> {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
-  for (let attempt = 0; attempt < 6; attempt++) {
+  for (let attempt = 0; attempt < 10; attempt++) {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${VOICE_TAKES_MODEL}:generateContent`,
       {
@@ -56,8 +56,14 @@ async function synthesize(voice: string): Promise<Buffer> {
       }
     );
     if (res.status === 429 || res.status >= 500) {
-      const wait = 10_000 * (attempt + 1);
-      console.log(`  ${voice}: HTTP ${res.status}, retrying in ${wait / 1000}s`);
+      const body = await res.text();
+      // Honor the API's RetryInfo when present; otherwise linear backoff.
+      const hinted = /"retryDelay":\s*"(\d+(?:\.\d+)?)s"/.exec(body)?.[1];
+      const quota = /"quotaId":\s*"([^"]+)"/.exec(body)?.[1];
+      const wait = hinted ? Math.ceil(Number(hinted) + 1) * 1000 : 10_000 * (attempt + 1);
+      console.log(
+        `  ${voice}: HTTP ${res.status}${quota ? ` (${quota})` : ""}, retrying in ${wait / 1000}s`
+      );
       await sleep(wait);
       continue;
     }

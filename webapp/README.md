@@ -29,6 +29,13 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
   `lib/dialogue/tokenize-prompt.ts`; results are cached per line text.
 - **TTS**: chosen in Settings → Voices (3.8 Flash TTS by default, or 3.8
   Flash-Lite TTS).
+- **Voice takes**: Settings → Voices → Voice takes plays two takes of one
+  sample line for every Gemini voice (Studio's 30 plus the ja-JP Tokyo library
+  voices, which only work on 3.8 TTS). **Generate missing takes** calls
+  `POST /api/tts/voice-takes/generate` in small batches; it skips takes already
+  in R2 (`tts/voice-takes/<model>/`, plus `manifest.json`), stops on a Gemini
+  quota hit with the retry time, and can be clicked again later to resume. The
+  row's ↺ button regenerates one voice (`{ voice, force: true }`). No DB rows.
 
 Gemini 3+ ignores `temperature`/`topP`/`topK` and rejects `candidateCount`, so
 requests send only `thinkingConfig.thinkingLevel` (adapted per model in

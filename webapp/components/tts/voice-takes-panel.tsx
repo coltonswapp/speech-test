@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Pause, Play } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Pause, Play, RotateCcw, Sparkles, Square } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +18,29 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ttsApi } from "@/lib/tts/client";
 import { GEMINI_VOICE_CATALOG } from "@/lib/tts/gemini-voice-catalog";
-import { VOICE_TAKES_MODEL } from "@/lib/tts/voice-takes";
+import { VOICE_TAKES_MODEL, VOICE_TAKES_PER_VOICE } from "@/lib/tts/voice-takes";
+import type { VoiceTakesBatchResult } from "@/lib/tts/voice-takes-batch";
+
+/** Per-minute limits under this are waited out automatically. */
+const AUTO_WAIT_MAX_SECONDS = 70;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** "Daily Gemini TTS limit reached, try again after ~1 AM MT" from the retry hint. */
+export function quotaMessage(quota: NonNullable<VoiceTakesBatchResult["quota"]>, now = Date.now()) {
+  if (!quota.daily && quota.retryAfterSeconds !== null) {
+    return `Gemini TTS rate limit reached, try again in ~${Math.ceil(quota.retryAfterSeconds / 60)} min`;
+  }
+  // Daily quotas reset at midnight Pacific (~1 AM MT) when the API gives no hint.
+  const at =
+    quota.retryAfterSeconds !== null
+      ? new Date(now + quota.retryAfterSeconds * 1000).toLocaleTimeString("en-US", {
+          timeZone: "America/Denver",
+          hour: "numeric",
+        })
+      : "1 AM";
+  return `Daily Gemini TTS limit reached, try again after ~${at} MT`;
+}
 
 const ALL = "all";
 
@@ -65,7 +88,8 @@ function FilterSelect({
 
 /**
  * Side-by-side listening: two takes of the same line per Gemini voice, read
- * from the R2 manifest written by scripts/seed-voice-takes.ts.
+ * from the R2 manifest. "Generate missing takes" loops small batches of
+ * POST /api/tts/voice-takes/generate until done or a Gemini quota hit.
  */
 export function VoiceTakesPanel() {
   const [gender, setGender] = useState(ALL);
@@ -73,6 +97,74 @@ export function VoiceTakesPanel() {
   const [source, setSource] = useState(ALL);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
+
+  const queryClient = useQueryClient();
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [running, setRunning] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState<string | null>(null);
+  const stopRef = useRef(false);
+
+  const applyBatch = (result: VoiceTakesBatchResult) => {
+    queryClient.setQueryData(["voice-takes"], { manifest: result.manifest });
+    setProgress({ done: result.doneVoices, total: result.totalVoices });
+  };
+
+  const generateMissing = async () => {
+    stopRef.current = false;
+    setRunning(true);
+    setNotice(null);
+    const failed = new Map<string, string>();
+    let spent = 0;
+    try {
+      while (!stopRef.current) {
+        const result = await ttsApi.generateVoiceTakes({ exclude: [...failed.keys()] });
+        applyBatch(result);
+        spent += result.costUSD;
+        for (const f of result.failures) failed.set(f.voice, f.error);
+        if (result.quota) {
+          const wait = result.quota.retryAfterSeconds;
+          if (!result.quota.daily && wait !== null && wait <= AUTO_WAIT_MAX_SECONDS) {
+            setNotice(`Rate limited, resuming in ${wait}s…`);
+            await sleep((wait + 1) * 1000);
+            setNotice(null);
+            continue;
+          }
+          setNotice(quotaMessage(result.quota));
+          break;
+        }
+        if (result.remainingVoices - failed.size <= 0) {
+          setNotice(
+            failed.size
+              ? `Done except ${failed.size} voice${failed.size === 1 ? "" : "s"} that failed: ${[...failed.keys()].join(", ")}`
+              : "All voice takes generated."
+          );
+          break;
+        }
+      }
+      if (stopRef.current) setNotice("Stopped. Progress is saved; run again to continue.");
+    } catch (error) {
+      setNotice((error as Error).message || "Could not generate voice takes.");
+    } finally {
+      setRunning(false);
+      if (spent > 0) toast.success(`Voice takes: ~$${spent.toFixed(3)} of Gemini TTS this run`);
+    }
+  };
+
+  const regenerate = async (voice: string) => {
+    setRegenerating(voice);
+    try {
+      const result = await ttsApi.generateVoiceTakes({ voice, force: true });
+      applyBatch(result);
+      if (result.quota) toast.error(quotaMessage(result.quota));
+      else if (result.failures.length) toast.error(`${voice}: ${result.failures[0].error}`);
+      else toast.success(`Regenerated ${voice}`);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setRegenerating(null);
+    }
+  };
 
   const takesQuery = useQuery({
     queryKey: ["voice-takes"],
@@ -85,6 +177,11 @@ export function VoiceTakesPanel() {
     [manifest]
   );
 
+  const completeVoices = GEMINI_VOICE_CATALOG.filter(
+    (v) => (takesByVoice.get(v.voice)?.length ?? 0) >= VOICE_TAKES_PER_VOICE
+  ).length;
+  const shown = progress ?? { done: completeVoices, total: GEMINI_VOICE_CATALOG.length };
+
   const rows = GEMINI_VOICE_CATALOG.filter(
     (v) =>
       (gender === ALL || v.gender === gender) &&
@@ -92,7 +189,7 @@ export function VoiceTakesPanel() {
       (source === ALL || v.source === source)
   );
 
-  const toggle = (voice: string, take: number) => {
+  const toggle = (voice: string, take: number, sha: string) => {
     const id = `${voice}#${take}`;
     if (!audioRef.current) {
       audioRef.current = new Audio();
@@ -103,7 +200,7 @@ export function VoiceTakesPanel() {
       setPlaying(null);
       return;
     }
-    audioRef.current.src = `/api/tts/voice-takes/audio?voice=${encodeURIComponent(voice)}&take=${take}`;
+    audioRef.current.src = `/api/tts/voice-takes/audio?voice=${encodeURIComponent(voice)}&take=${take}&v=${sha.slice(0, 12)}`;
     setPlaying(id);
     audioRef.current.play().catch(() => setPlaying(null));
   };
@@ -127,12 +224,36 @@ export function VoiceTakesPanel() {
             {rows.length} voice{rows.length === 1 ? "" : "s"}
           </span>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {running ? (
+            <Button type="button" size="sm" variant="outline" onClick={() => (stopRef.current = true)}>
+              <Square className="size-3" />
+              Stop
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              onClick={generateMissing}
+              disabled={takesQuery.isLoading || shown.done >= shown.total}
+            >
+              <Sparkles className="size-3" />
+              Generate missing takes
+            </Button>
+          )}
+          <span className="text-xs text-muted-foreground">
+            {running && <Loader2 className="mr-1 inline size-3 animate-spin" />}
+            {shown.done}/{shown.total} voices have {VOICE_TAKES_PER_VOICE} takes
+          </span>
+          {notice && <span className="text-xs text-amber-600 dark:text-amber-400">{notice}</span>}
+        </div>
         {takesQuery.isLoading ? (
           <Skeleton className="h-48 w-full" />
         ) : !manifest ? (
           <p className="text-sm text-muted-foreground">
-            No takes seeded yet. Run <code>pnpm db:seed-voice-takes</code> to
-            generate and upload them.
+            No takes yet. Click <strong>Generate missing takes</strong> to
+            create them ({GEMINI_VOICE_CATALOG.length * VOICE_TAKES_PER_VOICE} takes,
+            about $0.30 of Gemini TTS).
           </p>
         ) : (
           <div className="overflow-x-auto rounded-md border">
@@ -162,7 +283,7 @@ export function VoiceTakesPanel() {
                       <td className="px-3 py-2">
                         <div className="flex gap-1">
                           {takes.length === 0 ? (
-                            <span className="text-xs text-muted-foreground">not seeded</span>
+                            <span className="text-xs text-muted-foreground">not generated</span>
                           ) : (
                             takes.map((t) => {
                               const isPlaying = playing === `${v.voice}#${t.take}`;
@@ -172,7 +293,7 @@ export function VoiceTakesPanel() {
                                   type="button"
                                   size="sm"
                                   variant={isPlaying ? "default" : "outline"}
-                                  onClick={() => toggle(v.voice, t.take)}
+                                  onClick={() => toggle(v.voice, t.take, t.sha256)}
                                   title={`${v.displayName} take ${t.take} (${t.seconds}s)`}
                                 >
                                   {isPlaying ? <Pause className="size-3" /> : <Play className="size-3" />}
@@ -181,6 +302,21 @@ export function VoiceTakesPanel() {
                               );
                             })
                           )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => regenerate(v.voice)}
+                            disabled={running || regenerating !== null}
+                            title={`Regenerate ${v.displayName}'s takes`}
+                            aria-label={`Regenerate ${v.displayName}'s takes`}
+                          >
+                            {regenerating === v.voice ? (
+                              <Loader2 className="size-3 animate-spin" />
+                            ) : (
+                              <RotateCcw className="size-3" />
+                            )}
+                          </Button>
                         </div>
                       </td>
                       <td className="px-3 py-2 text-xs">

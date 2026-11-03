@@ -2,6 +2,7 @@ import type { TokenSyncFlag } from "@/lib/dialogue/types";
 import { formatApiError } from "@/lib/api-error";
 import type { GeminiTtsModel } from "@/lib/gemini/models";
 import type { VoiceTakesManifest } from "@/lib/tts/voice-takes";
+import type { VoiceTakesBatchResult } from "@/lib/tts/voice-takes-batch";
 import type { VariantTokenSync } from "@/lib/dialogue/types";
 
 export type ProjectSummary = {
@@ -257,6 +258,11 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const ttsApi = {
   getVoiceTakes: () =>
     request<{ manifest: VoiceTakesManifest | null }>("/api/tts/voice-takes"),
+  generateVoiceTakes: (body: { voice?: string; force?: boolean; exclude?: string[] } = {}) =>
+    request<VoiceTakesBatchResult>("/api/tts/voice-takes/generate", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   getTtsSettings: () =>
     request<{ geminiTtsModel: GeminiTtsModel }>("/api/tts/settings"),
   updateTtsSettings: (geminiTtsModel: GeminiTtsModel) =>

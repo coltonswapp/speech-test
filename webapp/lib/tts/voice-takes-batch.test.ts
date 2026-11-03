@@ -4,10 +4,13 @@ import {
   parseGeminiQuotaError,
   runVoiceTakesBatch,
   takeKey,
+  uploadVoiceTake,
   VoiceTakeQuotaError,
+  VoiceTakeUploadError,
   type VoiceTakeStore,
 } from "./voice-takes-batch";
-import { VOICE_TAKES_PER_VOICE, type VoiceTakesManifest } from "./voice-takes";
+import { VOICE_TAKES_MODEL, VOICE_TAKES_PER_VOICE, type VoiceTakesManifest } from "./voice-takes";
+import { pcm16ToWav } from "./wav";
 
 const catalog = ["A", "B", "C", "D", "E"].map((voice) => ({ voice, source: "studio" as const }));
 
@@ -146,4 +149,75 @@ test("parses Gemini 429 RetryInfo and QuotaFailure", () => {
   assert.equal(err.retryAfterSeconds, 13);
   assert.equal(err.daily, false);
   assert.equal(parseGeminiQuotaError("{}").retryAfterSeconds, null);
+});
+
+const realWav = (seed: number, samples = 2400) =>
+  pcm16ToWav(Buffer.alloc(samples * 2, seed), 24_000);
+const upload = (store: VoiceTakeStore, voice: string, take: number, wav: Buffer, overwrite = false) =>
+  uploadVoiceTake({ store, catalog, voice, take, model: VOICE_TAKES_MODEL, wav, overwrite });
+
+test("uploaded takes land on generate's keys and manifest, so the batch skips them", async () => {
+  const mem = memoryStore();
+  const first = await upload(mem.store, "B", 1, realWav(1));
+  assert.equal(first.status, "stored");
+  assert.equal(first.key, takeKey("B", 1));
+  assert.equal(first.entry.seconds, 0.1);
+  assert.equal(first.entry.bytes, 44 + 4800);
+  await upload(mem.store, "B", 2, realWav(2));
+  await upload(mem.store, "A", 2, realWav(3));
+  await upload(mem.store, "A", 1, realWav(4));
+  const m = mem.manifest()!;
+  assert.equal(m.model, VOICE_TAKES_MODEL);
+  // Catalog order for voices, take order within a voice.
+  assert.deepEqual(m.voices.map((v) => v.voice), ["A", "B"]);
+  assert.deepEqual(m.voices[0].takes.map((t) => t.take), [1, 2]);
+  assert.equal(m.voices[0].source, "studio");
+
+  const s = synth();
+  const batch = await runVoiceTakesBatch({ store: mem.store, synthesize: s.fn, catalog, maxVoices: 10 });
+  assert.deepEqual(batch.processedVoices, ["C", "D", "E"]);
+  assert.equal(s.calls.includes("A") || s.calls.includes("B"), false);
+  assert.equal(batch.status, "complete");
+});
+
+test("upload is idempotent: existing takes skip unless overwrite", async () => {
+  const mem = memoryStore();
+  const original = realWav(1);
+  await upload(mem.store, "A", 1, original);
+  const skipped = await upload(mem.store, "A", 1, realWav(9));
+  assert.equal(skipped.status, "skipped");
+  assert.ok(mem.objects.get(takeKey("A", 1))!.equals(original));
+
+  const replaced = await upload(mem.store, "A", 1, realWav(9), true);
+  assert.equal(replaced.status, "stored");
+  assert.ok(mem.objects.get(takeKey("A", 1))!.equals(realWav(9)));
+  assert.equal(mem.manifest()!.voices[0].takes.length, 1);
+
+  // An object already in storage but missing from the manifest is listed, not rewritten.
+  const seeded = memoryStore({ [takeKey("C", 2)]: realWav(5) });
+  const listed = await upload(seeded.store, "C", 2, realWav(6));
+  assert.equal(listed.status, "skipped");
+  assert.deepEqual(seeded.manifest()!.voices.map((v) => [v.voice, v.takes.map((t) => t.take)]), [["C", [2]]]);
+});
+
+test("upload rejects unknown voices, bad takes, other models, wrong formats, duplicate takes", async () => {
+  const { store } = memoryStore();
+  const rejects = (p: Promise<unknown>, status: number, match: RegExp) =>
+    assert.rejects(p, (e: unknown) => e instanceof VoiceTakeUploadError && e.status === status && match.test(e.message));
+  await rejects(upload(store, "Nope", 1, realWav(1)), 400, /Unknown voice/);
+  await rejects(upload(store, "A", 0, realWav(1)), 400, /take must be/);
+  await rejects(upload(store, "A", VOICE_TAKES_PER_VOICE + 1, realWav(1)), 400, /take must be/);
+  await rejects(
+    uploadVoiceTake({ store, catalog, voice: "A", take: 1, model: "gemini-3.1-flash-tts-preview", wav: realWav(1) }),
+    400,
+    /model must be/
+  );
+  await rejects(upload(store, "A", 1, Buffer.from("not a wav at all, definitely not")), 400, /Not a WAV/);
+  await rejects(upload(store, "A", 1, pcm16ToWav(Buffer.alloc(4800, 1), 44_100)), 400, /24 kHz/);
+  // Extra chunk after data (e.g. raw Gemini 3.8 output with C2PA) is not the stored format.
+  await rejects(upload(store, "A", 1, Buffer.concat([realWav(1), Buffer.from("c2pa\x04\0\0\0abcd")])), 400, /24 kHz/);
+  await rejects(upload(store, "A", 1, pcm16ToWav(Buffer.alloc(0), 24_000)), 400, /no audio|24 kHz/);
+
+  await upload(store, "A", 1, realWav(7));
+  await rejects(upload(store, "A", 2, realWav(7)), 409, /Identical/);
 });

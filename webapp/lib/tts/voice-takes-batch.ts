@@ -9,6 +9,7 @@ import {
   VOICE_TAKES_SAMPLE_TEXT,
   type VoiceTakesManifest,
 } from "@/lib/tts/voice-takes";
+import { pcm16ToWav, wavToPcm16 } from "@/lib/tts/wav";
 
 export type VoiceTakesManifestVoice = VoiceTakesManifest["voices"][number];
 export type VoiceTakeEntry = VoiceTakesManifestVoice["takes"][number];
@@ -91,6 +92,29 @@ function takeEntry(voice: string, take: number, wav: Buffer): VoiceTakeEntry {
   };
 }
 
+/**
+ * Re-read the manifest (so a concurrent writer's voices aren't dropped), put
+ * `entry` in catalog order, and write it. Shared by generate and upload.
+ */
+async function writeVoiceEntry(
+  store: VoiceTakeStore,
+  catalog: readonly { voice: string }[],
+  entry: VoiceTakesManifestVoice,
+  now: () => number
+): Promise<VoiceTakesManifest> {
+  const fresh = currentManifest(await store.readManifest(), new Date(now()));
+  const order = new Map(catalog.map((v, i) => [v.voice, i]));
+  const manifest: VoiceTakesManifest = {
+    ...fresh,
+    generatedAt: new Date(now()).toISOString(),
+    voices: [...fresh.voices.filter((v) => v.voice !== entry.voice), entry].sort(
+      (a, b) => (order.get(a.voice) ?? 1e9) - (order.get(b.voice) ?? 1e9)
+    ),
+  };
+  await store.writeManifest(manifest);
+  return manifest;
+}
+
 export async function runVoiceTakesBatch(params: {
   store: VoiceTakeStore;
   synthesize: SynthesizeVoiceTake;
@@ -152,18 +176,7 @@ export async function runVoiceTakesBatch(params: {
     }
 
     if (takes.length > 0) {
-      // Re-read before writing so a concurrent batch's voices aren't dropped.
-      manifest = currentManifest(await store.readManifest(), new Date(now()));
-      const entry: VoiceTakesManifestVoice = { voice: target.voice, source: target.source, takes };
-      const order = new Map(catalog.map((v, i) => [v.voice, i]));
-      manifest = {
-        ...manifest,
-        generatedAt: new Date(now()).toISOString(),
-        voices: [...manifest.voices.filter((v) => v.voice !== target.voice), entry].sort(
-          (a, b) => (order.get(a.voice) ?? 1e9) - (order.get(b.voice) ?? 1e9)
-        ),
-      };
-      await store.writeManifest(manifest);
+      manifest = await writeVoiceEntry(store, catalog, { voice: target.voice, source: target.source, takes }, now);
     }
     processedVoices.push(target.voice);
     if (quota) break;
@@ -192,4 +205,105 @@ export function parseGeminiQuotaError(body: string): VoiceTakeQuotaError {
   const delay = /"retryDelay":\s*"(\d+(?:\.\d+)?)s"/.exec(body)?.[1];
   const quotaId = /"quotaId":\s*"([^"]+)"/.exec(body)?.[1] ?? null;
   return new VoiceTakeQuotaError(delay ? Math.ceil(Number(delay)) : null, quotaId);
+}
+
+export class VoiceTakeUploadError extends Error {
+  constructor(
+    message: string,
+    readonly status: 400 | 409
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Only the exact WAV the generate path writes (pcm16ToWav: 44-byte header,
+ * 24 kHz mono 16-bit PCM) is accepted, so `seconds` and playback match.
+ * Conversion happens before upload, never here.
+ */
+export function assertStoredTakeFormat(wav: Buffer): void {
+  let parsed: { pcm: Buffer; sampleRate: number };
+  try {
+    parsed = wavToPcm16(wav);
+  } catch (error) {
+    throw new VoiceTakeUploadError((error as Error).message, 400);
+  }
+  if (parsed.sampleRate !== SAMPLE_RATE || !pcm16ToWav(parsed.pcm, SAMPLE_RATE).equals(wav)) {
+    throw new VoiceTakeUploadError(
+      "Expected a 44-byte-header 24 kHz mono 16-bit PCM WAV (the format generate stores).",
+      400
+    );
+  }
+  if (parsed.pcm.length === 0) throw new VoiceTakeUploadError("WAV has no audio.", 400);
+}
+
+export type VoiceTakeUploadResult = {
+  status: "stored" | "skipped";
+  voice: string;
+  take: number;
+  key: string;
+  entry: VoiceTakeEntry;
+  manifest: VoiceTakesManifest;
+};
+
+/**
+ * Store one pre-generated take under the same key and manifest entry the
+ * batch writes, so the player and "Generate missing takes" treat it as done.
+ * An existing take is left alone (status "skipped") unless overwrite is set.
+ */
+export async function uploadVoiceTake(params: {
+  store: VoiceTakeStore;
+  catalog: readonly { voice: string; source: "studio" | "library" }[];
+  voice: string;
+  take: number;
+  model: string;
+  wav: Buffer;
+  overwrite?: boolean;
+  now?: () => number;
+}): Promise<VoiceTakeUploadResult> {
+  const now = params.now ?? Date.now;
+  const { store, catalog, voice, take, wav } = params;
+  const target = catalog.find((v) => v.voice === voice);
+  if (!target) throw new VoiceTakeUploadError("Unknown voice", 400);
+  if (!Number.isInteger(take) || take < 1 || take > VOICE_TAKES_PER_VOICE) {
+    throw new VoiceTakeUploadError(`take must be 1..${VOICE_TAKES_PER_VOICE}`, 400);
+  }
+  if (params.model !== VOICE_TAKES_MODEL) {
+    throw new VoiceTakeUploadError(`model must be ${VOICE_TAKES_MODEL}`, 400);
+  }
+  assertStoredTakeFormat(wav);
+
+  const key = takeKey(voice, take);
+  const stored = currentManifest(await store.readManifest(), new Date(now()));
+  const existing = stored.voices.find((v) => v.voice === voice);
+  const listed = existing?.takes.find((t) => t.take === take);
+
+  if (!params.overwrite && (await store.exists(key))) {
+    // Already stored: make sure the manifest lists it (as the batch would), then skip.
+    const entry = listed ?? takeEntry(voice, take, await store.get(key));
+    const manifest = listed
+      ? stored
+      : await writeVoiceEntry(store, catalog, withTake(existing, target, entry), now);
+    return { status: "skipped", voice, take, key, entry, manifest };
+  }
+
+  const entry = takeEntry(voice, take, wav);
+  // Takes of one voice must differ, same rule as generate.
+  if (existing?.takes.some((t) => t.take !== take && t.sha256 === entry.sha256)) {
+    throw new VoiceTakeUploadError("Identical to another take of this voice", 409);
+  }
+  await store.put(key, wav);
+  const manifest = await writeVoiceEntry(store, catalog, withTake(existing, target, entry), now);
+  return { status: "stored", voice, take, key, entry, manifest };
+}
+
+function withTake(
+  existing: VoiceTakesManifestVoice | undefined,
+  target: { voice: string; source: "studio" | "library" },
+  entry: VoiceTakeEntry
+): VoiceTakesManifestVoice {
+  const takes = [...(existing?.takes ?? []).filter((t) => t.take !== entry.take), entry].sort(
+    (a, b) => a.take - b.take
+  );
+  return { voice: target.voice, source: target.source, takes };
 }

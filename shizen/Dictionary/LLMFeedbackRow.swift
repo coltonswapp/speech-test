@@ -63,8 +63,9 @@ enum LLMFeedbackPrompt {
     private static let askEvery = 4
     private static var sessionDecisions: [String: Bool] = [:]
 
-    static func shouldOffer(_ receipt: LLMFeedbackReceipt) -> Bool {
+    static func shouldOffer(_ receipt: LLMFeedbackReceipt, ignoreCadence: Bool = false) -> Bool {
         if hasVoted(receipt) { return false }
+        if ignoreCadence { return true }
         if let decided = sessionDecisions[receipt.requestId] { return decided }
         let count = UserDefaults.standard.integer(forKey: countKey) + 1
         UserDefaults.standard.set(count, forKey: countKey)
@@ -160,8 +161,8 @@ final class LLMFeedbackRow: UIView {
         CGSize(width: widthConstraint.constant, height: heightConstraint.constant)
     }
 
-    func present(_ receipt: LLMFeedbackReceipt?) {
-        guard let receipt, LLMFeedbackPrompt.shouldOffer(receipt) else {
+    func present(_ receipt: LLMFeedbackReceipt?, ignoreCadence: Bool = false) {
+        guard let receipt, LLMFeedbackPrompt.shouldOffer(receipt, ignoreCadence: ignoreCadence) else {
             if !isHidden { dismiss() }
             return
         }
@@ -361,6 +362,7 @@ final class LLMFeedbackRow: UIView {
             ]
             sheet.prefersGrabberVisible = true
             sheet.prefersScrollingExpandsWhenScrolledToEdge = false
+            sheet.applySolidNonLargeBackground()
         }
         presenter.present(nav, animated: true)
     }
@@ -410,6 +412,9 @@ final class LLMFeedbackRow: UIView {
     private func send(rating: LLMFeedbackRating, reason: LLMFeedbackReason?) {
         guard let receipt else { return }
         LLMFeedbackPrompt.markVoted(receipt)
+        var properties: [String: Any] = ["feature": receipt.feature, "rating": rating.rawValue]
+        properties["reason"] = reason?.rawValue
+        Analytics.track(.llmFeedback, properties)
         Task {
             await LLMGatewayClient.postFeedback(receipt, rating: rating, reason: reason)
         }

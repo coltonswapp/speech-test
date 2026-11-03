@@ -22,53 +22,11 @@ private enum KanjiDecompositionListMetrics {
     }
 }
 
-// MARK: - Shared hero card chrome
-
-private final class KanjiDecompositionHeroCard: UIView {
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        configure()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        configure()
-    }
-
-    private func configure() {
-        clipsToBounds = false
-        layer.cornerRadius = 10
-        layer.cornerCurve = .continuous
-        layer.masksToBounds = false
-        backgroundColor = ExperimentPalette.cardSurface
-        layer.borderWidth = ExperimentCardStroke.normalWidth
-        layer.shadowColor = UIColor.black.cgColor
-        layer.shadowRadius = 4
-        layer.shadowOffset = CGSize(width: 0, height: 1)
-        applyBorderColor()
-        applyShadowOpacity()
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: 10).cgPath
-    }
-
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        applyBorderColor()
-        applyShadowOpacity()
-        setNeedsLayout()
-    }
-
-    private func applyBorderColor() {
-        layer.borderColor = ExperimentPalette.cardBorder
-            .resolvedColor(with: traitCollection).cgColor
-    }
-
-    private func applyShadowOpacity() {
-        layer.shadowOpacity = traitCollection.userInterfaceStyle == .dark ? 0.35 : 0.08
-    }
+/// Decomposition slides always use glass heroes, matching Kanji Spotlight.
+/// The glow follows the slide-hero color picked in the Slide components showcase.
+private enum KanjiDecompositionHeroChrome {
+    static let style: SlideHeroStyle = .glass
+    static var glowColor: DialogueBubbleUnderglowColor { ExperimentSettings.slideHeroGlowColor }
 }
 
 // MARK: - Floating meaning badge
@@ -120,7 +78,8 @@ enum KanjiDecompositionMeaningBadgeStyle {
     }
 }
 
-private final class KanjiDecompositionMeaningBadge: UIView {
+/// Shared with word slideshows (SlideWordHeroView).
+final class KanjiDecompositionMeaningBadge: UIView {
     private let style: KanjiDecompositionMeaningBadgeStyle
     private let label = UILabel()
     private var widthConstraint: NSLayoutConstraint!
@@ -191,6 +150,11 @@ private final class KanjiDecompositionMeaningBadge: UIView {
     private func applyBorderColor() {
         layer.borderColor = ExperimentPalette.cardBorder
             .resolvedColor(with: traitCollection).cgColor
+    }
+
+    /// Overrides the default gold meaning text.
+    func setTextColor(_ color: UIColor) {
+        label.textColor = color
     }
 
     func configure(text: String) {
@@ -312,7 +276,7 @@ enum KanjiDecompositionBadgePlacement {
 
 final class KanjiDecompositionCharacterHeroView: UIView {
     let layoutIdentifier: KanjiDecompositionBadgeIdentifier
-    private let heroCard = KanjiDecompositionHeroCard()
+    private let heroCard: SlideHeroCardView
     private let glyphLabel = UILabel()
     private let badge: KanjiDecompositionMeaningBadge
 
@@ -324,9 +288,12 @@ final class KanjiDecompositionCharacterHeroView: UIView {
         cardWidth: CGFloat = 118,
         glyphFontSize: CGFloat = 64,
         badgeStyle: KanjiDecompositionMeaningBadgeStyle = .standard,
-        badgePlacement: KanjiDecompositionBadgePlacement = .center
+        badgePlacement: KanjiDecompositionBadgePlacement = .center,
+        heroStyle: SlideHeroStyle = ExperimentSettings.slideHeroStyle,
+        glowColor: DialogueBubbleUnderglowColor = ExperimentSettings.slideHeroGlowColor
     ) {
         self.layoutIdentifier = layoutIdentifier
+        self.heroCard = SlideHeroCardView(style: heroStyle, glowColor: glowColor)
         self.badge = KanjiDecompositionMeaningBadge(style: badgeStyle)
         super.init(frame: .zero)
         setup(cardWidth: cardWidth, glyphFontSize: glyphFontSize, badgePlacement: badgePlacement)
@@ -413,6 +380,10 @@ final class KanjiDecompositionCharacterHeroView: UIView {
 
     func applyMeaning(_ meaning: String) {
         badge.configure(text: meaning.isEmpty ? "—" : meaning)
+    }
+
+    func setGlowColor(_ color: DialogueBubbleUnderglowColor) {
+        heroCard.setGlowColor(color)
     }
 
     func applyUserOffset(_ offset: CGPoint) {
@@ -504,7 +475,9 @@ private func kanjiDecompositionPopulatePreviewRow(
             cardWidth: metrics.cardWidth,
             glyphFontSize: metrics.glyphFontSize,
             badgeStyle: metrics.compactBadges ? .compact : .standard,
-            badgePlacement: kanjiDecompositionPreviewBadgePlacement(for: index, count: word.characters.count)
+            badgePlacement: kanjiDecompositionPreviewBadgePlacement(for: index, count: word.characters.count),
+            heroStyle: KanjiDecompositionHeroChrome.style,
+            glowColor: KanjiDecompositionHeroChrome.glowColor
         )
         let detail = KanjidicStore.shared.detail(forKanji: String(character))
         hero.configure(character: character, meaning: detail?.badgeMeaning ?? "")
@@ -539,12 +512,18 @@ private func kanjiDecompositionInstallPreviewContainer(
 // MARK: - Word hero (furigana-annotated combined word, no meaning)
 
 final class KanjiDecompositionWordHeroCard: UIView {
-    private let heroCard = KanjiDecompositionHeroCard()
+    private let heroCard: SlideHeroCardView
     private let wordLabel = FuriganaTranscriptLabel()
     private let fixedWidth: CGFloat?
     private let heightToWidthRatio: CGFloat
 
-    init(fixedWidth: CGFloat? = nil, heightToWidthRatio: CGFloat = 1.24) {
+    init(
+        fixedWidth: CGFloat? = nil,
+        heightToWidthRatio: CGFloat = 1.24,
+        heroStyle: SlideHeroStyle = ExperimentSettings.slideHeroStyle,
+        glowColor: DialogueBubbleUnderglowColor = ExperimentSettings.slideHeroGlowColor
+    ) {
+        self.heroCard = SlideHeroCardView(style: heroStyle, glowColor: glowColor)
         self.fixedWidth = fixedWidth
         self.heightToWidthRatio = heightToWidthRatio
         super.init(frame: .zero)
@@ -552,6 +531,7 @@ final class KanjiDecompositionWordHeroCard: UIView {
     }
 
     override init(frame: CGRect) {
+        self.heroCard = SlideHeroCardView()
         self.fixedWidth = nil
         self.heightToWidthRatio = 1.24
         super.init(frame: frame)
@@ -559,6 +539,7 @@ final class KanjiDecompositionWordHeroCard: UIView {
     }
 
     required init?(coder: NSCoder) {
+        self.heroCard = SlideHeroCardView()
         self.fixedWidth = nil
         self.heightToWidthRatio = 1.24
         super.init(coder: coder)
@@ -655,6 +636,10 @@ final class KanjiDecompositionWordHeroCard: UIView {
         }
     }
 
+    func setGlowColor(_ color: DialogueBubbleUnderglowColor) {
+        heroCard.setGlowColor(color)
+    }
+
     /// Full-height wash behind the first match of `substring` in the word.
     func highlightSubstring(_ substring: String, color: UIColor) {
         let needle = substring.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -682,72 +667,6 @@ final class KanjiDecompositionWordHeroCard: UIView {
 
 private func installKanjiDecompositionWatermark(in host: UIView) {
     ExperimentSlideWatermark.install(in: host)
-}
-
-// MARK: - Readings list cell (On + Kun on one row)
-
-private final class KanjiDecompositionReadingsCell: UICollectionViewListCell {
-    private let rowStack = UIStackView()
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        setup()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setup()
-    }
-
-    private func setup() {
-        rowStack.axis = .horizontal
-        rowStack.alignment = .firstBaseline
-        rowStack.spacing = KanjiDecompositionListMetrics.inset(16)
-        rowStack.distribution = .fillEqually
-        rowStack.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(rowStack)
-        NSLayoutConstraint.activate([
-            rowStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: KanjiDecompositionListMetrics.inset(8)),
-            rowStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -KanjiDecompositionListMetrics.inset(8)),
-            rowStack.leadingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.leadingAnchor),
-            rowStack.trailingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.trailingAnchor),
-        ])
-    }
-
-    func configure(on: String?, kun: String?) {
-        rowStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        if let on, !on.isEmpty {
-            rowStack.addArrangedSubview(readingGroup(title: "On", value: on))
-        }
-        if let kun, !kun.isEmpty {
-            rowStack.addArrangedSubview(readingGroup(title: "Kun", value: kun))
-        }
-        if rowStack.arrangedSubviews.isEmpty {
-            rowStack.addArrangedSubview(readingGroup(title: "Reading", value: "—"))
-        }
-    }
-
-    private func readingGroup(title: String, value: String) -> UIView {
-        let titleLabel = UILabel()
-        titleLabel.text = title
-        titleLabel.font = .systemFont(ofSize: KanjiDecompositionListMetrics.size(10), weight: .semibold)
-        titleLabel.textColor = .tertiaryLabel
-
-        let valueLabel = UILabel()
-        valueLabel.text = value
-        valueLabel.font = .systemFont(ofSize: KanjiDecompositionListMetrics.size(14), weight: .medium)
-        valueLabel.textColor = .label
-        valueLabel.numberOfLines = 1
-        valueLabel.adjustsFontSizeToFitWidth = true
-        valueLabel.minimumScaleFactor = 0.65
-        valueLabel.lineBreakMode = .byTruncatingTail
-
-        let stack = UIStackView(arrangedSubviews: [titleLabel, valueLabel])
-        stack.axis = .vertical
-        stack.alignment = .leading
-        stack.spacing = 1
-        return stack
-    }
 }
 
 // MARK: - Compound list cell (expression • gloss)
@@ -825,7 +744,12 @@ private final class KanjiDecompositionCompoundCell: UICollectionViewListCell {
 final class KanjiDecompositionIntroCardView: UIView {
     private let eyebrowLabel = UILabel()
     private let questionLabel = UILabel()
-    private let wordHero = KanjiDecompositionWordHeroCard(fixedWidth: 200, heightToWidthRatio: 1.0)
+    private let wordHero = KanjiDecompositionWordHeroCard(
+        fixedWidth: 200,
+        heightToWidthRatio: 1.0,
+        heroStyle: KanjiDecompositionHeroChrome.style,
+        glowColor: KanjiDecompositionHeroChrome.glowColor
+    )
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -904,18 +828,20 @@ final class KanjiDecompositionCharacterCardView: UIView, KanjiDecompositionBadge
     private var collectionView: UICollectionView!
     private var collectionHeightConstraint: NSLayoutConstraint!
 
-    private var onReading: String?
-    private var kunReading: String?
+    /// One list row per reading type, e.g. ("On", "でん (den)").
+    private var readingRows: [(title: String, value: String)] = []
     private var compounds: [JMDictEntry] = []
 
     private var headerRegistration: UICollectionView.SupplementaryRegistration<UICollectionViewListCell>!
-    private var readingsCellRegistration: UICollectionView.CellRegistration<KanjiDecompositionReadingsCell, Void>!
+    private var readingsCellRegistration: UICollectionView.CellRegistration<SlideReadingRowCell, Int>!
     private var compoundCellRegistration: UICollectionView.CellRegistration<KanjiDecompositionCompoundCell, Int>!
 
     init(badgeIdentifier: KanjiDecompositionBadgeIdentifier) {
         heroView = KanjiDecompositionCharacterHeroView(
             layoutIdentifier: badgeIdentifier,
-            badgePlacement: .trailingEdgeCentered
+            badgePlacement: .trailingEdgeCentered,
+            heroStyle: KanjiDecompositionHeroChrome.style,
+            glowColor: KanjiDecompositionHeroChrome.glowColor
         )
         super.init(frame: .zero)
         setup()
@@ -924,7 +850,9 @@ final class KanjiDecompositionCharacterCardView: UIView, KanjiDecompositionBadge
     override init(frame: CGRect) {
         heroView = KanjiDecompositionCharacterHeroView(
             layoutIdentifier: .character(index: 0),
-            badgePlacement: .trailingEdgeCentered
+            badgePlacement: .trailingEdgeCentered,
+            heroStyle: KanjiDecompositionHeroChrome.style,
+            glowColor: KanjiDecompositionHeroChrome.glowColor
         )
         super.init(frame: frame)
         setup()
@@ -933,7 +861,9 @@ final class KanjiDecompositionCharacterCardView: UIView, KanjiDecompositionBadge
     required init?(coder: NSCoder) {
         heroView = KanjiDecompositionCharacterHeroView(
             layoutIdentifier: .character(index: 0),
-            badgePlacement: .trailingEdgeCentered
+            badgePlacement: .trailingEdgeCentered,
+            heroStyle: KanjiDecompositionHeroChrome.style,
+            glowColor: KanjiDecompositionHeroChrome.glowColor
         )
         super.init(coder: coder)
         setup()
@@ -992,10 +922,11 @@ final class KanjiDecompositionCharacterCardView: UIView, KanjiDecompositionBadge
             supplementaryView.contentConfiguration = configuration
         }
 
-        readingsCellRegistration = UICollectionView.CellRegistration<KanjiDecompositionReadingsCell, Void> {
-            [weak self] cell, _, _ in
-            guard let self else { return }
-            cell.configure(on: self.onReading, kun: self.kunReading)
+        readingsCellRegistration = UICollectionView.CellRegistration<SlideReadingRowCell, Int> {
+            [weak self] cell, _, index in
+            guard let self, self.readingRows.indices.contains(index) else { return }
+            let row = self.readingRows[index]
+            cell.configure(title: row.title, value: row.value)
         }
 
         compoundCellRegistration = UICollectionView.CellRegistration<KanjiDecompositionCompoundCell, Int> {
@@ -1030,7 +961,7 @@ final class KanjiDecompositionCharacterCardView: UIView, KanjiDecompositionBadge
     private func rowCount(for sectionIndex: Int) -> Int {
         guard let section = Section(rawValue: sectionIndex) else { return 0 }
         switch section {
-        case .readings: return 1
+        case .readings: return readingRows.count
         case .compounds: return compounds.count
         }
     }
@@ -1044,10 +975,7 @@ final class KanjiDecompositionCharacterCardView: UIView, KanjiDecompositionBadge
         // Measure with an expanded height first — when the height constraint is too
         // small, list cells clip and collectionViewContentSize under-reports.
         collectionHeightConstraint.constant = 10_000
-        collectionView.collectionViewLayout.invalidateLayout()
-        collectionView.layoutIfNeeded()
-
-        let measured = collectionView.collectionViewLayout.collectionViewContentSize.height
+        let measured = slideListContentHeight(of: collectionView)
         // Small buffer for section headers / separator insets the layout can under-count.
         let target = max(measured.rounded(.up) + 4, 1)
         collectionHeightConstraint.constant = target
@@ -1065,10 +993,7 @@ final class KanjiDecompositionCharacterCardView: UIView, KanjiDecompositionBadge
 
         heroView.configure(character: character, meaning: detail?.badgeMeaning ?? "")
 
-        let on = detail?.onReadingList ?? []
-        let kun = detail?.kunReadingList ?? []
-        onReading = on.isEmpty ? nil : on.joined(separator: "、")
-        kunReading = kun.isEmpty ? nil : kun.joined(separator: "、")
+        readingRows = slideReadingRows(for: detail)
 
         compounds = Array(
             JMDictStore.shared.compounds(forSurface: characterString, limit: 6)
@@ -1104,7 +1029,7 @@ extension KanjiDecompositionCharacterCardView: UICollectionViewDataSource {
             return collectionView.dequeueConfiguredReusableCell(
                 using: readingsCellRegistration,
                 for: indexPath,
-                item: ()
+                item: indexPath.item
             )
         case .compounds:
             return collectionView.dequeueConfiguredReusableCell(
@@ -1193,7 +1118,12 @@ final class KanjiDecompositionCombinedCardView: UIView, KanjiDecompositionBadgeL
     private var previewHeroes: [KanjiDecompositionCharacterHeroView] = []
     private let previewContainer = UIView()
     private let previewRow = UIStackView()
-    private let wordHero = KanjiDecompositionWordHeroCard(fixedWidth: 200, heightToWidthRatio: 1.0)
+    private let wordHero = KanjiDecompositionWordHeroCard(
+        fixedWidth: 200,
+        heightToWidthRatio: 1.0,
+        heroStyle: KanjiDecompositionHeroChrome.style,
+        glowColor: KanjiDecompositionHeroChrome.glowColor
+    )
     private let meaningLabel = UILabel()
     private var meaningTapGesture: UITapGestureRecognizer?
 
@@ -1345,7 +1275,9 @@ final class KanjiDecompositionStackedPartsCardView: UIView, KanjiDecompositionBa
                 cardWidth: metrics.cardWidth,
                 glyphFontSize: metrics.glyphFontSize,
                 badgeStyle: .compact,
-                badgePlacement: index.isMultiple(of: 2) ? .stackedLeading : .stackedTrailing
+                badgePlacement: index.isMultiple(of: 2) ? .stackedLeading : .stackedTrailing,
+                heroStyle: KanjiDecompositionHeroChrome.style,
+                glowColor: KanjiDecompositionHeroChrome.glowColor
             )
             let detail = KanjidicStore.shared.detail(forKanji: String(character))
             hero.configure(character: character, meaning: detail?.badgeMeaning ?? "")

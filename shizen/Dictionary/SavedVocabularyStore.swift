@@ -27,6 +27,13 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
     /// Index into `senses` the learner chose. Nil uses the first sense.
     var primarySenseIndex: Int?
     var sentence: String?
+    /// English of `sentence`, when that line had a translation.
+    var lineEnglish: String?
+    /// Contextual meaning from the moment the word was saved. Separate from `gloss`,
+    /// which stays the dictionary sense used on the flashcard back.
+    var contextGloss: String?
+    /// Lesson and scene titles, joined, when the word was saved from a lesson.
+    var sourceTitle: String?
     /// Missing on rows saved before phrase cards; those read as `.word`.
     var kind: SavedVocabularyKind
     /// Scrub tokens for a phrase, so furigana and readings stay per word.
@@ -52,6 +59,17 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// Nil when the save has neither a contextual meaning nor a distinct dialogue line.
+    var storedContext: StoredWordContext? {
+        StoredWordContext.make(
+            gloss: contextGloss,
+            line: sentence,
+            surface: surface,
+            source: sourceTitle,
+            lineEnglish: lineEnglish
+        )
+    }
+
     var flashcard: VocabFlashcard {
         VocabFlashcard(
             japanese: surface,
@@ -59,7 +77,8 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
             english: primarySenseText ?? sentence ?? "",
             sentence: sentence,
             tokens: isPhrase ? tokens : nil,
-            dictionaryForm: dictionaryForm
+            dictionaryForm: dictionaryForm,
+            storedContext: storedContext
         )
     }
 
@@ -72,6 +91,9 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
         senses: [VocabSense] = [],
         primarySenseIndex: Int? = nil,
         sentence: String? = nil,
+        lineEnglish: String? = nil,
+        contextGloss: String? = nil,
+        sourceTitle: String? = nil,
         kind: SavedVocabularyKind = .word,
         tokens: [String]? = nil,
         createdAt: Date,
@@ -83,6 +105,9 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
         self.dictionaryForm = dictionaryForm
         self.reading = reading
         self.sentence = sentence
+        self.lineEnglish = Self.nonEmpty(lineEnglish)
+        self.contextGloss = Self.nonEmpty(contextGloss)
+        self.sourceTitle = Self.nonEmpty(sourceTitle)
         self.kind = kind
         let cleanedTokens = tokens?
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -122,8 +147,13 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
 
     var isDeleted: Bool { deletedAt != nil }
 
+    private static func nonEmpty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     private enum CodingKeys: String, CodingKey {
-        case id, surface, dictionaryForm, reading, gloss, senses, primarySenseIndex, sentence, kind, tokens, createdAt, updatedAt, deletedAt
+        case id, surface, dictionaryForm, reading, gloss, senses, primarySenseIndex, sentence, lineEnglish, contextGloss, sourceTitle, kind, tokens, createdAt, updatedAt, deletedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -138,6 +168,9 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
             senses: try container.decodeIfPresent([VocabSense].self, forKey: .senses) ?? [],
             primarySenseIndex: try container.decodeIfPresent(Int.self, forKey: .primarySenseIndex),
             sentence: try container.decodeIfPresent(String.self, forKey: .sentence),
+            lineEnglish: try container.decodeIfPresent(String.self, forKey: .lineEnglish),
+            contextGloss: try container.decodeIfPresent(String.self, forKey: .contextGloss),
+            sourceTitle: try container.decodeIfPresent(String.self, forKey: .sourceTitle),
             kind: (try? container.decodeIfPresent(SavedVocabularyKind.self, forKey: .kind)) ?? .word,
             tokens: try container.decodeIfPresent([String].self, forKey: .tokens),
             createdAt: createdAt,
@@ -156,11 +189,49 @@ struct SavedVocabularyItem: Codable, Equatable, Identifiable {
         try container.encode(senses, forKey: .senses)
         try container.encodeIfPresent(primarySenseIndex, forKey: .primarySenseIndex)
         try container.encodeIfPresent(sentence, forKey: .sentence)
+        try container.encodeIfPresent(lineEnglish, forKey: .lineEnglish)
+        try container.encodeIfPresent(contextGloss, forKey: .contextGloss)
+        try container.encodeIfPresent(sourceTitle, forKey: .sourceTitle)
         try container.encode(kind, forKey: .kind)
         try container.encodeIfPresent(tokens, forKey: .tokens)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
         try container.encodeIfPresent(deletedAt, forKey: .deletedAt)
+    }
+}
+
+/// Meaning and dialogue line kept with a saved word, so reopening it does not ask again.
+struct StoredWordContext: Equatable {
+    var gloss: String?
+    var line: String?
+    var source: String?
+    var lineEnglish: String?
+
+    /// Something to show behind the Context button: the line, its English, or where it came from.
+    var hasLineContext: Bool {
+        line != nil || lineEnglish != nil || source != nil
+    }
+
+    /// Drops an empty gloss, and a line that is blank or just the word itself.
+    static func make(
+        gloss: String?,
+        line: String?,
+        surface: String,
+        source: String?,
+        lineEnglish: String? = nil
+    ) -> StoredWordContext? {
+        let gloss = nonempty(gloss)
+        let surface = surface.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawLine = nonempty(line)
+        let line = rawLine == surface ? nil : rawLine
+        let lineEnglish = nonempty(lineEnglish)
+        guard gloss != nil || line != nil else { return nil }
+        return StoredWordContext(gloss: gloss, line: line, source: nonempty(source), lineEnglish: lineEnglish)
+    }
+
+    private static func nonempty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
@@ -209,6 +280,7 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
     private static let senseTextLimit = 200
     private static let sourceKeyLimit = 80
     private static let sentenceLimit = 1200
+    private static let sourceTitleLimit = 200
     private static let nameLimit = 80
     private static let tokenLimit = 24
 
@@ -269,7 +341,7 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
         guard !key.isEmpty else { return nil }
         for folder in storedFolders.values {
             if let match = folder.items.values.first(where: {
-                !$0.isDeleted && Self.normalized($0.surface) == key
+                !$0.isDeleted && Self.matchesIdentity($0, key: key)
             }) {
                 return match
             }
@@ -285,7 +357,7 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
         let key = Self.normalized(surface)
         guard !key.isEmpty else { return false }
         return storedFolders[folderID]?.items.values.contains {
-            !$0.isDeleted && Self.normalized($0.surface) == key
+            !$0.isDeleted && Self.matchesIdentity($0, key: key)
         } == true
     }
 
@@ -294,14 +366,48 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
         ensureInbox()
         let surface = Self.clipped(Self.normalized(item.surface), limit: Self.surfaceLimit)
         guard !surface.isEmpty, storedFolders[folderID] != nil else { return item }
-        if let existing = storedFolders[folderID]?.items.values.first(where: {
-            !$0.isDeleted && Self.normalized($0.surface) == surface
+        if var existing = storedFolders[folderID]?.items.values.first(where: {
+            !$0.isDeleted && Self.matchesIdentity($0, key: surface)
         }) {
+            let incoming = Self.applying(item, surface: surface, onto: existing)
+            var changed = false
+            if incoming.surface != existing.surface {
+                existing.surface = incoming.surface
+                changed = true
+            }
+            if incoming.dictionaryForm != existing.dictionaryForm {
+                existing.dictionaryForm = incoming.dictionaryForm
+                changed = true
+            }
+            if let value = incoming.reading, existing.reading != value {
+                existing.reading = value
+                changed = true
+            }
+            if let value = incoming.contextGloss, existing.contextGloss != value {
+                existing.contextGloss = value
+                changed = true
+            }
+            if let value = incoming.lineEnglish, existing.lineEnglish != value {
+                existing.lineEnglish = value
+                changed = true
+            }
+            if let value = incoming.sourceTitle, existing.sourceTitle != value {
+                existing.sourceTitle = value
+                changed = true
+            }
+            if let value = incoming.sentence, existing.sentence != value {
+                existing.sentence = value
+                changed = true
+            }
+            if changed {
+                existing.updatedAt = Date()
+                writeItem(existing, toFolderID: folderID)
+            }
             return existing
         }
 
         if var deleted = storedFolders[folderID]?.items.values.first(where: {
-            $0.isDeleted && Self.normalized($0.surface) == surface
+            $0.isDeleted && Self.matchesIdentity($0, key: surface)
         }) {
             deleted = Self.applying(item, surface: surface, onto: deleted)
             deleted.updatedAt = Date()
@@ -438,6 +544,9 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
             },
             "primarySenseIndex": item.primarySenseIndex ?? NSNull(),
             "sentence": item.sentence ?? NSNull(),
+            "lineEnglish": item.lineEnglish ?? NSNull(),
+            "contextGloss": item.contextGloss ?? NSNull(),
+            "sourceTitle": item.sourceTitle ?? NSNull(),
             "kind": item.kind.rawValue,
             "tokens": item.tokens ?? NSNull(),
             "createdAt": Timestamp(date: item.createdAt),
@@ -731,6 +840,9 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
             senses: Self.decodeSenses(map["senses"]),
             primarySenseIndex: LearnerSnapshotValue.int(map["primarySenseIndex"]),
             sentence: LearnerSnapshotValue.string(map["sentence"]),
+            lineEnglish: LearnerSnapshotValue.string(map["lineEnglish"]),
+            contextGloss: LearnerSnapshotValue.string(map["contextGloss"]),
+            sourceTitle: LearnerSnapshotValue.string(map["sourceTitle"]),
             kind: LearnerSnapshotValue.string(map["kind"]).flatMap(SavedVocabularyKind.init(rawValue:)) ?? .word,
             tokens: LearnerSnapshotValue.stringList(map["tokens"]),
             createdAt: createdAt,
@@ -759,6 +871,9 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
         return deletedMatches
             && remote.surface == local.surface
             && remote.gloss == local.gloss
+            && remote.contextGloss == local.contextGloss
+            && remote.lineEnglish == local.lineEnglish
+            && remote.sourceTitle == local.sourceTitle
             && remote.senses == local.senses
             && remote.primarySenseIndex == local.primarySenseIndex
             && remote.updatedAt >= local.updatedAt.addingTimeInterval(-1)
@@ -787,6 +902,13 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
         NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
     }
 
+    /// Same card when the query is the stored surface or its lemma (転入した · 転入).
+    private static func matchesIdentity(_ item: SavedVocabularyItem, key: String) -> Bool {
+        if normalized(item.surface) == key { return true }
+        let lemma = normalized(item.dictionaryForm ?? "")
+        return !lemma.isEmpty && lemma == key
+    }
+
     private static func normalized(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -811,6 +933,9 @@ final class SavedVocabularyStore: SavedVocabularyStoring {
         stored.dictionaryForm = optionalClipped(item.dictionaryForm, limit: surfaceLimit)
         stored.reading = optionalClipped(item.reading, limit: surfaceLimit)
         stored.sentence = optionalClipped(item.sentence, limit: sentenceLimit)
+        stored.lineEnglish = optionalClipped(item.lineEnglish, limit: sentenceLimit)
+        stored.contextGloss = optionalClipped(item.contextGloss, limit: glossLimit)
+        stored.sourceTitle = optionalClipped(item.sourceTitle, limit: sourceTitleLimit)
         stored.kind = item.kind
         stored.tokens = item.kind == .phrase ? clippedTokens(item.tokens) : nil
         let senses = clippedSenses(item.senses)

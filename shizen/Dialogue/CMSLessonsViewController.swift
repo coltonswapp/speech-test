@@ -13,6 +13,8 @@ final class CMSLessonsViewController: UIViewController {
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
     private let statusLabel = UILabel()
+    private let trackFilterView = CMSLessonTrackFilterView()
+    private var loadedSections: [LessonUnitSection] = []
     private var sectionGridControllers: [LessonWaterfallGridController] = []
     private var sectionViews: [UIView] = []
 
@@ -31,6 +33,7 @@ final class CMSLessonsViewController: UIViewController {
         )
         configureScrollView()
         configureHeader()
+        configureTrackFilter()
         layoutViews()
         fetchLessons()
 
@@ -95,7 +98,7 @@ final class CMSLessonsViewController: UIViewController {
 
             contentStack.topAnchor.constraint(
                 equalTo: scrollView.contentLayoutGuide.topAnchor,
-                constant: 16
+                constant: 8
             ),
             contentStack.bottomAnchor.constraint(
                 equalTo: scrollView.contentLayoutGuide.bottomAnchor,
@@ -145,9 +148,37 @@ final class CMSLessonsViewController: UIViewController {
         return stack
     }
 
+    // MARK: - Track filter
+
+    private func configureTrackFilter() {
+        trackFilterView.isHidden = true
+        trackFilterView.frame.size.height = 55
+        trackFilterView.onSelectionChange = { [weak self] _ in
+            self?.renderVisibleSections()
+        }
+        guard addNavigationBarPalette(trackFilterView) else {
+            trackFilterView.translatesAutoresizingMaskIntoConstraints = false
+            trackFilterView.heightAnchor.constraint(equalToConstant: 55).isActive = true
+            contentStack.insertArrangedSubview(trackFilterView, at: 0)
+            return
+        }
+    }
+
     // MARK: - Sections
 
-    private func renderSections(_ sections: [LessonUnitSection]) {
+    private func showSections(_ sections: [LessonUnitSection]) {
+        loadedSections = sections
+        trackFilterView.setAvailableTracks(sections.map(\.track))
+        renderVisibleSections()
+    }
+
+    private func renderVisibleSections() {
+        let visible = loadedSections.filter { trackFilterView.includes($0.track) }
+        installSections(visible)
+    }
+
+    private func installSections(_ sections: [LessonUnitSection]) {
+        let savedOffset = scrollView.contentOffset
         for view in sectionViews {
             contentStack.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -161,7 +192,7 @@ final class CMSLessonsViewController: UIViewController {
                 if let previous = sectionViews.last {
                     contentStack.setCustomSpacing(24, after: previous)
                 }
-                let header = makeSectionHeader(title: title, subtitle: section.subtitle)
+                let header = makeSectionHeader(title: title, subtitle: sectionSubtitle(for: section))
                 contentStack.addArrangedSubview(header)
                 sectionViews.append(header)
             }
@@ -186,6 +217,31 @@ final class CMSLessonsViewController: UIViewController {
             sectionGridControllers.append(gridController)
             gridController.setLessons(section.lessons)
         }
+
+        guard scrollView.bounds.width > 0 else { return }
+        view.layoutIfNeeded()
+        for controller in sectionGridControllers {
+            controller.refreshContentHeightIfNeeded()
+        }
+        view.layoutIfNeeded()
+        let minY = -scrollView.adjustedContentInset.top
+        let maxY = max(
+            minY,
+            scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom
+        )
+        scrollView.contentOffset.y = min(max(savedOffset.y, minY), maxY)
+    }
+
+    /// When more than one track is showing, name the track on headers that do not already.
+    private func sectionSubtitle(for section: LessonUnitSection) -> String? {
+        guard case .specific(let tracks) = trackFilterView.selection, tracks.count > 1 else {
+            return section.subtitle
+        }
+        let track = section.track.title
+        if let subtitle = section.subtitle, !subtitle.isEmpty {
+            return subtitle.localizedCaseInsensitiveContains(track) ? subtitle : "\(track) · \(subtitle)"
+        }
+        return track
     }
 
     // MARK: - Data
@@ -202,7 +258,7 @@ final class CMSLessonsViewController: UIViewController {
         navigationItem.rightBarButtonItem?.isEnabled = false
 
         guard ContentCMSClient.isConfigured else {
-            renderSections([])
+            showSections([])
             return
         }
 
@@ -213,7 +269,7 @@ final class CMSLessonsViewController: UIViewController {
                 switch result {
                 case .success(let index):
                     let sections = LessonUnitSectionBuilder.sections(from: index)
-                    self.renderSections(sections)
+                    self.showSections(sections)
                     if index.lessons.isEmpty {
                         self.statusLabel.isHidden = false
                         self.statusLabel.text = "No lessons in CMS yet"
@@ -222,7 +278,7 @@ final class CMSLessonsViewController: UIViewController {
                         self.statusLabel.text = nil
                     }
                 case .failure(let error):
-                    self.renderSections([])
+                    self.showSections([])
                     self.statusLabel.isHidden = false
                     self.statusLabel.text = error.localizedDescription
                 }

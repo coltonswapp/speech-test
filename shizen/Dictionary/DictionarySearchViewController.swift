@@ -186,6 +186,7 @@ extension DictionarySearchViewController: UITableViewDataSource, UITableViewDele
         }
         recordCurrentQueryIfNeeded()
         let entry = results[indexPath.row]
+        Analytics.track(.dictionaryResultOpened, ["result_rank": indexPath.row])
         WordDictionaryDetailSheetPresenter.push(surface: entry.expression, from: self)
     }
 

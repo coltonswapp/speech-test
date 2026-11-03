@@ -71,6 +71,11 @@ final class AuthService: NSObject {
         return AuthAccount(title: "Account", subtitle: provider, isSignedIn: true)
     }
 
+    var accountCreationDate: Date? {
+        guard let user = Auth.auth().currentUser, !user.isAnonymous else { return nil }
+        return user.metadata.creationDate
+    }
+
     /// Later profile and learner-data plans must check this before writing `users/{uid}`.
     var canCreateLearnerDocuments: Bool { hasSignedInUserId }
 
@@ -217,6 +222,11 @@ final class AuthService: NSObject {
         let changed = userId != next
         userId = next
         if changed {
+            if let next {
+                Analytics.identify(userId: next)
+            } else {
+                Analytics.reset()
+            }
             NotificationCenter.default.post(name: Self.userDidChangeNotification, object: self)
         }
         Task { await UserProfileStore.shared.flushSavedBufferIfNeeded() }

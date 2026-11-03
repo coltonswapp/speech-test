@@ -24,7 +24,7 @@ struct DialogueLineAudioReference {
     var tokenSync: DialogueTokenSync? = nil
 }
 
-final class SentenceScrubExperimentViewController: UIViewController {
+final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQAPresenting {
 
     /// Short labels for the menu; sentences exercise different particles, questions, and kanji density.
     private static let exampleSentences: [(title: String, text: String)] = [
@@ -47,6 +47,8 @@ final class SentenceScrubExperimentViewController: UIViewController {
     private var providedTokens: [JapaneseToken]?
     /// Validated token timings from the host. Used only for dialogue-line karaoke.
     private var tokenSync: DialogueTokenSync?
+    /// False for generated examples with no clip to play.
+    private let showsListenControl: Bool
     private let recordedClip: RealtimeAudioClip?
     private let onReplayClip: ((RealtimeAudioClip) -> Void)?
     private let dialogueLineAudio: DialogueLineAudioReference?
@@ -54,6 +56,9 @@ final class SentenceScrubExperimentViewController: UIViewController {
     private var dialogueContext: DialogueNuanceContext?
     private let grammarAudioPlayer = GrammarAudioPlayer()
     private var appliedKaraokeTokenKey = -1
+    /// Hand-written words, glosses, and nuance. When set, nothing here calls the gateway.
+    private let script: SentenceScrubScript?
+    private var analyticsVisit = SentenceBreakdownVisit()
 
     init(
         sentence: String,
@@ -63,9 +68,13 @@ final class SentenceScrubExperimentViewController: UIViewController {
         dialogueLineAudio: DialogueLineAudioReference? = nil,
         dialogueContext: DialogueNuanceContext? = nil,
         tokens: [JapaneseToken]? = nil,
-        tokenSync: DialogueTokenSync? = nil
+        tokenSync: DialogueTokenSync? = nil,
+        showsListenControl: Bool = true,
+        script: SentenceScrubScript? = nil
     ) {
         currentSentence = sentence
+        self.script = script
+        let tokens = tokens ?? script?.tokens(in: sentence)
         let trimmedEnglish = englishTranslation?.trimmingCharacters(in: .whitespacesAndNewlines)
         providedEnglish = (trimmedEnglish?.isEmpty ?? true) ? nil : trimmedEnglish
         providedTokens = tokens.flatMap { $0.isEmpty ? nil : $0 }
@@ -74,6 +83,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         self.dialogueLineAudio = dialogueLineAudio
         self.dialogueContext = dialogueContext
         self.tokenSync = tokenSync
+        self.showsListenControl = showsListenControl
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -89,6 +99,8 @@ final class SentenceScrubExperimentViewController: UIViewController {
         dialogueContext = nil
         providedTokens = nil
         tokenSync = nil
+        showsListenControl = true
+        script = nil
         super.init(coder: coder)
     }
 
@@ -244,7 +256,13 @@ final class SentenceScrubExperimentViewController: UIViewController {
             .last
     }
 
-    private func presentContentQANote() {
+    func presentScreenshotQANote(from presenter: UIViewController) -> Bool {
+        guard lessonQAHost != nil else { return false }
+        presentContentQANote(from: presenter, forcesScreenshot: true)
+        return true
+    }
+
+    private func presentContentQANote(from presenter: UIViewController? = nil, forcesScreenshot: Bool = false) {
         guard let host = lessonQAHost else { return }
         var details = ["Japanese: \(currentSentence)"]
         if let english = qaEnglishLine() {
@@ -267,10 +285,20 @@ final class SentenceScrubExperimentViewController: UIViewController {
         } else {
             title = "Sentence scrub"
         }
-        host.presentContentQANote(focusTitle: title, focusDetailLines: details)
+        host.presentContentQANote(
+            focusTitle: title,
+            focusDetailLines: details,
+            presenter: presenter,
+            forcesScreenshot: forcesScreenshot
+        )
     }
 
     private func qaEnglishLine() -> String? {
+        vocabularyLineEnglish()
+    }
+
+    /// Curated lesson English, then the on-screen translation once it has settled.
+    private func vocabularyLineEnglish() -> String? {
         if let providedEnglish, !providedEnglish.isEmpty {
             return providedEnglish
         }
@@ -280,6 +308,11 @@ final class SentenceScrubExperimentViewController: UIViewController {
             return nil
         }
         return shown
+    }
+
+    /// Track, unit, and scene from the lesson that pushed this scrub.
+    private func vocabularySourceTitle() -> String? {
+        lessonQAHost?.vocabularySourceTitle()
     }
 
     private func refreshOptionsMenu() {
@@ -326,15 +359,18 @@ final class SentenceScrubExperimentViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        Analytics.track(.sentenceBreakdownOpened, ["source": analyticsSource])
         view.backgroundColor = .systemBackground
-        title = "Sentence scrub"
-
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: "Options",
-            image: nil,
-            primaryAction: nil,
-            menu: makeOptionsMenu()
-        )
+        navigationItem.largeTitleDisplayMode = .never
+        if script == nil {
+            title = "Sentence scrub"
+            navigationItem.rightBarButtonItem = UIBarButtonItem(
+                title: "Options",
+                image: nil,
+                primaryAction: nil,
+                menu: makeOptionsMenu()
+            )
+        }
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.alwaysBounceVertical = true
@@ -357,6 +393,8 @@ final class SentenceScrubExperimentViewController: UIViewController {
             WordDictionaryDetailSheetPresenter.push(
                 surface: surface,
                 sentence: sentence,
+                sourceTitle: self.vocabularySourceTitle(),
+                lineEnglish: self.vocabularyLineEnglish(),
                 from: self
             )
         }
@@ -377,6 +415,16 @@ final class SentenceScrubExperimentViewController: UIViewController {
                 self.present(UINavigationController(rootViewController: kanjiVC), animated: true)
             }
         }
+        if let script {
+            // Scripted: glosses come from the script, the overlay's dictionary-only gloss and
+            // the sheets it opens are off, and nothing ranks senses remotely.
+            scrubbableSentenceView.showCalloutOnScrub = false
+            scrubbableSentenceView.onRequestDictionaryDetail = nil
+            wordDictionaryDetailView.onSelectRelatedWord = nil
+            wordDictionaryDetailView.onSelectKanji = nil
+            wordDictionaryDetailView.showsSenseSuggestion = false
+            wordDictionaryDetailView.contextualGlossProvider = ScriptedContextualGlossProvider(script: script)
+        }
         applySentenceToScrubView()
         scrubbableSentenceView.bindDismissOnScroll(scrollView)
         scrubbableSentenceView.bindDismissOnTap(scrollView)
@@ -392,7 +440,9 @@ final class SentenceScrubExperimentViewController: UIViewController {
         sentenceSectionRowStack.spacing = 16
         sentenceSectionRowStack.distribution = .fill
         sentenceSectionRowStack.addArrangedSubview(scrubbableSentenceView)
-        sentenceSectionRowStack.addArrangedSubview(speakSentenceButton)
+        if showsListenControl {
+            sentenceSectionRowStack.addArrangedSubview(speakSentenceButton)
+        }
 
         scrubbableSentenceView.setContentHuggingPriority(.defaultLow, for: .horizontal)
         scrubbableSentenceView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -408,6 +458,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         )
         speakSentenceButton.accessibilityHint = "Plays audio of the Japanese example sentence"
         speakSentenceButton.addTarget(self, action: #selector(speakFullSentenceTapped), for: .touchUpInside)
+        speakSentenceButton.isHidden = !showsListenControl
 
         englishTranslationLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         englishTranslationLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -431,12 +482,18 @@ final class SentenceScrubExperimentViewController: UIViewController {
         sentenceContentStack.addArrangedSubview(translationSectionRowStack)
 
         NSLayoutConstraint.activate([
-            speakSentenceButton.topAnchor.constraint(equalTo: scrubbableSentenceView.sentenceLineView.topAnchor),
-            speakSentenceButton.trailingAnchor.constraint(equalTo: sentenceSectionRowStack.trailingAnchor),
             nuanceButton.trailingAnchor.constraint(equalTo: translationSectionRowStack.trailingAnchor),
-            nuanceButton.widthAnchor.constraint(equalTo: speakSentenceButton.widthAnchor),
-            nuanceButton.heightAnchor.constraint(equalTo: speakSentenceButton.heightAnchor),
+            nuanceButton.widthAnchor.constraint(equalToConstant: Self.audioButtonSize),
+            nuanceButton.heightAnchor.constraint(equalToConstant: Self.audioButtonSize),
         ])
+        if showsListenControl {
+            NSLayoutConstraint.activate([
+                speakSentenceButton.topAnchor.constraint(equalTo: scrubbableSentenceView.sentenceLineView.topAnchor),
+                speakSentenceButton.trailingAnchor.constraint(equalTo: sentenceSectionRowStack.trailingAnchor),
+                speakSentenceButton.widthAnchor.constraint(equalToConstant: Self.audioButtonSize),
+                speakSentenceButton.heightAnchor.constraint(equalToConstant: Self.audioButtonSize),
+            ])
+        }
 
         nuanceCardView.isHidden = true
 
@@ -455,6 +512,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         let content = scrollView.contentLayoutGuide
         let frame = scrollView.frameLayoutGuide
         let inset: CGFloat = 20
+        let topInset: CGFloat = 4
 
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -462,7 +520,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            contentStack.topAnchor.constraint(equalTo: content.topAnchor, constant: inset),
+            contentStack.topAnchor.constraint(equalTo: content.topAnchor, constant: topInset),
             contentStack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -24),
             contentStack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: inset),
             contentStack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -inset),
@@ -492,7 +550,15 @@ final class SentenceScrubExperimentViewController: UIViewController {
             stopSentencePlayback()
             translationTask?.cancel()
             nuanceLoadTask?.cancel()
+            var properties = analyticsVisit.summary
+            properties["source"] = analyticsSource
+            Analytics.track(.sentenceBreakdownClosed, properties)
         }
+    }
+
+    private var analyticsSource: String {
+        if script != nil { return "scripted" }
+        return dialogueLineAudio != nil ? "dialogue" : "other"
     }
 
     override func viewDidLayoutSubviews() {
@@ -542,6 +608,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
     private func setSentencePlaying(_ playing: Bool) {
         guard isPlayingSentence != playing else { return }
         isPlayingSentence = playing
+        scrubbableSentenceView.dimsSelectionHighlight = playing
         let symbolName = playing ? "pause.fill" : "play.fill"
         let symbolConfig = UIImage.SymbolConfiguration(pointSize: Self.audioGlyphPointSize, weight: .semibold)
         let image = UIImage(systemName: symbolName, withConfiguration: symbolConfig)?
@@ -663,6 +730,10 @@ final class SentenceScrubExperimentViewController: UIViewController {
             dismissNuanceCard()
         } else {
             nuanceCardIsShown = true
+            if !analyticsVisit.nuanceOpened {
+                analyticsVisit.nuanceOpened = true
+                Analytics.track(.glossViewed, ["kind": "nuance", "source": analyticsSource])
+            }
             beginNuanceLoadIfNeeded()
             revealNuanceCard()
         }
@@ -945,6 +1016,17 @@ final class SentenceScrubExperimentViewController: UIViewController {
         nuanceLoadTask?.cancel()
         nuanceLoadRequest = request
 
+        if let script {
+            nuanceCardView.apply(.loading)
+            nuanceLoadTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: SentenceScrubScript.nuanceDelay)
+                guard let self, !Task.isCancelled else { return }
+                self.nuanceCardView.apply(.result(script.nuance, feedback: nil))
+                self.animateNuanceCardResizeIfVisible()
+            }
+            return
+        }
+
         if !GeminiDialogueNuance.isAvailable {
             nuanceCardView.apply(.unavailable(GeminiDialogueNuance.unavailabilityMessage))
             return
@@ -982,34 +1064,73 @@ final class SentenceScrubExperimentViewController: UIViewController {
             selectionStartDivider.isHidden = true
             return
         }
+        analyticsVisit.tokensViewed.insert(surface)
 
-        if let index,
+        if script != nil {
+            // Spans too go through the scripted provider instead of the span-gloss call.
+            qaSelectionSummary = nil
+            wordDictionaryDetailView.configure(
+                surface: surface,
+                sentence: currentSentence,
+                showsCommonUses: false,
+                sourceTitle: vocabularySourceTitle(),
+                lineEnglish: vocabularyLineEnglish(),
+                allowsSavedEntryContext: false
+            )
+        } else if let index,
            let range = scrubbableSentenceView.lookupTokenRange(for: index),
            range.count > 1 {
             qaSelectionSummary = "Span: \(surface)"
             wordDictionaryDetailView.configureSelectedSpan(
                 surface: surface,
                 sentence: currentSentence,
-                tokens: scrubbableSentenceView.tokenTexts(in: range)
+                tokens: scrubbableSentenceView.tokenTexts(in: range),
+                sourceTitle: vocabularySourceTitle(),
+                lineEnglish: vocabularyLineEnglish(),
+                allowsSavedEntryContext: false
             )
         } else {
             qaSelectionSummary = "Token: \(surface)"
-            wordDictionaryDetailView.configure(surface: surface, sentence: currentSentence)
+            wordDictionaryDetailView.configure(
+                surface: surface,
+                sentence: currentSentence,
+                sourceTitle: vocabularySourceTitle(),
+                lineEnglish: vocabularyLineEnglish(),
+                allowsSavedEntryContext: false
+            )
         }
         selectionStartDivider.isHidden = false
     }
 
     private func handleSpanSelected(range: ClosedRange<Int>, surface: String) {
+        analyticsVisit.spansViewed += 1
+        Analytics.track(.glossViewed, ["kind": "multi_token", "token_count": range.count, "source": analyticsSource])
+        if script != nil {
+            wordDictionaryDetailView.configure(
+                surface: surface,
+                sentence: currentSentence,
+                showsCommonUses: false,
+                sourceTitle: vocabularySourceTitle(),
+                lineEnglish: vocabularyLineEnglish(),
+                allowsSavedEntryContext: false
+            )
+            selectionStartDivider.isHidden = false
+            return
+        }
         qaSelectionSummary = "Span: \(surface)"
         wordDictionaryDetailView.configureSelectedSpan(
             surface: surface,
             sentence: currentSentence,
-            tokens: scrubbableSentenceView.tokenTexts(in: range)
+            tokens: scrubbableSentenceView.tokenTexts(in: range),
+            sourceTitle: vocabularySourceTitle(),
+            lineEnglish: vocabularyLineEnglish(),
+            allowsSavedEntryContext: false
         )
         selectionStartDivider.isHidden = false
     }
 
     @objc private func speakFullSentenceTapped() {
+        guard showsListenControl else { return }
         if isPlayingSentence {
             stopSentencePlayback()
             return
@@ -1017,6 +1138,8 @@ final class SentenceScrubExperimentViewController: UIViewController {
 
         let trimmed = currentSentence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        analyticsVisit.sentencePlays += 1
+        Analytics.track(.audioReplayed, ["kind": "sentence", "source": analyticsSource])
 
         sentencePlaybackGeneration += 1
         let generation = sentencePlaybackGeneration
@@ -1102,6 +1225,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         let trimmed = currentSentence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         stopSentencePlayback()
+        analyticsVisit.openedRepeatAfterMe = true
 
         let repeatVC = RepeatAfterMeViewController(
             sentence: trimmed,
@@ -1110,5 +1234,27 @@ final class SentenceScrubExperimentViewController: UIViewController {
             dialogueLineAudio: dialogueLineAudio
         )
         navigationController?.pushViewController(repeatVC, animated: true)
+    }
+}
+
+/// What one breakdown visit did, sent once as `sentence_breakdown_closed`.
+private struct SentenceBreakdownVisit {
+    let openedAt = Date()
+    /// Distinct surfaces scrubbed onto; only the count is sent.
+    var tokensViewed: Set<String> = []
+    var spansViewed = 0
+    var nuanceOpened = false
+    var sentencePlays = 0
+    var openedRepeatAfterMe = false
+
+    var summary: [String: Any] {
+        [
+            "tokens_viewed": tokensViewed.count,
+            "spans_viewed": spansViewed,
+            "nuance_opened": nuanceOpened,
+            "sentence_plays": sentencePlays,
+            "opened_repeat_after_me": openedRepeatAfterMe,
+            "seconds": Int(Date().timeIntervalSince(openedAt).rounded()),
+        ]
     }
 }

@@ -564,7 +564,10 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
         guard configuration.usesTitleColumn, collectionView.bounds.width > 0 else { return nil }
         return LessonStoneTitleColumn(
             title: lesson(at: indexPath).title,
-            subtitle: "Unit \(indexPath.section + 1) • Lesson \(indexPath.item + 1)",
+            subtitle: units[indexPath.section].lessonRowSubtitle(
+                sectionIndex: indexPath.section,
+                lessonIndex: indexPath.item
+            ),
             padding: configuration.titleLeadingInset(),
             trailingMaxX: configuration.titleColumnMaxX(width: collectionView.bounds.width),
             covered: selected,
@@ -634,11 +637,13 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
     private func showLessonTip(for indexPath: IndexPath) {
         let unit = units[indexPath.section]
         let lesson = unit.lessons[indexPath.item]
+        lessonTipView.layer.removeAllAnimations()
         lessonTipView.apply(
             title: lesson.title,
-            subtitle: "Unit \(indexPath.section + 1) • Lesson \(indexPath.item + 1)",
+            subtitle: unit.lessonRowSubtitle(sectionIndex: indexPath.section, lessonIndex: indexPath.item),
             hasProgress: lesson.completedParts > 0,
-            isLocked: lesson.state == .locked
+            isLocked: lesson.state == .locked,
+            isCompleted: lesson.state == .completed
         )
         isLessonTipPresented = true
         tipPlacedBelow = nil
@@ -647,6 +652,7 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
         reconfigureVisibleStones()
         collectionView.layoutIfNeeded()
         updateLessonTipPosition()
+        lessonTipView.layoutIfNeeded()
         lessonTipView.showWithAnimation()
     }
 
@@ -925,6 +931,15 @@ struct PathUnit: Equatable {
     let title: String
     let glowColor: DialogueBubbleUnderglowColor
     let lessons: [PathLesson]
+    /// When false (unfiled “More lessons”), lesson rows omit the derived unit prefix.
+    let showsUnitNumberInLessonLabels: Bool
+
+    func lessonRowSubtitle(sectionIndex: Int, lessonIndex: Int) -> String {
+        if showsUnitNumberInLessonLabels {
+            return "Unit \(sectionIndex + 1) • Lesson \(lessonIndex + 1)"
+        }
+        return "Lesson \(lessonIndex + 1)"
+    }
 
     static var initialCurrentIndexPath: IndexPath {
         initialIndexPath(in: sampleCurriculum)
@@ -960,7 +975,8 @@ struct PathUnit: Equatable {
                 PathLesson(title: "At the Hotel", symbolName: "bed.double.fill", thumbnailName: nil, state: .locked),
                 PathLesson(title: "Shopping", symbolName: "bag.fill", thumbnailName: nil, state: .locked),
                 PathLesson(title: "On the Phone", symbolName: "phone.fill", thumbnailName: nil, state: .locked),
-            ]
+            ],
+            showsUnitNumberInLessonLabels: true
         ),
         PathUnit(
             eyebrow: "SECTION 1, UNIT 2",
@@ -977,7 +993,8 @@ struct PathUnit: Equatable {
                 PathLesson(title: "At the Park", symbolName: "leaf.fill", thumbnailName: nil, state: .locked),
                 PathLesson(title: "At School", symbolName: "graduationcap.fill", thumbnailName: nil, state: .locked),
                 PathLesson(title: "Town review", symbolName: "star.fill", thumbnailName: nil, state: .locked),
-            ]
+            ],
+            showsUnitNumberInLessonLabels: true
         ),
         PathUnit(
             eyebrow: "SECTION 1, UNIT 3",
@@ -994,7 +1011,8 @@ struct PathUnit: Equatable {
                 PathLesson(title: "Feelings", symbolName: "heart.fill", thumbnailName: nil, state: .locked),
                 PathLesson(title: "Making plans", symbolName: "clock.fill", thumbnailName: nil, state: .locked),
                 PathLesson(title: "Unit project", symbolName: "flag.fill", thumbnailName: nil, state: .locked),
-            ]
+            ],
+            showsUnitNumberInLessonLabels: true
         ),
     ]
 }
@@ -1118,7 +1136,7 @@ private final class PathUnitHeaderView: UICollectionReusableView {
             underglowGradientLayer.locations = [0, NSNumber(value: Float(midStop)), 1]
             glassGlowView.layer.shadowColor = color.cgColor
             glassGlowView.layer.shadowRadius = blur
-            glassGlowView.layer.shadowOpacity = 0.5
+            glassGlowView.layer.shadowOpacity = Float(underglowConfiguration.shadowOpacity)
             glassGlowView.layer.shadowOffset = .zero
         }
         underglowGradientLayer.startPoint = CGPoint(x: 0.5, y: 0.5)
@@ -1142,7 +1160,7 @@ private final class PathUnitHeaderView: UICollectionReusableView {
         underglowGradientLayer.cornerRadius = underglowConfiguration.cornerRadius
 
         if blur > 0 {
-            let shapeRect = CGRect(x: padding, y: padding, width: coreFrame.width, height: coreFrame.height)
+            let shapeRect = underglowConfiguration.shadowShapeRect(coreSize: coreFrame.size, padding: padding)
             glassGlowView.layer.shadowPath = UIBezierPath(
                 roundedRect: shapeRect,
                 cornerRadius: underglowConfiguration.cornerRadius
@@ -2063,13 +2081,12 @@ private final class LessonTitleTipView: UIView {
         subtitleLabel.textColor = .secondaryLabel
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let yellow = PrimaryButton.appearance(for: .yellow)
         var config = UIButton.Configuration.filled()
         config.cornerStyle = .capsule
-        config.baseBackgroundColor = yellow.backgroundColor
-        config.baseForegroundColor = yellow.titleColor
-        config.title = "Start Lesson"
-        config.image = UIImage(systemName: "play.fill")
+        config.baseBackgroundColor = UIColor.tertiarySystemFill
+        config.baseForegroundColor = .secondaryLabel
+        config.title = "Lesson Locked"
+        config.image = UIImage(systemName: "lock.fill")
         config.imagePlacement = .trailing
         config.imagePadding = 6
         config.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 9, weight: .bold)
@@ -2277,23 +2294,30 @@ private final class LessonTitleTipView: UIView {
         )
     }
 
-    func apply(title: String, subtitle: String, hasProgress: Bool, isLocked: Bool = false) {
+    func apply(title: String, subtitle: String, hasProgress: Bool, isLocked: Bool = false, isCompleted: Bool = false) {
         titleLabel.text = title
         subtitleLabel.text = subtitle
-        var config = startButton.configuration ?? UIButton.Configuration.filled()
-        if isLocked {
-            config.title = "Lesson Locked"
-            config.image = UIImage(systemName: "lock.fill")
-            config.baseBackgroundColor = UIColor.tertiarySystemFill
-            config.baseForegroundColor = .secondaryLabel
-        } else {
-            let yellow = PrimaryButton.appearance(for: .yellow)
-            config.title = hasProgress ? "Continue Lesson" : "Start Lesson"
-            config.image = UIImage(systemName: "play.fill")
-            config.baseBackgroundColor = yellow.backgroundColor
-            config.baseForegroundColor = yellow.titleColor
+        UIView.performWithoutAnimation {
+            var config = startButton.configuration ?? UIButton.Configuration.filled()
+            if isLocked {
+                config.title = "Lesson Locked"
+                config.image = UIImage(systemName: "lock.fill")
+                config.baseBackgroundColor = UIColor.tertiarySystemFill
+                config.baseForegroundColor = .secondaryLabel
+            } else {
+                let yellow = PrimaryButton.appearance(for: .yellow)
+                if isCompleted {
+                    config.title = "Study lesson"
+                } else {
+                    config.title = hasProgress ? "Continue Lesson" : "Start Lesson"
+                }
+                config.image = UIImage(systemName: "play.fill")
+                config.baseBackgroundColor = yellow.backgroundColor
+                config.baseForegroundColor = yellow.titleColor
+            }
+            startButton.configuration = config
+            startButton.layoutIfNeeded()
         }
-        startButton.configuration = config
         startButton.isUserInteractionEnabled = !isLocked
         if isLocked {
             startButton.accessibilityTraits.insert(.notEnabled)

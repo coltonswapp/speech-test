@@ -77,6 +77,8 @@ enum ContentCMSClient {
     enum QANoteSource: String, Encodable {
         case dialogue
         case quiz
+        /// A screen with no lesson. Used by the debug screenshot shortcut.
+        case screen
     }
 
     struct QANote: Encodable {
@@ -317,6 +319,11 @@ enum ContentCMSClient {
         }.resume()
     }
 
+    /// Last lesson JSON saved by `fetchDialogueCollection`, if any.
+    static func cachedDialogueCollectionData(id: String) -> Data? {
+        readCachedCollectionData(id: id)
+    }
+
     static func cachedDialogueLessonIndex() -> CMSDialogueLessonIndex? {
         guard let data = readCachedLessonIndexData() else { return nil }
         return try? parseLessonIndex(data)
@@ -341,6 +348,20 @@ enum ContentCMSClient {
                 return $0.id < $1.id
             }
         return CMSDialogueLessonIndex(units: units, lessons: lessons)
+    }
+
+    /// Bump when published dialogue JSON shape changes (e.g. pattern `description`).
+    private static let dialogueCacheFormatVersion = 2
+    private static let dialogueCacheFormatVersionKey = "ContentCMSClient.dialogueCacheFormatVersion"
+
+    /// Clears on-disk dialogue caches after a format bump so republished pattern fields appear.
+    @discardableResult
+    static func bustDialogueCacheIfFormatChanged() -> Bool {
+        let stored = UserDefaults.standard.integer(forKey: dialogueCacheFormatVersionKey)
+        guard stored < dialogueCacheFormatVersion else { return false }
+        try? FileManager.default.removeItem(at: cacheDirectory())
+        UserDefaults.standard.set(dialogueCacheFormatVersion, forKey: dialogueCacheFormatVersionKey)
+        return true
     }
 
     private static func cacheDirectory() -> URL {

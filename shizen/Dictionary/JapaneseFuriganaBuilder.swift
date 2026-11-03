@@ -243,14 +243,26 @@ final class FuriganaTranscriptLabel: UILabel {
         )
     }
 
-    override func drawText(in rect: CGRect) {
+    /// The rect `drawText` lays the base text out in.
+    private var textDrawRect: CGRect {
         let overflow = horizontalRubyOverflow
-        let drawRect = bounds.inset(by: UIEdgeInsets(
+        return bounds.inset(by: UIEdgeInsets(
             top: textInsets.top,
             left: textInsets.left + overflow,
             bottom: textInsets.bottom,
             right: textInsets.right + overflow
         ))
+    }
+
+    /// Where `range` sits in the base text, one segment per line it spans, in this label's
+    /// coordinates. Measured the same way as the token highlight: ruby stripped, on the
+    /// glyph baseline. For drawing your own marks under words.
+    func baseTextSegments(for range: NSRange) -> [(rect: CGRect, baselineY: CGFloat)] {
+        textSegments(for: range, in: textDrawRect)
+    }
+
+    override func drawText(in rect: CGRect) {
+        let drawRect = textDrawRect
         guard let attributedText, attributedText.length > 0 else {
             super.drawText(in: drawRect)
             return
@@ -421,9 +433,35 @@ final class FuriganaTranscriptLabel: UILabel {
               let attributed = attributedText,
               range.location >= 0,
               range.length > 0,
+              NSMaxRange(range) <= attributed.length else { return }
+        let font = attributed.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont
+            ?? self.font
+            ?? .systemFont(ofSize: 17)
+
+        tokenHighlightFillColor.setFill()
+        for segment in textSegments(for: range, in: drawRect) {
+            let highlight = tokenHighlightRect(
+                x: segment.rect.minX,
+                width: segment.rect.width,
+                baselineY: segment.baselineY,
+                font: font
+            )
+            let radius = min(
+                Self.tokenHighlightCornerRadius,
+                min(highlight.width, highlight.height) / 2
+            )
+            UIBezierPath(roundedRect: highlight, cornerRadius: radius).fill()
+        }
+    }
+
+    /// Token geometry shared by the highlight and `baseTextSegments(for:)`.
+    private func textSegments(for range: NSRange, in drawRect: CGRect) -> [(rect: CGRect, baselineY: CGFloat)] {
+        guard let attributed = attributedText,
+              range.location >= 0,
+              range.length > 0,
               NSMaxRange(range) <= attributed.length,
               drawRect.width > 0,
-              drawRect.height > 0 else { return }
+              drawRect.height > 0 else { return [] }
 
         let stripped = Self.attributedStringByRemovingRuby(attributed)
         let storage = NSTextStorage(attributedString: stripped)
@@ -439,13 +477,9 @@ final class FuriganaTranscriptLabel: UILabel {
         storage.addLayoutManager(manager)
 
         let glyphRange = manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-        guard glyphRange.length > 0 else { return }
+        guard glyphRange.length > 0 else { return [] }
 
-        let font = attributed.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont
-            ?? self.font
-            ?? .systemFont(ofSize: 17)
-
-        tokenHighlightFillColor.setFill()
+        var segments: [(rect: CGRect, baselineY: CGFloat)] = []
         manager.enumerateLineFragments(forGlyphRange: glyphRange) { fragmentRect, _, _, lineGlyphRange, _ in
             let intersection = NSIntersectionRange(lineGlyphRange, glyphRange)
             guard intersection.length > 0 else { return }
@@ -462,18 +496,13 @@ final class FuriganaTranscriptLabel: UILabel {
 
             let baseline = manager.location(forGlyphAt: intersection.location).y
             let baselineY = drawRect.minY + fragmentRect.minY + baseline
-            let highlight = self.tokenHighlightRect(
-                x: drawRect.minX + tokenRect.minX,
-                width: tokenRect.width,
-                baselineY: baselineY,
-                font: font
-            )
-            let radius = min(
-                Self.tokenHighlightCornerRadius,
-                min(highlight.width, highlight.height) / 2
-            )
-            UIBezierPath(roundedRect: highlight, cornerRadius: radius).fill()
+            segments.append((
+                CGRect(x: drawRect.minX + tokenRect.minX, y: drawRect.minY + tokenRect.minY,
+                       width: tokenRect.width, height: tokenRect.height),
+                baselineY
+            ))
         }
+        return segments
     }
 
     private func tokenHighlightRect(
@@ -563,7 +592,7 @@ enum JapaneseFuriganaBuilder {
     fileprivate static let rubySizeFactor: CGFloat = 0.45
     fileprivate static let rubyTextColor = UIColor.secondaryLabel
     /// Bump when ruby alignment / drawing changes so cached strings don't keep the old layout.
-    private static let rubyLayoutRevision = "ruby-glued-runs-v14"
+    private static let rubyLayoutRevision = "ruby-glued-runs-v15"
 
     /// Vertical gap between transcript lines in the same speaker turn.
     static let transcriptLineSpacing: CGFloat = 18
@@ -1211,6 +1240,11 @@ enum JapaneseFuriganaBuilder {
     static func wordDetailRubyTopInset(for font: UIFont) -> CGFloat {
         let rubyReserve = font.pointSize * rubySizeFactor
         return ceil(rubyReserve + 4)
+    }
+
+    /// Just the ruby glyph height, for a line that sits right under a heading.
+    static func rubyGlyphTopInset(for font: UIFont) -> CGFloat {
+        ceil(font.pointSize * rubySizeFactor)
     }
 
     /// Insets for speech-bubble dialogue lines (title-sized Japanese with ruby).

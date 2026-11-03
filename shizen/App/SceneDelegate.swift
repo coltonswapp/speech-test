@@ -24,6 +24,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let root = UINavigationController(rootViewController: MainViewController())
         window?.rootViewController = root
         window?.makeKeyAndVisible()
+        TempNaturalPreviewDriver.run(from: root) // TEMP-PREVIEW
         ExplosionManager.prepare(windowScene: windowScene)
         ExplosionManager.emojis = ExperimentSettings.explosionEmojis
         DialogueScenarioCollectionCatalog.prefetchConfiguredCollections()
@@ -31,6 +32,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             ToastManager.shared.showBanner(symbol: "hand.draw.fill", text: "Multi-select")
         }
         ExperimentSettings.applySpanHighlightStyle()
+        ScreenshotQAShortcut.start()
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {

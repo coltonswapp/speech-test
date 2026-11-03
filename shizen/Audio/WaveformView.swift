@@ -355,6 +355,14 @@ final class AudioLevelBarsView: UIView {
     private let barGain: [CGFloat] = [0.88, 0.94, 1.0, 0.94, 0.88]
     private let barWobblePhase: [CGFloat] = [0, 1.7, 3.1, 4.8, 2.3]
     private let barWobbleSpeed: [CGFloat] = [2.2, 2.8, 3.4, 2.5, 2.0]
+    /// Voice motion reads newest audio in the center and older audio outward,
+    /// so each syllable ripples out from the middle like a mouth opening.
+    private let voiceHistoryOffsets = [2, 1, 0, 1, 2]
+    /// Per-bar silhouette for voice motion, re-rolled on syllable onsets so
+    /// consecutive syllables don't all draw the same diamond.
+    private var voiceShape: [CGFloat] = [1, 1, 1, 1, 1]
+    private var lastVoiceShapeChange: CFTimeInterval = 0
+    private var lastReportedEnergy: CGFloat = -1
 
     private var levelHistory: [Float] = []
     private let levelHistoryCapacity = 12
@@ -483,6 +491,14 @@ final class AudioLevelBarsView: UIView {
         didSet { setNeedsDisplay() }
     }
 
+    /// Center-out ripple plus per-syllable silhouettes instead of the plain
+    /// staggered-history follow. Built for spoken dialogue.
+    var voiceMotion = false
+
+    /// Called each frame the drawn loudness moves, 0…1, already eased by the
+    /// bars' attack/release — hosts drive glows and other chrome from it.
+    var onEnergyChange: ((CGFloat) -> Void)?
+
     private(set) var isIdle = true
 
     override init(frame: CGRect) {
@@ -522,16 +538,21 @@ final class AudioLevelBarsView: UIView {
         let boosted = Self.displayLevel(level, gain: levelGain)
         let wasIdle = isIdle
 
+        if voiceMotion {
+            updateVoiceShape(previous: levelHistory.last ?? 0, current: boosted)
+        }
+
         levelHistory.append(boosted)
         if levelHistory.count > levelHistoryCapacity {
             levelHistory.removeFirst(levelHistory.count - levelHistoryCapacity)
         }
 
+        let offsets = voiceMotion ? voiceHistoryOffsets : barHistoryOffsets
         for i in 0..<barCount {
-            let offset = min(barHistoryOffsets[i] * historyStride, max(0, levelHistory.count - 1))
+            let offset = min(offsets[i] * historyStride, max(0, levelHistory.count - 1))
             let sampleIndex = levelHistory.count - 1 - offset
             let sample = CGFloat(levelHistory[sampleIndex])
-            targetLevels[i] = sample * barGain[i]
+            targetLevels[i] = sample * barGain[i] * (voiceMotion ? voiceShape[i] : 1)
         }
 
         isIdle = boosted < 0.012
@@ -540,6 +561,25 @@ final class AudioLevelBarsView: UIView {
         }
         if isIdle != wasIdle || !isIdle {
             setNeedsDisplay()
+        }
+    }
+
+    /// Re-rolls the silhouette on a syllable onset (sharp rise or speech
+    /// starting from quiet), and drifts it gently through long vowels so
+    /// sustained sound keeps visibly moving.
+    private func updateVoiceShape(previous: Float, current: Float) {
+        let now = CACurrentMediaTime()
+        let isOnset = current - previous > 0.06 || (previous < 0.05 && current > 0.12)
+        let isSustained = current > 0.2 && now - lastVoiceShapeChange > 0.22
+        guard isOnset || isSustained else { return }
+        lastVoiceShapeChange = now
+        let spread: CGFloat = isOnset ? 0.38 : 0.18
+        let center = barCount / 2
+        for i in 0..<barCount {
+            // Center stays tall so the voice always peaks in the middle;
+            // neighbors swing more for a mouth-like, uneven silhouette.
+            let floor: CGFloat = i == center ? 0.92 : 1 - spread
+            voiceShape[i] = CGFloat.random(in: floor...(1 + spread * 0.5))
         }
     }
 
@@ -611,9 +651,11 @@ final class AudioLevelBarsView: UIView {
         displayedLevels = Array(repeating: 0, count: barCount)
         barVelocities = Array(repeating: 0, count: barCount)
         levelHistory.removeAll(keepingCapacity: true)
+        voiceShape = Array(repeating: 1, count: barCount)
         animationTime = 0
         isIdle = true
         isSettlingToRest = false
+        reportEnergyIfNeeded()
         setNeedsDisplay()
     }
 
@@ -710,6 +752,18 @@ final class AudioLevelBarsView: UIView {
         if changed || (!fidelityMode && isIdle) {
             setNeedsDisplay()
         }
+        reportEnergyIfNeeded()
+    }
+
+    private func reportEnergyIfNeeded() {
+        guard let onEnergyChange else { return }
+        // Center-weighted so the idle breathe on the outer bars stays out of it.
+        let center = displayedLevels[barCount / 2]
+        let neighbors = (displayedLevels[barCount / 2 - 1] + displayedLevels[barCount / 2 + 1]) / 2
+        let energy = max(0, min(1, (center * 0.6 + neighbors * 0.4) / 0.75))
+        guard abs(energy - lastReportedEnergy) > 0.003 else { return }
+        lastReportedEnergy = energy
+        onEnergyChange(energy)
     }
 
     #if DEBUG

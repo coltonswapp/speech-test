@@ -204,6 +204,10 @@ class DialogueExperimentViewController: UIViewController {
     /// earned by passing the quiz instead of finishing playback.
     var recordsCompletionOnPlaybackFinish = true
 
+    /// Hosts set this when the first listen ran in hardcore mode so a
+    /// playback-earned completion carries the hardcore badge.
+    var recordsHardcoreCompletion = false
+
     /// Study / view-lesson: Japanese (and stage captions) stay `.label` on every
     /// line. Focus is still bubble scale and underglow. First-listen modes keep
     /// unheard lines at `.secondaryLabel`.
@@ -223,6 +227,7 @@ class DialogueExperimentViewController: UIViewController {
             updateSceneImageWidthForCurrentMode()
             rebuildTranscriptRows()
             resetScrollPositionForNewTranscript()
+            refreshLineScrubber()
         }
     }
 
@@ -240,6 +245,10 @@ class DialogueExperimentViewController: UIViewController {
     private var stageCaptionLabels: [UILabel?] = []
     /// One bubble+meter per speaker in `.listeningSpeakers` mode; empty otherwise.
     private var listeningSpeakerSlots: [ListeningSpeakerSlot] = []
+    /// Host hook for the "Show transcript" pill under the speaker bubbles.
+    var onTranscriptRevealRequested: (() -> Void)?
+    private var showsTranscriptRevealOffer = false
+    private weak var transcriptRevealButton: UIButton?
     /// One meter per line in `.listeningLines` / `.reveal` modes; empty otherwise.
     private var listeningLineMeters: [AudioLevelBarsView] = []
     /// Slow-tracking level baseline; the gap between the live level and this
@@ -262,6 +271,8 @@ class DialogueExperimentViewController: UIViewController {
     private(set) var didStartPlaybackThisAttempt = false
     /// Host is notified after a full listen so the pager can unlock the quiz.
     var onPlaybackFinished: (() -> Void)?
+    /// Scene grammar for the Role Play completion recap. Set by the lesson pager.
+    var rolePlayRecapSource: RolePlayRecapSource?
     /// When set, Play turns into a Quiz button once the dialogue finishes.
     var onQuizRequested: (() -> Void)? {
         didSet { updateTransportControls() }
@@ -301,6 +312,11 @@ class DialogueExperimentViewController: UIViewController {
 
     private let transportBarContainer = UIView()
     private let elapsedLabel = UILabel()
+    /// Speaker-tinted progress + line seek while the transcript is hidden.
+    private let lineScrubber = DialogueLineScrubberView()
+    /// Buttons pin to the bar top, or below the scrubber row when it shows.
+    private var transportControlsTopConstraint: NSLayoutConstraint!
+    private var transportControlsBelowScrubberConstraint: NSLayoutConstraint!
     private let playPauseButton = GlassIconButton(
         symbolName: "play.fill",
         pointSize: DialogueExperimentViewController.transportGlyphPointSize,
@@ -314,7 +330,6 @@ class DialogueExperimentViewController: UIViewController {
     private let quizTransportButton = UIButton(type: .system)
     private var isShowingQuizTransportButton = false
     private let overflowButton = UIButton(type: .system)
-    private let overflowGlyphView = UIImageView()
     private let restartButton = UIButton(type: .system)
     private let restartGlyphView = UIImageView()
     private let leftTransportControlsStack = UIStackView()
@@ -351,6 +366,9 @@ class DialogueExperimentViewController: UIViewController {
         didSet {
             if playbackPhase == .playing {
                 didStartPlaybackThisAttempt = true
+            }
+            if playbackPhase != oldValue {
+                dialoguePlaybackPhaseDidChange()
             }
         }
     }
@@ -494,7 +512,6 @@ class DialogueExperimentViewController: UIViewController {
         isPerformingLayoutSideEffects = true
         defer { isPerformingLayoutSideEffects = false }
 
-        overflowButton.bringSubviewToFront(overflowGlyphView)
         restartButton.bringSubviewToFront(restartGlyphView)
         let topConstant = dialogueContentStackTopConstant()
         if abs(contentStackTopConstraint.constant - topConstant) > 0.5 {
@@ -640,6 +657,8 @@ class DialogueExperimentViewController: UIViewController {
 
         updateMetadataLabel()
         rebuildTranscriptRows()
+        refreshLineScrubber()
+        lineScrubber.setCurrentTime(0)
         resolveLessonAudio()
         updateTransportControls()
 
@@ -926,15 +945,9 @@ class DialogueExperimentViewController: UIViewController {
 
         playPauseButton.addAction(UIAction { [weak self] _ in self?.togglePlayPause() }, for: .primaryActionTriggered)
 
-        Self.configureGlassTransportButton(
-            overflowButton,
-            glyphView: overflowGlyphView,
-            symbolName: "ellipsis",
-            glyphPointSize: Self.transportGlyphPointSize - 2,
-            accessibilityLabel: "More"
-        )
+        configureOverflowSpeedButton()
         overflowButton.showsMenuAsPrimaryAction = true
-        overflowButton.menu = makeOverflowMenu()
+        dialogueRefreshOverflowMenu()
         overflowButton.isHidden = !dialogueShowsOverflowButton()
         overflowButton.isUserInteractionEnabled = dialogueShowsOverflowButton()
 
@@ -960,20 +973,33 @@ class DialogueExperimentViewController: UIViewController {
         trailingTransportSlot.addSubview(playPauseButton)
         trailingTransportSlot.addSubview(quizTransportButton)
 
+        lineScrubber.translatesAutoresizingMaskIntoConstraints = false
+        lineScrubber.onSelectLine = { [weak self] spokenIndex in
+            guard let self, let display = self.displayIndex(forSpokenIndex: spokenIndex) else { return }
+            self.trackReplay(kind: "line")
+            self.playLine(at: display)
+        }
+
         transportBarContainer.addSubview(leftTransportControlsStack)
         transportBarContainer.addSubview(elapsedLabel)
+        transportBarContainer.addSubview(lineScrubber)
         transportBarContainer.addSubview(trailingTransportSlot)
 
-        elapsedLabel.isHidden = !dialogueShowsElapsedTime()
-
         let horizontalInset: CGFloat = 20
+        transportControlsTopConstraint = leftTransportControlsStack.topAnchor.constraint(
+            equalTo: transportBarContainer.topAnchor,
+            constant: 8
+        )
+        transportControlsBelowScrubberConstraint = leftTransportControlsStack.topAnchor.constraint(
+            equalTo: lineScrubber.bottomAnchor,
+            constant: 6
+        )
         let buttonSize = Self.transportButtonSize
         let slotHuggingConstraint = trailingTransportSlot.widthAnchor.constraint(equalToConstant: 0)
         slotHuggingConstraint.priority = .defaultLow
 
         NSLayoutConstraint.activate([
             leftTransportControlsStack.leadingAnchor.constraint(equalTo: transportBarContainer.leadingAnchor, constant: horizontalInset),
-            leftTransportControlsStack.topAnchor.constraint(equalTo: transportBarContainer.topAnchor, constant: 8),
             leftTransportControlsStack.bottomAnchor.constraint(equalTo: transportBarContainer.safeAreaLayoutGuide.bottomAnchor, constant: -8),
 
             overflowButton.widthAnchor.constraint(equalToConstant: buttonSize),
@@ -1003,7 +1029,13 @@ class DialogueExperimentViewController: UIViewController {
             elapsedLabel.centerYAnchor.constraint(equalTo: leftTransportControlsStack.centerYAnchor),
             elapsedLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leftTransportControlsStack.trailingAnchor, constant: 12),
             elapsedLabel.trailingAnchor.constraint(lessThanOrEqualTo: playPauseButton.leadingAnchor, constant: -12),
+
+            // Full-width row above the floating buttons.
+            lineScrubber.topAnchor.constraint(equalTo: transportBarContainer.topAnchor, constant: 8),
+            lineScrubber.leadingAnchor.constraint(equalTo: transportBarContainer.leadingAnchor, constant: horizontalInset),
+            lineScrubber.trailingAnchor.constraint(equalTo: transportBarContainer.trailingAnchor, constant: -horizontalInset),
         ])
+        refreshLineScrubber()
 
         if presentationContext == .standalone {
             view.addSubview(transportBarContainer)
@@ -1064,13 +1096,16 @@ class DialogueExperimentViewController: UIViewController {
         ) { [weak self] _ in
             self?.presentRolePlay()
         }
-        return UIMenu(children: [
+        var children: [UIMenuElement] = [
             makePlaybackSpeedMenu(),
             makeStageLinePauseMenu(),
-            makeTokenSyncMenuAction(),
-            makeTokenHighlightPreviewAction(),
-            rolePlay,
-        ])
+        ]
+        if presentationContext == .standalone {
+            children.append(makeTokenSyncMenuAction())
+            children.append(makeTokenHighlightPreviewAction())
+        }
+        children.append(rolePlay)
+        return UIMenu(children: children)
     }
 
     func makeTokenSyncMenuAction() -> UIAction {
@@ -1124,6 +1159,7 @@ class DialogueExperimentViewController: UIViewController {
 
     func dialogueRefreshOverflowMenu() {
         overflowButton.menu = makeOverflowMenu()
+        applyOverflowSpeedAppearance()
     }
 
     private func presentRolePlay() {
@@ -1136,6 +1172,7 @@ class DialogueExperimentViewController: UIViewController {
             grammarPointIDs: grammarPointIDs
         )
         rolePlay.dialogueApplyPlaybackSpeed(playbackSpeed)
+        rolePlay.rolePlayRecapSource = rolePlayRecapSource
         if let navigationController {
             navigationController.pushViewController(rolePlay, animated: true)
         } else {
@@ -1156,6 +1193,11 @@ class DialogueExperimentViewController: UIViewController {
     }
 
     private func setPlaybackSpeed(_ speed: Float) {
+        if speed != playbackSpeed {
+            var properties: [String: Any] = ["speed": Double(speed)]
+            properties["lesson_id"] = scenarioID
+            Analytics.track(.playbackSpeedChanged, properties)
+        }
         playbackSpeed = speed
         applyPlaybackSpeedToPlayer()
         dialogueRefreshOverflowMenu()
@@ -1166,6 +1208,10 @@ class DialogueExperimentViewController: UIViewController {
             return "1.0× Normal"
         }
         return String(format: "%.1f×", speed)
+    }
+
+    private static func playbackSpeedButtonTitle(for speed: Float) -> String {
+        String(format: "%.1fx", speed)
     }
 
     private func rebuildTranscriptRows() {
@@ -1235,6 +1281,9 @@ class DialogueExperimentViewController: UIViewController {
     // MARK: - Listening mode (hidden dialogue text)
 
     private static let listeningInactiveBubbleEmphasis: CGFloat = 0.4
+    /// How far an opposite-side speaker row rides up into the one above —
+    /// about half the meter bubble (52pt meter + 32pt padding).
+    private static let listeningSpeakerStaggerOverlap: CGFloat = 42
 
     /// One static bubble per speaker: name label plus a speaker-tinted live
     /// meter. Leading speaker sits left with the name above the bubble;
@@ -1272,6 +1321,9 @@ class DialogueExperimentViewController: UIViewController {
             bubble.setUnderglowConfiguration(.compactMeter(for: entry.side))
 
             let meter = makeListeningMeterView(for: entry.side)
+            meter.onEnergyChange = { [weak bubble] energy in
+                bubble?.setVoiceLevel(energy)
+            }
             bubble.addSubview(meter)
 
             if entry.side == .leading {
@@ -1310,12 +1362,89 @@ class DialogueExperimentViewController: UIViewController {
 
             contentStack.addArrangedSubview(container)
             if slotIndex < orderedSpeakers.count - 1 {
-                contentStack.setCustomSpacing(48, after: container)
+                // Opposite sides can't collide, so tuck the next bubble up
+                // into a conversational stagger rather than a full row below.
+                let nextSide = orderedSpeakers[slotIndex + 1].side
+                contentStack.setCustomSpacing(
+                    nextSide == entry.side ? 24 : -Self.listeningSpeakerStaggerOverlap,
+                    after: container
+                )
             }
             listeningSpeakerSlots.append(
                 ListeningSpeakerSlot(speaker: entry.speaker, side: entry.side, bubble: bubble, meter: meter)
             )
         }
+
+        if let lastRow = contentStack.arrangedSubviews.last {
+            contentStack.setCustomSpacing(28, after: lastRow)
+        }
+        contentStack.addArrangedSubview(makeTranscriptRevealRow())
+    }
+
+    /// Centered glass pill, always in layout so its arrival doesn't shift the
+    /// bubbles; hidden by alpha until the host offers it.
+    private func makeTranscriptRevealRow() -> UIView {
+        var config = UIButton.Configuration.glass()
+        config.cornerStyle = .capsule
+        config.title = "Show transcript"
+        config.image = UIImage(systemName: "eye")
+        config.imagePadding = 8
+        config.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+        config.baseForegroundColor = .label
+        config.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 18, bottom: 12, trailing: 18)
+        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+            var outgoing = incoming
+            outgoing.font = .systemFont(ofSize: 16, weight: .semibold)
+            return outgoing
+        }
+
+        let button = UIButton(configuration: config)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addAction(UIAction { [weak self] _ in
+            self?.onTranscriptRevealRequested?()
+        }, for: .primaryActionTriggered)
+        transcriptRevealButton = button
+        applyTranscriptRevealOfferAppearance(to: button)
+
+        let row = UIView()
+        row.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(button)
+        NSLayoutConstraint.activate([
+            button.topAnchor.constraint(equalTo: row.topAnchor),
+            button.bottomAnchor.constraint(equalTo: row.bottomAnchor),
+            button.centerXAnchor.constraint(equalTo: row.centerXAnchor),
+        ])
+        return row
+    }
+
+    /// Hardcore hosts call this when a listen finishes; ignoring the pill is
+    /// fine — the learner can keep scrubbing or head to the quiz.
+    func setTranscriptRevealOfferVisible(_ visible: Bool, animated: Bool) {
+        guard visible != showsTranscriptRevealOffer else { return }
+        showsTranscriptRevealOffer = visible
+        guard let button = transcriptRevealButton else { return }
+        guard animated else {
+            applyTranscriptRevealOfferAppearance(to: button)
+            return
+        }
+        // A beat after the last line so the ending lands before the offer.
+        UIView.animate(
+            withDuration: 0.5,
+            delay: visible ? 0.5 : 0,
+            usingSpringWithDamping: 0.8,
+            initialSpringVelocity: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState]
+        ) {
+            self.applyTranscriptRevealOfferAppearance(to: button)
+        }
+    }
+
+    private func applyTranscriptRevealOfferAppearance(to button: UIButton) {
+        let visible = showsTranscriptRevealOffer
+        button.alpha = visible ? 1 : 0
+        button.transform = visible ? .identity : CGAffineTransform(scaleX: 0.9, y: 0.9)
+        button.isUserInteractionEnabled = visible
+        button.accessibilityElementsHidden = !visible
     }
 
     /// Bar geometry and shaping mirror the tuned Speaking Meters experiment
@@ -1323,7 +1452,9 @@ class DialogueExperimentViewController: UIViewController {
     /// matches bar width so resting bars read as dots. Gain and smoothing are
     /// adapted for the AVAudioPlayer metering driver, which runs quieter and
     /// smoother than the experiment's FFT tap — smoothing sits high so attack
-    /// lands the syllable it belongs to and release stays quick.
+    /// lands the syllable it belongs to and release stays quick. Voice motion
+    /// ripples syllables out from the center bar with a fresh silhouette each
+    /// onset, so the meter reads as someone talking rather than a level gauge.
     private func makeListeningMeterView(for side: DialogueSpeakerSide) -> AudioLevelBarsView {
         let meter = AudioLevelBarsView()
         meter.translatesAutoresizingMaskIntoConstraints = false
@@ -1339,10 +1470,15 @@ class DialogueExperimentViewController: UIViewController {
         // the audio itself, or sustained speech reads as random floating.
         meter.wobbleAmount = 0.08
         meter.diamondFalloff = 0.25
-        meter.springiness = 0.5
+        meter.springiness = 0.6
         meter.historyStride = 2
-        meter.barColor = side == .leading ? .systemBlue : .systemYellow
+        meter.voiceMotion = true
+        meter.barColor = Self.listeningMeterColor(for: side)
         return meter
+    }
+
+    private static func listeningMeterColor(for side: DialogueSpeakerSide) -> UIColor {
+        side == .leading ? .systemBlue : .systemYellow
     }
 
     private var activeListeningSpeaker: String? {
@@ -1483,20 +1619,6 @@ class DialogueExperimentViewController: UIViewController {
         listeningSpeakerSlots.forEach { $0.meter.releaseToRest() }
         listeningLineMeters.forEach { $0.releaseToRest() }
         listeningMeterBaseline = 0
-    }
-
-    /// Single scroll at play start so both speaker bubbles sit in frame (the
-    /// scene image may push the second bubble below the fold).
-    private func scrollListeningBubblesIntoView() {
-        guard transcriptDisplayMode == .listeningSpeakers, !listeningSpeakerSlots.isEmpty,
-              let lastRow = contentStack.arrangedSubviews.last else { return }
-        scrollView.layoutIfNeeded()
-        let rowFrame = rowBoundsInScrollableContent(lastRow)
-        let inset = scrollView.adjustedContentInset
-        let targetY = rowFrame.maxY - scrollView.bounds.height + inset.bottom + Self.followAlongBottomBuffer
-        guard let clamped = scrollView.clampedContentOffsetY(targetY, allowNoScroll: true),
-              clamped > scrollView.contentOffset.y + 1 else { return }
-        scrollView.setContentOffset(CGPoint(x: 0, y: clamped), animated: true)
     }
 
     private func applyBubbleBackgroundStyleToAllBubbles() {
@@ -1703,6 +1825,9 @@ class DialogueExperimentViewController: UIViewController {
 
             let meter = makeListeningMeterView(for: line.speakerSide)
             meter.meterHeight = 36
+            meter.onEnergyChange = { [weak japaneseBubble] energy in
+                japaneseBubble?.setVoiceLevel(energy)
+            }
             japaneseBubble.addSubview(meter)
 
             let meterIntrinsic = meter.intrinsicContentSize
@@ -1861,6 +1986,8 @@ class DialogueExperimentViewController: UIViewController {
         )
 
         lineContainer.addSubview(messageColumn)
+        // Needs the column in the row first so the pin has a common ancestor.
+        lineContainer.swipeContainer?.besideChromeAnchorView = lineContainer
         DialogueBubbleLayout.pinMessageColumn(
             messageColumn,
             to: lineContainer,
@@ -1891,6 +2018,11 @@ class DialogueExperimentViewController: UIViewController {
                 guard generation == self.lessonAudioResolveGeneration else { return }
                 self.resolvedAudioURL = url
                 if url == nil {
+                    if self.example.publishedAudioUrl != nil || self.example.audioKey?.isEmpty == false {
+                        var properties: [String: Any] = ["remote": self.example.publishedAudioUrl != nil]
+                        properties["lesson_id"] = self.scenarioID
+                        Analytics.track(.lessonAudioFailed, properties)
+                    }
                     self.finishLessonAudioResolve(generation: generation)
                 } else {
                     self.prepareAudioAlignment(generation: generation)
@@ -1976,6 +2108,7 @@ class DialogueExperimentViewController: UIViewController {
         // Embedded m4a marks were written at publish and can sit ahead of
         // token stamps approved later. Follow the stamps when they line up.
         applyTokenSyncLineWindows()
+        refreshLineScrubber()
 
         updateTransportControls()
         if presentationContext == .standalone {
@@ -2091,9 +2224,8 @@ class DialogueExperimentViewController: UIViewController {
         if fromBeginning, dialogueShouldHoldForStageLinesDuringPlayback() {
             let leading = stageLineDisplayIndices(beforeSpokenIndex: 0)
             if !leading.isEmpty {
-                if transcriptDisplayMode == .listeningSpeakers {
-                    scrollListeningBubblesIntoView()
-                } else {
+                // Listening speakers stay put: the learner frames the bubbles.
+                if transcriptDisplayMode != .listeningSpeakers {
                     scrollToTranscriptTop(animated: true)
                 }
                 playbackPhase = .playing
@@ -2112,9 +2244,7 @@ class DialogueExperimentViewController: UIViewController {
 
     private func beginClipPlayback(player: AVAudioPlayer, fromBeginning: Bool, skipScroll: Bool) {
         if !skipScroll {
-            if transcriptDisplayMode == .listeningSpeakers {
-                scrollListeningBubblesIntoView()
-            } else if fromBeginning {
+            if transcriptDisplayMode != .listeningSpeakers, fromBeginning {
                 scrollToTranscriptTop(animated: true)
             }
         }
@@ -2180,7 +2310,6 @@ class DialogueExperimentViewController: UIViewController {
     private func resumePlayback() {
         guard let player = audioPlayer else { return }
         seekTargetLineIndex = nil
-        scrollListeningBubblesIntoView()
         playbackResumeStartedAt = CACurrentMediaTime()
         applyPlaybackSpeedToPlayer()
         (audioPlayer ?? player).play()
@@ -2261,12 +2390,14 @@ class DialogueExperimentViewController: UIViewController {
     private func recordDialogueProgress(scenarioID: String) {
         let tally = DialogueCompletionTally(
             score: DialogueQuizScore(correctCount: 0, questionCount: 0),
-            englishPeekedCount: englishPeekedCount
+            englishPeekedCount: englishPeekedCount,
+            isHardcore: recordsHardcoreCompletion
         )
         DialogueProgressStore.shared.markCompleted(
             scenarioID: scenarioID,
             starCount: tally.starCount,
-            points: tally.total
+            points: tally.total,
+            hardcore: tally.isHardcore
         )
         GrammarMasteryStore.shared.recordEncounter(
             grammarIDs: grammarPointIDs,
@@ -3203,6 +3334,9 @@ class DialogueExperimentViewController: UIViewController {
     /// chrome so those buttons sit in-row instead of overflowing (and clipping).
     func dialogueReservesAccessoryChromeHeight() -> Bool { false }
 
+    /// Subclass hook after play / pause / idle / finished flips.
+    func dialoguePlaybackPhaseDidChange() {}
+
     func dialogueDidInstallBubbleSwipe(
         _ container: DialogueBubbleSwipeRevealContainer,
         at index: Int,
@@ -3685,7 +3819,10 @@ class DialogueExperimentViewController: UIViewController {
     func togglePlayPause() {
         guard !isResolvingLessonAudio else { return }
         switch playbackPhase {
-        case .idle, .finished:
+        case .idle:
+            startPlayback(fromBeginning: true)
+        case .finished:
+            trackReplay(kind: "dialogue")
             startPlayback(fromBeginning: true)
         case .playing:
             pausePlayback()
@@ -3695,8 +3832,16 @@ class DialogueExperimentViewController: UIViewController {
     }
 
     func restartTapped() {
+        trackReplay(kind: "restart")
         stopPlayback(resetPosition: true)
         startPlayback(fromBeginning: true)
+    }
+
+    /// `kind`: dialogue (play again after the end), restart, or line (jump from the scrubber).
+    private func trackReplay(kind: String) {
+        var properties: [String: Any] = ["kind": kind, "speed": Double(playbackSpeed)]
+        properties["lesson_id"] = scenarioID
+        Analytics.track(.audioReplayed, properties)
     }
 
     func dialoguePlayPauseSymbolName(isPlaying: Bool) -> String {
@@ -3807,6 +3952,31 @@ class DialogueExperimentViewController: UIViewController {
         quizTransportButton.accessibilityElementsHidden = !showQuiz
     }
 
+    private func configureOverflowSpeedButton() {
+        var config = UIButton.Configuration.glass()
+        config.cornerStyle = .capsule
+        config.baseForegroundColor = Self.transportGlyphColor
+        config.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+        config.titleAlignment = .center
+        config.titleLineBreakMode = .byClipping
+        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+            var outgoing = incoming
+            outgoing.font = .monospacedDigitSystemFont(ofSize: Self.transportSpeedTitlePointSize, weight: .semibold)
+            outgoing.foregroundColor = Self.transportGlyphColor
+            return outgoing
+        }
+        overflowButton.configuration = config
+        overflowButton.translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    private func applyOverflowSpeedAppearance() {
+        let title = Self.playbackSpeedButtonTitle(for: playbackSpeed)
+        var config = overflowButton.configuration
+        config?.title = title
+        overflowButton.configuration = config
+        overflowButton.accessibilityLabel = "Playback options, speed \(title)"
+    }
+
     private func configureQuizTransportButton() {
         var config = UIButton.Configuration.glass()
         config.cornerStyle = .capsule
@@ -3871,7 +4041,41 @@ class DialogueExperimentViewController: UIViewController {
         }
     }
 
+    /// The scrubber stands in for the transcript as a sense of place, so it
+    /// only shows when the text is hidden (and replaces the elapsed clock).
+    private var showsLineScrubber: Bool {
+        transcriptDisplayMode == .listeningSpeakers
+    }
+
+    private func refreshLineScrubber() {
+        // Alignment can land before the transport bar is configured.
+        guard transportControlsTopConstraint != nil else { return }
+        let shows = showsLineScrubber
+        lineScrubber.isHidden = !shows
+        // Deactivate before activating so the two tops never fight.
+        transportControlsTopConstraint.isActive = false
+        transportControlsBelowScrubberConstraint.isActive = false
+        (shows ? transportControlsBelowScrubberConstraint : transportControlsTopConstraint).isActive = true
+        elapsedLabel.isHidden = !dialogueShowsElapsedTime() || shows
+        let segments = alignedLines.enumerated().compactMap { spokenIndex, line -> DialogueLineScrubberView.Segment? in
+            guard let display = displayIndex(forSpokenIndex: spokenIndex),
+                  displayLines.indices.contains(display) else { return nil }
+            return DialogueLineScrubberView.Segment(
+                start: line.timeRange.lowerBound,
+                end: line.timeRange.upperBound,
+                speaker: displayLines[display].speaker,
+                color: Self.listeningMeterColor(for: displayLines[display].speakerSide)
+            )
+        }
+        // A dropped line would shift every later index off its spoken line.
+        lineScrubber.configure(
+            segments: segments.count == alignedLines.count ? segments : [],
+            duration: clipDuration
+        )
+    }
+
     private func updateElapsedLabel(currentTime: TimeInterval) {
+        lineScrubber.setCurrentTime(currentTime)
         guard dialogueShowsElapsedTime() else { return }
         elapsedLabel.text = Self.formatElapsed(currentTime)
     }
@@ -4142,6 +4346,7 @@ class DialogueExperimentViewController: UIViewController {
 
     private static let transportButtonSize: CGFloat = 50
     private static let transportGlyphPointSize: CGFloat = 22
+    private static let transportSpeedTitlePointSize: CGFloat = 12
     private static let transportGlyphColor = UIColor.systemYellow
     private static let nestedPagingTransportSlideDistance: CGFloat = 140
 

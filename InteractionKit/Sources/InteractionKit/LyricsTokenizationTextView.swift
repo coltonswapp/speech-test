@@ -22,7 +22,8 @@ public enum LyricsTokenSelectionAppearance {
   case scrubUnderline
 }
 
-/// Fill and lower band for a multi-word selection. Single-token tips stay system blue.
+/// Top color and text for a multi-word selection. The pill eases from `fillColor`
+/// to a lighter blue at the bottom. Single-token tips stay system blue.
 @MainActor
 public struct LyricsSpanHighlightStyle {
   public var fillColor: UIColor
@@ -75,6 +76,8 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   public var underlineHorizontalPadding: CGFloat = 2.5
 
   /// Space between the glyph bounds bottom and the underline (positive = line sits lower).
+  /// Furigana lines ignore this and sit just under the baseline — the font descent
+  /// would otherwise drop the stroke into the gap the next line's readings use.
   public var underlineVerticalGap: CGFloat = 2
 
   /// Layout points; slightly thick so underlines read clearly on iPhone.
@@ -108,8 +111,23 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   private let selectionVPad: CGFloat = 1
   private let selectionCornerRadius: CGFloat = 6
   private let selectionColor = UIColor.systemBlue
-  /// Multi-word spans keep the blue pill and add a darker band on the lower half.
+  /// Multi-word spans keep the blue pill and fade it to a lighter blue toward the bottom.
   private var selectionUsesSpanAccent = false
+
+  /// Lowers the selection fill while audio plays so karaoke can read on top of it.
+  public var dimsSelectionHighlight = false {
+    didSet {
+      guard dimsSelectionHighlight != oldValue else { return }
+      if showsFurigana {
+        setNeedsDisplay()
+      } else {
+        let indices = activeSelectionIndices
+        applySelectionAttributed(selectedIndices: indices.isEmpty ? nil : indices)
+      }
+    }
+  }
+
+  private static let playbackSelectionAlpha: CGFloat = 0.32
 
   /// Playback karaoke wash. Independent of `selectedTokenIndex` / definition fill.
   private var karaokeRange: NSRange?
@@ -334,7 +352,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   }
 
   /// Highlights a contiguous token span exactly, without expanding to merged lookup groups.
-  /// The pill stays blue, with a darker band across the lower half.
+  /// The pill stays the existing blue on top and eases to a lighter blue at the bottom.
   public func setDefinitionSelectionHighlight(tokenRange: ClosedRange<Int>?) {
     let filtered = tokenRange.map { range in
       Set(range.filter { tokens.indices.contains($0) })
@@ -364,9 +382,11 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       font: font,
       selectedIndices: selectedIndices,
       selectionAppearance: tokenSelectionAppearance,
-      selectedTextColor: selectionUsesSpanAccent
-        ? LyricsSpanHighlightStyle.current.textColor
-        : .white,
+      selectedTextColor: dimsSelectionHighlight
+        ? .label
+        : (selectionUsesSpanAccent
+          ? LyricsSpanHighlightStyle.current.textColor
+          : .white),
       showsFurigana: showsFurigana,
       applyRuby: applyRuby
     )
@@ -757,7 +777,6 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       super.draw(rect)
       return
     }
-    drawKaraokeHighlight(in: rect)
     let selectionIndices = activeSelectionIndices
     if tokenSelectionAppearance == .definitionTip, !selectionIndices.isEmpty {
       let highlight = selectionIndices
@@ -785,19 +804,22 @@ public final class LyricsInsetUnderlineTextView: UITextView {
           let radiusSource = selectionUsesSpanAccent ? style.cornerRadius : selectionCornerRadius
           let r = min(radiusSource, b.height * 0.45)
           let p = UIBezierPath(roundedRect: b, cornerRadius: r)
-          let fill = selectionUsesSpanAccent ? style.fillColor : selectionColor
-          fill.setFill()
-          p.fill()
           if selectionUsesSpanAccent {
-            drawSpanHalfHighlight(in: p, bounds: b, fraction: style.bandHeightFraction, color: style.bandColor)
+            drawSpanVerticalGradient(in: p, bounds: b, topColor: style.fillColor)
+          } else {
+            selectionFillColor(selectionColor).setFill()
+            p.fill()
           }
         }
       }
     }
+    // After the selection fill so a dimmed pill does not cover the playback marker,
+    // and before glyphs so the wash stays behind the characters.
+    drawKaraokeHighlight(in: rect)
     if showsFurigana {
       _ = rebuildFuriganaLayoutIfNeeded()
       drawFuriganaCoreText()
-      if tokenSelectionAppearance == .definitionTip, !selectionIndices.isEmpty {
+      if tokenSelectionAppearance == .definitionTip, !selectionIndices.isEmpty, !dimsSelectionHighlight {
         drawFuriganaSelectionBaseTextOverlay(highlight: selectionIndices)
       }
     } else {
@@ -835,22 +857,76 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     }
   }
 
-  /// Secondary color across the lower portion of a multi-word pill. Clipped to the rounded fill.
-  private func drawSpanHalfHighlight(
+  /// Existing blue across the top of a multi-word pill, easing to a lighter blue at the bottom.
+  private func drawSpanVerticalGradient(
     in pill: UIBezierPath,
     bounds: CGRect,
-    fraction: CGFloat,
-    color: UIColor
+    topColor: UIColor
   ) {
-    let clamped = min(1, max(0, fraction))
-    guard clamped > 0.01, let ctx = UIGraphicsGetCurrentContext() else { return }
+    guard let ctx = UIGraphicsGetCurrentContext() else { return }
+    let top = deviceRGBColor(selectionFillColor(topColor))
+    let bottom = deviceRGBColor(selectionFillColor(lighterBlue(from: topColor)))
+    let locations: [CGFloat] = [0, 0.42, 1]
+    guard let gradient = CGGradient(
+      colorsSpace: CGColorSpaceCreateDeviceRGB(),
+      colors: [top, top, bottom] as CFArray,
+      locations: locations
+    ) else { return }
     ctx.saveGState()
     pill.addClip()
-    let height = bounds.height * clamped
-    let band = CGRect(x: bounds.minX, y: bounds.maxY - height, width: bounds.width, height: height)
-    color.setFill()
-    UIBezierPath(rect: band).fill()
+    ctx.drawLinearGradient(
+      gradient,
+      start: CGPoint(x: bounds.midX, y: bounds.minY),
+      end: CGPoint(x: bounds.midX, y: bounds.maxY),
+      options: []
+    )
     ctx.restoreGState()
+  }
+
+  /// `UIColor.cgColor` is often Display P3. The gradient is device RGB, so convert first.
+  private func deviceRGBColor(_ color: UIColor) -> CGColor {
+    var red: CGFloat = 0
+    var green: CGFloat = 0
+    var blue: CGFloat = 0
+    var alpha: CGFloat = 0
+    let resolved = color.resolvedColor(with: traitCollection)
+    guard resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+      return resolved.cgColor
+    }
+    return CGColor(
+      colorSpace: CGColorSpaceCreateDeviceRGB(),
+      components: [red, green, blue, alpha]
+    ) ?? resolved.cgColor
+  }
+
+  private func selectionFillColor(_ color: UIColor) -> UIColor {
+    let resolved = color.resolvedColor(with: traitCollection)
+    guard dimsSelectionHighlight else { return resolved }
+    return resolved.withAlphaComponent(Self.playbackSelectionAlpha)
+  }
+
+  /// Same hue as the selection blue, mixed toward white so the bottom of the pill reads lighter.
+  private func lighterBlue(from color: UIColor) -> UIColor {
+    let resolved = color.resolvedColor(with: traitCollection)
+    var red: CGFloat = 0
+    var green: CGFloat = 0
+    var blue: CGFloat = 0
+    var alpha: CGFloat = 0
+    guard resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return resolved }
+    let mix: CGFloat = 0.46
+    return UIColor(
+      red: red + (1 - red) * mix,
+      green: green + (1 - green) * mix,
+      blue: blue + (1 - blue) * mix,
+      alpha: alpha
+    )
+  }
+
+  public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+    super.traitCollectionDidChange(previousTraitCollection)
+    if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+      setNeedsDisplay()
+    }
   }
 
   private func drawKaraokeHighlight(in rect: CGRect) {
@@ -1094,11 +1170,25 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     layout: FuriganaTextLayout,
     baseTextOnly: Bool = false
   ) -> [CGRect] {
+    coreTextLineFragments(
+      forCharacterRange: range,
+      layout: layout,
+      baseTextOnly: baseTextOnly
+    ).map(\.rect)
+  }
+
+  /// Glyph box plus the view-space baseline. The box bottom includes font descent,
+  /// which is mostly empty under kana; underlines should key off `baselineY`.
+  private func coreTextLineFragments(
+    forCharacterRange range: NSRange,
+    layout: FuriganaTextLayout,
+    baseTextOnly: Bool = false
+  ) -> [(rect: CGRect, baselineY: CGFloat)] {
     let lines = coreTextLines(in: layout.frame)
     guard !lines.isEmpty else { return [] }
     let lineOrigins = coreTextLineOrigins(in: layout.frame, lineCount: lines.count)
     let baseFont = baseTextOnly ? Self.fontForAttributes(from: visibleAttributedText ?? NSAttributedString()) : nil
-    var out: [CGRect] = []
+    var out: [(rect: CGRect, baselineY: CGFloat)] = []
     for (index, line) in lines.enumerated() {
       let lineRange = CTLineGetStringRange(line)
       let lineNSRange = NSRange(location: lineRange.location, length: lineRange.length)
@@ -1129,15 +1219,17 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       }
       let origin = lineOrigins[index]
       let width = maxX - minX
-      let y = layout.textOrigin.y + (layout.textSize.height - origin.y - glyphAscent)
-      out.append(
+      let baselineY = layout.textOrigin.y + (layout.textSize.height - origin.y)
+      let y = baselineY - glyphAscent
+      out.append((
         CGRect(
           x: layout.textOrigin.x + origin.x + minX,
           y: y,
           width: width,
           height: glyphAscent + glyphDescent
-        )
-      )
+        ),
+        baselineY
+      ))
     }
     return out
   }
@@ -1172,6 +1264,24 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     return nil
   }
 
+  /// Stroke center just under the glyph baseline. The fragment bottom includes
+  /// font descent, which is mostly empty under kana and crowds the next line's
+  /// readings. Line spacing stays put.
+  private func furiganaUnderlineCenterY(baselineY: CGFloat) -> CGFloat {
+    let source = visibleAttributedText ?? attributedText
+    let font = source.map { Self.fontForAttributes(from: $0) }
+      ?? UIFont.preferredFont(forTextStyle: .title1)
+    let belowBaseline = max(2, font.pointSize * 0.09) + 2
+    return baselineY + belowBaseline
+  }
+
+  private func furiganaUnderlineFragments(
+    for range: NSRange
+  ) -> [(rect: CGRect, baselineY: CGFloat)] {
+    guard let layout = furiganaLayout ?? rebuildFuriganaLayoutIfNeeded() else { return [] }
+    return coreTextLineFragments(forCharacterRange: range, layout: layout)
+  }
+
   private func drawInsetUnderlinesUsingViewRects(
     segments: [(range: NSRange, tokenIndices: Set<Int>)],
     pad: CGFloat,
@@ -1184,12 +1294,12 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       let isActive = !tokenIndices.isDisjoint(with: underlineHighlight)
       guard !isActive else { continue }
       guard charRange.length > 0 else { continue }
-      for fragment in lineFragmentViewRectsForCharacterRange(charRange) {
-        var br = fragment
+      for fragment in furiganaUnderlineFragments(for: charRange) {
+        var br = fragment.rect
         guard br.width > pad * 2 else { continue }
         br = br.insetBy(dx: pad, dy: 0)
         guard br.intersects(rect) else { continue }
-        let y = br.maxY + underlineVerticalGap - tokenUnderlineWidth * 0.5
+        let y = furiganaUnderlineCenterY(baselineY: fragment.baselineY)
         let path = UIBezierPath()
         path.move(to: CGPoint(x: br.minX, y: y))
         path.addLine(to: CGPoint(x: br.maxX, y: y))
@@ -1204,12 +1314,12 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       for (charRange, tokenIndices) in segments {
         let isActive = !tokenIndices.isDisjoint(with: underlineHighlight)
         guard isActive, charRange.length > 0 else { continue }
-        for fragment in lineFragmentViewRectsForCharacterRange(charRange) {
-          var br = fragment
+        for fragment in furiganaUnderlineFragments(for: charRange) {
+          var br = fragment.rect
           guard br.width > pad * 2 else { continue }
           br = br.insetBy(dx: pad, dy: 0)
           guard br.intersects(rect) else { continue }
-          let y = br.maxY + underlineVerticalGap - scrubActiveUnderlineWidth * 0.5
+          let y = furiganaUnderlineCenterY(baselineY: fragment.baselineY)
           let path = UIBezierPath()
           path.move(to: CGPoint(x: br.minX, y: y))
           path.addLine(to: CGPoint(x: br.maxX, y: y))

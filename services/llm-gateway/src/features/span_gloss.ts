@@ -1,6 +1,7 @@
 import { Type } from "@google/genai";
 
 import { parseJSONObject, requiredString, trimmedString } from "../validate.js";
+import { GEMINI_35_FLASH_LITE } from "./models.js";
 import { defineFeature } from "./types.js";
 
 const INSTRUCTIONS = `You help English-speaking Japanese learners understand a short span they selected inside a sentence.
@@ -25,7 +26,7 @@ No grammar jargon. Do not describe words outside the span.
 Return a JSON object with "meaning" and "note" string fields.`;
 
 export const spanGloss = defineFeature({
-  defaultModel: "gemini-2.5-flash",
+  defaultModel: GEMINI_35_FLASH_LITE,
 
   parseInput(body) {
     return {

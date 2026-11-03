@@ -39,6 +39,17 @@ struct DialogueScenarioCollection: Hashable {
         patterns.first { $0.id == id }
     }
 
+    /// Prefer `patternId`; fall back to `grammarPointID` when the highlight is legacy.
+    func teachingPattern(for highlight: DialogueGrammarPatternRef) -> DialogueTeachingPattern? {
+        if let patternId = highlight.patternId, let found = teachingPattern(id: patternId) {
+            return found
+        }
+        if let grammarPointID = highlight.grammarPointID {
+            return teachingPattern(id: grammarPointID)
+        }
+        return nil
+    }
+
     struct Scenario: Hashable {
         let id: String
         let menuTitle: String
@@ -83,6 +94,7 @@ private struct DialogueScenarioCollectionFile: Decodable {
     struct TeachingPatternRecord: Decodable {
         let id: String
         let label: String
+        let description: String?
         let shortMeaning: String?
         let formNote: String?
 
@@ -90,9 +102,15 @@ private struct DialogueScenarioCollectionFile: Decodable {
             DialogueTeachingPattern(
                 id: id,
                 label: label,
+                description: Self.nilIfBlank(description),
                 shortMeaning: shortMeaning,
                 formNote: formNote
             )
+        }
+
+        private static func nilIfBlank(_ value: String?) -> String? {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
         }
     }
 
@@ -396,7 +414,8 @@ private extension DialogueScenarioCollection {
         let patternCatalog = (file.patterns ?? []).map(\.model)
         patterns = patternCatalog
         let patternLabelById = Dictionary(
-            uniqueKeysWithValues: patternCatalog.map { ($0.id, $0.label) }
+            patternCatalog.map { ($0.id, $0.label) },
+            uniquingKeysWith: { first, _ in first }
         )
         scenarios = file.scenarios.map { record in
             let taggedLines = record.scenario.lines.enumerated().compactMap { index, line in
@@ -431,16 +450,17 @@ private extension DialogueScenarioCollection {
                     gainDb: record.ambienceGainDb
                 )
             )
-            let grammarPatterns = (record.highlights?.grammarPatterns ?? []).map { pattern -> DialogueGrammarPatternRef in
+            let grammarPatterns = (record.highlights?.grammarPatterns ?? []).compactMap { pattern -> DialogueGrammarPatternRef? in
+                let trimmed = pattern.label.trimmingCharacters(in: .whitespacesAndNewlines)
+                let catalogLabel = pattern.patternId.flatMap { patternLabelById[$0] }?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 let label: String = {
-                    let trimmed = pattern.label.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty, trimmed != pattern.patternId { return trimmed }
+                    if !catalogLabel.isEmpty { return catalogLabel }
                     if !trimmed.isEmpty { return trimmed }
-                    if let patternId = pattern.patternId,
-                       let catalogLabel = patternLabelById[patternId] {
-                        return catalogLabel
-                    }
                     return pattern.patternId ?? ""
                 }()
+                guard !label.isEmpty else { return nil }
                 return DialogueGrammarPatternRef(
                     label: label,
                     patternId: pattern.patternId,
@@ -490,10 +510,20 @@ enum DialogueScenarioCollectionCatalog {
 
     static let trainStationID = "train-station"
 
+    /// Posted on the main queue when a background refresh brings a newer copy of a
+    /// collection than the one already handed out. `userInfo[collectionIDKey]` is the id.
+    static let didRefreshCollection = Notification.Name("DialogueScenarioCollectionCatalog.didRefreshCollection")
+    static let collectionIDKey = "collectionID"
+
     private static let cacheLock = NSLock()
     private static var remoteCollections: [String: DialogueScenarioCollection] = [:]
+    /// Raw JSON behind each entry in `remoteCollections`, so a refresh can tell
+    /// whether the network copy actually changed.
+    private static var remoteCollectionData: [String: Data] = [:]
     /// Completions waiting on an in-flight CMS fetch for a given collection id.
+    /// An empty list means a background refresh with nobody waiting.
     private static var inFlightCompletions: [String: [(DialogueScenarioCollection?) -> Void]] = [:]
+    private static let diskQueue = DispatchQueue(label: "shizen.dialogue-collection-disk", qos: .userInitiated)
 
     static func collection(id: String) -> DialogueScenarioCollection? {
         cacheLock.lock()
@@ -504,16 +534,18 @@ enum DialogueScenarioCollectionCatalog {
         return bundledCollections[id]
     }
 
-    /// Collection that can be presented immediately — remote cache hit, or bundled
-    /// when the CMS is not configured. Returns `nil` when a network fetch is needed.
+    /// Collection that can be presented immediately — memory cache, the saved disk
+    /// copy, or bundled when the CMS is not configured. Returns `nil` when a network
+    /// fetch is needed.
     static func readyCollection(id: String) -> DialogueScenarioCollection? {
         cacheLock.lock()
-        defer { cacheLock.unlock() }
         if let remote = remoteCollections[id] {
+            cacheLock.unlock()
             return remote
         }
-        guard !ContentCMSClient.isConfigured else { return nil }
-        return bundledCollections[id]
+        cacheLock.unlock()
+        guard ContentCMSClient.isConfigured else { return bundledCollections[id] }
+        return loadDiskCopy(id: id)
     }
 
     static var trainStation: DialogueScenarioCollection? {
@@ -531,42 +563,86 @@ enum DialogueScenarioCollectionCatalog {
     }
 
     /// Fetches a collection from the CMS when configured; falls back to bundled JSON.
-    /// Always revalidates against the network so a republish is visible without
-    /// force-quitting. In-flight fetches for the same id are joined.
+    /// When a saved copy exists (memory or disk) the completion gets it right away and
+    /// the network refresh runs quietly. A changed copy replaces the cache for the next
+    /// open and posts `didRefreshCollection`. In-flight fetches for the same id are joined.
     static func fetchCollection(
         id: String,
         completion: @escaping (DialogueScenarioCollection?) -> Void
     ) {
-        cacheLock.lock()
-        if inFlightCompletions[id] != nil {
-            inFlightCompletions[id, default: []].append(completion)
-            cacheLock.unlock()
-            return
-        }
-        inFlightCompletions[id] = [completion]
-        cacheLock.unlock()
-
+        refreshCachesIfExportFormatChanged()
         print("[inline-question] fetch \(id) cms=\(ContentCMSClient.isConfigured) base=\(ContentCMSClient.baseURL?.absoluteString ?? "nil")")
         guard ContentCMSClient.isConfigured else {
             print("[inline-question] fetch \(id) using bundled/cache — CMS not configured")
-            finishFetch(id: id, result: collection(id: id))
+            let result = collection(id: id)
+            DispatchQueue.main.async { completion(result) }
             return
         }
+
+        cacheLock.lock()
+        let cached = remoteCollections[id]
+        cacheLock.unlock()
+        if let cached {
+            DispatchQueue.main.async { completion(cached) }
+            refreshFromNetwork(id: id, completion: nil)
+            return
+        }
+
+        diskQueue.async {
+            if let saved = loadDiskCopy(id: id) {
+                DispatchQueue.main.async { completion(saved) }
+                refreshFromNetwork(id: id, completion: nil)
+            } else {
+                refreshFromNetwork(id: id, completion: completion)
+            }
+        }
+    }
+
+    /// Joins or starts the CMS fetch. `completion` is nil for a background refresh.
+    private static func refreshFromNetwork(
+        id: String,
+        completion: ((DialogueScenarioCollection?) -> Void)?
+    ) {
+        cacheLock.lock()
+        if inFlightCompletions[id] != nil {
+            if let completion {
+                inFlightCompletions[id, default: []].append(completion)
+            }
+            cacheLock.unlock()
+            return
+        }
+        inFlightCompletions[id] = completion.map { [$0] } ?? []
+        cacheLock.unlock()
+
         ContentCMSClient.fetchDialogueCollection(id: id) { result in
             switch result {
             case .success(let data):
+                cacheLock.lock()
+                let unchanged = remoteCollectionData[id] == data
+                let current = remoteCollections[id]
+                cacheLock.unlock()
+                if unchanged, let current {
+                    finishFetch(id: id, result: current)
+                    return
+                }
                 Self.logRawInlineQuestions(in: data, collectionID: id)
                 do {
-                    let file = try JSONDecoder().decode(
-                        DialogueScenarioCollectionFile.self,
-                        from: data
-                    )
-                    let decoded = DialogueScenarioCollection(file: file)
+                    let decoded = try decodeRemote(data)
                     Self.logDecodedInlineQuestions(in: decoded)
                     cacheLock.lock()
                     remoteCollections[id] = decoded
+                    remoteCollectionData[id] = data
                     cacheLock.unlock()
                     finishFetch(id: id, result: decoded)
+                    if current != nil {
+                        DispatchQueue.main.async {
+                            NotificationCenter.default.post(
+                                name: didRefreshCollection,
+                                object: nil,
+                                userInfo: [collectionIDKey: id]
+                            )
+                        }
+                    }
                 } catch {
                     print("[inline-question] DECODE FAILED \(id): \(error)")
                     print("DialogueScenarioCollection: decode failed for \(id): \(error)")
@@ -578,6 +654,28 @@ enum DialogueScenarioCollectionCatalog {
                 finishFetch(id: id, result: collection(id: id))
             }
         }
+    }
+
+    /// Decodes the saved lesson JSON into the memory cache. Nil when nothing is saved
+    /// or it no longer decodes.
+    private static func loadDiskCopy(id: String) -> DialogueScenarioCollection? {
+        guard let data = ContentCMSClient.cachedDialogueCollectionData(id: id),
+              let decoded = try? decodeRemote(data)
+        else { return nil }
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        // A network result may have landed while this was decoding; keep it.
+        if let newer = remoteCollections[id] {
+            return newer
+        }
+        remoteCollections[id] = decoded
+        remoteCollectionData[id] = data
+        return decoded
+    }
+
+    private static func decodeRemote(_ data: Data) throws -> DialogueScenarioCollection {
+        let file = try JSONDecoder().decode(DialogueScenarioCollectionFile.self, from: data)
+        return DialogueScenarioCollection(file: file)
     }
 
     private static func logRawInlineQuestions(in data: Data, collectionID: String) {
@@ -620,8 +718,17 @@ enum DialogueScenarioCollectionCatalog {
     }
 
     static func prefetchConfiguredCollections() {
+        refreshCachesIfExportFormatChanged()
         guard ContentCMSClient.isConfigured else { return }
         fetchCollection(id: trainStationID) { _ in }
+    }
+
+    private static func refreshCachesIfExportFormatChanged() {
+        guard ContentCMSClient.bustDialogueCacheIfFormatChanged() else { return }
+        cacheLock.lock()
+        remoteCollections.removeAll()
+        remoteCollectionData.removeAll()
+        cacheLock.unlock()
     }
 
     static func scenarios(containingGrammarPointID grammarID: String) -> [ScenarioReference] {

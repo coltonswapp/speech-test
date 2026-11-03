@@ -513,7 +513,7 @@ private extension UIFont {
 }
 
 /// Transcript-style evidence: A/B sides, English under each bubble, playback scale.
-private final class DialogueQuizEvidenceRowView: UIView {
+final class DialogueQuizEvidenceRowView: UIView {
 
     private static let japaneseFont: UIFont = {
         let base = UIFont.preferredFont(forTextStyle: .title2)

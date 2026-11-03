@@ -8,6 +8,33 @@
 
 import Foundation
 
+/// CMS Lessons filter bucket. N5–N3 follow a unit's `jlptLevel`.
+/// Lessons with no unit, and units outside N5–N3, are unassigned (`NA`).
+nonisolated enum CMSLessonTrack: CaseIterable, Hashable, Sendable {
+    case n5
+    case n4
+    case n3
+    case unassigned
+
+    var title: String {
+        switch self {
+        case .n5: return "N5"
+        case .n4: return "N4"
+        case .n3: return "N3"
+        case .unassigned: return "NA"
+        }
+    }
+
+    init(jlptLevel: Int) {
+        switch jlptLevel {
+        case 5: self = .n5
+        case 4: self = .n4
+        case 3: self = .n3
+        default: self = .unassigned
+        }
+    }
+}
+
 /// Dialogue lesson track on the home path. 5 = N5 … 3 = N3.
 enum DialogueLessonTrack: Int, CaseIterable {
     case n5 = 5
@@ -37,6 +64,25 @@ struct LessonUnitSection {
     let title: String?
     let subtitle: String?
     let lessons: [WaterfallLesson]
+    let track: CMSLessonTrack
+
+    init(
+        title: String?,
+        subtitle: String?,
+        lessons: [WaterfallLesson],
+        track: CMSLessonTrack = .unassigned
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.lessons = lessons
+        self.track = track
+    }
+}
+
+struct LessonTrackProgress {
+    let completedScenes: Int
+    let totalScenes: Int
+    let stars: Int
 }
 
 enum LessonUnitSectionBuilder {
@@ -48,7 +94,12 @@ enum LessonUnitSectionBuilder {
         guard !index.units.isEmpty else {
             return index.lessons.isEmpty
                 ? []
-                : [LessonUnitSection(title: nil, subtitle: nil, lessons: index.lessons.map(waterfallLesson))]
+                : [LessonUnitSection(
+                    title: nil,
+                    subtitle: nil,
+                    lessons: index.lessons.map(waterfallLesson),
+                    track: .unassigned
+                )]
         }
 
         var sections: [LessonUnitSection] = []
@@ -59,7 +110,8 @@ enum LessonUnitSectionBuilder {
                 LessonUnitSection(
                     title: unit.title,
                     subtitle: unit.subtitle ?? "Level N\(unit.jlptLevel)",
-                    lessons: lessons.map(waterfallLesson)
+                    lessons: lessons.map(waterfallLesson),
+                    track: CMSLessonTrack(jlptLevel: unit.jlptLevel)
                 )
             )
         }
@@ -74,7 +126,8 @@ enum LessonUnitSectionBuilder {
                 LessonUnitSection(
                     title: "More lessons",
                     subtitle: nil,
-                    lessons: unfiled.map(waterfallLesson)
+                    lessons: unfiled.map(waterfallLesson),
+                    track: .unassigned
                 )
             )
         }
@@ -132,6 +185,33 @@ enum LessonUnitSectionBuilder {
         return CMSDialogueLessonIndex(units: units, lessons: lessons)
     }
 
+    /// Scenes completed and best stars for one track, scoped and counted like the home path.
+    static func trackProgress(
+        from index: CMSDialogueLessonIndex,
+        track: DialogueLessonTrack,
+        progress: DialogueProgressStore
+    ) -> LessonTrackProgress {
+        let completedIDs = progress.completedScenarioIDs
+        var completed = 0
+        var total = 0
+        var stars = 0
+        for summary in scopedIndex(index, track: track).lessons where summary.scenarioCount > 0 {
+            let lesson = waterfallLesson(from: summary)
+            let partCount = sceneCount(for: lesson)
+            total += partCount
+            completed += sceneProgress(
+                for: lesson,
+                partCount: partCount,
+                completedScenarioIDs: completedIDs
+            ).completedParts
+            let sceneIDs = lesson.scenarioIDs.isEmpty
+                ? completedIDs.filter { $0.hasPrefix("\(summary.id)/") }
+                : Set(lesson.scenarioIDs)
+            stars += sceneIDs.reduce(0) { $0 + progress.displayedStarCount(scenarioID: $1) }
+        }
+        return LessonTrackProgress(completedScenes: completed, totalScenes: total, stars: stars)
+    }
+
     static func pathUnits(
         from index: CMSDialogueLessonIndex,
         completedScenarioIDs: Set<String>
@@ -144,11 +224,12 @@ enum LessonUnitSectionBuilder {
         return sections(from: playable).enumerated().map { index, section in
             PathUnit(
                 eyebrow: pathEyebrow(for: section, index: index),
-                title: section.title ?? "Lessons",
+                title: pathHeaderTitle(for: section, sectionIndex: index),
                 glowColor: index % 2 == 0 ? .yellow : .blue,
                 lessons: section.lessons.map { lesson in
                     pathLesson(from: lesson, completedScenarioIDs: completedScenarioIDs, assignedCurrent: &assignedCurrent)
-                }
+                },
+                showsUnitNumberInLessonLabels: !isMoreLessonsSection(section)
             )
         }
     }
@@ -157,9 +238,10 @@ enum LessonUnitSectionBuilder {
         sections.enumerated().map { index, section in
             PathUnit(
                 eyebrow: pathEyebrow(for: section, index: index),
-                title: section.title ?? "Lessons",
+                title: pathHeaderTitle(for: section, sectionIndex: index),
                 glowColor: index % 2 == 0 ? .yellow : .blue,
-                lessons: section.lessons.map(pathLesson)
+                lessons: section.lessons.map(pathLesson),
+                showsUnitNumberInLessonLabels: !isMoreLessonsSection(section)
             )
         }
     }
@@ -240,7 +322,26 @@ enum LessonUnitSectionBuilder {
         return (completedParts, Set(0 ..< completedParts))
     }
 
+    private static let moreLessonsSectionTitle = "More lessons"
+
+    private static func isMoreLessonsSection(_ section: LessonUnitSection) -> Bool {
+        section.title == moreLessonsSectionTitle
+    }
+
+    private static func pathHeaderTitle(for section: LessonUnitSection, sectionIndex: Int) -> String {
+        if isMoreLessonsSection(section) {
+            return moreLessonsSectionTitle
+        }
+        if let title = section.title {
+            return "Unit \(sectionIndex + 1) · \(title)"
+        }
+        return "Lessons"
+    }
+
     private static func pathEyebrow(for section: LessonUnitSection, index: Int) -> String {
+        if isMoreLessonsSection(section) {
+            return moreLessonsSectionTitle.uppercased()
+        }
         if let subtitle = section.subtitle, !subtitle.isEmpty {
             return subtitle.uppercased()
         }

@@ -40,12 +40,14 @@ Compact variant (small meter pills): same as default, then `horizontalInset = 12
 
 ## 2. Layer stack (z-order)
 
-Host view: `clipsToBounds = false`. Glow must be allowed to bloom outside the glass.
+Host view: `clipsToBounds = false`. The glow sits in a clip view shaped like the glass, so it never tints past the bubble's edges or corners.
 
 ```
-[back]  glowView          — clear UIView, frames (not Auto Layout)
-        └─ CAGradientLayer (.radial)
-        └─ layer.shadow*  — same hue, extra bloom
+[back]  glowClipView      — clear UIView, Auto Layout pin to host edges,
+        │                    clipsToBounds, glass corner radius (.continuous)
+        └─ glowView       — clear UIView, frames (not Auto Layout)
+           └─ CAGradientLayer (.radial)
+           └─ layer.shadow*  — same hue, extra bloom
         glassView         — UIVisualEffectView, Auto Layout pin to host edges
         content           — labels, etc. on top of glass
 [front]
@@ -57,7 +59,7 @@ Critical:
 2. Glow view uses **manual frames** in `layoutSubviews`. Auto Layout fights the blur padding.
 3. Glass view **does** use Auto Layout, pinned to the host.
 4. Glow and glass are `isUserInteractionEnabled = false`.
-5. Glass uses `clipsToBounds = true` so the material stays in the rounded rect. The **host** and **glow** must not clip.
+5. Glass uses `clipsToBounds = true` so the material stays in the rounded rect. The **glow clip view** clips to the same shape; the host does not clip.
 
 ---
 
@@ -216,6 +218,7 @@ Do not hide the glass when emphasis is 0.
 
 ```swift
 final class UnderglowGlassView: UIView {
+    private let glowClipView = UIView()
     private let glowView = UIView()
     private let gradient = CAGradientLayer()
     private let glassView: UIVisualEffectView
@@ -232,6 +235,12 @@ final class UnderglowGlassView: UIView {
         super.init(frame: frame)
         clipsToBounds = false
 
+        glowClipView.translatesAutoresizingMaskIntoConstraints = false
+        glowClipView.isUserInteractionEnabled = false
+        glowClipView.clipsToBounds = true
+        glowClipView.layer.cornerRadius = glassCornerRadius
+        glowClipView.layer.cornerCurve = .continuous
+
         glowView.backgroundColor = .clear
         glowView.clipsToBounds = false
         glowView.isUserInteractionEnabled = false
@@ -241,9 +250,14 @@ final class UnderglowGlassView: UIView {
         // applyBubbleStyle(glassView, cornerRadius: 18)
         glassView.isUserInteractionEnabled = false
 
-        addSubview(glowView)
+        glowClipView.addSubview(glowView)
+        addSubview(glowClipView)
         addSubview(glassView)
         NSLayoutConstraint.activate([
+            glowClipView.topAnchor.constraint(equalTo: topAnchor),
+            glowClipView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glowClipView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            glowClipView.bottomAnchor.constraint(equalTo: bottomAnchor),
             glassView.topAnchor.constraint(equalTo: topAnchor),
             glassView.leadingAnchor.constraint(equalTo: leadingAnchor),
             glassView.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -282,8 +296,9 @@ If you also have a solid Messages-style fill mode, that is a **different** treat
 
 | Mistake | Result |
 |---|---|
-| Glow as a subview of the glass view | Glow clipped; no bloom through the material |
-| Host `clipsToBounds = true` | Same — glow truncated at the rect |
+| Glow as a subview of the glass view | Glow drawn inside the material instead of refracted through it |
+| Glow not clipped to the glass shape | Faint tint leaks past the bottom corners, reading as a shadow |
+| Host `clipsToBounds = true` instead of a rounded glow clip view | Square clip; tint still shows at the rounded corners |
 | Auto Layout on the glow view | Blur padding fights constraints; jitter on resize |
 | Black drop shadow on bubble glass | Muddy, “card” look instead of a light wash |
 | Filling the full bounds with glow | Reads as a tinted plate, not a bottom ember |
@@ -300,7 +315,7 @@ If you also have a solid Messages-style fill mode, that is a **different** treat
 
 1. Idle (`emphasis = 0`): rounded glass plate visible, **no** colored bloom.
 2. Active (`emphasis = 1`): soft colored band along the **bottom**, slightly above the edge, refracted by the glass. Not a hard rectangle.
-3. Bloom extends a few points **outside** the glass, especially left/right of the bottom corners.
+3. No tint shows **outside** the glass, including at the bottom corners.
 4. Changing `color` only retints the wash; geometry stays put.
 5. Compact meter: tighter blur, 12pt side inset, no extra X offset.
 6. Resize the host: glow stays a thin bottom band, not a stretched oval covering the card.

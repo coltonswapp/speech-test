@@ -127,6 +127,36 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
     public enum TrailingAccessory: Equatable {
         case hidden
         case speaker
+        case play
+        case pause
+        /// Filled completion badge. Not tappable.
+        case checkmark
+    }
+
+    /// Where the trailing (Hear) chrome sits relative to the bubble.
+    public enum ChromePlacement {
+        /// Above the bubble, bottom-aligned with the speaker label.
+        case aboveBubble
+        /// On the open side of the bubble (`chromeEdge`), vertically centered
+        /// on it and pinned to ``besideChromeAnchorView``'s edge — not the
+        /// bubble's — so swiping never carries it over the reveal icons.
+        case besideBubble
+    }
+
+    public var chromePlacement: ChromePlacement = .aboveBubble {
+        didSet {
+            guard oldValue != chromePlacement else { return }
+            updateChromeEdgeConstraints()
+        }
+    }
+
+    /// Full-width row whose edge `.besideBubble` chrome pins to. Falls back to
+    /// the bubble edge until it shares a hierarchy with this container.
+    public weak var besideChromeAnchorView: UIView? {
+        didSet {
+            guard oldValue !== besideChromeAnchorView else { return }
+            updateChromeEdgeConstraints()
+        }
     }
 
     /// Cluster Hear (and Role Play mic) on the inner edge of the bubble,
@@ -148,6 +178,8 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
 
     public var leadingAccessoryActiveColor = UIColor.systemBlue
     public var trailingAccessoryActiveColor = UIColor.systemYellow
+    /// Fill behind the trailing `.checkmark` badge.
+    public var trailingAccessoryCompletionColor = UIColor.systemBlue
     public var onTrailingAccessoryTap: (() -> Void)?
 
     /// Diameter of Role Play mic / Hear chrome. Hosts use this to keep
@@ -156,6 +188,7 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
     private static var chromeButtonSize: CGFloat { accessoryChromeSize }
     private static let chromeIconSize: CGFloat = 19
     private static let chromeSpacing: CGFloat = 6
+    private static let besideBubbleGap: CGFloat = 8
     private static var chromeRadius: CGFloat { chromeButtonSize / 2 }
 
     private let bubbleView: UIView
@@ -172,8 +205,13 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
     private let trailingAccessoryButton = UIButton(type: .custom)
     private let trailingAccessoryBackdrop = LiquidGlassEffectView.makeContainer()
     private let trailingAccessoryIcon = UIImageView()
+    private let trailingAccessoryFill = UIView()
+    private var trailingAccessoryBounceScale: CGFloat = 1
     private var chromeEdgeConstraints: [NSLayoutConstraint] = []
     private var chromeBottomConstraints: [NSLayoutConstraint] = []
+    /// Trailing chrome's bottom pin for `.aboveBubble`; swapped for a centerY
+    /// pin by `.besideBubble`.
+    private var trailingAboveBubbleBottomConstraint: NSLayoutConstraint?
     private let panGesture = UIPanGestureRecognizer()
     private var bubbleTranslationX: CGFloat = 0
     /// Focus scale applied by the host; composed with swipe translation so
@@ -236,6 +274,11 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
         trailingAccessoryButton.accessibilityLabel = "Hear this line"
         trailingAccessoryBackdrop.alpha = 1
         trailingAccessoryIcon.alpha = 1
+        trailingAccessoryFill.translatesAutoresizingMaskIntoConstraints = false
+        trailingAccessoryFill.isUserInteractionEnabled = false
+        trailingAccessoryFill.layer.cornerRadius = Self.chromeRadius
+        trailingAccessoryFill.layer.cornerCurve = .circular
+        trailingAccessoryFill.alpha = 0
         trailingAccessoryButton.addAction(
             UIAction { [weak self] _ in self?.onTrailingAccessoryTap?() },
             for: .primaryActionTriggered
@@ -253,6 +296,7 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
         leadingAccessoryHost.addSubview(leadingAccessoryIcon)
         addSubview(trailingAccessoryButton)
         trailingAccessoryButton.addSubview(trailingAccessoryBackdrop)
+        trailingAccessoryButton.addSubview(trailingAccessoryFill)
         trailingAccessoryButton.addSubview(trailingAccessoryIcon)
 
         NSLayoutConstraint.activate([
@@ -301,6 +345,11 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
             trailingAccessoryBackdrop.leadingAnchor.constraint(equalTo: trailingAccessoryButton.leadingAnchor),
             trailingAccessoryBackdrop.trailingAnchor.constraint(equalTo: trailingAccessoryButton.trailingAnchor),
             trailingAccessoryBackdrop.bottomAnchor.constraint(equalTo: trailingAccessoryButton.bottomAnchor),
+
+            trailingAccessoryFill.topAnchor.constraint(equalTo: trailingAccessoryButton.topAnchor),
+            trailingAccessoryFill.leadingAnchor.constraint(equalTo: trailingAccessoryButton.leadingAnchor),
+            trailingAccessoryFill.trailingAnchor.constraint(equalTo: trailingAccessoryButton.trailingAnchor),
+            trailingAccessoryFill.bottomAnchor.constraint(equalTo: trailingAccessoryButton.bottomAnchor),
 
             trailingAccessoryIcon.centerXAnchor.constraint(equalTo: trailingAccessoryButton.centerXAnchor),
             trailingAccessoryIcon.centerYAnchor.constraint(equalTo: trailingAccessoryButton.centerYAnchor),
@@ -359,11 +408,13 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
         }
     }
 
-    public func setTrailingAccessory(_ style: TrailingAccessory, animated: Bool) {
-        let styleChanged = trailingAccessory != style
+    /// `bounce` pops the badge and fires a haptic — use it when a line is
+    /// marked complete so `.play` → `.checkmark` lands as a moment.
+    public func setTrailingAccessory(_ style: TrailingAccessory, animated: Bool, bounce: Bool = false) {
+        let previous = trailingAccessory
         trailingAccessory = style
-        guard styleChanged else { return }
-        applyTrailingAccessoryAppearance(animated: animated)
+        guard previous != style else { return }
+        applyTrailingAccessoryAppearance(from: previous, animated: animated, bounce: bounce)
     }
 
     /// iOS 26+: content-area back swipe waits for the bubble reply pan to fail first.
@@ -416,6 +467,48 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
             applyReset()
         } completion: { _ in
             completion?()
+        }
+    }
+
+    /// Teaches the left swipe: the bubble slides partway, its reveal icon peeks out, then it
+    /// springs home. `strength` 0...1 scales the travel and the bounce, so a first hint can be a
+    /// gentle lean and later ones a fuller tug. Does nothing mid-drag, while offset, or under
+    /// Reduce Motion.
+    public func playProgressiveRevealHint(strength: CGFloat = 1) {
+        guard allowsProgressiveReveal else { return }
+        playHint(direction: -1, strength: strength)
+    }
+
+    /// Teaches the right swipe the same way, peeking the focus icon.
+    public func playExpandHint(strength: CGFloat = 1) {
+        guard allowsExpand else { return }
+        playHint(direction: 1, strength: strength)
+    }
+
+    /// `direction` is -1 for left, +1 for right.
+    private func playHint(direction: CGFloat, strength: CGFloat) {
+        guard !isCommitted, rawTranslation == 0, Self.activelyDragging == nil,
+              !UIAccessibility.isReduceMotionEnabled else { return }
+        let strength = min(1, max(0, strength))
+        let travel = Self.commitThreshold * (0.35 + 0.65 * strength)
+        UIView.animate(
+            withDuration: 0.42 - 0.12 * strength,
+            delay: 0,
+            options: [.curveEaseInOut, .allowUserInteraction]
+        ) {
+            self.applyVisuals(forRawTranslation: direction * travel)
+        } completion: { _ in
+            // A drag that started mid-hint owns the bubble now.
+            guard Self.activelyDragging !== self, self.rawTranslation == 0 else { return }
+            UIView.animate(
+                withDuration: 0.55,
+                delay: 0.1,
+                usingSpringWithDamping: 0.85 - 0.35 * strength,
+                initialSpringVelocity: 0,
+                options: [.allowUserInteraction, .beginFromCurrentState]
+            ) {
+                self.applyVisuals(forRawTranslation: 0)
+            }
         }
     }
 
@@ -610,7 +703,12 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
         let accessoryVisible: CGFloat = leadingAccessory == .hidden ? 0 : 1
         leadingAccessoryHost.alpha = accessoryVisible
         let trailingVisible: CGFloat = trailingAccessory == .hidden ? 0 : 1
-        trailingAccessoryButton.alpha = trailingVisible
+        // A right swipe slides the bubble toward trailing beside-chrome; fade
+        // it out of the way instead of letting the bubble cover it.
+        let slidesTowardChrome = chromePlacement == .besideBubble && chromeEdge == .trailing
+        trailingAccessoryButton.alpha = slidesTowardChrome
+            ? trailingVisible * (1 - expandProgress)
+            : trailingVisible
 
         let glassAmount = isCommitted ? 1 : max(expandProgress, progressiveProgress)
         (bubbleView as? SwipeRevealGlassAdjusting)?.setSwipeRevealAmount(glassAmount)
@@ -621,6 +719,12 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
         bubbleView.transform = baseBubbleTransform.concatenating(swipe)
     }
 
+    private func applyTrailingAccessoryTransform() {
+        trailingAccessoryButton.transform = trailingAccessoryBounceScale == 1
+            ? .identity
+            : CGAffineTransform(scaleX: trailingAccessoryBounceScale, y: trailingAccessoryBounceScale)
+    }
+
     /// Pin chrome bottoms to the speaker name so the cluster reads with the label.
     /// Pass `nil` to sit flush above the bubble (no overlap).
     ///
@@ -629,6 +733,7 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
     /// cross-hierarchy constraint crashes Auto Layout.
     public func alignChromeBottom(to speakerLabel: UIView?) {
         NSLayoutConstraint.deactivate(chromeBottomConstraints)
+        trailingAboveBubbleBottomConstraint?.isActive = false
         let anchor: NSLayoutYAxisAnchor
         if let speakerLabel, Self.sharesCommonAncestor(speakerLabel, with: self) {
             anchor = speakerLabel.bottomAnchor
@@ -637,9 +742,10 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
         }
         chromeBottomConstraints = [
             leadingAccessoryHost.bottomAnchor.constraint(equalTo: anchor),
-            trailingAccessoryButton.bottomAnchor.constraint(equalTo: anchor),
         ]
+        trailingAboveBubbleBottomConstraint = trailingAccessoryButton.bottomAnchor.constraint(equalTo: anchor)
         NSLayoutConstraint.activate(chromeBottomConstraints)
+        updateChromeEdgeConstraints()
     }
 
     private static func sharesCommonAncestor(_ a: UIView, with b: UIView) -> Bool {
@@ -661,6 +767,44 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
         NSLayoutConstraint.deactivate(chromeEdgeConstraints)
         let size = Self.chromeButtonSize
         let gap = Self.chromeSpacing
+        if chromePlacement == .besideBubble {
+            trailingAboveBubbleBottomConstraint?.isActive = false
+            // Hear sits on the row's outer edge on the open side (bubble edge
+            // until the row is known); status chrome keeps its above-bubble
+            // slot flush with the bubble.
+            let besideGap = Self.besideBubbleGap
+            let row = besideChromeAnchorView.flatMap {
+                Self.sharesCommonAncestor($0, with: self) ? $0 : nil
+            }
+            chromeEdgeConstraints = [
+                trailingAccessoryButton.centerYAnchor.constraint(equalTo: bubbleView.centerYAnchor),
+            ]
+            switch chromeEdge {
+            case .trailing:
+                chromeEdgeConstraints += [
+                    row.map {
+                        trailingAccessoryButton.trailingAnchor.constraint(equalTo: $0.trailingAnchor)
+                    } ?? trailingAccessoryButton.leadingAnchor.constraint(
+                        equalTo: bubbleView.trailingAnchor,
+                        constant: besideGap
+                    ),
+                    leadingAccessoryHost.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor),
+                ]
+            case .leading:
+                chromeEdgeConstraints += [
+                    row.map {
+                        trailingAccessoryButton.leadingAnchor.constraint(equalTo: $0.leadingAnchor)
+                    } ?? trailingAccessoryButton.trailingAnchor.constraint(
+                        equalTo: bubbleView.leadingAnchor,
+                        constant: -besideGap
+                    ),
+                    leadingAccessoryHost.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor),
+                ]
+            }
+            NSLayoutConstraint.activate(chromeEdgeConstraints)
+            return
+        }
+        trailingAboveBubbleBottomConstraint?.isActive = true
         switch chromeEdge {
         case .trailing:
             // Hear stays on the bubble's trailing edge; mic is a fixed slot inward.
@@ -684,23 +828,36 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
         NSLayoutConstraint.activate(chromeEdgeConstraints)
     }
 
-    private func applyTrailingAccessoryAppearance(animated: Bool) {
-        applyTrailingAccessorySymbol()
+    private func applyTrailingAccessoryAppearance(
+        from previous: TrailingAccessory,
+        animated: Bool,
+        bounce: Bool
+    ) {
         let visible = trailingAccessory != .hidden
-        trailingAccessoryButton.isUserInteractionEnabled = visible
+        // Morph in place (play ↔ pause → checkmark) when the button stays up.
+        let morphs = animated && visible && previous != .hidden
+        applyTrailingAccessorySymbol(replacing: morphs)
+        trailingAccessoryButton.isUserInteractionEnabled = visible && trailingAccessory != .checkmark
+        trailingAccessoryButton.accessibilityLabel = trailingAccessoryAccessibilityLabel
+        trailingAccessoryButton.accessibilityTraits = trailingAccessory == .checkmark
+            ? [.image, .notEnabled]
+            : .button
         if visible { trailingAccessoryButton.isHidden = false }
+        let isCheckmark = trailingAccessory == .checkmark
         let apply = {
             self.trailingAccessoryButton.alpha = visible ? 1 : 0
+            self.trailingAccessoryFill.alpha = isCheckmark ? 1 : 0
         }
         trailingAccessoryBackdrop.alpha = 1
         trailingAccessoryIcon.alpha = 1
         guard animated else {
             apply()
             if !visible { trailingAccessoryButton.isHidden = true }
+            if bounce { playTrailingAccessoryBounce() }
             return
         }
         UIView.animate(
-            withDuration: 0.22,
+            withDuration: isCheckmark ? 0.28 : 0.22,
             delay: 0,
             options: [.curveEaseOut, .allowUserInteraction, .beginFromCurrentState]
         ) {
@@ -711,15 +868,51 @@ public final class SwipeRevealContainer: UIView, UIGestureRecognizerDelegate {
                 self.trailingAccessoryButton.isHidden = true
             }
         }
+        if bounce { playTrailingAccessoryBounce() }
     }
 
-    private func applyTrailingAccessorySymbol() {
+    private var trailingAccessoryAccessibilityLabel: String {
+        switch trailingAccessory {
+        case .hidden, .speaker: return "Hear this line"
+        case .play: return "Play this line"
+        case .pause: return "Pause"
+        case .checkmark: return "Line complete"
+        }
+    }
+
+    private func applyTrailingAccessorySymbol(replacing: Bool = false) {
+        trailingAccessoryFill.backgroundColor = trailingAccessoryCompletionColor
         switch trailingAccessory {
         case .hidden:
             break
         case .speaker:
-            applySymbol("speaker.wave.2.fill", to: trailingAccessoryIcon)
+            applySymbol("speaker.wave.2.fill", to: trailingAccessoryIcon, replacing: replacing)
             trailingAccessoryIcon.tintColor = trailingAccessoryActiveColor
+        case .play:
+            applySymbol("play.fill", to: trailingAccessoryIcon, replacing: replacing)
+            trailingAccessoryIcon.tintColor = trailingAccessoryActiveColor
+        case .pause:
+            applySymbol("pause.fill", to: trailingAccessoryIcon, replacing: replacing)
+            trailingAccessoryIcon.tintColor = trailingAccessoryActiveColor
+        case .checkmark:
+            applySymbol("checkmark", to: trailingAccessoryIcon, replacing: replacing)
+            trailingAccessoryIcon.tintColor = .white
+        }
+    }
+
+    private func playTrailingAccessoryBounce() {
+        commitHaptic.impactOccurred(intensity: 0.85)
+        trailingAccessoryBounceScale = 1.3
+        applyTrailingAccessoryTransform()
+        UIView.animate(
+            withDuration: 0.5,
+            delay: 0,
+            usingSpringWithDamping: 0.45,
+            initialSpringVelocity: 0.8,
+            options: [.allowUserInteraction, .beginFromCurrentState]
+        ) {
+            self.trailingAccessoryBounceScale = 1
+            self.applyTrailingAccessoryTransform()
         }
     }
 

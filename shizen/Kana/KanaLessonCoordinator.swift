@@ -44,6 +44,7 @@ final class KanaLessonCoordinator: NSObject {
     }
 
     func makeCoordinator() -> ProgressiveContainerCoordinator {
+        Analytics.track(.lessonStarted, analyticsProperties)
         let steps = buildSteps()
         let coordinator = ProgressiveContainerCoordinator(steps: steps)
         coordinator.delegate = self
@@ -59,6 +60,18 @@ final class KanaLessonCoordinator: NSObject {
         coordinator.updateLives(sessionTracker.metrics.livesRemaining)
         container.modalPresentationStyle = .fullScreen
         viewController.present(container, animated: true)
+    }
+
+    private var analyticsProperties: [String: Any] {
+        let session: String = switch kind {
+        case .lesson: "lesson"
+        case .rowReview: "row_review"
+        case .srsReview: "srs_review"
+        case .customReview: "custom_review"
+        }
+        var properties: [String: Any] = ["lesson_type": "kana", "kana_session": session]
+        properties["lesson_id"] = row?.id
+        return properties
     }
 
     // MARK: - Step building
@@ -538,6 +551,8 @@ final class KanaLessonCoordinator: NSObject {
         guard !didPresentSummary, let progressiveCoordinator else { return }
         didPresentSummary = true
         sessionTracker.endSession()
+        let event: Analytics.Event = outcome == .completed ? .lessonCompleted : .lessonFailed
+        Analytics.track(event, analyticsProperties.merging(sessionTracker.metrics.analyticsProperties) { _, new in new })
 
         let summary = KanaLessonSummaryStepViewController(
             kind: kind,
@@ -574,6 +589,11 @@ extension KanaLessonCoordinator: ProgressiveContainerCoordinatorDelegate {
         coordinator.delegate = nil
         progressiveCoordinator = nil
         sessionTracker.endSession()
+        if !didPresentSummary {
+            var properties = analyticsProperties.merging(sessionTracker.metrics.analyticsProperties) { _, new in new }
+            properties["furthest_stage"] = "drills"
+            Analytics.track(.lessonAbandoned, properties)
+        }
         delegate?.kanaLessonSessionDidCancel(kind: kind, row: row)
     }
 }

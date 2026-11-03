@@ -30,6 +30,66 @@ enum GeminiGrammarUsage {
         let form: String
         let examples: [String]
         let note: String
+
+        var parsedExamples: [Example] {
+            examples.compactMap(Example.parse)
+        }
+    }
+
+    /// One productive example: Japanese, optional kana reading, English gloss.
+    /// Gateway format: `窓を開けてもいい？ (まどをあけてもいい？) — Can I open the window?`
+    struct Example: Equatable {
+        let japanese: String
+        let reading: String?
+        let english: String?
+
+        static func parse(_ raw: String) -> Example? {
+            var remainder = glossWithoutVerbLabel(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+            guard !remainder.isEmpty else { return nil }
+
+            var english: String?
+            for separator in [" — ", " – ", "—", "–"] {
+                guard let range = remainder.range(of: separator) else { continue }
+                english = String(remainder[range.upperBound...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                remainder = String(remainder[..<range.lowerBound])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                break
+            }
+
+            var reading: String?
+            if let range = remainder.range(
+                of: #"[\(（]([^)）]+)[\)）]\s*$"#,
+                options: .regularExpression
+            ) {
+                let wrapped = String(remainder[range])
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "()（） \t"))
+                if Self.isKanaReading(wrapped) {
+                    reading = wrapped
+                }
+                remainder = String(remainder[..<range.lowerBound])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+
+            guard !remainder.isEmpty else { return nil }
+            return Example(
+                japanese: remainder,
+                reading: reading,
+                english: english?.isEmpty == false ? english : nil
+            )
+        }
+
+        private static func isKanaReading(_ text: String) -> Bool {
+            !text.isEmpty && text.unicodeScalars.allSatisfy { scalar in
+                switch scalar.value {
+                case 0x3040...0x30FF, 0x30FC, 0x30FB, 0x3001, 0x3002,
+                     0xFF01, 0xFF1F, 0x0020, 0x3000, 0x003F, 0x0021:
+                    return true
+                default:
+                    return false
+                }
+            }
+        }
     }
 
     struct Explanation {
@@ -54,9 +114,9 @@ enum GeminiGrammarUsage {
         LLMGatewayClient.unavailabilityMessage(signInPrompt: "Sign in to see how this grammar is used.")
     }
 
-    /// Scene lines for a pattern, with the lines that use it marked. Tagged lines win;
-    /// otherwise lines containing the label's fixed text. When nothing matches, no line
-    /// is marked and the gateway finds it.
+    /// Scene lines for a pattern, with the lines that use it marked. Spoken-range
+    /// evidence wins, then tagged grammar ids, then lines containing the label's
+    /// fixed text. When nothing matches, no line is marked and the gateway finds it.
     static func request(
         for pattern: DialogueGrammarPatternRef,
         in scenarioLines: [GrammarScenarioLine]
@@ -226,7 +286,7 @@ enum GeminiGrammarUsage {
                 .joined(separator: "\u{1E}")
         }
         return [
-            "gemini-grammar-usage-v1-gateway",
+            "gemini-grammar-usage-v2-gateway",
             request.pattern,
             request.grammarPointID ?? "",
             lines.joined(separator: "\u{1D}"),

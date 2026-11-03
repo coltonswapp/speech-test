@@ -22,6 +22,8 @@ final class WordDictionaryDetailView: UIView {
     private let romajiLabel = UILabel()
     private let dictionaryFormLabel = UILabel()
     private let wordActionsStack = UIStackView()
+    /// Full height of the header row; the actions center on the headword inside it.
+    private let wordActionsColumn = UIView()
     private let speakWordButton = UIButton(type: .system)
     private let speakWordGlyphView = UIImageView()
     private let saveVocabularyButton = UIButton(type: .system)
@@ -32,7 +34,7 @@ final class WordDictionaryDetailView: UIView {
 #endif
     private let saveHaptic = UIImpactFeedbackGenerator(style: .light)
     private var saveDraft: SavedVocabularyItem?
-    /// Model gloss for this use. Wins over the dictionary line when present.
+    /// Model gloss for this use. The flashcard definition uses it only when the dictionary has nothing.
     private var contextualFlashcardDefinition: String?
     /// Sense the ranker chose for the sentence, as one comma-separated line.
     private var rankedFlashcardDefinition: String?
@@ -55,18 +57,28 @@ final class WordDictionaryDetailView: UIView {
     private let contextualLoadingSpinner = NNLoadingSpinner(frame: CGRect(x: 0, y: 0, width: 24, height: 24))
     private let contextualLoadingLabel = UILabel()
     private let contextualMeaningLabel = UILabel()
+    private let contextualContextHeading = UILabel()
+    private let contextualLineLabel = FuriganaTranscriptLabel()
+    private let contextualLineEnglishLabel = UILabel()
+    private let contextualSourceLabel = UILabel()
     private let contextualGrammarLabel = UILabel()
     private let contextualMessageLabel = UILabel()
     private let relatedWordTagsView = RelatedWordTagsView()
-    /// Space between the in-sentence gloss and Common Uses / Break down.
-    private let bonusSectionSpacer = UIView()
+    /// Heading plus body blocks inside the gloss card. Each hides itself when its rows do.
+    private let meaningSection = GlossCardSection()
+    private let contextSection = GlossCardSection()
+    private let bonusSection = GlossCardSection()
     private let commonUsesButton = UIButton(type: .system)
     private let commonUsesTitle = UILabel()
     private let commonUsesLoadingRow = UIStackView()
     private let commonUsesLoadingSpinner = NNLoadingSpinner(frame: CGRect(x: 0, y: 0, width: 24, height: 24))
     private let commonUsesLoadingLabel = UILabel()
     private let commonUsesBodyLabel = UILabel()
+    private let componentTilesView = SpanComponentTilesView()
     private let commonUsesMessageLabel = UILabel()
+    /// Gloss card plus the example chips that sit underneath it.
+    private let glossColumn = UIStackView()
+    private let bonusExamplesRow = DialogueGrammarExampleStripView()
     private let feedbackCluster = LLMFeedbackRow()
     private var bonusEngaged = false
     private var bonusButtonTitle = "Common Uses"
@@ -87,6 +99,8 @@ final class WordDictionaryDetailView: UIView {
     private var commonUsesEnabled = false
     private var breakDownEnabled = false
     private var glossBonusAction: GlossBonusAction?
+    /// Line, English, and lesson label revealed by the Context button.
+    private var activeWordContext: StoredWordContext?
     private var lastDictionaryGloss: String?
     /// Kana lookup was untrustworthy; definitions stay hidden until a headword validates.
     private var awaitingContextualHeadword = false
@@ -155,6 +169,8 @@ final class WordDictionaryDetailView: UIView {
 
     private var lastConfiguredSurface = ""
     private var lastConfiguredSentence: String?
+    private var lastConfiguredSourceTitle: String?
+    private var lastConfiguredLineEnglish: String?
     private var lastGlossFraming: ContextualGlossFraming = .word
 
     private static let contextualCardContentInsets = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
@@ -189,8 +205,14 @@ final class WordDictionaryDetailView: UIView {
         sentence: String? = nil,
         glossFraming: ContextualGlossFraming? = nil,
         showsCommonUses: Bool = true,
-        showsBreakDown: Bool = false
+        showsBreakDown: Bool = false,
+        storedContext: StoredWordContext? = nil,
+        sourceTitle: String? = nil,
+        lineEnglish: String? = nil,
+        allowsSavedEntryContext: Bool = true
     ) {
+        lastConfiguredSourceTitle = sourceTitle
+        lastConfiguredLineEnglish = lineEnglish
         contextualGlossTask?.cancel()
         commonUsesTask?.cancel()
         breakDownTask?.cancel()
@@ -198,9 +220,11 @@ final class WordDictionaryDetailView: UIView {
         resetCommonUsesContent()
         contextualMessageLabel.isHidden = true
         contextualMessageLabel.text = nil
+        hideStoredContextDetails()
         commonUsesEnabled = false
         breakDownEnabled = false
         glossBonusAction = nil
+        activeWordContext = nil
         lastDictionaryGloss = nil
         contextualFlashcardDefinition = nil
         rankedFlashcardDefinition = nil
@@ -238,14 +262,31 @@ final class WordDictionaryDetailView: UIView {
         let glossInSentence = lastGlossFraming == .inSentence
             && !trimmedSentence.isEmpty
             && trimmedSentence != surface.trimmingCharacters(in: .whitespacesAndNewlines)
-        awaitingContextualHeadword = glossInSentence && contextSensitive
         let trimmedSurface = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasSentenceContext = !trimmedSentence.isEmpty && trimmedSentence != trimmedSurface
+        let displayHeadword = contextSensitive ? surface : (lookup.dictionaryForm ?? surface)
+        let savedItem = allowsSavedEntryContext
+            ? (Self.savedWord(matching: displayHeadword) ?? Self.savedWord(matching: trimmedSurface))
+            : nil
+        let resolvedStored = storedContext ?? savedItem?.storedContext
+        let entryContext = allowsSavedEntryContext ? resolvedStored : nil
+        let displayContext = allowsSavedEntryContext
+            ? Self.resolvedEntryContext(
+                stored: resolvedStored,
+                surface: surface,
+                sentence: sentence ?? savedItem?.sentence,
+                sourceTitle: sourceTitle ?? savedItem?.sourceTitle,
+                lineEnglish: lineEnglish ?? savedItem?.lineEnglish
+            )
+            : nil
+        awaitingContextualHeadword = savedItem == nil && entryContext == nil && glossInSentence && contextSensitive
         // Highlights and word lookups pass `.word` framing so the prompt is not
         // "in this sentence", but they still need a meaning — especially when
-        // JMdict has no entry (七時, いいところ).
-        let shouldLoadContextualGloss = glossInSentence || hasSentenceContext || entries.isEmpty
-        let displayHeadword = contextSensitive ? surface : (lookup.dictionaryForm ?? surface)
+        // JMdict has no entry (七時, いいところ). A stored word already has that
+        // meaning, so reopening a flashcard does not ask again.
+        let shouldLoadContextualGloss = savedItem == nil
+            && entryContext == nil
+            && (glossInSentence || hasSentenceContext || entries.isEmpty)
 
         let wordFont = selectedWordLabel.font ?? UIFont.preferredFont(forTextStyle: .largeTitle)
         applySelectedWordHeadline(
@@ -301,14 +342,19 @@ final class WordDictionaryDetailView: UIView {
         dictionaryFlashcardDefinition = contextSensitive ? nil : VocabSenseList.flashcardLine(from: entries)
         breakDownEnabled = showsBreakDown && !trimmedSentence.isEmpty
         commonUsesEnabled = showsCommonUses && !breakDownEnabled && hasSentenceContext
+        let savedSurface = displayHeadword.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lemma = contextSensitive ? nil : lookup.dictionaryForm
         saveDraft = SavedVocabularyItem(
             id: UUID().uuidString,
-            surface: surface.trimmingCharacters(in: .whitespacesAndNewlines),
-            dictionaryForm: contextSensitive ? nil : lookup.dictionaryForm,
+            surface: savedSurface,
+            dictionaryForm: (lemma != savedSurface) ? lemma : nil,
             reading: readingForRomaji.isEmpty ? nil : readingForRomaji,
             gloss: dictionaryFlashcardDefinition,
             senses: dictionaryFlashcardDefinition.map { [VocabSense(text: $0)] } ?? [],
             sentence: trimmedSentence.isEmpty ? nil : trimmedSentence,
+            lineEnglish: displayContext?.lineEnglish ?? lineEnglish,
+            contextGloss: entryContext?.gloss,
+            sourceTitle: displayContext?.source ?? sourceTitle,
             createdAt: Date()
         )
         refreshSaveButton()
@@ -331,7 +377,43 @@ final class WordDictionaryDetailView: UIView {
         dividerBeforeCompounds.isHidden = !showCompounds || definitionsSectionTitle.isHidden
 
         updateCommonUsesButton()
-        if shouldLoadContextualGloss {
+        if allowsSavedEntryContext, let savedPhrase = Self.savedPhrase(matching: trimmedSurface) {
+            // The span gloss was stored when the phrase was saved. A new
+            // contextual gloss can disagree with the line on the flashcard.
+            if let tokens = savedPhrase.tokens {
+                applySpanWordHeader(tokens: tokens)
+            }
+            let savedReading = savedPhrase.reading?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !savedReading.isEmpty {
+                speechText = savedReading
+            }
+            if var draft = saveDraft {
+                draft.kind = .phrase
+                draft.tokens = savedPhrase.tokens
+                if !savedReading.isEmpty {
+                    draft.reading = savedReading
+                }
+                saveDraft = draft
+            }
+        }
+        if var entryContext {
+            // Older phrase cards kept the span meaning on the flashcard gloss, not contextGloss.
+            if entryContext.gloss == nil,
+               let meaning = Self.savedPhrase(matching: trimmedSurface)?.primarySenseText {
+                entryContext.gloss = meaning
+                if var draft = saveDraft {
+                    draft.contextGloss = meaning
+                    saveDraft = draft
+                }
+            }
+            isAwaitingSpanGloss = false
+            applyStoredMeaning(entryContext)
+        } else if allowsSavedEntryContext, let meaning = Self.savedPhrase(matching: trimmedSurface)?.primarySenseText {
+            applyContextualGloss(
+                ContextualGlossResult(meaning: meaning, grammarNote: "", relatedWords: [])
+            )
+        } else if shouldLoadContextualGloss {
             loadContextualGloss(
                 surface: surface,
                 sentence: sentence,
@@ -342,10 +424,57 @@ final class WordDictionaryDetailView: UIView {
         } else {
             clearUnsolicitedGloss()
         }
+        if allowsSavedEntryContext {
+            installContextButton(stored: displayContext)
+        }
 
 #if DEBUG
         updateKanjiDecompositionButton(for: displayedEntries)
 #endif
+    }
+
+    private static func savedWord(matching surface: String?) -> SavedVocabularyItem? {
+        let trimmed = surface?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+        return SavedVocabularyStore.shared.item(matchingSurface: trimmed)
+    }
+
+    /// A saved multi-token card whose meaning was captured with the original span gloss.
+    /// Phrases with no stored gloss stay on the gateway path.
+    private static func savedPhrase(matching surface: String) -> SavedVocabularyItem? {
+        guard let item = SavedVocabularyStore.shared.item(matchingSurface: surface),
+              item.isPhrase,
+              item.primarySenseText != nil
+        else { return nil }
+        return item
+    }
+
+    /// Saved context first; otherwise the line, English, and track/unit/scene from this look.
+    private static func resolvedEntryContext(
+        stored: StoredWordContext?,
+        surface: String,
+        sentence: String?,
+        sourceTitle: String?,
+        lineEnglish: String?
+    ) -> StoredWordContext? {
+        if var stored {
+            if stored.lineEnglish == nil { stored.lineEnglish = nonempty(lineEnglish) }
+            if stored.source == nil { stored.source = nonempty(sourceTitle) }
+            if stored.line == nil { stored.line = nonempty(sentence) }
+            return stored
+        }
+        return StoredWordContext.make(
+            gloss: nil,
+            line: sentence,
+            surface: surface,
+            source: sourceTitle,
+            lineEnglish: lineEnglish
+        )
+    }
+
+    private static func nonempty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// Hides the gloss card when nothing is loading or explained. The Common Uses
@@ -357,6 +486,7 @@ final class WordDictionaryDetailView: UIView {
         contextualLoadingSpinner.isHidden = true
         contextualMeaningLabel.isHidden = true
         contextualMeaningLabel.text = nil
+        hideStoredContextDetails()
         contextualGrammarLabel.isHidden = true
         contextualGrammarLabel.text = nil
         contextualMessageLabel.isHidden = true
@@ -377,6 +507,7 @@ final class WordDictionaryDetailView: UIView {
     ) {
         let trimmedSentence = sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let hasDictionaryMatch = !lookup.entries.isEmpty
+        hideStoredContextDetails()
         relatedWordTagsView.setWords([])
 
         let contextSentence = trimmedSentence.isEmpty ? surface : trimmedSentence
@@ -448,7 +579,16 @@ final class WordDictionaryDetailView: UIView {
     /// Looks up a long-press span. An exact JMdict expression uses the normal entry;
     /// anything else is explained together in the gloss card.
     /// `tokens` are the selected scrub tokens, used to keep furigana on each word.
-    func configureSelectedSpan(surface: String, sentence: String, tokens: [String] = []) {
+    func configureSelectedSpan(
+        surface: String,
+        sentence: String,
+        tokens: [String] = [],
+        sourceTitle: String? = nil,
+        lineEnglish: String? = nil,
+        allowsSavedEntryContext: Bool = true
+    ) {
+        lastConfiguredSourceTitle = sourceTitle
+        lastConfiguredLineEnglish = lineEnglish
         let trimmed = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedSentence = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -460,7 +600,10 @@ final class WordDictionaryDetailView: UIView {
                 surface: trimmed,
                 sentence: trimmedSentence,
                 showsCommonUses: false,
-                showsBreakDown: true
+                showsBreakDown: true,
+                sourceTitle: sourceTitle,
+                lineEnglish: lineEnglish,
+                allowsSavedEntryContext: allowsSavedEntryContext
             )
         } else {
             showUnlistedSpan(surface: trimmed, sentence: trimmedSentence, tokens: tokens)
@@ -591,6 +734,8 @@ final class WordDictionaryDetailView: UIView {
             reading: draftReading.isEmpty ? nil : draftReading,
             gloss: nil,
             sentence: sentence.isEmpty ? nil : sentence,
+            lineEnglish: lastConfiguredLineEnglish,
+            sourceTitle: lastConfiguredSourceTitle,
             kind: isPhrase ? .phrase : .word,
             tokens: isPhrase ? pieces : nil,
             createdAt: Date()
@@ -633,6 +778,7 @@ final class WordDictionaryDetailView: UIView {
         contextualGrammarLabel.isHidden = true
         contextualMeaningLabel.isHidden = true
         contextualMessageLabel.isHidden = true
+        hideStoredContextDetails()
 
         let contextSentence = sentence.isEmpty ? surface : sentence
         guard GeminiSpanGloss.isConfigured else {
@@ -721,6 +867,7 @@ final class WordDictionaryDetailView: UIView {
         contextualGrammarLabel.isHidden = true
         contextualMeaningLabel.text = nil
         contextualGrammarLabel.text = nil
+        hideStoredContextDetails()
         cancelSpanGlossFeedback()
         relatedWordTagsView.setWords([])
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -737,9 +884,14 @@ final class WordDictionaryDetailView: UIView {
     private enum GlossBonusAction {
         case commonUses
         case breakDown
+        case wordContext
     }
 
     @objc private func commonUsesTapped() {
+        if glossBonusAction == .wordContext {
+            toggleWordContext()
+            return
+        }
         if bonusEngaged {
             collapseBonusContent()
             return
@@ -752,7 +904,7 @@ final class WordDictionaryDetailView: UIView {
             loadCommonUses(surface: surface, sentence: sentence)
         case .breakDown:
             loadBreakDown(surface: surface, sentence: sentence)
-        case nil:
+        case .wordContext, nil:
             break
         }
     }
@@ -896,30 +1048,7 @@ final class WordDictionaryDetailView: UIView {
     private var isShowingCommonUses: Bool {
         !commonUsesTitle.isHidden || !commonUsesLoadingRow.isHidden
             || !commonUsesBodyLabel.isHidden || !commonUsesMessageLabel.isHidden
-    }
-
-    /// Keeps a clear gap above Common Uses / Break down, whichever in-sentence row sits above it.
-    private func syncBonusSectionSpacing() {
-        let showingBonus = isShowingCommonUses
-        bonusSectionSpacer.isHidden = !showingBonus
-        contextualSectionStack.setCustomSpacing(UIStackView.spacingUseDefault, after: contextualHeaderRow)
-        contextualSectionStack.setCustomSpacing(UIStackView.spacingUseDefault, after: contextualLoadingRow)
-        contextualSectionStack.setCustomSpacing(UIStackView.spacingUseDefault, after: contextualMeaningLabel)
-        contextualSectionStack.setCustomSpacing(12, after: contextualGrammarLabel)
-        contextualSectionStack.setCustomSpacing(UIStackView.spacingUseDefault, after: contextualMessageLabel)
-        contextualSectionStack.setCustomSpacing(UIStackView.spacingUseDefault, after: relatedWordTagsView)
-        guard showingBonus else { return }
-        let inSentenceRows = [
-            contextualHeaderRow,
-            contextualLoadingRow,
-            contextualMeaningLabel,
-            contextualGrammarLabel,
-            contextualMessageLabel,
-            relatedWordTagsView,
-        ]
-        if let last = inSentenceRows.last(where: { !$0.isHidden }) {
-            contextualSectionStack.setCustomSpacing(0, after: last)
-        }
+            || !componentTilesView.isHidden
     }
 
     /// Word / highlight lookups ask for extra insight; in-sentence lookups list other uses.
@@ -937,6 +1066,8 @@ final class WordDictionaryDetailView: UIView {
             commonUsesTitle.isHidden = false
             commonUsesBodyLabel.isHidden = true
             commonUsesBodyLabel.attributedText = nil
+            clearBreakDownTiles()
+            clearBonusExamples()
             commonUsesMessageLabel.isHidden = true
             commonUsesMessageLabel.text = nil
             feedbackCluster.dismiss()
@@ -949,14 +1080,32 @@ final class WordDictionaryDetailView: UIView {
     }
 
     private func applyCommonUses(_ result: GeminiCommonUses.Result, feedback: LLMFeedbackReceipt?) {
-        applyBonus(commonUsesSectionTitle, attributedCommonUses(result), feedback: feedback)
+        applyBonus(
+            commonUsesSectionTitle,
+            attributedCommonUses(result),
+            feedback: feedback,
+            examples: result.otherUses
+        )
     }
 
     private func applyBreakDown(_ result: GeminiSpanBreakdown.Result, feedback: LLMFeedbackReceipt?) {
-        applyBonus("BREAK DOWN", attributedBreakDown(result), feedback: feedback)
+        let components = result.components
+        applyBonus(
+            "BREAK DOWN",
+            attributedBreakDown(result, includePartsNote: components.isEmpty),
+            feedback: feedback,
+            components: components,
+            examples: result.otherUses
+        )
     }
 
-    private func applyBonus(_ title: String, _ body: NSAttributedString, feedback: LLMFeedbackReceipt?) {
+    private func applyBonus(
+        _ title: String,
+        _ body: NSAttributedString,
+        feedback: LLMFeedbackReceipt?,
+        components: [GeminiSpanBreakdown.Component] = [],
+        examples: [String] = []
+    ) {
         GlossMotion.crossfade(contextualSectionStack, animated: isGlossCardOnScreen) {
             commonUsesLoadingRow.isHidden = true
             commonUsesLoadingSpinner.isHidden = true
@@ -966,6 +1115,8 @@ final class WordDictionaryDetailView: UIView {
             commonUsesTitle.isHidden = false
             commonUsesBodyLabel.attributedText = body
             commonUsesBodyLabel.isHidden = false
+            componentTilesView.setComponents(components)
+            showBonusExamples(examples)
             spanFeedbackTask?.cancel()
             spanFeedbackTask = nil
             spanFeedbackRequestID = nil
@@ -992,6 +1143,8 @@ final class WordDictionaryDetailView: UIView {
             commonUsesLoadingSpinner.isHidden = true
             commonUsesBodyLabel.isHidden = true
             commonUsesBodyLabel.attributedText = nil
+            clearBreakDownTiles()
+            clearBonusExamples()
             feedbackCluster.dismiss()
             commonUsesTitle.text = title
             commonUsesTitle.isHidden = false
@@ -1013,7 +1166,6 @@ final class WordDictionaryDetailView: UIView {
             contextualSectionTitle.isHidden = true
             syncContextualHeader()
         }
-        syncBonusSectionSpacing()
         contextualCardContainer.isHidden = false
     }
 
@@ -1021,46 +1173,46 @@ final class WordDictionaryDetailView: UIView {
         let body = NSMutableAttributedString()
         let here = glossWithoutVerbLabel(result.inThisSentence)
         body.append(NSAttributedString(string: here, attributes: [
-            .font: UIFont.preferredFont(forTextStyle: .title3).bold(),
+            .font: UIFont.preferredFont(forTextStyle: .body).semibold(),
             .foregroundColor: UIColor.label,
         ]))
         appendKanjiNote(result.kanjiNote, to: body)
-        let otherUses = result.otherUses.map { glossWithoutVerbLabel($0) }.filter { !$0.isEmpty }
-        if !otherUses.isEmpty {
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.paragraphSpacingBefore = 8
-            paragraph.lineSpacing = 3
-            let text = otherUses.map { "· \($0)" }.joined(separator: "\n")
-            body.append(NSAttributedString(string: "\n\(text)", attributes: [
-                .font: UIFont.preferredFont(forTextStyle: .subheadline),
-                .foregroundColor: UIColor.secondaryLabel,
-                .paragraphStyle: paragraph,
-            ]))
+        return body
+    }
+
+    private func attributedBreakDown(
+        _ result: GeminiSpanBreakdown.Result,
+        includePartsNote: Bool = true
+    ) -> NSAttributedString {
+        let body = NSMutableAttributedString()
+        let here = glossWithoutVerbLabel(result.inThisSentence)
+        body.append(NSAttributedString(string: here, attributes: [
+            .font: UIFont.preferredFont(forTextStyle: .body).semibold(),
+            .foregroundColor: UIColor.label,
+        ]))
+        if includePartsNote {
+            appendKanjiNote(result.partsNote, to: body)
         }
         return body
     }
 
-    private func attributedBreakDown(_ result: GeminiSpanBreakdown.Result) -> NSAttributedString {
-        let body = NSMutableAttributedString()
-        let here = glossWithoutVerbLabel(result.inThisSentence)
-        body.append(NSAttributedString(string: here, attributes: [
-            .font: UIFont.preferredFont(forTextStyle: .title3).bold(),
-            .foregroundColor: UIColor.label,
-        ]))
-        appendKanjiNote(result.partsNote, to: body)
-        let otherUses = result.otherUses.map { glossWithoutVerbLabel($0) }.filter { !$0.isEmpty }
-        if !otherUses.isEmpty {
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.paragraphSpacingBefore = 8
-            paragraph.lineSpacing = 3
-            let text = otherUses.map { "· \($0)" }.joined(separator: "\n")
-            body.append(NSAttributedString(string: "\n\(text)", attributes: [
-                .font: UIFont.preferredFont(forTextStyle: .subheadline),
-                .foregroundColor: UIColor.secondaryLabel,
-                .paragraphStyle: paragraph,
-            ]))
+    /// Example phrases sit under the card, the same chips as a grammar gloss.
+    private func showBonusExamples(_ uses: [String]) {
+        let items = uses.compactMap { GeminiGrammarUsage.Example.parse($0) }
+        guard !items.isEmpty else {
+            bonusExamplesRow.isHidden = true
+            return
         }
-        return body
+        bonusExamplesRow.apply(items)
+        bonusExamplesRow.isHidden = false
+    }
+
+    private func clearBonusExamples() {
+        bonusExamplesRow.isHidden = true
+    }
+
+    private func clearBreakDownTiles() {
+        componentTilesView.setComponents([])
     }
 
     /// Renders a composition line with the kanji themselves in the primary color.
@@ -1108,11 +1260,12 @@ final class WordDictionaryDetailView: UIView {
         commonUsesLoadingSpinner.isHidden = true
         commonUsesBodyLabel.isHidden = true
         commonUsesBodyLabel.attributedText = nil
+        clearBreakDownTiles()
+        clearBonusExamples()
         commonUsesMessageLabel.isHidden = true
         commonUsesMessageLabel.text = nil
         feedbackCluster.dismiss()
         setBonusEngaged(false)
-        syncBonusSectionSpacing()
     }
 
     private func updateCommonUsesButton() {
@@ -1238,6 +1391,9 @@ final class WordDictionaryDetailView: UIView {
         contextualMeaningLabel.isHidden = true
         contextualGrammarLabel.isHidden = true
         contextualMessageLabel.isHidden = true
+        if !(glossBonusAction == .wordContext && bonusEngaged) {
+            hideStoredContextDetails()
+        }
         contextualMeaningLabel.text = nil
         contextualGrammarLabel.text = nil
         contextualMessageLabel.text = nil
@@ -1250,6 +1406,139 @@ final class WordDictionaryDetailView: UIView {
         contextualCardContainer.layoutIfNeeded()
     }
 
+    /// Shows the saved gloss as the meaning. The line stays behind the Context button.
+    private func applyStoredMeaning(_ context: StoredWordContext) {
+        contextualGlossTask?.cancel()
+        contextualRequestID = UUID()
+        contextualLoadingRow.isHidden = true
+        contextualLoadingSpinner.isHidden = true
+        contextualMessageLabel.isHidden = true
+        contextualMessageLabel.text = nil
+        contextualGrammarLabel.isHidden = true
+        contextualGrammarLabel.text = nil
+        cancelSpanGlossFeedback()
+        relatedWordTagsView.setWords([])
+        hideStoredContextDetails()
+
+        let gloss = context.gloss?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if gloss.isEmpty {
+            contextualMeaningLabel.isHidden = true
+            contextualMeaningLabel.text = nil
+            contextualSectionTitle.isHidden = true
+        } else {
+            contextualMeaningLabel.isHidden = false
+            contextualMeaningLabel.text = gloss
+            contextualMeaningLabel.textColor = .label
+            applyContextualSectionTitle()
+        }
+        syncContextualHeader()
+        contextualCardContainer.isHidden = gloss.isEmpty && !context.hasLineContext
+        contextualCardContainer.setNeedsLayout()
+        contextualCardContainer.layoutIfNeeded()
+        setNeedsLayout()
+    }
+
+    /// Context is only for a saved word or phrase. A first look at a lesson line keeps Explain.
+    private func installContextButton(stored: StoredWordContext?) {
+        guard let reveal = stored, reveal.hasLineContext else { return }
+        activeWordContext = reveal
+        glossBonusAction = .wordContext
+        setGlossBonusButton(
+            title: "Context",
+            symbolName: "text.quote",
+            hint: "Shows the line where this word came up"
+        )
+        let showingMeaning = !contextualMeaningLabel.isHidden
+            && !(contextualMeaningLabel.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if !showingMeaning, contextualGlossTask == nil {
+            setWordContextVisible(true)
+            setBonusEngaged(true)
+        }
+    }
+
+    private func toggleWordContext() {
+        let show = !bonusEngaged
+        GlossMotion.crossfade(contextualSectionStack, animated: isGlossCardOnScreen) {
+            self.setWordContextVisible(show)
+        }
+        setBonusEngaged(show)
+        resizeGlossCard()
+    }
+
+    private func setWordContextVisible(_ visible: Bool) {
+        guard visible, let context = activeWordContext else {
+            hideStoredContextDetails()
+            return
+        }
+        let hasLine = !(context.line?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        if hasLine, let line = context.line {
+            contextualLineLabel.isHidden = false
+            applyRubyLine(line, surface: lastConfiguredSurface)
+        } else {
+            contextualLineLabel.isHidden = true
+            contextualLineLabel.attributedText = nil
+        }
+        let english = context.lineEnglish?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        contextualLineEnglishLabel.isHidden = english.isEmpty
+        contextualLineEnglishLabel.text = english.isEmpty ? nil : english
+        let source = context.source?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        contextualSourceLabel.isHidden = source.isEmpty
+        contextualSourceLabel.text = source.isEmpty ? nil : source
+        let showsExample = hasLine || !english.isEmpty || !source.isEmpty
+        contextualContextHeading.isHidden = !showsExample
+        contextualCardContainer.isHidden = false
+    }
+
+    /// Furigana for the saved line, with the vocabulary word marked.
+    private func applyRubyLine(_ line: String, surface: String) {
+        let font = UIFont.preferredFont(forTextStyle: .body).semibold()
+        contextualLineLabel.font = font
+        contextualLineLabel.verticalTextInsetsAffectAlignmentRect = false
+        // Only the ruby glyph height, and none when there is no kanji to read,
+        // so the line sits right under its CONTEXT heading.
+        let hasKanji = line.unicodeScalars.contains { scalar in
+            (0x3400...0x4DBF).contains(scalar.value)
+                || (0x4E00...0x9FFF).contains(scalar.value)
+                || scalar.value == 0x3005
+        }
+        contextualLineLabel.textInsets = UIEdgeInsets(
+            top: hasKanji ? JapaneseFuriganaBuilder.rubyGlyphTopInset(for: font) : 0,
+            left: 0,
+            bottom: 0,
+            right: 0
+        )
+        contextualLineLabel.attributedText = JapaneseFuriganaBuilder.attributedString(
+            for: line,
+            font: font,
+            textColor: .label
+        )
+        let needle = surface.trimmingCharacters(in: .whitespacesAndNewlines)
+        let highlight = needle.isEmpty ? nil : line.range(of: needle).map { NSRange($0, in: line) }
+        contextualLineLabel.setTokenHighlightPreservingLayout(
+            foregroundColor: .label,
+            highlightedRange: highlight,
+            fullHeight: false
+        )
+    }
+
+    /// Keeps the contextual meaning for the next save. The flashcard definition is chosen separately.
+    private func rememberContextGloss(_ meaning: String) {
+        let trimmed = meaning.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, var draft = saveDraft else { return }
+        draft.contextGloss = trimmed
+        saveDraft = draft
+    }
+
+    private func hideStoredContextDetails() {
+        contextualContextHeading.isHidden = true
+        contextualLineLabel.isHidden = true
+        contextualLineLabel.attributedText = nil
+        contextualLineEnglishLabel.isHidden = true
+        contextualLineEnglishLabel.text = nil
+        contextualSourceLabel.isHidden = true
+        contextualSourceLabel.text = nil
+    }
+
     private func applyContextualGloss(_ gloss: ContextualGlossResult) {
         if isGlossCardOnScreen {
             GlossMotion.fadeNextContentChange(in: contextualSectionStack)
@@ -1259,12 +1548,16 @@ final class WordDictionaryDetailView: UIView {
         contextualMessageLabel.isHidden = true
         contextualMessageLabel.text = nil
         applyContextualSectionTitle()
+        if !(glossBonusAction == .wordContext && bonusEngaged) {
+            hideStoredContextDetails()
+        }
         contextualMeaningLabel.isHidden = false
         let meaning = glossWithoutVerbLabel(gloss.meaning)
         contextualMeaningLabel.text = meaning
         contextualMeaningLabel.textColor = .label
         if !meaning.isEmpty {
             contextualFlashcardDefinition = meaning
+            rememberContextGloss(meaning)
             applyFlashcardDefinitionToDraft()
         }
 
@@ -1277,7 +1570,6 @@ final class WordDictionaryDetailView: UIView {
             contextualGrammarLabel.isHidden = false
         }
         relatedWordTagsView.setWords(gloss.relatedWords)
-        syncBonusSectionSpacing()
         contextualCardContainer.isHidden = false
         if awaitingContextualHeadword {
             revealValidatedHeadword(gloss.headword)
@@ -1303,11 +1595,13 @@ final class WordDictionaryDetailView: UIView {
         dictionaryFlashcardDefinition = VocabSenseList.flashcardLine(from: entries)
         if var draft = saveDraft {
             if trimmed != surface {
-                draft.dictionaryForm = trimmed
+                draft.surface = trimmed
+                draft.dictionaryForm = nil
             }
             saveDraft = draft
         }
         applyFlashcardDefinitionToDraft()
+        refreshSaveButton()
 
         if trimmed != surface {
             let primary = entries.max { ($0.score ?? 0) < ($1.score ?? 0) } ?? entries.first
@@ -1361,7 +1655,9 @@ final class WordDictionaryDetailView: UIView {
         ])
 
         wordHeaderStack.axis = .horizontal
-        wordHeaderStack.alignment = .center
+        // The column of word, romaji, and dictionary form sets the height, so
+        // romaji sits right under the headword rather than under the buttons.
+        wordHeaderStack.alignment = .fill
         wordHeaderStack.spacing = 16
         wordHeaderStack.distribution = .fill
         wordHeaderStack.clipsToBounds = false
@@ -1420,9 +1716,21 @@ final class WordDictionaryDetailView: UIView {
         kanjiDecompositionButton.isHidden = true
         wordActionsStack.addArrangedSubview(kanjiDecompositionButton)
 #endif
-        wordHeaderStack.addArrangedSubview(selectedWordLabel)
-        wordHeaderStack.addArrangedSubview(wordActionsStack)
-        wordContentStack.addArrangedSubview(wordHeaderStack)
+        wordActionsStack.translatesAutoresizingMaskIntoConstraints = false
+        wordActionsColumn.clipsToBounds = false
+        wordActionsColumn.setContentHuggingPriority(.required, for: .horizontal)
+        wordActionsColumn.setContentCompressionResistancePriority(.required, for: .horizontal)
+        wordActionsColumn.addSubview(wordActionsStack)
+        wordContentStack.addArrangedSubview(selectedWordLabel)
+        wordHeaderStack.addArrangedSubview(wordContentStack)
+        wordHeaderStack.addArrangedSubview(wordActionsColumn)
+        NSLayoutConstraint.activate([
+            wordActionsStack.leadingAnchor.constraint(equalTo: wordActionsColumn.leadingAnchor),
+            wordActionsStack.trailingAnchor.constraint(equalTo: wordActionsColumn.trailingAnchor),
+            wordActionsStack.topAnchor.constraint(greaterThanOrEqualTo: wordActionsColumn.topAnchor),
+            wordActionsStack.bottomAnchor.constraint(lessThanOrEqualTo: wordActionsColumn.bottomAnchor),
+            wordActionsStack.centerYAnchor.constraint(equalTo: selectedWordLabel.centerYAnchor),
+        ])
 
         let wordFont: UIFont = {
             let base = UIFont.preferredFont(forTextStyle: .largeTitle)
@@ -1460,20 +1768,38 @@ final class WordDictionaryDetailView: UIView {
 
         contextualSectionTitle.text = nil
         contextualSectionTitle.isHidden = true
-        contextualSectionTitle.font = UIFont.preferredFont(forTextStyle: .caption1)
+        contextualSectionTitle.font = sectionHeaderFont
         contextualSectionTitle.textColor = .secondaryLabel
 
-        let contextualMeaningFont: UIFont = {
-            let base = UIFont.preferredFont(forTextStyle: .title3)
-            if let d = base.fontDescriptor.withSymbolicTraits(.traitBold) {
-                return UIFont(descriptor: d, size: 0)
-            }
-            return base
-        }()
-        contextualMeaningLabel.font = contextualMeaningFont
+        contextualMeaningLabel.font = .preferredFont(forTextStyle: .body).semibold()
         contextualMeaningLabel.textColor = .label
         contextualMeaningLabel.textAlignment = .natural
         contextualMeaningLabel.numberOfLines = 0
+
+        contextualContextHeading.text = "CONTEXT"
+        contextualContextHeading.font = sectionHeaderFont
+        contextualContextHeading.textColor = .secondaryLabel
+        contextualContextHeading.isHidden = true
+
+        contextualLineLabel.font = .preferredFont(forTextStyle: .body).semibold()
+        contextualLineLabel.textColor = .label
+        contextualLineLabel.textAlignment = .natural
+        contextualLineLabel.numberOfLines = 0
+        contextualLineLabel.clipsToBounds = false
+        contextualLineLabel.verticalTextInsetsAffectAlignmentRect = false
+        contextualLineLabel.isHidden = true
+
+        contextualLineEnglishLabel.font = .preferredFont(forTextStyle: .subheadline)
+        contextualLineEnglishLabel.textColor = .secondaryLabel
+        contextualLineEnglishLabel.textAlignment = .natural
+        contextualLineEnglishLabel.numberOfLines = 0
+        contextualLineEnglishLabel.isHidden = true
+
+        contextualSourceLabel.font = .preferredFont(forTextStyle: .caption1)
+        contextualSourceLabel.textColor = .tertiaryLabel
+        contextualSourceLabel.textAlignment = .natural
+        contextualSourceLabel.numberOfLines = 0
+        contextualSourceLabel.isHidden = true
 
         contextualGrammarLabel.font = .preferredFont(forTextStyle: .subheadline)
         contextualGrammarLabel.textColor = .secondaryLabel
@@ -1487,12 +1813,17 @@ final class WordDictionaryDetailView: UIView {
         contextualMessageLabel.numberOfLines = 0
         contextualMessageLabel.isHidden = true
 
-        commonUsesTitle.font = UIFont.preferredFont(forTextStyle: .caption1)
+        commonUsesTitle.font = sectionHeaderFont
         commonUsesTitle.textColor = .secondaryLabel
         commonUsesTitle.isHidden = true
 
         commonUsesBodyLabel.numberOfLines = 0
         commonUsesBodyLabel.isHidden = true
+
+        componentTilesView.onSelect = { [weak self] word in
+            self?.onSelectRelatedWord?(word)
+        }
+        componentTilesView.isHidden = true
 
         commonUsesMessageLabel.font = .preferredFont(forTextStyle: .subheadline)
         commonUsesMessageLabel.textColor = .secondaryLabel
@@ -1570,33 +1901,40 @@ final class WordDictionaryDetailView: UIView {
         contextualLoadingRow.addArrangedSubview(contextualLoadingSpinner)
         contextualLoadingRow.addArrangedSubview(contextualLoadingLabel)
 
-        contextualSectionStack.axis = .vertical
-        contextualSectionStack.alignment = .fill
-        contextualSectionStack.spacing = 6
         relatedWordTagsView.onSelect = { [weak self] word in
             self?.onSelectRelatedWord?(word)
         }
         relatedWordTagsView.isHidden = true
 
-        contextualSectionStack.addArrangedSubview(contextualHeaderRow)
-        contextualSectionStack.addArrangedSubview(contextualLoadingRow)
-        contextualSectionStack.addArrangedSubview(contextualMeaningLabel)
-        contextualSectionStack.addArrangedSubview(contextualGrammarLabel)
-        contextualSectionStack.addArrangedSubview(contextualMessageLabel)
-        bonusSectionSpacer.isHidden = true
-        bonusSectionSpacer.translatesAutoresizingMaskIntoConstraints = false
-        bonusSectionSpacer.setContentHuggingPriority(.required, for: .vertical)
-        bonusSectionSpacer.setContentCompressionResistancePriority(.required, for: .vertical)
-        bonusSectionSpacer.heightAnchor.constraint(equalToConstant: 16).isActive = true
+        // Every block in the card is a heading over its body: Meaning / In this
+        // sentence, Context, then Common Uses / Explain / Break down.
+        meaningSection.setRows(
+            heading: contextualHeaderRow,
+            body: [
+                contextualLoadingRow,
+                contextualMeaningLabel,
+                contextualGrammarLabel,
+                contextualMessageLabel,
+                relatedWordTagsView,
+            ]
+        )
+        meaningSection.setCustomSpacing(12, after: contextualGrammarLabel)
+        contextSection.setRows(
+            heading: contextualContextHeading,
+            body: [contextualLineLabel, contextualLineEnglishLabel, contextualSourceLabel]
+        )
+        bonusSection.setRows(
+            heading: commonUsesTitle,
+            body: [commonUsesLoadingRow, commonUsesBodyLabel, componentTilesView, commonUsesMessageLabel]
+        )
+        bonusSection.setCustomSpacing(8, after: commonUsesBodyLabel)
 
-        contextualSectionStack.addArrangedSubview(relatedWordTagsView)
-        contextualSectionStack.addArrangedSubview(bonusSectionSpacer)
-        contextualSectionStack.addArrangedSubview(commonUsesTitle)
-        contextualSectionStack.addArrangedSubview(commonUsesLoadingRow)
-        contextualSectionStack.addArrangedSubview(commonUsesBodyLabel)
-        contextualSectionStack.addArrangedSubview(commonUsesMessageLabel)
-        contextualSectionStack.setCustomSpacing(12, after: contextualGrammarLabel)
-        contextualSectionStack.setCustomSpacing(0, after: bonusSectionSpacer)
+        contextualSectionStack.axis = .vertical
+        contextualSectionStack.alignment = .fill
+        contextualSectionStack.spacing = GlossCardSection.sectionSpacing
+        contextualSectionStack.addArrangedSubview(meaningSection)
+        contextualSectionStack.addArrangedSubview(contextSection)
+        contextualSectionStack.addArrangedSubview(bonusSection)
 
         contextualCardSurface.backgroundColor = .secondarySystemGroupedBackground
         contextualCardSurface.layer.cornerRadius = 14
@@ -1661,7 +1999,8 @@ final class WordDictionaryDetailView: UIView {
 
         kanjiChipsScrollView.translatesAutoresizingMaskIntoConstraints = false
         kanjiChipsScrollView.showsHorizontalScrollIndicator = false
-        kanjiChipsScrollView.alwaysBounceHorizontal = true
+        // Bounces only when the chips overflow; a short strip stays put.
+        kanjiChipsScrollView.alwaysBounceHorizontal = false
         // Glass chips carry a drop shadow (masksToBounds = false); don't clip it vertically.
         kanjiChipsScrollView.clipsToBounds = false
 
@@ -1714,12 +2053,23 @@ final class WordDictionaryDetailView: UIView {
         compoundsSectionStack.addArrangedSubview(compoundsSectionTitle)
         compoundsSectionStack.addArrangedSubview(compoundStack)
 
-        contentStack.addArrangedSubview(wordContentStack)
-        contentStack.setCustomSpacing(16, after: wordContentStack)
+        contentStack.addArrangedSubview(wordHeaderStack)
+        contentStack.setCustomSpacing(16, after: wordHeaderStack)
         contentStack.addArrangedSubview(dividerAfterWord)
         contentStack.setCustomSpacing(16, after: dividerAfterWord)
-        contentStack.addArrangedSubview(contextualCardContainer)
-        contentStack.setCustomSpacing(16, after: contextualCardContainer)
+        glossColumn.axis = .vertical
+        glossColumn.alignment = .fill
+        glossColumn.spacing = 8
+        glossColumn.clipsToBounds = false
+        bonusExamplesRow.isHidden = true
+        bonusExamplesRow.onChipTap = { [weak self] example in
+            self?.onSelectRelatedWord?(example.japanese)
+        }
+        glossColumn.addArrangedSubview(contextualCardContainer)
+        glossColumn.addArrangedSubview(bonusExamplesRow)
+
+        contentStack.addArrangedSubview(glossColumn)
+        contentStack.setCustomSpacing(16, after: glossColumn)
         contentStack.addArrangedSubview(kanjiSectionStack)
         contentStack.setCustomSpacing(16, after: kanjiSectionStack)
         contentStack.addArrangedSubview(dividerBeforeDefinitions)
@@ -1757,7 +2107,7 @@ final class WordDictionaryDetailView: UIView {
     }
 
     @objc private func saveVocabularyTapped() {
-        let surface = lastConfiguredSurface.trimmingCharacters(in: .whitespacesAndNewlines)
+        let surface = vocabularySaveSurface
         guard !surface.isEmpty, !isAwaitingSpanGloss, let draft = saveDraft, let presenter = nearestViewController() else { return }
 
         saveHaptic.impactOccurred()
@@ -1807,6 +2157,7 @@ final class WordDictionaryDetailView: UIView {
         item.id = UUID().uuidString
         item.createdAt = Date()
         SavedVocabularyStore.shared.save(item, toFolderID: folderID)
+        Analytics.track(.flashcardAdded, ["kind": item.kind.rawValue, "from_lesson": item.sourceTitle != nil])
         refreshSaveButton(showConfirmation: true)
     }
 
@@ -1835,8 +2186,16 @@ final class WordDictionaryDetailView: UIView {
         refreshSaveButton()
     }
 
+    /// Headword written to the folder. The tap token stays on `lastConfiguredSurface` for
+    /// sentence highlighting and gloss requests (転入した → 転入).
+    private var vocabularySaveSurface: String {
+        let draft = saveDraft?.surface.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !draft.isEmpty { return draft }
+        return lastConfiguredSurface.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func refreshSaveButton(showConfirmation: Bool = false) {
-        let surface = lastConfiguredSurface.trimmingCharacters(in: .whitespacesAndNewlines)
+        let surface = vocabularySaveSurface
         let isSaved = !surface.isEmpty && SavedVocabularyStore.shared.contains(surface: surface)
 
         if showConfirmation, isSaved {
@@ -2295,6 +2654,176 @@ final class WordDictionaryDetailView: UIView {
 
 }
 
+/// Wrapping row of span content words in the Break down section.
+/// Same glass chip as the KANJI tiles: the word large, the gloss underneath.
+/// A heading over its body rows inside the gloss card. Hides itself when every row is hidden,
+/// so the card's section spacing never leaves a gap for an empty block.
+private final class GlossCardSection: UIStackView {
+    /// Gap between two sections in the card.
+    static let sectionSpacing: CGFloat = 16
+    /// Gap from a section heading to its first body row.
+    static let headingSpacing: CGFloat = 4
+    /// Gap between body rows.
+    static let rowSpacing: CGFloat = 6
+
+    private var hiddenObservations: [NSKeyValueObservation] = []
+
+    init() {
+        super.init(frame: .zero)
+        axis = .vertical
+        alignment = .fill
+        spacing = Self.rowSpacing
+        isHidden = true
+    }
+
+    required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setRows(heading: UIView, body: [UIView]) {
+        for row in [heading] + body {
+            addArrangedSubview(row)
+            hiddenObservations.append(row.observe(\.isHidden) { [weak self] _, _ in
+                self?.syncHidden()
+            })
+        }
+        setCustomSpacing(Self.headingSpacing, after: heading)
+        syncHidden()
+    }
+
+    private func syncHidden() {
+        let empty = arrangedSubviews.allSatisfy(\.isHidden)
+        if isHidden != empty {
+            isHidden = empty
+        }
+    }
+}
+
+private final class SpanComponentTilesView: UIView {
+
+    var onSelect: ((String) -> Void)?
+
+    private var chips: [GlassChipControl] = []
+    private var laidOutHeight: CGFloat = 0
+
+    private static let horizontalSpacing: CGFloat = 8
+    private static let verticalSpacing: CGFloat = 8
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        clipsToBounds = false
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setComponents(_ components: [GeminiSpanBreakdown.Component]) {
+        chips.forEach { $0.removeFromSuperview() }
+        let titleFont = UIFont.preferredFont(forTextStyle: .title2)
+        let subtitleFont = UIFont.preferredFont(forTextStyle: .caption1)
+        chips = components.compactMap { component in
+            let gloss = glossWithoutVerbLabel(component.gloss)
+            guard !gloss.isEmpty else { return nil }
+            let headword = Self.tappableHeadword(for: component)
+            let title = headword ?? Self.displayWord(for: component)
+            guard !title.isEmpty else { return nil }
+            let chip = GlassChipControl(
+                title: title,
+                subtitle: gloss,
+                titleFont: titleFont,
+                subtitleFont: subtitleFont,
+                showsFurigana: true
+            )
+            chip.translatesAutoresizingMaskIntoConstraints = true
+            if let headword {
+                chip.addAction(UIAction { [weak self] _ in self?.onSelect?(headword) }, for: .touchUpInside)
+                chip.accessibilityHint = "Opens the dictionary for this word"
+            } else {
+                chip.isUserInteractionEnabled = false
+                chip.accessibilityTraits = .staticText
+            }
+            addSubview(chip)
+            return chip
+        }
+        isHidden = chips.isEmpty
+        let width = layoutWidth
+        laidOutHeight = width > 0 && !chips.isEmpty ? layoutContents(in: width) : 0
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = layoutWidth
+        guard width > 0, !chips.isEmpty else { return }
+        let height = layoutContents(in: width)
+        if abs(height - laidOutHeight) > 0.5 {
+            laidOutHeight = height
+            invalidateIntrinsicContentSize()
+            superview?.setNeedsLayout()
+        }
+    }
+
+    override var intrinsicContentSize: CGSize {
+        let width = layoutWidth
+        guard width > 0, !chips.isEmpty else {
+            return CGSize(width: UIView.noIntrinsicMetric, height: chips.isEmpty ? 0 : laidOutHeight)
+        }
+        let height = laidOutHeight > 0 ? laidOutHeight : layoutContents(in: width)
+        return CGSize(width: UIView.noIntrinsicMetric, height: height)
+    }
+
+    private var layoutWidth: CGFloat {
+        if bounds.width > 1 { return bounds.width }
+        var view = superview
+        while let candidate = view {
+            if candidate.bounds.width > 1 { return candidate.bounds.width }
+            view = candidate.superview
+        }
+        return 0
+    }
+
+    /// Exact JMdict headword for this component, preferring the dictionary form.
+    private static func tappableHeadword(for component: GeminiSpanBreakdown.Component) -> String? {
+        let lemma = component.lemma.trimmingCharacters(in: .whitespacesAndNewlines)
+        let surface = component.surface.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !lemma.isEmpty, JMDictStore.shared.hasExactExpressionMatch(for: lemma) {
+            return lemma
+        }
+        if !surface.isEmpty, surface != lemma, JMDictStore.shared.hasExactExpressionMatch(for: surface) {
+            return surface
+        }
+        return nil
+    }
+
+    private static func displayWord(for component: GeminiSpanBreakdown.Component) -> String {
+        let lemma = component.lemma.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !lemma.isEmpty { return lemma }
+        return component.surface.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    @discardableResult
+    private func layoutContents(in width: CGFloat) -> CGFloat {
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+
+        for chip in chips {
+            let size = chip.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+            let fitsOnRow = x == 0 || x + size.width <= width + 0.5
+            if !fitsOnRow {
+                x = 0
+                y += rowHeight + Self.verticalSpacing
+                rowHeight = 0
+            }
+            chip.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
+            x += size.width + Self.horizontalSpacing
+            rowHeight = max(rowHeight, size.height)
+        }
+
+        return chips.isEmpty ? 0 : y + rowHeight
+    }
+}
+
 /// Wrapping row of tappable related-word chips under a contextual gloss.
 private final class RelatedWordTagsView: UIView {
 
@@ -2310,6 +2839,7 @@ private final class RelatedWordTagsView: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        clipsToBounds = false
         caption.text = "RELATED"
         caption.font = .preferredFont(forTextStyle: .caption2)
         caption.textColor = .tertiaryLabel
@@ -2322,7 +2852,7 @@ private final class RelatedWordTagsView: UIView {
 
     func setWords(_ words: [ContextualRelatedWord]) {
         chips.forEach { $0.removeFromSuperview() }
-        let titleFont = UIFont.preferredFont(forTextStyle: .body).bold()
+        let titleFont = UIFont.preferredFont(forTextStyle: .title2)
         let subtitleFont = UIFont.preferredFont(forTextStyle: .caption1)
         chips = words.map { related in
             let note = glossWithoutVerbLabel(related.note)
@@ -2330,7 +2860,8 @@ private final class RelatedWordTagsView: UIView {
                 title: related.word,
                 subtitle: note.isEmpty ? nil : note,
                 titleFont: titleFont,
-                subtitleFont: subtitleFont
+                subtitleFont: subtitleFont,
+                showsFurigana: true
             )
             chip.translatesAutoresizingMaskIntoConstraints = true
             let word = related.word
@@ -2395,6 +2926,13 @@ private final class RelatedWordTagsView: UIView {
 private extension UIFont {
     func bold() -> UIFont {
         guard let descriptor = fontDescriptor.withSymbolicTraits(.traitBold) else { return self }
+        return UIFont(descriptor: descriptor, size: 0)
+    }
+
+    func semibold() -> UIFont {
+        let descriptor = fontDescriptor.addingAttributes([
+            .traits: [UIFontDescriptor.TraitKey.weight: UIFont.Weight.semibold]
+        ])
         return UIFont(descriptor: descriptor, size: 0)
     }
 }

@@ -7,12 +7,36 @@ final class OnboardingCoordinator: NSObject {
     enum Flow: String {
         case original = "onboarding_config"
         case journey = "onboarding_journey_config"
+        case tutor = "onboarding_tutor"
+        case natural = "onboarding_natural"
+        case listenFirst = "onboarding_listen_first"
+
+        /// The `flow` property on onboarding analytics events.
+        var analyticsName: String {
+            switch self {
+            case .original: return "original"
+            case .journey: return "journey"
+            case .tutor: return "tutor"
+            case .natural: return "natural"
+            case .listenFirst: return "listen_first"
+            }
+        }
     }
+
+    /// Step to open on (with earlier steps underneath for Back), e.g. to resume an interrupted flow.
+    var initialStepIndex = 0
+    /// Called with a step's index when the learner moves past it.
+    var stepCompletionHandler: ((Int) -> Void)?
+    /// Steps built by the host (e.g. around a restored session); set before `start()`.
+    var injectedSteps: [OnboardingViewController]?
 
     private(set) var userInfo = UserOnboardingInfo()
     private let flow: Flow
     private var isPreviewMode = false
     private var currentStepIndex = 0
+    /// Last step reported as viewed, so a cancelled swipe-back doesn't count as a new appearance.
+    private weak var lastViewedStep: OnboardingViewController?
+    private var didReportCompletion = false
 
     init(flow: Flow = .original) {
         self.flow = flow
@@ -27,6 +51,18 @@ final class OnboardingCoordinator: NSObject {
     }()
 
     private lazy var steps: [OnboardingViewController] = {
+        if let injectedSteps {
+            return injectedSteps
+        }
+        if flow == .tutor {
+            return TutorOnboardingFlow.makeSteps()
+        }
+        if flow == .natural {
+            return NaturalOnboardingFlow.makeSteps()
+        }
+        if flow == .listenFirst {
+            return ListenFirstOnboardingFlow.makeSteps()
+        }
         if let config = OnboardingConfiguration.loadLocal(named: flow.rawValue) {
             return buildStepsFromConfig(config)
         }
@@ -50,6 +86,7 @@ final class OnboardingCoordinator: NSObject {
     func next() {
         rebuildStepsIfNeeded()
         let nextIndex = currentStepIndex + 1
+        stepCompletionHandler?(currentStepIndex)
         guard nextIndex < steps.count else {
             finishSetup()
             return
@@ -65,7 +102,16 @@ final class OnboardingCoordinator: NSObject {
             navigationController.popViewController(animated: true)
             return
         }
-        containerViewController.navigationController?.popViewController(animated: true)
+        if let host = containerViewController.navigationController, host.viewControllers.count > 1 {
+            host.popViewController(animated: true)
+        } else {
+            containerViewController.dismiss(animated: true)
+        }
+    }
+
+    func stepBeatDidChange(_ viewController: OnboardingViewController) {
+        guard steps.indices.contains(currentStepIndex), steps[currentStepIndex] === viewController else { return }
+        refreshProgress()
     }
 
     func updateSurveyResponses(_ responses: [String: [String]]) {
@@ -119,6 +165,7 @@ final class OnboardingCoordinator: NSObject {
 
     func finishSetup() {
         if isPreviewMode {
+            reportCompletion()
             authenticationDelegate?.signUpComplete()
             return
         }
@@ -145,7 +192,46 @@ final class OnboardingCoordinator: NSObject {
         OnboardingStore.save(userInfo)
         OnboardingStore.markCompletedForCurrentUser()
         Task { await UserProfileStore.shared.flushSavedBufferIfNeeded() }
+        reportCompletion()
         authenticationDelegate?.signUpComplete()
+    }
+
+    private func reportCompletion() {
+        guard !didReportCompletion else { return }
+        didReportCompletion = true
+        Analytics.setPersonProperties(onboardingPersonProperties())
+        Analytics.onboardingCompleted(flow: flow.analyticsName)
+    }
+
+    /// Onboarding answers as person properties: the Hana flows' session, else the config flows' `userInfo`.
+    private func onboardingPersonProperties() -> [String: Any] {
+        var properties: [String: Any] = ["onboarding_flow": flow.analyticsName]
+        if let session = steps.compactMap({ ($0 as? TutorStepViewController)?.session }).first {
+            let level: String = switch session.level {
+            case .brandNew: "brand_new"
+            case .kana: "kana"
+            case .someKanji: "some_kanji"
+            case .conversational: "conversational"
+            }
+            properties["level"] = level
+            properties["daily_goal_minutes"] = session.minutesPerDay
+            if let natural = session as? NaturalOnboardingSession {
+                properties["register"] = natural.register.rawValue
+                properties["track"] = natural.track
+            }
+        } else {
+            properties["level"] = userInfo.sliderLevel
+            properties["daily_goal"] = userInfo.dailyGoal
+            properties["why_learning"] = userInfo.surveyResponses["why_learning"]
+        }
+        return properties
+    }
+
+    private func reportStepViewed(_ step: OnboardingViewController, at index: Int) {
+        guard step !== lastViewedStep else { return }
+        lastViewedStep = step
+        let name = step.onboardingStepId ?? String(describing: type(of: step))
+        Analytics.onboardingStepViewed(index: index, name: name, flow: flow.analyticsName)
     }
 
     private func requestSignInThenFinish() {
@@ -196,17 +282,30 @@ final class OnboardingCoordinator: NSObject {
     }
 
     private func configureInitialStep() {
-        guard let initialStep = steps.first else { return }
-        currentStepIndex = 0
-        configureStep(initialStep)
-        navigationController.setViewControllers([initialStep], animated: false)
+        guard !steps.isEmpty else { return }
+        let index = min(max(initialStepIndex, 0), steps.count - 1)
+        currentStepIndex = index
+        steps[0...index].forEach { $0.coordinator = self }
+        configureStep(steps[index])
+        navigationController.setViewControllers(Array(steps[0...index]), animated: false)
     }
 
     private func configureStep(_ viewController: OnboardingViewController) {
         viewController.coordinator = self
-        let hideBack = viewController is OnboardingFinishViewController
-        containerViewController.setBackButtonHidden(hideBack)
-        containerViewController.updateProgress(step: currentStepIndex, totalSteps: steps.count)
+        containerViewController.setBackButtonHidden(viewController.hidesOnboardingBackButton)
+        refreshProgress()
+    }
+
+    private func refreshProgress() {
+        guard steps.indices.contains(currentStepIndex) else {
+            containerViewController.setProgress(0)
+            return
+        }
+        let beats = steps.map { max(1, $0.progressBeatCount) }
+        let total = beats.reduce(0, +)
+        let completed = beats.prefix(currentStepIndex).reduce(0, +)
+        let beat = min(steps[currentStepIndex].progressBeat, beats[currentStepIndex] - 1)
+        containerViewController.setProgress(Float(completed + beat + 1) / Float(total))
     }
 
     private func buildStepsFromConfig(_ config: OnboardingConfiguration) -> [OnboardingViewController] {
@@ -329,7 +428,9 @@ extension OnboardingCoordinator: UINavigationControllerDelegate {
     ) {
         if let index = steps.firstIndex(where: { $0 === viewController }) {
             currentStepIndex = index
-            containerViewController.updateProgress(step: index, totalSteps: steps.count)
+            containerViewController.setBackButtonHidden(steps[index].hidesOnboardingBackButton)
+            refreshProgress()
+            reportStepViewed(steps[index], at: index)
         }
     }
 }

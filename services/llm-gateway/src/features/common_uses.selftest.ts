@@ -76,6 +76,8 @@ const prompt = commonUses.build({
 }).systemInstruction;
 assert.match(prompt, /物置小屋 \(ものおきごや\) — a storage shed/);
 assert.match(prompt, /If the Japanese is already all kana, do not add a reading/);
+assert.match(prompt, /Particles are read as pronounced, not as spelled/);
+assert.match(prompt, /こんにちは → こんにちわ/);
 assert.match(prompt, /Empty string when it doesn't help\. No readings/);
 assert.match(prompt, /Used to say/);
 assert.match(prompt, /Do not start with "This word is used"/);

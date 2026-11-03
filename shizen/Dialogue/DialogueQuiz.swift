@@ -54,6 +54,8 @@ struct DialogueCompletionTally: Hashable {
     let score: DialogueQuizScore
     let englishPeekedCount: Int
     let awardsImmersedListen: Bool
+    /// First listen ran in hardcore mode; a badge, not points or a star.
+    let isHardcore: Bool
     let lines: [Line]
     let total: Int
 
@@ -89,11 +91,13 @@ struct DialogueCompletionTally: Hashable {
     init(
         score: DialogueQuizScore,
         englishPeekedCount: Int,
-        awardsImmersedListen: Bool = true
+        awardsImmersedListen: Bool = true,
+        isHardcore: Bool = false
     ) {
         self.score = score
         self.englishPeekedCount = max(0, englishPeekedCount)
         self.awardsImmersedListen = awardsImmersedListen
+        self.isHardcore = isHardcore
 
         var lines: [Line] = []
         let quizPoints = score.correctCount * DialogueScoreRules.pointsPerCorrectQuestion
@@ -209,17 +213,25 @@ struct DialogueQuizEvidenceContext {
         spokenLines.map(\.japanese)
     }
 
-    func sourceLines(for question: DialogueQuizQuestion) -> [DialogueQuizSourceLine] {
-        guard let indices = question.sourceSpokenIndices else { return [] }
-        return indices.compactMap { index in
+    func sourceLines(spokenIndices: [Int]) -> [DialogueQuizSourceLine] {
+        spokenIndices.compactMap { index in
             guard spokenLines.indices.contains(index) else { return nil }
             return spokenLines[index]
         }
     }
 
-    func clampedSpokenIndices(for question: DialogueQuizQuestion) -> [Int]? {
-        guard let indices = question.sourceSpokenIndices, !indices.isEmpty else { return nil }
+    func sourceLines(for question: DialogueQuizQuestion) -> [DialogueQuizSourceLine] {
+        guard let indices = question.sourceSpokenIndices else { return [] }
+        return sourceLines(spokenIndices: indices)
+    }
+
+    func clampedSpokenIndices(_ indices: [Int]?) -> [Int]? {
+        guard let indices, !indices.isEmpty else { return nil }
         let valid = indices.filter { spokenLines.indices.contains($0) }
         return valid.isEmpty ? nil : valid
+    }
+
+    func clampedSpokenIndices(for question: DialogueQuizQuestion) -> [Int]? {
+        clampedSpokenIndices(question.sourceSpokenIndices)
     }
 }

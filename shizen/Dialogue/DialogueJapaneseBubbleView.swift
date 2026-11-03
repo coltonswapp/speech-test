@@ -27,12 +27,17 @@ final class DialogueJapaneseBubbleView: UIView {
 
     private let solidBackgroundView = UIView()
     private let solidMaskLayer = CAShapeLayer()
+    /// Clips the underglow to the bubble's rounded shape so its padded falloff
+    /// can't tint the corners outside the glass.
+    private let glassGlowClipView = UIView()
     private let glassGlowView = UIView()
     private let underglowGradientLayer = CAGradientLayer()
     private let glassBackgroundView = LiquidGlassEffectView.makeContainer()
     private var highlightGradientLayer: CAGradientLayer?
     private var emphasisAmount: CGFloat = 0
     private var swipeRevealAmount: CGFloat = 0
+    /// Live speech loudness from a hosted meter; swells the underglow.
+    private var voiceLevel: CGFloat = 0
     private var backgroundStyle: DialogueBubbleBackgroundStyle = .glass
     private var underglowConfiguration = DialogueBubbleUnderglowConfiguration.default
     private var tailEdge: DialogueBubbleTailEdge = .none
@@ -54,6 +59,12 @@ final class DialogueJapaneseBubbleView: UIView {
         contentPadding.left + contentPadding.right
     }
 
+    /// Distance from each bubble edge to the text, including a tail if shown. For lining
+    /// things up with the text rather than the bubble.
+    var labelHorizontalInsets: (leading: CGFloat, trailing: CGFloat) {
+        (labelLeadingConstraint.constant, -labelTrailingConstraint.constant)
+    }
+
     /// Horizontal padding that currently sizes the label, including a tail if shown.
     var layoutHorizontalContentPadding: CGFloat {
         Self.horizontalContentPadding + (tailEdge == .none ? 0 : Self.tailProtrusion)
@@ -73,6 +84,13 @@ final class DialogueJapaneseBubbleView: UIView {
         solidBackgroundView.backgroundColor = .clear
         solidMaskLayer.fillColor = UIColor.black.cgColor
 
+        glassGlowClipView.translatesAutoresizingMaskIntoConstraints = false
+        glassGlowClipView.isUserInteractionEnabled = false
+        glassGlowClipView.backgroundColor = .clear
+        glassGlowClipView.clipsToBounds = true
+        glassGlowClipView.layer.cornerRadius = Self.cornerRadius
+        glassGlowClipView.layer.cornerCurve = .continuous
+
         glassGlowView.translatesAutoresizingMaskIntoConstraints = true
         glassGlowView.isUserInteractionEnabled = false
         glassGlowView.backgroundColor = .clear
@@ -89,7 +107,8 @@ final class DialogueJapaneseBubbleView: UIView {
         glassBackgroundView.alpha = 0
 
         addSubview(solidBackgroundView)
-        addSubview(glassGlowView)
+        glassGlowClipView.addSubview(glassGlowView)
+        addSubview(glassGlowClipView)
         addSubview(glassBackgroundView)
         addSubview(label)
 
@@ -113,6 +132,11 @@ final class DialogueJapaneseBubbleView: UIView {
             solidBackgroundView.leadingAnchor.constraint(equalTo: leadingAnchor),
             solidBackgroundView.trailingAnchor.constraint(equalTo: trailingAnchor),
             solidBackgroundView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            glassGlowClipView.topAnchor.constraint(equalTo: topAnchor),
+            glassGlowClipView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glassGlowClipView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            glassGlowClipView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             glassBackgroundView.topAnchor.constraint(equalTo: topAnchor),
             glassBackgroundView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -215,6 +239,23 @@ final class DialogueJapaneseBubbleView: UIView {
         }
     }
 
+    /// Pulses the underglow with a speaker's voice: brighter and taller while
+    /// loud, back to the resting glow in silence. Per-frame safe (no layout).
+    func setVoiceLevel(_ level: CGFloat) {
+        let clamped = max(0, min(1, level))
+        guard abs(clamped - voiceLevel) > 0.002 else { return }
+        voiceLevel = clamped
+        applyEmphasisVisuals()
+        applyVoiceGlowTransform()
+    }
+
+    private func applyVoiceGlowTransform() {
+        glassGlowView.transform = CGAffineTransform(
+            scaleX: 1 + voiceLevel * 0.1,
+            y: 1 + voiceLevel * 0.9
+        )
+    }
+
     func setSwipeRevealAmount(_ amount: CGFloat) {
         let clamped = max(0, min(1, amount))
         guard abs(clamped - swipeRevealAmount) > 0.001 else { return }
@@ -257,7 +298,10 @@ final class DialogueJapaneseBubbleView: UIView {
             solidBackgroundView.alpha = 0
             solidBackgroundView.backgroundColor = .clear
             glassGlowView.isHidden = !isBubbleActive
-            glassGlowView.alpha = glassAmount * underglowConfiguration.opacity
+            glassGlowView.alpha = min(1, glassAmount * underglowConfiguration.opacity * (1 + voiceLevel * 1.4))
+            if underglowConfiguration.blurRadius > 0 {
+                glassGlowView.layer.shadowOpacity = Float(underglowConfiguration.shadowOpacity * (1 + voiceLevel))
+            }
             glassBackgroundView.isHidden = false
             glassBackgroundView.alpha = 1
         }
@@ -301,7 +345,7 @@ final class DialogueJapaneseBubbleView: UIView {
             underglowGradientLayer.locations = [0, NSNumber(value: Float(midStop)), 1]
             glassGlowView.layer.shadowColor = color.cgColor
             glassGlowView.layer.shadowRadius = blur
-            glassGlowView.layer.shadowOpacity = 0.5
+            glassGlowView.layer.shadowOpacity = Float(underglowConfiguration.shadowOpacity)
             glassGlowView.layer.shadowOffset = .zero
         }
 
@@ -321,17 +365,16 @@ final class DialogueJapaneseBubbleView: UIView {
 
         let blur = underglowConfiguration.blurRadius
         let padding = blur > 0 ? blur * 0.75 : 0
+        // Frame is only valid under an identity transform; restore the voice
+        // swell after placing it.
+        glassGlowView.transform = .identity
         glassGlowView.frame = coreFrame.insetBy(dx: -padding, dy: -padding)
+        applyVoiceGlowTransform()
         underglowGradientLayer.frame = glassGlowView.bounds
         underglowGradientLayer.cornerRadius = underglowConfiguration.cornerRadius
 
         if blur > 0 {
-            let shapeRect = CGRect(
-                x: padding,
-                y: padding,
-                width: coreFrame.width,
-                height: coreFrame.height
-            )
+            let shapeRect = underglowConfiguration.shadowShapeRect(coreSize: coreFrame.size, padding: padding)
             glassGlowView.layer.shadowPath = UIBezierPath(
                 roundedRect: shapeRect,
                 cornerRadius: underglowConfiguration.cornerRadius

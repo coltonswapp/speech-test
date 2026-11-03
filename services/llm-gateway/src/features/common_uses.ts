@@ -1,6 +1,7 @@
 import { Type } from "@google/genai";
 
 import { optionalString, parseJSONObject, requiredString, trimmedString, withoutVerbLabel, withPhraseReading } from "../validate.js";
+import { GEMINI_35_FLASH_LITE, PARTICLE_READING_RULE } from "./models.js";
 import { defineFeature } from "./types.js";
 
 const INSTRUCTIONS = `You help English-speaking Japanese learners compare how one word is used.
@@ -24,9 +25,10 @@ inThisSentence:
 otherUses:
 - 2 to 4 other common uses of this word.
 - Each item is a short Japanese phrase that shows the use, then " — ", then a plain English gloss.
-- The Japanese must include this word in a real phrase. かける → "眼鏡をかける (めがねをかける) — to put on glasses", not "to put on glasses".
+- The Japanese must include this word in a real phrase. かける → "眼鏡をかける (めがねおかける) — to put on glasses", not "to put on glasses".
 - After the Japanese and before the em dash, add a hiragana reading of the whole phrase in parentheses: 物置小屋 (ものおきごや) — a storage shed.
 - Hiragana only. Not romaji. Not furigana over the characters. Not a reading of only the selected word.
+- ${PARTICLE_READING_RULE}
 - If the Japanese is already all kana, do not add a reading.
 - These are uses in general, not more notes about this sentence.
 - A short phrase, not a full sentence, and under 80 characters. No English-only items.
@@ -74,7 +76,7 @@ function kanjiNoteForSurface(note: string, surface: string): string {
 }
 
 export const commonUses = defineFeature({
-  defaultModel: "gemini-2.5-flash",
+  defaultModel: GEMINI_35_FLASH_LITE,
 
   parseInput(body) {
     return {

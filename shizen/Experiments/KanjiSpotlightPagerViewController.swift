@@ -215,10 +215,12 @@ final class KanjiSpotlightPagerViewController: ExperimentSlideshowViewController
         present(nav, animated: true)
     }
 
+    /// Highlight wash on examples and the hero underglow share one color.
     private func refreshExampleHighlights() {
         let color = ExperimentSettings.kanjiSpotlightHighlightColor
         for page in pages {
             (page.cardView as? KanjiSpotlightEntryCardView)?.applyHighlightColor(color)
+            (page.cardView as? KanjiSpotlightKanjiCardView)?.applyHighlightColor(color)
         }
     }
 }

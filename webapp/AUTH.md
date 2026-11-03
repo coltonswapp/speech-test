@@ -31,7 +31,7 @@ The future iOS/staff review client marks a **scene checked off** via:
 
 ## Shizen notes (QA notes to Shohei)
 
-Two endpoints, one contract (`source`, `source_id`, `title?`, `note`, `agent?`, `metadata.url`, `metadata.created_at`, optional `metadata.screenshot_jpeg`):
+Two endpoints, one contract (`source`, `source_id`, `title?`, `note`, `agent?`, `metadata.url`, `metadata.created_at`, optional `metadata.screenshot_jpeg`). `source` is `dialogue`, `quiz`, or `screen` (a debug screenshot of a surface with no lesson):
 
 - `POST /api/client/content-qa/notes`: the iOS QA Note sheet. Bearer `CONTENT_QA_CLIENT_TOKEN` only.
 - `POST /hooks/shizen-note`: other callers (Studio, MCP, scripts). Bearer `SHIZEN_NOTE_WEBHOOK_TOKEN` only; this token never ships in the app. Both paths skip the Studio proxy so each route's own token check applies.

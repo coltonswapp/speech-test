@@ -250,6 +250,10 @@ final class DialogueGlassPillView: UIView {
             height: Self.fixedPillHeight
         )
     }
+
+    override var intrinsicContentSize: CGSize {
+        sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: Self.fixedPillHeight))
+    }
 }
 
 // MARK: - Interactive glass chip
@@ -261,14 +265,25 @@ final class GlassChipControl: UIControl {
 
     private static let cornerRadius: CGFloat = 14
     private static let contentInsets = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+    /// The label already reserves the ruby above the glyphs. Leaving the full
+    /// top pad on top of that leaves a void above the reading.
+    private static let furiganaUpwardOffset: CGFloat = 10
 
     private let glassView: UIVisualEffectView
-    private let titleLabel = UILabel()
+    private let titleLabel: UILabel
     private let subtitleLabel = UILabel()
     private let stack = UIStackView()
 
-    init(title: String, subtitle: String?, titleFont: UIFont, subtitleFont: UIFont) {
+    init(
+        title: String,
+        subtitle: String?,
+        titleFont: UIFont,
+        subtitleFont: UIFont,
+        showsFurigana: Bool = false,
+        contentAlignment: NSTextAlignment = .center
+    ) {
         glassView = LiquidGlassEffectView.makeLightPillContainer()
+        titleLabel = showsFurigana ? FuriganaTranscriptLabel() : UILabel()
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         isAccessibilityElement = true
@@ -278,21 +293,44 @@ final class GlassChipControl: UIControl {
         LiquidGlassEffectView.applyPillStyle(to: glassView, cornerRadius: Self.cornerRadius)
         glassView.isUserInteractionEnabled = false
 
-        titleLabel.text = title
-        titleLabel.font = titleFont
-        titleLabel.textColor = .label
-        titleLabel.textAlignment = .center
+        clipsToBounds = false
+        if showsFurigana, let furigana = titleLabel as? FuriganaTranscriptLabel {
+            furigana.numberOfLines = 2
+            furigana.clipsToBounds = false
+            // Keep the ruby inside the chip. The default alignment rect lets it
+            // paint above the glass, where the card clips it.
+            furigana.verticalTextInsetsAffectAlignmentRect = false
+            JapaneseFuriganaBuilder.applyScrubDisplay(
+                to: furigana,
+                attributed: JapaneseFuriganaBuilder.attributedString(
+                    for: title,
+                    font: titleFont,
+                    textColor: .label
+                ),
+                contentInsets: UIEdgeInsets(
+                    top: JapaneseFuriganaBuilder.wordDetailRubyTopInset(for: titleFont),
+                    left: 0,
+                    bottom: 0,
+                    right: 0
+                )
+            )
+        } else {
+            titleLabel.text = title
+            titleLabel.font = titleFont
+            titleLabel.textColor = .label
+        }
+        titleLabel.textAlignment = contentAlignment
 
         subtitleLabel.text = subtitle
         subtitleLabel.font = subtitleFont
         subtitleLabel.textColor = .secondaryLabel
-        subtitleLabel.textAlignment = .center
+        subtitleLabel.textAlignment = contentAlignment
         subtitleLabel.numberOfLines = 2
         subtitleLabel.isHidden = (subtitle?.isEmpty ?? true)
 
         stack.axis = .vertical
-        stack.alignment = .center
-        stack.spacing = 4
+        stack.alignment = contentAlignment == .center ? .center : .leading
+        stack.spacing = 2
         stack.isUserInteractionEnabled = false
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(titleLabel)
@@ -307,7 +345,12 @@ final class GlassChipControl: UIControl {
             glassView.trailingAnchor.constraint(equalTo: trailingAnchor),
             glassView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: Self.contentInsets.top),
+            stack.topAnchor.constraint(
+                equalTo: topAnchor,
+                constant: showsFurigana
+                    ? Self.contentInsets.top - Self.furiganaUpwardOffset
+                    : Self.contentInsets.top
+            ),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.contentInsets.bottom),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.contentInsets.left),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.contentInsets.right),
@@ -528,6 +571,68 @@ enum GlassPillFlowLayout {
 
         return (frames, sizes.isEmpty ? 0 : y + rowHeight)
     }
+
+    /// Same left-aligned rows as `frames`, but break points are chosen so leftover
+    /// space is shared across rows. A row of one pill is used only when nothing else fits.
+    static func balancedFrames(for sizes: [CGSize], in width: CGFloat) -> (frames: [CGRect], height: CGFloat) {
+        let count = sizes.count
+        guard count > 0, width > 0 else { return ([], 0) }
+
+        func rowWidth(from start: Int, to end: Int) -> CGFloat? {
+            var used: CGFloat = 0
+            for index in start..<end {
+                if index > start { used += horizontalSpacing }
+                used += sizes[index].width
+                if used > width + 0.5 { return nil }
+            }
+            return used
+        }
+
+        var cost = Array(repeating: CGFloat.greatestFiniteMagnitude, count: count + 1)
+        var choice = Array(repeating: 0, count: count + 1)
+        cost[0] = 0
+        for start in 0..<count {
+            guard cost[start].isFinite else { continue }
+            for end in (start + 1)...count {
+                guard let used = rowWidth(from: start, to: end) else { break }
+                let leftover = width - used
+                var rowCost = leftover * leftover
+                if end - start == 1, count > 1 {
+                    rowCost += 80_000
+                }
+                let total = cost[start] + rowCost
+                if total < cost[end] {
+                    cost[end] = total
+                    choice[end] = start
+                }
+            }
+        }
+        guard cost[count].isFinite else { return frames(for: sizes, in: width) }
+
+        var spans: [(start: Int, end: Int)] = []
+        var end = count
+        while end > 0 {
+            let start = choice[end]
+            spans.append((start, end))
+            end = start
+        }
+
+        var frames: [CGRect] = []
+        var y: CGFloat = 0
+        for (offset, span) in spans.reversed().enumerated() {
+            var x: CGFloat = 0
+            var rowHeight: CGFloat = 0
+            for index in span.start..<span.end {
+                let size = sizes[index]
+                frames.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
+                x += size.width + horizontalSpacing
+                rowHeight = max(rowHeight, size.height)
+            }
+            let isLast = offset == spans.count - 1
+            y += isLast ? rowHeight : rowHeight + verticalSpacing
+        }
+        return (frames, y)
+    }
 }
 
 private extension UIView {
@@ -542,7 +647,7 @@ private extension UIView {
     }
 }
 
-/// Wraps `GlassTagControl`s with the same rows as `DialogueGlassPillFlowView`.
+/// Wraps `GlassTagControl`s into balanced rows so a long label does not leave a pill alone.
 final class GlassTagFlowView: UIView {
 
     private var tagViews: [GlassTagControl] = []
@@ -587,7 +692,7 @@ final class GlassTagFlowView: UIView {
 
     private func flowLayout(in width: CGFloat) -> (frames: [CGRect], height: CGFloat) {
         let sizes = tagViews.map { $0.sizeThatFits(.zero) }
-        return GlassPillFlowLayout.frames(for: sizes, in: width)
+        return GlassPillFlowLayout.balancedFrames(for: sizes, in: width)
     }
 }
 
@@ -697,6 +802,232 @@ final class DialogueGlassPillFlowView: UIView {
             )
         }
         return GlassPillFlowLayout.frames(for: sizes, in: width)
+    }
+}
+
+/// Single-row horizontal glass pills (grammar example chips).
+final class DialogueGlassPillStripView: UIView {
+
+    var onPillTap: ((String) -> Void)?
+
+    private let scrollView = UIScrollView()
+    private let stack = UIStackView()
+    private var pillViews: [DialogueGlassPillView] = []
+    private var viewedTexts: Set<String> = []
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        translatesAutoresizingMaskIntoConstraints = false
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.alwaysBounceHorizontal = true
+        scrollView.clipsToBounds = false
+        clipsToBounds = false
+
+        stack.axis = .horizontal
+        stack.alignment = .center
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(stack)
+        addSubview(scrollView)
+
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            heightAnchor.constraint(equalToConstant: DialogueGlassPillView.fixedPillHeight),
+
+            stack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+            stack.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func configure(texts: [String], style: DialogueGlassPillStyle = .grammar) {
+        pillViews.forEach { $0.removeFromSuperview() }
+        pillViews = texts.map { text in
+            let pill = DialogueGlassPillView(text: text, style: style)
+            pill.onTap = { [weak self] tapped in
+                self?.viewedTexts.insert(tapped)
+                self?.pillViews.first { $0.text == tapped }?.setViewed(true, animated: true)
+                self?.onPillTap?(tapped)
+            }
+            pill.setViewed(viewedTexts.contains(text), animated: false)
+            pill.setContentHuggingPriority(.required, for: .horizontal)
+            pill.setContentCompressionResistancePriority(.required, for: .horizontal)
+            stack.addArrangedSubview(pill)
+            return pill
+        }
+        isHidden = texts.isEmpty
+    }
+}
+
+/// Horizontal glass examples, same chip as gloss related-words.
+final class DialogueGrammarExampleStripView: UIView {
+
+    var onChipTap: ((GeminiGrammarUsage.Example) -> Void)?
+
+    private let scrollView = UIScrollView()
+    private let stack = UIStackView()
+    private let loadingRow = UIStackView()
+    private let loadingSpinner = NNLoadingSpinner(frame: CGRect(x: 0, y: 0, width: 24, height: 24))
+    private let loadingLabel = UILabel()
+    private let messageLabel = UILabel()
+    private var chips: [GlassChipControl] = []
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.alwaysBounceHorizontal = true
+        scrollView.clipsToBounds = false
+        clipsToBounds = false
+
+        stack.axis = .horizontal
+        stack.alignment = .fill
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(stack)
+
+        loadingSpinner.configure(with: .systemYellow)
+        loadingSpinner.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            loadingSpinner.widthAnchor.constraint(equalToConstant: 24),
+            loadingSpinner.heightAnchor.constraint(equalToConstant: 24),
+        ])
+        loadingLabel.text = "Finding examples…"
+        loadingLabel.font = .preferredFont(forTextStyle: .subheadline)
+        loadingLabel.textColor = .secondaryLabel
+        loadingRow.axis = .horizontal
+        loadingRow.alignment = .center
+        loadingRow.spacing = 10
+        loadingRow.translatesAutoresizingMaskIntoConstraints = false
+        loadingRow.addArrangedSubview(loadingSpinner)
+        loadingRow.addArrangedSubview(loadingLabel)
+        loadingRow.isHidden = true
+
+        messageLabel.font = .preferredFont(forTextStyle: .subheadline)
+        messageLabel.textColor = .secondaryLabel
+        messageLabel.numberOfLines = 0
+        messageLabel.isHidden = true
+        messageLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(scrollView)
+        addSubview(loadingRow)
+        addSubview(messageLabel)
+
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            stack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+            stack.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor),
+
+            loadingRow.topAnchor.constraint(equalTo: topAnchor),
+            loadingRow.leadingAnchor.constraint(equalTo: leadingAnchor),
+            loadingRow.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+            loadingRow.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            messageLabel.topAnchor.constraint(equalTo: topAnchor),
+            messageLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
+            messageLabel.trailingAnchor.constraint(equalTo: trailingAnchor),
+            messageLabel.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func applyLoading() {
+        clearChips()
+        messageLabel.isHidden = true
+        loadingRow.isHidden = false
+        loadingSpinner.isHidden = false
+        loadingSpinner.reset()
+        scrollView.isHidden = true
+        invalidateIntrinsicContentSize()
+    }
+
+    func apply(_ items: [GeminiGrammarUsage.Example]) {
+        loadingRow.isHidden = true
+        loadingSpinner.isHidden = true
+        messageLabel.isHidden = true
+        clearChips()
+        let titleFont = Self.exampleTitleFont
+        let subtitleFont = Self.exampleSubtitleFont
+        chips = items.map { item in
+            let english = item.english?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let chip = GlassChipControl(
+                title: item.japanese,
+                subtitle: english.isEmpty ? nil : english,
+                titleFont: titleFont,
+                subtitleFont: subtitleFont,
+                showsFurigana: true,
+                contentAlignment: .left
+            )
+            chip.setContentHuggingPriority(.required, for: .horizontal)
+            chip.setContentCompressionResistancePriority(.required, for: .horizontal)
+            chip.accessibilityHint = "Opens this example sentence"
+            chip.addAction(UIAction { [weak self] _ in
+                self?.onChipTap?(item)
+            }, for: .touchUpInside)
+            stack.addArrangedSubview(chip)
+            return chip
+        }
+        scrollView.isHidden = items.isEmpty
+        invalidateIntrinsicContentSize()
+    }
+
+    func applyMessage(_ text: String) {
+        clearChips()
+        loadingRow.isHidden = true
+        loadingSpinner.isHidden = true
+        scrollView.isHidden = true
+        messageLabel.text = text
+        messageLabel.isHidden = text.isEmpty
+        invalidateIntrinsicContentSize()
+    }
+
+    override var intrinsicContentSize: CGSize {
+        if !loadingRow.isHidden {
+            return CGSize(width: UIView.noIntrinsicMetric, height: 44)
+        }
+        if !messageLabel.isHidden {
+            let width = bounds.width > 0 ? bounds.width : 320
+            let height = messageLabel.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
+            return CGSize(width: UIView.noIntrinsicMetric, height: max(22, height))
+        }
+        let chipHeight = chips
+            .map { $0.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).height }
+            .max() ?? 0
+        return CGSize(width: UIView.noIntrinsicMetric, height: chipHeight)
+    }
+
+    /// A step up from body / caption so a short phrase is easier to read in the chip.
+    private static var exampleTitleFont: UIFont {
+        let base = UIFont.preferredFont(forTextStyle: .title3)
+        guard let descriptor = base.fontDescriptor.withSymbolicTraits(.traitBold) else { return base }
+        return UIFont(descriptor: descriptor, size: 0)
+    }
+
+    private static var exampleSubtitleFont: UIFont {
+        UIFont.preferredFont(forTextStyle: .footnote)
+    }
+
+    private func clearChips() {
+        chips.forEach { $0.removeFromSuperview() }
+        chips = []
     }
 }
 
@@ -881,5 +1212,12 @@ final class DialogueLearningHighlightsContentView: UIView {
             vocabSection.setNeedsLayout()
             grammarSection.setNeedsLayout()
         }
+    }
+}
+
+private extension UIFont {
+    func bold() -> UIFont {
+        guard let descriptor = fontDescriptor.withSymbolicTraits(.traitBold) else { return self }
+        return UIFont(descriptor: descriptor, size: 0)
     }
 }

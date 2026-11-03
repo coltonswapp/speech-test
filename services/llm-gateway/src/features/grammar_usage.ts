@@ -11,6 +11,7 @@ import {
   withPhraseReading,
   type Body,
 } from "../validate.js";
+import { GEMINI_35_FLASH_LITE, PARTICLE_READING_RULE } from "./models.js";
 import { defineFeature } from "./types.js";
 
 const MAX_LINES = 12;
@@ -20,26 +21,28 @@ const INSTRUCTIONS = `You help English-speaking Japanese learners see how one gr
 
 The learner tapped a pattern label such as "___ ちゃいけない" or "〜ていい？". "___" and "〜" mark where other words go. Lines marked → use the pattern. When no line is marked, find the line that uses it. Other lines are context only.
 
-Explain the pattern, not the whole line or the whole conversation.
+Explain how this pattern is featured in the → line. Not the whole line. Not the whole conversation.
 
 inThisScene:
-- One short sentence: what the pattern is doing in the line that uses it.
-- Plain English. Do not translate the whole line.
-- Do not start with the Japanese.
-- Lead with the use: "Asking if it's okay to…", "Saying you must not…", "Giving a reason with…".
+- Quote the exact stretch from the → line that is this pattern (the word that fills the slot plus the pattern ending).
+- Then one short sentence: what that stretch is doing here.
+- Example: "飲んじゃいけない — saying you must not drink (here)."
+- Example: "青いの方が — saying the blue one is more (lighter) than the other."
+- Do not translate the whole line. Do not retell the conversation.
 
 form:
-- One short line on how the pattern is built, so the learner can make their own.
-- Write the slot in plain terms, then the pattern: "verb て-form + もいい？", "noun + じゃダメ", "verb ない-form + といけない".
-- Start with the slot the dialogue uses (静かだし → "な-adjective + だし"). Add one other slot, after a semicolon, only when it changes the ending ("な-adjective / noun + だし; い-adjective + し").
-- Only these labels: verb, noun, い-adjective, な-adjective, dictionary form, ます-form, て-form, ない-form, た-form. No other grammar terms.
+- Break down how this line builds the pattern, using those actual words.
+- Slot-fill + pattern: "飲んで + じゃいけない (て→じゃ)", "青い + の方が".
+- After a semicolon, add the generic recipe so they can make their own: "verb て-form + じゃいけない", "い-adjective + のほうが".
+- Only these labels in the recipe: verb, noun, い-adjective, な-adjective, dictionary form, ます-form, て-form, ない-form, た-form. No other grammar terms.
 - Empty string when the pattern is a fixed phrase that does not attach to other words.
 
 examples:
 - 2 to 3 short everyday examples of the same pattern with different words than the dialogue.
 - Each item is the Japanese, then " — ", then a plain English gloss.
-- When the Japanese has any kanji, add a hiragana reading of the whole example in parentheses after the Japanese and before the em dash: 窓を開けてもいい？ (まどをあけてもいい？) — Can I open the window?
+- When the Japanese has any kanji, add a hiragana reading of the whole example in parentheses after the Japanese and before the em dash: 窓を開けてもいい？ (まどおあけてもいい？) — Can I open the window?
 - Hiragana only. Not romaji. Not a reading of only the kanji. If the Japanese is already all kana, do not add a reading: これ、食べてもいい？ needs one; ちょっといい？ does not.
+- ${PARTICLE_READING_RULE}
 - Same register as the dialogue (casual stays casual). Under 40 Japanese characters each. No English-only items.
 - Do not repeat a line from the dialogue.
 
@@ -93,7 +96,7 @@ function sanitizedExamples(raw: unknown, lines: Line[]): string[] {
 }
 
 export const grammarUsage = defineFeature({
-  defaultModel: "gemini-2.5-flash",
+  defaultModel: GEMINI_35_FLASH_LITE,
 
   parseInput(body) {
     const lines = objectArray(body, "lines", MAX_LINES).map((line, i) => parseLine(line, `lines[${i}]`));
@@ -116,8 +119,8 @@ export const grammarUsage = defineFeature({
       ...lines.map(formatLine),
       "",
       "Return for this pattern only:",
-      "• inThisScene — one short sentence on what it does here",
-      "• form — how to build it, or empty for a fixed phrase",
+      "• inThisScene — the exact stretch from the → line, then what it does here",
+      "• form — this line's breakdown, then the generic recipe, or empty for a fixed phrase",
       "• examples — 2 to 3 new everyday examples",
       "• note — one short tip, or empty",
     ];

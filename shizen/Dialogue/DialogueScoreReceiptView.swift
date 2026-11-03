@@ -61,6 +61,17 @@ final class DialogueScoreSummaryCardView: UIView {
                 makeRow(label: line.label, points: line.points, kind: line.kind)
             )
         }
+        if tally.isHardcore {
+            contentStack.addArrangedSubview(
+                makeRow(
+                    label: "Hardcore listen",
+                    points: 0,
+                    kind: .bonus,
+                    image: DialogueHardcoreMode.icon,
+                    trailingText: "Badge"
+                )
+            )
+        }
 
         NSLayoutConstraint.activate([
             contentStack.topAnchor.constraint(equalTo: topAnchor, constant: Self.verticalInset),
@@ -136,7 +147,9 @@ final class DialogueScoreSummaryCardView: UIView {
     private func makeRow(
         label: String,
         points: Int,
-        kind: DialogueCompletionTally.Line.Kind
+        kind: DialogueCompletionTally.Line.Kind,
+        image: UIImage? = nil,
+        trailingText: String? = nil
     ) -> UIView {
         let iconContainer = UIView()
         iconContainer.backgroundColor = iconBackground(for: kind)
@@ -145,7 +158,7 @@ final class DialogueScoreSummaryCardView: UIView {
         iconContainer.translatesAutoresizingMaskIntoConstraints = false
 
         let icon = UIImageView(
-            image: UIImage(
+            image: image ?? UIImage(
                 systemName: iconName(for: kind),
                 withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)
             )
@@ -172,7 +185,8 @@ final class DialogueScoreSummaryCardView: UIView {
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let pointsLabel = UILabel()
-        pointsLabel.text = Self.signedPoints(points)
+        let trailing = trailingText ?? Self.signedPoints(points)
+        pointsLabel.text = trailing
         pointsLabel.font = .monospacedDigitSystemFont(ofSize: 15, weight: .semibold)
         pointsLabel.textColor = pointsColor(for: kind)
         pointsLabel.textAlignment = .right
@@ -184,7 +198,8 @@ final class DialogueScoreSummaryCardView: UIView {
         row.alignment = .center
         row.spacing = 10
         row.isAccessibilityElement = true
-        row.accessibilityLabel = "\(label), \(Self.signedPoints(points)) points"
+        row.accessibilityLabel = trailingText.map { "\(label), \($0)" }
+            ?? "\(label), \(trailing) points"
         return row
     }
 

@@ -407,7 +407,7 @@ export const shizenNoteJob = pgTable("shizen_note_job", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-  source: text("source").notNull(), // dialogue | quiz
+  source: text("source").notNull(), // dialogue | quiz | screen
   sourceId: text("source_id").notNull(),
   title: text("title"),
   note: text("note").notNull(),

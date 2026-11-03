@@ -18,6 +18,8 @@ struct VocabFlashcard {
     var tokens: [String]? = nil
     /// Lemma of `japanese` (e.g. 似合う for 似合ってる), when known.
     var dictionaryForm: String? = nil
+    /// Contextual meaning and dialogue line kept with a saved word. Nil for starter cards.
+    var storedContext: StoredWordContext? = nil
 
     var isPhrase: Bool { (tokens?.count ?? 0) > 1 }
 
@@ -61,15 +63,19 @@ final class VocabFlashcardView: UIView {
     private let dictionaryButton = UIButton(type: .system)
     private var lookupSurface = ""
     private var lookupSentence: String?
+    private var lookupContext: StoredWordContext?
 
     private var japaneseCenterYConstraint: NSLayoutConstraint!
     private var japaneseTopConstraint: NSLayoutConstraint!
     private var definitionCenterYConstraint: NSLayoutConstraint!
+    /// Revealed only: keeps a wrapped definition from riding up into the shrunken keyword.
+    private var definitionBelowKeywordConstraint: NSLayoutConstraint!
 
     private static let revealedKeywordScale: CGFloat = 0.42
     private static let definitionEntryOffset: CGFloat = 22
     private static let hiddenDefinitionCenterYOffset: CGFloat = 16
     private static let revealedDefinitionCenterYOffset: CGFloat = 32
+    private static let revealedKeywordToDefinitionGap: CGFloat = 14
 
     private(set) var isRevealed = false
     private var japaneseText = ""
@@ -98,6 +104,7 @@ final class VocabFlashcardView: UIView {
         lookupSurface = card.japanese
         let sentence = card.sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         lookupSentence = sentence.isEmpty ? nil : sentence
+        lookupContext = card.storedContext
         updateDictionaryButton(dictionaryForm: card.displayedDictionaryForm)
         applyJapaneseDisplay()
         readingLabel.text = card.reading == card.japanese ? "" : card.reading
@@ -313,6 +320,7 @@ final class VocabFlashcardView: UIView {
     private func applyRevealedLayout(_ revealed: Bool) {
         japaneseCenterYConstraint.isActive = !revealed
         japaneseTopConstraint.isActive = revealed
+        definitionBelowKeywordConstraint.isActive = revealed
         japaneseCenterYConstraint.constant = revealed ? 0 : hiddenJapaneseCenterYOffset()
         definitionCenterYConstraint.constant = revealed
             ? Self.revealedDefinitionCenterYOffset
@@ -351,8 +359,12 @@ final class VocabFlashcardView: UIView {
         guard !surface.isEmpty, let presenter = nearestViewController() else { return }
         WordDictionaryDetailSheetPresenter.present(
             surface: surface,
-            sentence: lookupSentence,
+            sentence: lookupSentence ?? lookupContext?.line,
             glossFraming: .word,
+            storedContext: lookupContext,
+            sourceTitle: lookupContext?.source,
+            lineEnglish: lookupContext?.lineEnglish,
+            fullSheet: true,
             from: presenter
         )
     }
@@ -370,6 +382,14 @@ final class VocabFlashcardView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        // The keyword shrinks via transform, which Auto Layout doesn't see, so
+        // place the definition against the scaled glyph bottom by hand.
+        let keywordGap = japaneseLabel.bounds.height * Self.revealedKeywordScale / 2
+            + Self.revealedKeywordToDefinitionGap
+        if definitionBelowKeywordConstraint.constant != keywordGap {
+            definitionBelowKeywordConstraint.constant = keywordGap
+            super.layoutSubviews()
+        }
         layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: layer.cornerRadius).cgPath
         bringSubviewToFront(dictionaryButton)
     }
@@ -457,6 +477,11 @@ final class VocabFlashcardView: UIView {
             equalTo: centerYAnchor,
             constant: Self.hiddenDefinitionCenterYOffset
         )
+        // Centered unless that would overlap the keyword; then pushed down.
+        definitionCenterYConstraint.priority = .defaultHigh
+        definitionBelowKeywordConstraint = definitionStack.topAnchor.constraint(
+            greaterThanOrEqualTo: japaneseLabel.centerYAnchor
+        )
 
         NSLayoutConstraint.activate([
             japaneseLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
@@ -468,6 +493,14 @@ final class VocabFlashcardView: UIView {
             definitionCenterYConstraint,
             definitionStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 24),
             definitionStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -24),
+            {
+                let aboveHint = definitionStack.bottomAnchor.constraint(
+                    lessThanOrEqualTo: hintLabel.topAnchor,
+                    constant: -12
+                )
+                aboveHint.priority = UILayoutPriority(999)
+                return aboveHint
+            }(),
 
             hintLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
             hintLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),

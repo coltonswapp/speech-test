@@ -391,6 +391,12 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
         applyTokenIndex(nil, fromUser: false)
     }
 
+    /// Fades a token or span selection so playback karaoke stays visible on the line.
+    public var dimsSelectionHighlight: Bool {
+        get { sentenceTextView.dimsSelectionHighlight }
+        set { sentenceTextView.dimsSelectionHighlight = newValue }
+    }
+
     /// Playback karaoke wash on the sentence line. Does not change scrub
     /// selection, callout, or `onSelectionChanged`.
     public func setKaraokeHighlight(

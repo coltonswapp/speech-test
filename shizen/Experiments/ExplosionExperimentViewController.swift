@@ -2,12 +2,25 @@
 //  ExplosionExperimentViewController.swift
 //  shizen
 //
-//  DEBUG experiment: tap the canvas to fire NNKit explosions. Size and emoji
-//  editing live in an undimmed detent sheet — small to play, medium/large to edit.
+//  DEBUG experiment: tap the canvas to fire NNKit explosions. Size, particle
+//  kind, and emoji editing live in an undimmed detent sheet — small to play,
+//  medium/large to edit.
 //
 
 import NNKit
 import UIKit
+
+enum ExplosionParticleKind: Int, CaseIterable {
+    case emojis
+    case mascots
+
+    var title: String {
+        switch self {
+        case .emojis: return "Emojis"
+        case .mascots: return "Mascots"
+        }
+    }
+}
 
 enum ExplosionSizeOption: Int, CaseIterable {
     case tiny
@@ -33,6 +46,8 @@ final class ExplosionExperimentViewController: UIViewController {
 
     private let hintLabel = UILabel()
     private var selectedSize: ExplosionSizeOption = .medium
+    private var particleKind: ExplosionParticleKind = .emojis
+    private var mascotSettings = HanaParticleSettings()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -64,9 +79,19 @@ final class ExplosionExperimentViewController: UIViewController {
     private func presentControlsSheetIfNeeded(animated: Bool) {
         guard presentedViewController == nil else { return }
 
-        let sheet = ExplosionControlsSheetViewController(selectedSize: selectedSize)
+        let sheet = ExplosionControlsSheetViewController(
+            selectedSize: selectedSize,
+            particleKind: particleKind,
+            mascotSettings: mascotSettings
+        )
         sheet.onSizeChanged = { [weak self] size in
             self?.selectedSize = size
+        }
+        sheet.onKindChanged = { [weak self] kind in
+            self?.particleKind = kind
+        }
+        sheet.onMascotSettingsChanged = { [weak self] settings in
+            self?.mascotSettings = settings
         }
         sheet.modalPresentationStyle = .pageSheet
         sheet.isModalInPresentation = true
@@ -91,19 +116,21 @@ final class ExplosionExperimentViewController: UIViewController {
     @objc private func canvasTapped(_ gesture: UITapGestureRecognizer) {
         HapticsHelper.lightHaptic()
         let location = view.convert(gesture.location(in: view), to: nil)
+        let images = particleKind == .mascots ? HanaParticleImages.images(for: mascotSettings) : []
+        let pointSize = particleKind == .mascots ? mascotSettings.particleSize : 0
         switch selectedSize {
         case .tiny:
-            ExplosionManager.trigger(.tiny, at: location)
+            ExplosionManager.trigger(.tiny, at: location, images: images, imagePointSize: pointSize)
         case .small:
-            ExplosionManager.trigger(.small, at: location)
+            ExplosionManager.trigger(.small, at: location, images: images, imagePointSize: pointSize)
         case .medium:
-            ExplosionManager.trigger(.medium, at: location)
+            ExplosionManager.trigger(.medium, at: location, images: images, imagePointSize: pointSize)
         case .large:
-            ExplosionManager.trigger(.large, at: location)
+            ExplosionManager.trigger(.large, at: location, images: images, imagePointSize: pointSize)
         case .atomic:
-            ExplosionManager.trigger(.atomic, at: location)
+            ExplosionManager.trigger(.atomic, at: location, images: images, imagePointSize: pointSize)
         case .random:
-            ExplosionManager.triggerRandom(at: location)
+            ExplosionManager.triggerRandom(at: location, images: images, imagePointSize: pointSize)
         }
     }
 }
@@ -111,28 +138,53 @@ final class ExplosionExperimentViewController: UIViewController {
 final class ExplosionControlsSheetViewController: UIViewController, UISheetPresentationControllerDelegate {
 
     static let smallDetentID = UISheetPresentationController.Detent.Identifier("explosionSmall")
-    static let smallDetentHeight: CGFloat = 168
+    static let smallDetentHeight: CGFloat = 212
 
     var onSizeChanged: ((ExplosionSizeOption) -> Void)?
+    var onKindChanged: ((ExplosionParticleKind) -> Void)?
+    var onMascotSettingsChanged: ((HanaParticleSettings) -> Void)?
 
     private let stack = UIStackView()
     private let instructionLabel = UILabel()
+    private let kindControl = UISegmentedControl(items: ExplosionParticleKind.allCases.map(\.title))
     private let sizeControl = UISegmentedControl(items: ExplosionSizeOption.allCases.map(\.title))
     private let emojiCollectionView: UICollectionView
+    private let mascotScroll = UIScrollView()
+    private let mascotStack = UIStackView()
+    private let consistentSwitch = UISwitch()
+    private let particleSizeSlider = UISlider()
+    private let petalSlider = UISlider()
+    private let faceSlider = UISlider()
+    private let spreadSlider = UISlider()
+    private let wobbleSlider = UISlider()
+    private let previewScroll = UIScrollView()
+    private let previewStack = UIStackView()
+    private let filler = UIView()
     private let copyButton = UIButton(type: .system)
     private var selectedEmojis: Set<String>
+    private var particleKind: ExplosionParticleKind
+    private var mascotSettings: HanaParticleSettings
+    private var isExpanded = false
+    private var previewWorkItem: DispatchWorkItem?
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
     private var copyResetWorkItem: DispatchWorkItem?
 
-    init(selectedSize: ExplosionSizeOption) {
+    init(
+        selectedSize: ExplosionSizeOption,
+        particleKind: ExplosionParticleKind,
+        mascotSettings: HanaParticleSettings
+    ) {
         let layout = UICollectionViewFlowLayout()
         layout.itemSize = CGSize(width: 44, height: 44)
         layout.minimumInteritemSpacing = 8
         layout.minimumLineSpacing = 8
         emojiCollectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         selectedEmojis = Set(ExperimentSettings.explosionEmojis)
+        self.particleKind = particleKind
+        self.mascotSettings = mascotSettings
         super.init(nibName: nil, bundle: nil)
         sizeControl.selectedSegmentIndex = selectedSize.rawValue
+        kindControl.selectedSegmentIndex = particleKind.rawValue
     }
 
     required init?(coder: NSCoder) {
@@ -146,7 +198,8 @@ final class ExplosionControlsSheetViewController: UIViewController, UISheetPrese
         configureCollection()
         applySelectedEmojis()
         applySnapshot()
-        applyDetentLayout(isExpanded: false)
+        applyDetentLayout()
+        kindControl.addTarget(self, action: #selector(kindChanged), for: .valueChanged)
         sizeControl.addTarget(self, action: #selector(sizeChanged), for: .valueChanged)
     }
 
@@ -160,7 +213,51 @@ final class ExplosionControlsSheetViewController: UIViewController, UISheetPrese
         instructionLabel.textAlignment = .center
         instructionLabel.textColor = .secondaryLabel
 
+        kindControl.translatesAutoresizingMaskIntoConstraints = false
         sizeControl.translatesAutoresizingMaskIntoConstraints = false
+
+        mascotScroll.translatesAutoresizingMaskIntoConstraints = false
+        mascotScroll.alwaysBounceVertical = true
+        mascotScroll.showsVerticalScrollIndicator = true
+        mascotScroll.setContentHuggingPriority(.defaultLow, for: .vertical)
+        mascotScroll.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        mascotStack.axis = .vertical
+        mascotStack.spacing = 14
+        mascotStack.translatesAutoresizingMaskIntoConstraints = false
+        mascotScroll.addSubview(mascotStack)
+
+        let consistentLabel = UILabel()
+        consistentLabel.text = "Consistent"
+        consistentLabel.font = .systemFont(ofSize: 16, weight: .medium)
+        consistentLabel.textColor = .label
+        consistentSwitch.isOn = mascotSettings.consistent
+        consistentSwitch.addTarget(self, action: #selector(consistentChanged), for: .valueChanged)
+        let consistentRow = UIStackView(arrangedSubviews: [consistentLabel, consistentSwitch])
+        consistentRow.axis = .horizontal
+        consistentRow.alignment = .center
+
+        configureSlider(particleSizeSlider, min: 24, max: 96, value: Float(mascotSettings.particleSize))
+        configureSlider(petalSlider, min: 0.5, max: 1.2, value: Float(mascotSettings.petalScale))
+        configureSlider(faceSlider, min: 0.5, max: 1.6, value: Float(mascotSettings.faceScale))
+        configureSlider(spreadSlider, min: 0, max: 1, value: Float(mascotSettings.petalSpread))
+        configureSlider(wobbleSlider, min: 0, max: 1, value: Float(mascotSettings.petalWobble))
+
+        previewScroll.translatesAutoresizingMaskIntoConstraints = false
+        previewScroll.alwaysBounceHorizontal = true
+        previewScroll.showsHorizontalScrollIndicator = false
+        previewStack.axis = .horizontal
+        previewStack.spacing = 4
+        previewStack.alignment = .center
+        previewStack.translatesAutoresizingMaskIntoConstraints = false
+        previewScroll.addSubview(previewStack)
+
+        mascotStack.addArrangedSubview(consistentRow)
+        mascotStack.addArrangedSubview(ExperimentSliderRow.make(title: "Mascot size", slider: particleSizeSlider, format: "%.0f"))
+        mascotStack.addArrangedSubview(ExperimentSliderRow.make(title: "Petal size", slider: petalSlider, format: "%.2f"))
+        mascotStack.addArrangedSubview(ExperimentSliderRow.make(title: "Face size", slider: faceSlider, format: "%.2f"))
+        mascotStack.addArrangedSubview(ExperimentSliderRow.make(title: "Petal spread", slider: spreadSlider, format: "%.2f"))
+        mascotStack.addArrangedSubview(ExperimentSliderRow.make(title: "Petal wobble", slider: wobbleSlider, format: "%.2f"))
+        mascotStack.addArrangedSubview(previewScroll)
 
         emojiCollectionView.translatesAutoresizingMaskIntoConstraints = false
         emojiCollectionView.backgroundColor = .clear
@@ -170,6 +267,10 @@ final class ExplosionControlsSheetViewController: UIViewController, UISheetPrese
         emojiCollectionView.setContentHuggingPriority(.defaultLow, for: .vertical)
         emojiCollectionView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
 
+        filler.backgroundColor = .clear
+        filler.setContentHuggingPriority(.init(1), for: .vertical)
+        filler.setContentCompressionResistancePriority(.init(1), for: .vertical)
+
         var copyConfig = UIButton.Configuration.tinted()
         copyConfig.title = "Copy selected"
         copyConfig.image = UIImage(systemName: "doc.on.doc")
@@ -177,10 +278,13 @@ final class ExplosionControlsSheetViewController: UIViewController, UISheetPrese
         copyButton.configuration = copyConfig
         copyButton.addTarget(self, action: #selector(copySelectedTapped), for: .touchUpInside)
 
+        stack.addArrangedSubview(kindControl)
         stack.addArrangedSubview(instructionLabel)
         stack.addArrangedSubview(sizeControl)
         stack.addArrangedSubview(emojiCollectionView)
+        stack.addArrangedSubview(mascotScroll)
         stack.addArrangedSubview(copyButton)
+        stack.addArrangedSubview(filler)
         view.addSubview(stack)
 
         NSLayoutConstraint.activate([
@@ -188,9 +292,28 @@ final class ExplosionControlsSheetViewController: UIViewController, UISheetPrese
             stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             stack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
+            kindControl.heightAnchor.constraint(equalToConstant: 32),
             sizeControl.heightAnchor.constraint(equalToConstant: 32),
+            mascotStack.topAnchor.constraint(equalTo: mascotScroll.contentLayoutGuide.topAnchor),
+            mascotStack.leadingAnchor.constraint(equalTo: mascotScroll.contentLayoutGuide.leadingAnchor),
+            mascotStack.trailingAnchor.constraint(equalTo: mascotScroll.contentLayoutGuide.trailingAnchor),
+            mascotStack.bottomAnchor.constraint(equalTo: mascotScroll.contentLayoutGuide.bottomAnchor),
+            mascotStack.widthAnchor.constraint(equalTo: mascotScroll.frameLayoutGuide.widthAnchor),
+            previewScroll.heightAnchor.constraint(equalToConstant: 96),
+            previewStack.topAnchor.constraint(equalTo: previewScroll.contentLayoutGuide.topAnchor),
+            previewStack.leadingAnchor.constraint(equalTo: previewScroll.contentLayoutGuide.leadingAnchor),
+            previewStack.trailingAnchor.constraint(equalTo: previewScroll.contentLayoutGuide.trailingAnchor),
+            previewStack.bottomAnchor.constraint(equalTo: previewScroll.contentLayoutGuide.bottomAnchor),
+            previewStack.heightAnchor.constraint(equalTo: previewScroll.frameLayoutGuide.heightAnchor),
             copyButton.heightAnchor.constraint(equalToConstant: 44),
         ])
+    }
+
+    private func configureSlider(_ slider: UISlider, min: Float, max: Float, value: Float) {
+        slider.minimumValue = min
+        slider.maximumValue = max
+        slider.value = value
+        slider.addTarget(self, action: #selector(mascotSliderChanged), for: .valueChanged)
     }
 
     private func configureCollection() {
@@ -242,15 +365,89 @@ final class ExplosionControlsSheetViewController: UIViewController, UISheetPrese
         ExplosionManager.emojis = ExperimentSettings.explosionEmojis
     }
 
-    private func applyDetentLayout(isExpanded: Bool) {
-        instructionLabel.text = isExpanded ? "Emojis in the burst" : "Pull up to edit emojis"
-        emojiCollectionView.isHidden = !isExpanded
-        copyButton.isHidden = !isExpanded
+    private func applyDetentLayout() {
+        let mascots = particleKind == .mascots
+        let showMascotEditor = mascots && isExpanded
+        let showEmojiEditor = !mascots && isExpanded
+        if mascots {
+            instructionLabel.text = isExpanded
+                ? (mascotSettings.consistent ? "Same color, size and spin still vary" : "Themes, size, and spin vary")
+                : "Pull up to tune mascots"
+        } else {
+            instructionLabel.text = isExpanded ? "Emojis in the burst" : "Pull up to edit emojis"
+        }
+        emojiCollectionView.isHidden = !showEmojiEditor
+        copyButton.isHidden = !showEmojiEditor
+        mascotScroll.isHidden = !showMascotEditor
+        filler.isHidden = isExpanded
+        if showMascotEditor {
+            schedulePreviewRefresh()
+        }
+    }
+
+    private func schedulePreviewRefresh() {
+        previewWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.rebuildPreview()
+        }
+        previewWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work)
+    }
+
+    private func rebuildPreview() {
+        let images = HanaParticleImages.images(for: mascotSettings)
+        let side: CGFloat = mascotSettings.consistent ? 88 : 64
+        for view in previewStack.arrangedSubviews {
+            previewStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        for image in images {
+            let view = UIImageView(image: image)
+            view.contentMode = .scaleAspectFit
+            view.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                view.widthAnchor.constraint(equalToConstant: side),
+                view.heightAnchor.constraint(equalToConstant: side),
+            ])
+            previewStack.addArrangedSubview(view)
+        }
+    }
+
+    private func publishMascotSettings() {
+        onMascotSettingsChanged?(mascotSettings)
+        if particleKind == .mascots, isExpanded {
+            instructionLabel.text = mascotSettings.consistent
+                ? "Same color, size and spin still vary"
+                : "Themes, size, and spin vary"
+        }
+        schedulePreviewRefresh()
     }
 
     private static func swiftArrayLiteral(from emojis: [String]) -> String {
         let items = emojis.map { "\"\($0)\"" }.joined(separator: ", ")
         return "[\(items)]"
+    }
+
+    @objc private func kindChanged() {
+        particleKind = ExplosionParticleKind(rawValue: kindControl.selectedSegmentIndex) ?? .emojis
+        onKindChanged?(particleKind)
+        applyDetentLayout()
+        HapticsHelper.superLightHaptic()
+    }
+
+    @objc private func consistentChanged() {
+        mascotSettings.consistent = consistentSwitch.isOn
+        publishMascotSettings()
+        HapticsHelper.superLightHaptic()
+    }
+
+    @objc private func mascotSliderChanged() {
+        mascotSettings.particleSize = CGFloat(particleSizeSlider.value)
+        mascotSettings.petalScale = CGFloat(petalSlider.value)
+        mascotSettings.faceScale = CGFloat(faceSlider.value)
+        mascotSettings.petalSpread = CGFloat(spreadSlider.value)
+        mascotSettings.petalWobble = CGFloat(wobbleSlider.value)
+        publishMascotSettings()
     }
 
     @objc private func sizeChanged() {
@@ -279,8 +476,8 @@ final class ExplosionControlsSheetViewController: UIViewController, UISheetPrese
     func sheetPresentationControllerDidChangeSelectedDetentIdentifier(
         _ sheetPresentationController: UISheetPresentationController
     ) {
-        let isSmall = sheetPresentationController.selectedDetentIdentifier == Self.smallDetentID
-        applyDetentLayout(isExpanded: !isSmall)
+        isExpanded = sheetPresentationController.selectedDetentIdentifier != Self.smallDetentID
+        applyDetentLayout()
     }
 }
 

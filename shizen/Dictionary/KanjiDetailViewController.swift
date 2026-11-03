@@ -153,9 +153,12 @@ private final class KanjiCompoundListCell: UICollectionViewListCell {
         stack.addArrangedSubview(glossLabel)
         contentView.addSubview(stack)
 
+        // The ruby label already reserves its reading room above the kanji, so
+        // keep the top pad tight and give the gloss more room — otherwise the
+        // block sits low in the row and below the disclosure chevron.
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
-            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -6),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
             stack.leadingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.trailingAnchor),
         ])
@@ -229,6 +232,7 @@ final class KanjiDetailViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        Analytics.track(.kanjiDetailOpened)
         title = character
         navigationItem.largeTitleDisplayMode = .never
         view.backgroundColor = .systemGroupedBackground

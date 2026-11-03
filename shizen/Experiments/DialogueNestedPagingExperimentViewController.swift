@@ -398,7 +398,7 @@ private final class NestedVerticalScrollHandoffCoordinator: NSObject, UIScrollVi
 
 // MARK: - DialogueNestedPagingExperimentViewController
 
-final class DialogueNestedPagingExperimentViewController: UIViewController {
+final class DialogueNestedPagingExperimentViewController: UIViewController, ScreenshotQAPresenting {
 
     private static let boundaryEpsilon: CGFloat = 0.5
     /// Fraction of a page the outer pager must travel (without a strong flick) before committing.
@@ -507,11 +507,18 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     private var selectedScenarioID: String
     private var prefersNextIncompleteScenario: Bool
     private var sessionMode: DialogueLessonSessionMode
+    /// Funnel events per scene visit; see `DialogueLessonAnalytics`.
+    let analytics = DialogueLessonAnalytics()
     private var hasFinishedListeningThisVisit = false
     private var hasFinishedQuizThisVisit = false
     private var committedTally: DialogueCompletionTally?
     /// How the dialogue transcript renders (full text, Japanese only, live meters).
     private var transcriptDisplayMode: DialogueTranscriptDisplayMode = .full
+    /// Hardcore was on from before playback started through the finish, so
+    /// this visit's completion earns the hardcore badge.
+    private var hardcoreEligibleThisVisit = false
+    /// A hardcore listen finished this visit, so the transcript is shown again.
+    private var hardcoreTranscriptRevealed = false
     private var appliedTopContentInset: CGFloat = -1
     private var appliedBottomContentInset: CGFloat = -1
     private var pageTransitionProgress: CGFloat = 0
@@ -534,6 +541,16 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     /// doesn't also drop the learner into review of the scene they just left.
     private var suppressViewLessonOnSheetDismiss = false
     private var nextSceneButtonEndsLesson = false
+
+    /// Hardcore on: live meters only until a playback finishes, then the
+    /// learner's chosen transcript mode.
+    private var hardcoreActive: Bool {
+        DialogueHardcoreMode.isEnabled && !hardcoreTranscriptRevealed
+    }
+
+    private var effectiveTranscriptDisplayMode: DialogueTranscriptDisplayMode {
+        hardcoreActive ? .listeningSpeakers : transcriptDisplayMode
+    }
 
     private var authoredHasQuiz: Bool {
         !(currentScenarioItem?.quiz.isEmpty ?? true)
@@ -688,18 +705,25 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        updateInteractivePopForHardcore()
         guard hasLoadedLessonContent else { return }
         if topScrollEdgeInteraction.scrollView == nil {
             topScrollEdgeInteraction.scrollView = activeInnerScrollView
         }
         updateScrollEdgeInteractionsForActivePage()
+        refreshNavigationBarItems()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        // Hand the back swipes to whatever is pushed on top or revealed.
+        setBackSwipeGesturesEnabled(true)
         guard hasLoadedLessonContent else { return }
         dialogueViewController.stopHostedPlaybackIfDisappearing()
         quizViewController?.stopEvidencePlayback()
+        if isMovingFromParent || isBeingDismissed || navigationController?.isBeingDismissed == true {
+            analytics.end()
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -863,6 +887,12 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         applyScrollLayoutIfNeeded(force: true)
         view.layoutIfNeeded()
         loadingCoordinator.bringOverlayToFront()
+        beginAnalyticsVisit()
+    }
+
+    private func beginAnalyticsVisit() {
+        guard currentScenarioItem != nil else { return }
+        analytics.begin(scenarioID: selectedScenarioID, collectionID: collection?.id, mode: sessionMode)
     }
 
     private func showCollectionLoadFailure(id: String) {
@@ -1030,19 +1060,43 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     }
 
     private func configureDialogueNavigationItems() {
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: nil,
-            image: UIImage(systemName: "text.line.first.and.arrowtriangle.forward"),
-            primaryAction: nil,
-            menu: makeDialogueMenu()
-        )
+        refreshNavigationBarItems()
+    }
+
+    /// Lesson menu on dialogue/quiz; highlights feedback + QA on the highlights page (right bar only).
+    private func refreshNavigationBarItems() {
+        let isHighlightsPage = isHighlightsUnlocked && activePageIndex == highlightsPageIndex
+        if isHighlightsPage,
+           let sceneContext = lessonDialogueSceneContext(),
+           let item = currentScenarioItem,
+           let supportItem = LessonHighlightSupportMenu.makeBarButtonItem(
+               scene: sceneContext,
+               subject: .highlights(item.highlights),
+               presenter: self
+           ) {
+            navigationItem.rightBarButtonItem = supportItem
+            return
+        }
+
+        let lessonMenuImage = UIImage(systemName: "text.line.first.and.arrowtriangle.forward")
+        let switchingFromHighlightsMenu = navigationItem.rightBarButtonItem?.accessibilityIdentifier
+            == LessonHighlightSupportMenu.barButtonAccessibilityID
+        if navigationItem.rightBarButtonItem == nil || switchingFromHighlightsMenu {
+            navigationItem.rightBarButtonItem = UIBarButtonItem(
+                title: nil,
+                image: lessonMenuImage,
+                primaryAction: nil,
+                menu: makeDialogueMenu()
+            )
+        } else {
+            navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
+        }
     }
 
     private func makeDialogueMenu() -> UIMenu {
         let displayOptions: [(DialogueTranscriptDisplayMode, String, String)] = [
             (.full, "Japanese · swipe for English", "text.bubble"),
             (.japaneseOnly, "Hide English", "eye.slash"),
-            (.listeningSpeakers, "Live meters", "waveform"),
             (.reveal, "Reveal Mode", "hand.tap"),
         ]
         let displayActions = displayOptions.map { mode, title, symbol in
@@ -1081,7 +1135,60 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         ) { [weak self] _ in
             self?.presentDictionaryLookup()
         }
-        var children: [UIMenuElement] = [dictionarySearch, experimentsMenu]
+        var learnerItems: [UIMenuElement] = []
+        if let next = nextScenarioItem, sceneIsReadyForNextScene {
+            let nextScene = UIAction(
+                title: "Next scene",
+                subtitle: next.menuTitle,
+                image: UIImage(systemName: "arrow.right.circle")
+            ) { [weak self] _ in
+                self?.advanceToNextScene()
+            }
+            learnerItems.append(nextScene)
+        }
+        if sessionMode == .viewLesson, authoredHasQuiz {
+            let retake = UIAction(
+                title: "Retake quiz",
+                image: UIImage(systemName: "arrow.counterclockwise")
+            ) { [weak self] _ in
+                self?.startRetake()
+            }
+            learnerItems.append(retake)
+        }
+        if hardcoreActive, hasFinishedListeningThisVisit {
+            let reveal = UIAction(
+                title: "Show transcript",
+                image: UIImage(systemName: "text.bubble")
+            ) { [weak self] _ in
+                self?.revealHardcoreTranscript()
+            }
+            learnerItems.append(reveal)
+        }
+        if DialogueHardcoreMode.isAvailable {
+            let hardcore = UIAction(
+                title: "Hardcore",
+                subtitle: "Audio and live meters only",
+                image: DialogueHardcoreMode.icon,
+                state: DialogueHardcoreMode.isEnabled ? .on : .off
+            ) { [weak self] _ in
+                self?.toggleHardcoreMode()
+            }
+            learnerItems.append(hardcore)
+        }
+        learnerItems.append(dictionarySearch)
+
+        var children: [UIMenuElement] = [UIMenu(options: .displayInline, children: learnerItems)]
+        if LLMGatewayClient.isAvailable, contentQASceneContext != nil {
+            let report = UIAction(
+                title: "Report a problem",
+                image: UIImage(systemName: "exclamationmark.bubble")
+            ) { [weak self] _ in
+                self?.presentLessonIssueReport()
+            }
+            children.append(UIMenu(options: .displayInline, children: [report]))
+        }
+
+        var developerItems: [UIMenuElement] = [experimentsMenu]
         if let context = contentQASceneContext {
             let approved = approvedScenarioIDs.contains(selectedScenarioID)
             let approve = UIAction(
@@ -1104,27 +1211,10 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
                 image: UIImage(systemName: "checklist"),
                 children: [approve, note]
             )
-            children.append(qaMenu)
+            developerItems.append(qaMenu)
         }
-        if let next = nextScenarioItem, sceneIsReadyForNextScene {
-            let nextScene = UIAction(
-                title: "Next scene",
-                subtitle: next.menuTitle,
-                image: UIImage(systemName: "arrow.right.circle")
-            ) { [weak self] _ in
-                self?.advanceToNextScene()
-            }
-            children.append(nextScene)
-        }
-        if sessionMode == .viewLesson, authoredHasQuiz {
-            let retake = UIAction(
-                title: "Retake quiz",
-                image: UIImage(systemName: "arrow.counterclockwise")
-            ) { [weak self] _ in
-                self?.startRetake()
-            }
-            children.append(retake)
-        }
+        children.append(UIMenu(title: "Developer", options: .displayInline, children: developerItems))
+
         return UIMenu(
             title: collection?.title ?? "Dialogue",
             children: children
@@ -1199,46 +1289,16 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         guard let item = currentScenarioItem else {
             return ContentQAFocus(title: "Lesson highlights", detailLines: [])
         }
-        let highlights = item.highlights
-        var details: [String] = []
-        if highlights.vocabulary.isEmpty {
-            details.append("Vocab: none authored")
-        } else {
-            let preview = highlights.vocabulary.prefix(10).joined(separator: ", ")
-            let suffix = highlights.vocabulary.count > 10 ? "…" : ""
-            details.append("Vocab (\(highlights.vocabulary.count)): \(preview)\(suffix)")
-        }
-        if highlights.grammarPatterns.isEmpty {
-            details.append("Grammar: none authored")
-        } else {
-            let labels = highlights.grammarPatternLabels.prefix(6).joined(separator: ", ")
-            let suffix = highlights.grammarPatterns.count > 6 ? "…" : ""
-            details.append("Grammar (\(highlights.grammarPatterns.count)): \(labels)\(suffix)")
-        }
-        if highlights.contextNotes.isEmpty {
-            details.append("Context notes: none")
-        } else {
-            details.append("Context notes: \(highlights.contextNotes.count)")
-            if let first = highlights.contextNotes.first {
-                details.append("First note: \(Self.contentQATrimmedExportText(first))")
-            }
-        }
-        return ContentQAFocus(title: "Lesson highlights", detailLines: details)
-    }
-
-    private static func contentQATrimmedExportText(_ text: String, maxLength: Int = 240) -> String {
-        let collapsed = text
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard collapsed.count > maxLength else { return collapsed }
-        let end = collapsed.index(collapsed.startIndex, offsetBy: maxLength)
-        return String(collapsed[..<end]) + "…"
+        return ContentQAFocus(
+            title: "Lesson highlights",
+            detailLines: LessonHighlightSupportMenu.highlightsDetailLines(item.highlights)
+        )
     }
 
     /// Best-effort Studio identity for any dialogue source (CMS lesson, bundled JSON, harness clip).
     private var contentQASceneContext: ContentQASceneContext? {
         guard let item = currentScenarioItem else { return nil }
-        let identity = Self.parseContentQAIdentity(
+        let identity = LessonContentQAIdentity.parse(
             scenarioID: item.id,
             collectionID: collection?.id
         )
@@ -1263,48 +1323,46 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         )
     }
 
-    private static func parseContentQAIdentity(
-        scenarioID: String,
-        collectionID: String?
-    ) -> (collectionId: String, slug: String) {
-        if let collectionID {
-            let prefix = "\(collectionID)/"
-            if scenarioID.hasPrefix(prefix) {
-                let slug = String(scenarioID.dropFirst(prefix.count))
-                if !slug.isEmpty, !slug.contains("/") {
-                    return (collectionID, slug)
-                }
-            }
-            if !scenarioID.contains("/") {
-                return (collectionID, scenarioID)
-            }
-        }
-        if let slash = scenarioID.firstIndex(of: "/") {
-            let collectionId = String(scenarioID[..<slash])
-            let slug = String(scenarioID[scenarioID.index(after: slash)...])
-            if !collectionId.isEmpty, !slug.isEmpty, !slug.contains("/") {
-                return (collectionId, slug)
-            }
-        }
-        let fallbackCollection = collectionID ?? "dialogue"
-        return (fallbackCollection, scenarioID)
+    private func lessonDialogueSceneContext() -> LessonDialogueSceneContext? {
+        guard let scene = contentQASceneContext, let item = currentScenarioItem else { return nil }
+        return LessonDialogueSceneContext(
+            collectionId: scene.collectionId,
+            scenarioId: scene.slug,
+            publishedVariantId: item.example.publishedVariantId,
+            publishedContentHash: item.example.publishedContentHash,
+            lessonTitle: scene.lessonTitle,
+            lessonID: scene.lessonID,
+            sceneTitle: scene.sceneTitle,
+            sessionMode: contentQASessionModeLabel()
+        )
     }
 
     var canPresentContentQANote: Bool {
         contentQAContext != nil
     }
 
+    func presentScreenshotQANote(from presenter: UIViewController) -> Bool {
+        guard canPresentContentQANote else { return false }
+        presentContentQANote(presenter: presenter, forcesScreenshot: true)
+        return true
+    }
+
     /// Presents the shared QA note sheet. Scene identity, source, and Studio link
     /// stay on the current lesson page. Pass a focus override when the note is
     /// about a pushed surface such as sentence scrub.
-    func presentContentQANote(focusTitle: String? = nil, focusDetailLines: [String]? = nil) {
+    func presentContentQANote(
+        focusTitle: String? = nil,
+        focusDetailLines: [String]? = nil,
+        presenter: UIViewController? = nil,
+        forcesScreenshot: Bool = false
+    ) {
         guard let context = contentQAContext else { return }
         var sourceId = "\(context.scene.collectionId)/\(context.scene.slug)"
         if let number = context.focus.quizQuestionNumber {
             sourceId += "#q\(number)"
         }
         DialogueContentQANoteViewController.present(
-            from: self,
+            from: presenter ?? self,
             source: context.focus.source,
             sourceId: sourceId,
             focusTitle: focusTitle ?? context.focus.title,
@@ -1316,8 +1374,38 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             studioLink: ContentCMSClient.studioScenarioEditorLink(
                 collectionId: context.scene.collectionId,
                 slug: context.scene.slug
-            )
+            ),
+            forcesScreenshot: forcesScreenshot
         )
+    }
+
+    private func presentLessonIssueReport() {
+        guard let scene = contentQASceneContext, let item = currentScenarioItem else { return }
+        if dialogueViewController.dialoguePlaybackPhase == .playing {
+            dialogueViewController.dialoguePausePlayback()
+        }
+        quizViewController?.stopEvidencePlayback()
+        let focus = makeContentQAFocus()
+        let page: LessonIssuePage
+        if activePageIndex == 0 {
+            page = .dialogue
+        } else if hasQuizPage, activePageIndex == 1 {
+            page = .quiz
+        } else {
+            page = .highlights
+        }
+        let context = LessonIssueContext(
+            collectionId: scene.collectionId,
+            scenarioId: scene.slug,
+            publishedVariantId: item.example.publishedVariantId,
+            publishedContentHash: item.example.publishedContentHash,
+            page: page,
+            focusTitle: focus.title,
+            focusDetails: focus.detailLines,
+            sessionMode: contentQASessionModeLabel(),
+            quizQuestionNumber: focus.quizQuestionNumber
+        )
+        LessonIssueReportViewController.present(from: self, context: context)
     }
 
     /// Results push inside the sheet's own navigation controller, never onto the scene's stack.
@@ -1335,7 +1423,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         guard !isApprovingScene else { return }
         let scenarioID = selectedScenarioID
         isApprovingScene = true
-        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
+        refreshNavigationBarItems()
         ContentCMSClient.checkOffScene(collectionId: collectionId, slug: slug) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -1343,11 +1431,11 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
                 switch result {
                 case .success(let data):
                     self.approvedScenarioIDs.insert(scenarioID)
-                    self.navigationItem.rightBarButtonItem?.menu = self.makeDialogueMenu()
+                    self.refreshNavigationBarItems()
                     let parsed = Self.parseContentQACheckOff(data)
                     self.presentSceneApprovalResult(parsed)
                 case .failure(let error):
-                    self.navigationItem.rightBarButtonItem?.menu = self.makeDialogueMenu()
+                    self.refreshNavigationBarItems()
                     let alert = UIAlertController(
                         title: "Couldn’t approve scene",
                         message: error.localizedDescription,
@@ -1423,15 +1511,59 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
 
     private func toggleTokenSyncHighlight() {
         ExperimentSettings.dialogueShowsTokenSync.toggle()
-        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
+        refreshNavigationBarItems()
         dialogueViewController?.applyTokenSyncHighlightSetting()
     }
 
     private func selectTranscriptDisplayMode(_ mode: DialogueTranscriptDisplayMode) {
         guard mode != transcriptDisplayMode else { return }
         transcriptDisplayMode = mode
-        dialogueViewController?.transcriptDisplayMode = mode
-        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
+        applyEffectiveTranscriptDisplayMode()
+        refreshNavigationBarItems()
+    }
+
+    private func toggleHardcoreMode() {
+        DialogueHardcoreMode.isEnabled.toggle()
+        if DialogueHardcoreMode.isEnabled {
+            hardcoreTranscriptRevealed = false
+        } else {
+            // The badge needs hardcore on through the quiz, not just the listen.
+            hardcoreEligibleThisVisit = false
+        }
+        if !hasFinishedListeningThisVisit {
+            // Turning it on after playback started doesn't count: the learner
+            // may already have read part of the transcript.
+            hardcoreEligibleThisVisit = hardcoreActive
+                && sessionMode == .attempt
+                && dialogueViewController?.didStartPlaybackThisAttempt == false
+        }
+        applyEffectiveTranscriptDisplayMode()
+        refreshNavigationBarItems()
+    }
+
+    private func applyEffectiveTranscriptDisplayMode() {
+        guard let dialogue = dialogueViewController else { return }
+        dialogue.transcriptDisplayMode = effectiveTranscriptDisplayMode
+        dialogue.recordsHardcoreCompletion = hardcoreEligibleThisVisit
+        dialogue.setTranscriptRevealOfferVisible(
+            hardcoreActive && hasFinishedListeningThisVisit,
+            animated: false
+        )
+        updateInteractivePopForHardcore()
+    }
+
+    /// While hardcore hides the transcript, the scrubber spans the screen and
+    /// a rightward drag on it would trip a back swipe. The back button still leaves.
+    private func updateInteractivePopForHardcore() {
+        // Only while we're on top: a pushed screen owns its own back swipe.
+        guard navigationController?.topViewController === self else { return }
+        setBackSwipeGesturesEnabled(!hardcoreActive)
+    }
+
+    /// Both the screen-edge swipe and iOS 26's swipe-anywhere content pop.
+    private func setBackSwipeGesturesEnabled(_ enabled: Bool) {
+        navigationController?.interactivePopGestureRecognizer?.isEnabled = enabled
+        navigationController?.interactiveContentPopGestureRecognizer?.isEnabled = enabled
     }
 
     private func selectScenario(id: String) {
@@ -1440,9 +1572,10 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         sessionMode = resolvedSessionMode(preferred: sessionMode, scenarioID: id)
         applySessionUnlocksForCurrentMode()
         guard let item = currentScenarioItem else { return }
+        beginAnalyticsVisit()
         title = item.menuTitle
         embedDialogue(for: item)
-        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
+        refreshNavigationBarItems()
         reloadQuizContent()
         reloadHighlightsContent()
         updateUnlockedPagesVisibility()
@@ -1462,11 +1595,15 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             existing.stopHostedPlaybackIfDisappearing()
             existing.recordsCompletionOnPlaybackFinish = shouldRecordCompletionOnPlaybackFinish(for: item)
             existing.usesStudyTranscriptContrast = sessionMode == .viewLesson
+            applyEffectiveTranscriptDisplayMode()
             existing.onPlaybackFinished = { [weak self] in
                 self?.handleDialoguePlaybackFinished()
             }
+            existing.onTranscriptRevealRequested = { [weak self] in
+                self?.revealHardcoreTranscript()
+            }
             existing.tokenSyncSettingDidChange = { [weak self] in
-                self?.navigationItem.rightBarButtonItem?.menu = self?.makeDialogueMenu()
+                self?.refreshNavigationBarItems()
             }
             existing.updateSceneImage(
                 url: item.thumbnailURL,
@@ -1478,6 +1615,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
                 scenarioID: item.id,
                 grammarPointIDs: item.grammarPointIDs
             )
+            existing.rolePlayRecapSource = makeRolePlayRecapSource(for: item)
             applyScrollLayoutIfNeeded(force: true)
             configureScrollEdgeEffects()
             updateScrollEdgeInteractionsForActivePage()
@@ -1493,15 +1631,20 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             grammarPointIDs: item.grammarPointIDs
         )
         dialogue.sceneImageName = collection?.sceneImageName
+        dialogue.rolePlayRecapSource = makeRolePlayRecapSource(for: item)
         dialogue.sceneImageURL = item.thumbnailURL
-        dialogue.transcriptDisplayMode = transcriptDisplayMode
+        dialogue.transcriptDisplayMode = effectiveTranscriptDisplayMode
+        dialogue.recordsHardcoreCompletion = hardcoreEligibleThisVisit
         dialogue.recordsCompletionOnPlaybackFinish = shouldRecordCompletionOnPlaybackFinish(for: item)
         dialogue.usesStudyTranscriptContrast = sessionMode == .viewLesson
         dialogue.onPlaybackFinished = { [weak self] in
             self?.handleDialoguePlaybackFinished()
         }
+        dialogue.onTranscriptRevealRequested = { [weak self] in
+            self?.revealHardcoreTranscript()
+        }
         dialogue.tokenSyncSettingDidChange = { [weak self] in
-            self?.navigationItem.rightBarButtonItem?.menu = self?.makeDialogueMenu()
+            self?.refreshNavigationBarItems()
         }
         addChild(dialogue)
         dialogue.view.translatesAutoresizingMaskIntoConstraints = false
@@ -1571,6 +1714,29 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         updateQuizNextButtonState()
         applyQuizNextButtonProgress(pageTransitionProgress)
         applyQuizScrollInsetsForPageTransition()
+    }
+
+    /// Same grammar detail the Highlights page opens, for the Role Play recap.
+    private func makeRolePlayRecapSource(for item: ScenarioItem) -> RolePlayRecapSource {
+        RolePlayRecapSource(
+            highlights: item.highlights,
+            teachingPattern: { [weak self] pattern in
+                self?.collection?.teachingPattern(for: pattern)
+            },
+            presentPattern: { [weak self] pattern, presenter in
+                guard let self else { return }
+                let lines = item.example.scenario?.lines ?? []
+                GrammarPatternDetailPresenter.push(
+                    pattern: pattern,
+                    catalogPattern: self.collection?.teachingPattern(for: pattern),
+                    evidenceContext: Self.quizEvidenceContext(for: item),
+                    spokenLines: lines.filter(\.isSpokenLine),
+                    request: GeminiGrammarUsage.request(for: pattern, in: lines),
+                    sceneContext: self.lessonDialogueSceneContext(),
+                    from: presenter
+                )
+            }
+        )
     }
 
     private static func quizEvidenceContext(for item: ScenarioItem) -> DialogueQuizEvidenceContext {
@@ -1795,6 +1961,9 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             hasFinishedListeningThisVisit = true
             hasFinishedQuizThisVisit = false
         }
+        hardcoreTranscriptRevealed = sessionMode == .retakeQuiz
+        hardcoreEligibleThisVisit = hardcoreActive && sessionMode == .attempt
+        applyEffectiveTranscriptDisplayMode()
     }
 
     private func resolvedSessionMode(
@@ -1805,7 +1974,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         let hasQuiz = scenarioItems.first(where: { $0.id == scenarioID })?.quiz.isEmpty == false
         switch preferred {
         case .viewLesson:
-            return completed ? .viewLesson : .attempt
+            return .viewLesson
         case .retakeQuiz:
             if completed && hasQuiz { return .retakeQuiz }
             return completed ? .viewLesson : .attempt
@@ -1822,7 +1991,8 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         DialogueCompletionTally(
             score: quizViewController.currentScore,
             englishPeekedCount: dialogueViewController.englishPeekedCount,
-            awardsImmersedListen: awardsImmersedListenThisVisit()
+            awardsImmersedListen: awardsImmersedListenThisVisit(),
+            isHardcore: hardcoreEligibleThisVisit && sessionMode == .attempt
         )
     }
 
@@ -1830,12 +2000,14 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         guard committedTally == nil, let item = currentScenarioItem else { return }
         let tally = makeCurrentTally()
         committedTally = tally
+        analytics.quizCompleted(tally)
         let isRetake = sessionMode == .retakeQuiz
         DialogueProgressStore.shared.markCompleted(
             scenarioID: item.id,
             starCount: tally.starCount,
             points: tally.total,
-            countsTowardDaily: !isRetake
+            countsTowardDaily: !isRetake,
+            hardcore: tally.isHardcore
         )
         if !isRetake {
             GrammarMasteryStore.shared.recordEncounter(
@@ -1846,13 +2018,29 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
     }
 
     private func handleDialoguePlaybackFinished() {
+        if hardcoreActive {
+            dialogueViewController?.setTranscriptRevealOfferVisible(true, animated: true)
+        }
         guard !hasFinishedListeningThisVisit else { return }
         hasFinishedListeningThisVisit = true
+        analytics.dialogueListened(hardcore: hardcoreActive)
+        if let item = currentScenarioItem, shouldRecordCompletionOnPlaybackFinish(for: item) {
+            analytics.completedWithoutQuiz()
+        }
         updateUnlockedPagesVisibility()
         view.layoutIfNeeded()
         refreshHandoffCoordinatorInnerScrollViews()
-        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
+        refreshNavigationBarItems()
         applyPageTransitionProgress(currentPageTransitionProgress())
+    }
+
+    /// Flipping straight to text the instant audio ends is jarring; a pill
+    /// under the bubbles (and a menu item) lets the learner reveal when ready.
+    private func revealHardcoreTranscript() {
+        guard hardcoreActive else { return }
+        hardcoreTranscriptRevealed = true
+        applyEffectiveTranscriptDisplayMode()
+        refreshNavigationBarItems()
     }
 
     private func handleQuizFinished() {
@@ -1860,7 +2048,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         updateUnlockedPagesVisibility()
         view.layoutIfNeeded()
         refreshHandoffCoordinatorInnerScrollViews()
-        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
+        refreshNavigationBarItems()
         applyPageTransitionProgress(currentPageTransitionProgress())
     }
 
@@ -1868,12 +2056,13 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         guard authoredHasQuiz else { return }
         sessionMode = .retakeQuiz
         applySessionUnlocksForCurrentMode()
+        beginAnalyticsVisit()
         dialogueViewController.resetAttemptListeningState()
         dialogueViewController.usesStudyTranscriptContrast = false
         reloadQuizContent()
         updateUnlockedPagesVisibility()
         refreshHandoffCoordinatorInnerScrollViews()
-        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
+        refreshNavigationBarItems()
         view.layoutIfNeeded()
         handoffCoordinator?.snapToPage(1)
     }
@@ -1882,11 +2071,14 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         sessionMode = .viewLesson
         hasFinishedListeningThisVisit = true
         hasFinishedQuizThisVisit = true
+        hardcoreEligibleThisVisit = false
+        hardcoreTranscriptRevealed = true
         dialogueViewController?.recordsCompletionOnPlaybackFinish = false
         dialogueViewController?.usesStudyTranscriptContrast = true
+        applyEffectiveTranscriptDisplayMode()
         updateUnlockedPagesVisibility()
         refreshHandoffCoordinatorInnerScrollViews()
-        navigationItem.rightBarButtonItem?.menu = makeDialogueMenu()
+        refreshNavigationBarItems()
         view.layoutIfNeeded()
         highlightsPinnedTopBoundary = 0
         if snapToHighlights, isHighlightsUnlocked {
@@ -2052,10 +2244,13 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         highlightsContentView.translatesAutoresizingMaskIntoConstraints = false
         highlightsContentView.onSelectVocabulary = { [weak self] word in
             guard let self else { return }
+            let line = self.vocabularyLine(containing: word)
             WordDictionaryDetailSheetPresenter.push(
                 surface: word,
-                sentence: self.contextSentence(containing: word),
+                sentence: line?.japanese,
                 glossFraming: .word,
+                sourceTitle: self.vocabularySourceTitle(),
+                lineEnglish: line?.english,
                 from: self
             )
         }
@@ -2063,37 +2258,14 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             guard let self else { return }
             let item = self.currentScenarioItem
             let lines = item?.example.scenario?.lines ?? []
-            let spokenTexts = lines.filter(\.isSpokenLine).map(\.japanese)
-            let catalog: DialogueTeachingPattern? = {
-                guard let patternId = pattern.patternId else { return nil }
-                return self.collection?.teachingPattern(id: patternId)
-            }()
-            let hear: GrammarPatternDetailPresenter.HearContext? = {
-                guard let item else { return nil }
-                let hasAudio =
-                    !(item.example.publishedAudioUrl?
-                        .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-                    || !(item.example.audioKey?
-                        .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-                guard hasAudio, !spokenTexts.isEmpty else { return nil }
-                return GrammarPatternDetailPresenter.HearContext(
-                    publishedAudioUrl: item.example.publishedAudioUrl,
-                    audioKey: item.example.audioKey,
-                    cacheMetadata: item.example.remoteAudioCacheMetadata,
-                    spokenJapaneseTexts: spokenTexts,
-                    tokenSync: DialogueTokenSync.validated(
-                        item.example.tokenSync,
-                        spokenTexts: spokenTexts,
-                        publishedContentHash: item.example.publishedContentHash
-                    )
-                )
-            }()
+            let catalog = self.collection?.teachingPattern(for: pattern)
             GrammarPatternDetailPresenter.push(
                 pattern: pattern,
                 catalogPattern: catalog,
-                exampleLines: lines,
-                hearContext: hear,
+                evidenceContext: item.map(Self.quizEvidenceContext(for:)),
+                spokenLines: lines.filter(\.isSpokenLine),
                 request: GeminiGrammarUsage.request(for: pattern, in: lines),
+                sceneContext: lessonDialogueSceneContext(),
                 from: self
             )
         }
@@ -2126,22 +2298,47 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         highlightsContentView.configure(highlights: highlights)
     }
 
-    /// Prefer a dialogue line that contains the vocabulary surface so the dictionary
-    /// sheet can request a contextual (Gemini / on-device) gloss — especially for
-    /// compounds that have no single JMdict entry (e.g. いいところ).
-    private func contextSentence(containing vocabulary: String) -> String? {
+    /// "N5 • Unit • Scene" stamped onto a word saved from this lesson. Nil outside a scene.
+    func vocabularySourceTitle() -> String? {
+        guard let scene = lessonDialogueSceneContext() else { return nil }
+        var parts: [String] = []
+        if let level = collection?.jlptLevel, (3...5).contains(level) {
+            parts.append("N\(level)")
+        }
+        let unit = collection?.unitTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !unit.isEmpty {
+            parts.append(unit)
+        }
+        let sceneTitle = scene.sceneTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !sceneTitle.isEmpty {
+            parts.append(sceneTitle)
+        }
+        if parts.isEmpty {
+            let lesson = scene.lessonTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            return lesson.isEmpty ? nil : lesson
+        }
+        return parts.joined(separator: " • ")
+    }
+
+    /// The spoken line that contains this vocabulary word, with its English when the line has one.
+    private func vocabularyLine(containing vocabulary: String) -> (japanese: String, english: String?)? {
         let word = vocabulary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !word.isEmpty, let item = currentScenarioItem else { return nil }
 
         if let line = item.example.scenario?.lines.first(where: {
             $0.japanese.contains(word)
         }) {
-            return line.japanese
+            return (line.japanese, Self.nonEmpty(line.english))
         }
         if item.example.japanese.contains(word) {
-            return item.example.japanese
+            return (item.example.japanese, Self.nonEmpty(item.example.english))
         }
         return nil
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func applyScrollLayoutIfNeeded(force: Bool = false) {
@@ -2493,8 +2690,9 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         applyHighlightsScrollInsetsForPageTransition()
         applyQuizNextButtonProgress(progress)
         applyNextSceneButtonProgress(progress)
-        dialogueViewController.applyNestedPagingTransportProgress(activePageIndex == 0 ? 0 : 1)
-
+        let dialogueTransportProgress = min(max(progress, 0), 1)
+        dialogueViewController.applyNestedPagingTransportProgress(dialogueTransportProgress)
+        refreshNavigationBarItems()
     }
 
     private func pageChevronBottomCenterY() -> CGFloat {
@@ -2802,6 +3000,11 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         }
         coordinator.onPageChanged = { [weak self] page in
             guard let self else { return }
+            if page == self.highlightsPageIndex, self.isHighlightsUnlocked {
+                self.analytics.pageShown(.highlights)
+            } else if page == 1, self.hasQuizPage {
+                self.analytics.pageShown(.quiz)
+            }
             self.updateScrollEdgeInteractionsForActivePage()
             let transportProgress: CGFloat = page == 0 ? 0 : 1
             self.dialogueViewController.applyNestedPagingTransportProgress(transportProgress, animated: true)
@@ -2824,4 +3027,3 @@ extension DialogueNestedPagingExperimentViewController: UISheetPresentationContr
         enterViewLesson(snapToHighlights: false)
     }
 }
-

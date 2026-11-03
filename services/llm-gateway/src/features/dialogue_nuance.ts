@@ -1,6 +1,7 @@
 import { Type } from "@google/genai";
 
 import { InputError, isObject, objectArray, optionalString, parseJSONObject, trimmedString, type Body } from "../validate.js";
+import { GEMINI_35_FLASH_LITE } from "./models.js";
 import { defineFeature } from "./types.js";
 
 const MAX_NEIGHBORS = 2;
@@ -48,7 +49,7 @@ function formatLine(line: Line, focused: boolean): string {
 }
 
 export const dialogueNuance = defineFeature({
-  defaultModel: "gemini-2.5-flash",
+  defaultModel: GEMINI_35_FLASH_LITE,
 
   parseInput(body) {
     if (!isObject(body.focused)) {

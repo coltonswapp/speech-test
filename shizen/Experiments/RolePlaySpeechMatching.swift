@@ -3,8 +3,8 @@
 //  shizen
 //
 //  Soft Japanese line matching for Role Play ASR partials.
-//  Paint is generous (particles/mora drops, phonetic fold). Completion is
-//  strict so a mid-line pause or a padded ASR final cannot skip the rest.
+//  Paint is generous (particles/mora drops). Completion is strict: one
+//  hypothesis has to cover the whole line within a small kana error budget.
 //
 
 import Foundation
@@ -36,51 +36,7 @@ enum RolePlaySpeechMatching {
         }
 
         let matched = min(tChars.count, max(fromSurface, fromResume, clampedAlready))
-
-        let strictSurface = strictOrderedMatch(target: tChars, heard: hChars)
-        var strictResume = clampedAlready
-        if clampedAlready < tChars.count {
-            let rest = Array(tChars.dropFirst(clampedAlready))
-            strictResume = clampedAlready + strictOrderedMatch(target: rest, heard: hChars)
-        }
-        let strictMatched = min(tChars.count, max(strictSurface, strictResume, clampedAlready))
-        let remaining = tChars.count - strictMatched
-        let ratio = Double(strictMatched) / Double(tChars.count)
-
-        let phoneticT = phoneticHiragana(target)
-        let phoneticH = phoneticHiragana(heard)
-        let phoneticRatio: Double
-        let phoneticRemaining: Int
-        if phoneticT.isEmpty {
-            phoneticRatio = 1
-            phoneticRemaining = 0
-        } else if phoneticH.isEmpty {
-            phoneticRatio = 0
-            phoneticRemaining = phoneticT.count
-        } else {
-            let pChars = Array(phoneticT)
-            let phoneticMatched = strictOrderedMatch(target: pChars, heard: Array(phoneticH))
-            phoneticRatio = Double(phoneticMatched) / Double(pChars.count)
-            phoneticRemaining = pChars.count - phoneticMatched
-        }
-
-        let remainingLimit = tChars.count <= 8 ? 1 : 2
-        let leftoverIsPunctuationOnly = leftoverIsOnlyPunctuation(
-            in: target,
-            matchedNormalizedCount: matched
-        )
-        let isSoftComplete: Bool
-        if leftoverIsPunctuationOnly {
-            isSoftComplete = true
-        } else if tChars.count <= 2 {
-            isSoftComplete = remaining == 0
-        } else {
-            isSoftComplete =
-                ratio >= 0.80
-                || phoneticRatio >= 0.80
-                || remaining <= remainingLimit
-                || phoneticRemaining <= remainingLimit
-        }
+        let isSoftComplete = isLineSpoken(heard: heard, target: target)
         return Match(matchedNormalizedCount: matched, isSoftComplete: isSoftComplete)
     }
 
@@ -114,23 +70,6 @@ enum RolePlaySpeechMatching {
         character.unicodeScalars.allSatisfy { ignorablePunctuation.contains($0) }
     }
 
-    private static func leftoverIsOnlyPunctuation(in original: String, matchedNormalizedCount: Int) -> Bool {
-        let trimmed = original.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return true }
-        var remaining = matchedNormalizedCount
-        var index = trimmed.startIndex
-        while index < trimmed.endIndex {
-            let next = trimmed.index(after: index)
-            let piece = normalizeForMatch(String(trimmed[index]))
-            if !piece.isEmpty {
-                if remaining <= 0 { break }
-                remaining -= piece.count
-            }
-            index = next
-        }
-        return trimmed[index...].allSatisfy { isIgnorablePunctuation($0) }
-    }
-
     static func normalizeForMatch(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let scalars = trimmed.unicodeScalars.filter { scalar in
@@ -140,25 +79,60 @@ enum RolePlaySpeechMatching {
         return String(String.UnicodeScalarView(scalars))
     }
 
-    /// Fold katakana to hiragana and kanji to a hiragana reading so ASR kana can
-    /// match written kanji.
+    /// Kanji expanded to their MeCab/JMDict reading and katakana folded to
+    /// hiragana, so ASR kana can match written kanji (学生 ↔ がくせい).
     static func phoneticHiragana(_ text: String) -> String {
-        var s = normalizeForMatch(text)
-        if let folded = s.applyingTransform(.fullwidthToHalfwidth, reverse: false) {
-            s = folded
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        let reading = JapaneseTokenizer.hiraganaReading(for: trimmed)
+        let hiragana = reading.applyingTransform(.hiraganaToKatakana, reverse: true) ?? reading
+        return normalizeForMatch(hiragana)
+    }
+
+    /// True when some stretch of `heard` reads as the whole target, as written
+    /// or as kana. Filler before or after is free; dropped, swapped, or extra
+    /// mora inside the line each cost one error.
+    static func isLineSpoken(heard: String, target: String) -> Bool {
+        let t = Array(normalizeForMatch(target))
+        guard !t.isEmpty else { return true }
+        let h = Array(normalizeForMatch(heard))
+        guard !h.isEmpty else { return false }
+        if bestSubstringEditDistance(target: t, heard: h) <= errorBudget(forLength: t.count) {
+            return true
         }
-        if let hira = s.applyingTransform(.hiraganaToKatakana, reverse: true) {
-            s = hira
+
+        let pt = Array(phoneticHiragana(target))
+        let ph = Array(phoneticHiragana(heard))
+        guard !pt.isEmpty, !ph.isEmpty else { return false }
+        return bestSubstringEditDistance(target: pt, heard: ph) <= errorBudget(forLength: pt.count)
+    }
+
+    /// Short lines must be exact; longer ones forgive roughly one slip per
+    /// seven kana for ASR noise.
+    static func errorBudget(forLength count: Int) -> Int {
+        switch count {
+        case ...3: return 0
+        case ...8: return 1
+        default: return Int(Double(count) * 0.15)
         }
-        if let latin = s.applyingTransform(.toLatin, reverse: false) {
-            let foldedLatin = latin
-                .folding(options: [.diacriticInsensitive, .widthInsensitive, .caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
-                .replacingOccurrences(of: " ", with: "")
-            if let hira = foldedLatin.applyingTransform(.latinToHiragana, reverse: false) {
-                s = hira
+    }
+
+    /// Edit distance from `target` to its closest substring of `heard`
+    /// (semi-global alignment: skipping heard text at either end is free).
+    private static func bestSubstringEditDistance(target: [Character], heard: [Character]) -> Int {
+        guard !target.isEmpty else { return 0 }
+        guard !heard.isEmpty else { return target.count }
+        var previous = [Int](repeating: 0, count: heard.count + 1)
+        var current = previous
+        for i in 1...target.count {
+            current[0] = i
+            for j in 1...heard.count {
+                let substitution = previous[j - 1] + (target[i - 1] == heard[j - 1] ? 0 : 1)
+                current[j] = min(substitution, previous[j] + 1, current[j - 1] + 1)
             }
+            swap(&previous, &current)
         }
-        return normalizeForMatch(s)
+        return previous.min() ?? target.count
     }
 
     private static func bestOrderedMatch(target: [Character], heard: [Character]) -> Int {
@@ -166,14 +140,6 @@ enum RolePlaySpeechMatching {
             longestContainedPrefixLength(target: target, heard: heard),
             greedySequentialMatch(target: target, heard: heard),
             lenientSequentialMatch(target: target, heard: heard)
-        )
-    }
-
-    /// Prefix / in-order coverage only — used to decide the line is done.
-    private static func strictOrderedMatch(target: [Character], heard: [Character]) -> Int {
-        max(
-            longestContainedPrefixLength(target: target, heard: heard),
-            greedySequentialMatch(target: target, heard: heard)
         )
     }
 

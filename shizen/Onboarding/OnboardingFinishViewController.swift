@@ -14,6 +14,8 @@ final class OnboardingFinishViewController: OnboardingViewController {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override var hidesOnboardingBackButton: Bool { true }
+
     override func viewDidLoad() {
         setupOnboarding(
             title: config.title ?? "You're in",

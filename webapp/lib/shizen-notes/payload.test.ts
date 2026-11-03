@@ -64,6 +64,15 @@ describe("screenshotObjectKey", () => {
 });
 
 describe("shizenNoteSchema screenshot_jpeg", () => {
+  it("accepts a screen note from the screenshot shortcut", () => {
+    const parsed = shizenNoteSchema.safeParse({
+      ...noteBody(),
+      source: "screen",
+      source_id: "SettingsViewController",
+    });
+    assert.equal(parsed.success, true);
+  });
+
   it("accepts a note with no screenshot", () => {
     const parsed = shizenNoteSchema.safeParse(noteBody());
     assert.equal(parsed.success, true);

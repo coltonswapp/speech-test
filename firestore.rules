@@ -35,6 +35,19 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Learner problem reports from POST /v1/lesson-report. Admin-only, like lessonFeedback.
+    match /lessonReports/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /lessonReportStats/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /lessonReportRate/{document=**} {
+      allow read, write: if false;
+    }
+
     match /users/{userId} {
       allow read, write: if isSignedIn() && request.auth.uid == userId;
 

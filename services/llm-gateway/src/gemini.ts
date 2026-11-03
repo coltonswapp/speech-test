@@ -1,8 +1,9 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel, type GenerateContentConfig } from "@google/genai";
 
 import type { FeaturePrompt } from "./features/types.js";
 
 const TIMEOUT_MS = 20_000;
+const MAX_OUTPUT_TOKENS = 600;
 
 export class UpstreamError extends Error {}
 
@@ -28,20 +29,7 @@ export function createGeminiClient(apiKey: string): GeminiClient {
         response = await ai.models.generateContent({
           model,
           contents: prompt,
-          config: {
-            systemInstruction,
-            responseMimeType: "application/json",
-            responseSchema,
-            maxOutputTokens: 600,
-            temperature: 0,
-            topP: 1,
-            topK: 1,
-            seed: 42,
-            // Thinking tokens count against maxOutputTokens; disable on 2.5 models
-            // so short answers aren't truncated to empty text.
-            ...(model.startsWith("gemini-2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-            abortSignal: AbortSignal.timeout(TIMEOUT_MS),
-          },
+          config: generationConfig(model, { systemInstruction, responseSchema }),
         });
       } catch (err) {
         throw new UpstreamError("Gemini request failed", { cause: err });
@@ -63,5 +51,36 @@ export function createGeminiClient(apiKey: string): GeminiClient {
         },
       };
     },
+  };
+}
+
+/**
+ * 3.5 rejects temperature, topP, and topK. 2.5 still accepts them, and thinking
+ * tokens on 3.5 count against maxOutputTokens, so those calls use a low thinking level.
+ */
+function generationConfig(
+  model: string,
+  prompt: Pick<FeaturePrompt, "systemInstruction" | "responseSchema">,
+): GenerateContentConfig {
+  const shared: GenerateContentConfig = {
+    systemInstruction: prompt.systemInstruction,
+    responseMimeType: "application/json",
+    responseSchema: prompt.responseSchema,
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    seed: 42,
+    abortSignal: AbortSignal.timeout(TIMEOUT_MS),
+  };
+  if (model.startsWith("gemini-2.5")) {
+    return {
+      ...shared,
+      temperature: 0,
+      topP: 1,
+      topK: 1,
+      thinkingConfig: { thinkingBudget: 0 },
+    };
+  }
+  return {
+    ...shared,
+    thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
   };
 }

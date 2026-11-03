@@ -7,6 +7,7 @@ const FLASH_36_RATE_CHANGE = Date.UTC(2027, 0, 1);
 function rate(model: string, at: Date): { inputPerMillion: number; outputPerMillion: number } | undefined {
   switch (model) {
     case "gemini-2.5-flash":
+    case "gemini-3.5-flash-lite":
       return { inputPerMillion: 0.3, outputPerMillion: 2.5 };
     case "gemini-2.5-flash-lite":
       return { inputPerMillion: 0.1, outputPerMillion: 0.4 };

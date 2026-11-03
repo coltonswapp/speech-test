@@ -24,7 +24,7 @@ The body is `{ "feature": "<name>", ...feature fields }`. Every success response
   "requestId": "11111111-1111-4111-8111-111111111111",
   "feedbackToken": "1750000000.<base64url hmac>",
   "result": { "...": "feature-specific" },
-  "model": "gemini-2.5-flash",
+  "model": "gemini-3.5-flash-lite",
   "usage": { "promptTokenCount": 380, "candidatesTokenCount": 50, "totalTokenCount": 430 }
 }
 ```
@@ -35,13 +35,13 @@ The body is `{ "feature": "<name>", ...feature fields }`. Every success response
 
 | `feature` | Request fields | `result` | Default model | iOS client |
 | --- | --- | --- | --- | --- |
-| `common_uses` | `surface` (≤64), `sentence` (≤500), `dictionaryGloss?` | `inThisSentence`, `otherUses[]`, `kanjiNote` | `gemini-2.5-flash` | `GeminiCommonUses` (`GeminiTokenLookup.swift`) |
+| `common_uses` | `surface` (≤64), `sentence` (≤500), `dictionaryGloss?` | `inThisSentence`, `otherUses[]`, `kanjiNote` | `gemini-3.5-flash-lite` | `GeminiCommonUses` (`GeminiTokenLookup.swift`) |
 | `contextual_gloss` | `surface`, `sentence`, `framing` (`inSentence` or `word`), `dictionaryForm?`, `dictionaryGloss?`, `requestsHeadword?` | `meaning`, `grammarNote`, `relatedWords[{word, note}]`, `headword` | `gemini-2.5-flash-lite` | `GeminiContextualGloss` |
 | `sense_fit` | `surface`, `sentence`, `senses[]` (2–30, ≤300 chars each) | `index` (always in range) | `gemini-2.5-flash-lite` | `GeminiVocabSenseRanker` (`VocabSenseRanker.swift`) |
-| `dialogue_nuance` | `focused {speaker?, japanese, english?}`, `preceding[]` and `following[]` (≤2 lines each) | `naturalMeaning`, `impliedMeaning`, `notes` | `gemini-2.5-flash` | `GeminiDialogueNuance` |
-| `span_gloss` | `surface` (≤120), `sentence` | `meaning`, `note` | `gemini-2.5-flash` | `GeminiSpanGloss` (`GeminiTokenLookup.swift`) |
-| `span_breakdown` | `surface` (≤120), `sentence` | `inThisSentence`, `otherUses[]`, `partsNote` | `gemini-2.5-flash` | `GeminiSpanBreakdown` (`GeminiTokenLookup.swift`) |
-| `grammar_usage` | `pattern` (≤60), `grammarPointID?`, `lines[{speaker?, japanese, english?, focus?}]` (1–12) | `inThisScene`, `form`, `examples[]` (≤3), `note` | `gemini-2.5-flash` | `GeminiGrammarUsage` |
+| `dialogue_nuance` | `focused {speaker?, japanese, english?}`, `preceding[]` and `following[]` (≤2 lines each) | `naturalMeaning`, `impliedMeaning`, `notes` | `gemini-3.5-flash-lite` | `GeminiDialogueNuance` |
+| `span_gloss` | `surface` (≤120), `sentence` | `meaning`, `note` | `gemini-3.5-flash-lite` | `GeminiSpanGloss` (`GeminiTokenLookup.swift`) |
+| `span_breakdown` | `surface` (≤120), `sentence` | `inThisSentence`, `otherUses[]`, `partsNote`, `components[]` (`surface`, `lemma`, `reading`, `gloss`; content words only; optional for older clients) | `gemini-3.5-flash-lite` | `GeminiSpanBreakdown` (`GeminiTokenLookup.swift`) |
+| `grammar_usage` | `pattern` (≤60), `grammarPointID?`, `lines[{speaker?, japanese, english?, focus?}]` (1–12) | `inThisScene`, `form`, `examples[]` (≤3), `note` | `gemini-3.5-flash-lite` | `GeminiGrammarUsage` |
 
 Optional hint strings are trimmed and truncated (`dictionaryGloss` to 300 characters), not rejected.
 
@@ -87,7 +87,7 @@ Look up one user in the Firebase console: `llmUsage/{uid}/periods/week_2026-W40`
   "requestId": "11111111-1111-4111-8111-111111111111",
   "feedbackToken": "<token from generate>",
   "feature": "span_gloss",
-  "model": "gemini-2.5-flash",
+  "model": "gemini-3.5-flash-lite",
   "rating": "down",
   "reason": "wrong_meaning",
   "input": { "sentence": "...", "surface": "..." },
@@ -119,7 +119,7 @@ All config is env-only; see [`.env.example`](.env.example). Never commit `.env`.
 | `FIREBASE_PROJECT_ID` | yes | `shizen-b453f`; tokens from other projects are rejected |
 | `LLM_FEEDBACK_HMAC_KEY` | yes | Secret Manager in prod. At least 32 characters. Signs feedback tokens. Never put this in the app |
 | `LLM_FEEDBACK_RETENTION_DAYS` | no | TTL age for `llmFeedback` docs. Default 90 |
-| `GEMINI_MODEL_<FEATURE>` | no | Per-feature model override, e.g. `GEMINI_MODEL_CONTEXTUAL_GLOSS=gemini-2.5-flash`. Change it with `gcloud run services update shizen-llm --region us-central1 --update-env-vars=...`, no rebuild needed |
+| `GEMINI_MODEL_<FEATURE>` | no | Per-feature model override, e.g. `GEMINI_MODEL_COMMON_USES=gemini-3.5-flash-lite`. `contextual_gloss` and `sense_fit` default to `gemini-2.5-flash-lite`; the other five default to `gemini-3.5-flash-lite`. Change it with `gcloud run services update shizen-llm --region us-central1 --update-env-vars=...`, no rebuild needed |
 | `PORT` | no | Cloud Run sets this; defaults to 8080 |
 
 The service exits on startup if a required var is missing.

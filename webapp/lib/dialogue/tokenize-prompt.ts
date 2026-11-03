@@ -30,6 +30,7 @@ Each token is an object {"text", "reading"}. "text" is the verbatim surface as d
 - Hiragana for native and Sino-Japanese words (今日 → きょう, 分からなくて → わからなくて); katakana surfaces may keep katakana.
 - Numbers, counters and Latin letters are written out as spoken in context, never as digits (302 → さんまるに for a room number, 430円 → よんひゃくさんじゅうえん, 三〇二 → さんまるに, ATM → えーてぃーえむ, 9時 → くじ).
 - Long vowels use ー or the spelled kana as pronounced (はいー → はいー, コーヒー → コーヒー).
+- Particles are read as pronounced, not as spelled: topic は → わ, direction へ → え, object を → お. This holds inside fixed expressions and merged tokens too (こんにちは → こんにちわ, こんばんは → こんばんわ, では → でわ, には → にわ). A は or へ that is part of a word keeps its own reading (はい → はい, へえ → へえ, 母 → はは, 部屋 → へや).
 - Punctuation tokens get an empty reading.
 Never put kanji, digits or Latin letters in "reading".`;
 

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ttsApi } from "@/lib/tts/client";
-import { GEMINI_VOICE_CATALOG } from "@/lib/tts/gemini-voice-catalog";
+import { GEMINI_VOICE_CATALOG, geminiVoiceName } from "@/lib/tts/gemini-voice-catalog";
 import { VOICE_TAKES_MODEL, VOICE_TAKES_PER_VOICE } from "@/lib/tts/voice-takes";
 import type { VoiceTakesBatchResult } from "@/lib/tts/voice-takes-batch";
 
@@ -272,7 +272,10 @@ export function VoiceTakesPanel() {
                   return (
                     <tr key={v.voice} className="border-t align-top">
                       <td className="px-3 py-2">
-                        <div className="font-medium">{v.displayName}</div>
+                        <div className="font-medium">{geminiVoiceName(v)}</div>
+                        {v.characterName && (
+                          <div className="text-xs text-muted-foreground">{v.displayName}</div>
+                        )}
                         <div className="text-xs text-muted-foreground">{v.voice}</div>
                         {v.source === "library" && (
                           <Badge variant="outline" className="mt-1">
@@ -294,7 +297,7 @@ export function VoiceTakesPanel() {
                                   size="sm"
                                   variant={isPlaying ? "default" : "outline"}
                                   onClick={() => toggle(v.voice, t.take, t.sha256)}
-                                  title={`${v.displayName} take ${t.take} (${t.seconds}s)`}
+                                  title={`${geminiVoiceName(v)} take ${t.take} (${t.seconds}s)`}
                                 >
                                   {isPlaying ? <Pause className="size-3" /> : <Play className="size-3" />}
                                   {t.take}
@@ -308,8 +311,8 @@ export function VoiceTakesPanel() {
                             variant="ghost"
                             onClick={() => regenerate(v.voice)}
                             disabled={running || regenerating !== null}
-                            title={`Regenerate ${v.displayName}'s takes`}
-                            aria-label={`Regenerate ${v.displayName}'s takes`}
+                            title={`Regenerate ${geminiVoiceName(v)}'s takes`}
+                            aria-label={`Regenerate ${geminiVoiceName(v)}'s takes`}
                           >
                             {regenerating === v.voice ? (
                               <Loader2 className="size-3 animate-spin" />
@@ -322,6 +325,7 @@ export function VoiceTakesPanel() {
                       <td className="px-3 py-2 text-xs">
                         {v.gender}
                         {v.ageYears ? `, ${v.ageYears}` : ""}, {v.pitch} pitch
+                        {v.occupation && <div>{v.occupation}</div>}
                         <div className="text-muted-foreground">{v.accent}</div>
                       </td>
                       <td className="px-3 py-2 text-xs">

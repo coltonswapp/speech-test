@@ -1081,7 +1081,17 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
         ) { [weak self] _ in
             self?.presentDictionaryLookup()
         }
-        var children: [UIMenuElement] = [dictionarySearch, experimentsMenu]
+        var children: [UIMenuElement] = []
+        if LLMGatewayClient.isAvailable, contentQASceneContext != nil {
+            let report = UIAction(
+                title: "Report a problem",
+                image: UIImage(systemName: "exclamationmark.bubble")
+            ) { [weak self] _ in
+                self?.presentLessonIssueReport()
+            }
+            children.append(UIMenu(options: .displayInline, children: [report]))
+        }
+        children.append(contentsOf: [dictionarySearch, experimentsMenu])
         if let context = contentQASceneContext {
             let approved = approvedScenarioIDs.contains(selectedScenarioID)
             let approve = UIAction(
@@ -1318,6 +1328,35 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
                 slug: context.scene.slug
             )
         )
+    }
+
+    private func presentLessonIssueReport() {
+        guard let scene = contentQASceneContext, let item = currentScenarioItem else { return }
+        if dialogueViewController.dialoguePlaybackPhase == .playing {
+            dialogueViewController.dialoguePausePlayback()
+        }
+        quizViewController?.stopEvidencePlayback()
+        let focus = makeContentQAFocus()
+        let page: LessonIssuePage
+        if activePageIndex == 0 {
+            page = .dialogue
+        } else if hasQuizPage, activePageIndex == 1 {
+            page = .quiz
+        } else {
+            page = .highlights
+        }
+        let context = LessonIssueContext(
+            collectionId: scene.collectionId,
+            scenarioId: scene.slug,
+            publishedVariantId: item.example.publishedVariantId,
+            publishedContentHash: item.example.publishedContentHash,
+            page: page,
+            focusTitle: focus.title,
+            focusDetails: focus.detailLines,
+            sessionMode: contentQASessionModeLabel(),
+            quizQuestionNumber: focus.quizQuestionNumber
+        )
+        LessonIssueReportViewController.present(from: self, context: context)
     }
 
     /// Results push inside the sheet's own navigation controller, never onto the scene's stack.

@@ -20,6 +20,28 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Gemini models
+
+- **Text** (dialogue generation and revision, grammar generation):
+  `GEMINI_TEXT_MODEL`, default `gemini-3.5-flash-lite`, thinking level `low`.
+- **Tokenize + readings**: `GEMINI_TOKENIZE_MODEL`, default `gemini-3.8-flash`
+  (provisional), thinking level `low`. The prompt and thinking level live in
+  `lib/dialogue/tokenize-prompt.ts`; results are cached per line text.
+- **TTS**: chosen in Settings → Voices (3.8 Flash TTS by default, or 3.8
+  Flash-Lite TTS).
+- **Voice takes**: Settings → Voices → Voice takes plays two takes of one
+  sample line for every Gemini voice (Studio's 30 plus the ja-JP Tokyo library
+  voices, which only work on 3.8 TTS). **Generate missing takes** calls
+  `POST /api/tts/voice-takes/generate` in small batches; it skips takes already
+  in R2 (`tts/voice-takes/<model>/`, plus `manifest.json`), stops on a Gemini
+  quota hit with the retry time, and can be clicked again later to resume. The
+  row's ↺ button regenerates one voice (`{ voice, force: true }`). No DB rows.
+
+Gemini 3+ ignores `temperature`/`topP`/`topK` and rejects `candidateCount`, so
+requests send only `thinkingConfig.thinkingLevel` (adapted per model in
+`lib/gemini/text-model.ts`). Published per-1M-token rates, including the
+2027-01-01 rate changes, live in `lib/gemini/models.ts`. See `.env.example`.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

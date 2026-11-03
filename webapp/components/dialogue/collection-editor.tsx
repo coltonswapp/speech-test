@@ -9,6 +9,7 @@ import {
   ArrowDown,
   ArrowUp,
   Download,
+  Images,
   Plus,
   Sparkles,
   Trash2,
@@ -18,6 +19,7 @@ import { GrammarPointPicker } from "@/components/content/grammar-point-picker";
 import { DifficultyLevelPicker } from "@/components/dialogue/difficulty-level-picker";
 import { FormalityLevelPicker } from "@/components/dialogue/formality-level-picker";
 import { LessonPlaythroughButton } from "@/components/dialogue/lesson-playthrough";
+import { LessonThumbnailViewer } from "@/components/dialogue/lesson-thumbnail-viewer";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,6 +65,7 @@ import {
 } from "@/lib/dialogue/generated-lines";
 import type { DialogueDifficulty } from "@/lib/dialogue/difficulty";
 import type { DialogueFormality } from "@/lib/dialogue/formality";
+import { buildLessonThumbnailItems } from "@/lib/dialogue/lesson-thumbnails";
 
 function collectionToRawJson(collection: DialogueCollection): string {
   return serializeCollectionFile(
@@ -132,8 +135,28 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
   const [aiPrompt, setAiPrompt] = useState("");
   const [rawText, setRawText] = useState("");
   const [rawError, setRawError] = useState<string | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerItemId, setViewerItemId] = useState<string | null>(null);
 
   const collection = data?.collection;
+  const thumbnailItems = useMemo(
+    () =>
+      collection
+        ? buildLessonThumbnailItems({
+            collectionId: collection.id,
+            lessonTitle: collection.title,
+            lessonThumbnailUrl: collection.thumbnailUrl,
+            lessonThumbnailSmallUrl: collection.thumbnailSmallUrl,
+            scenarios: collection.scenarios,
+          })
+        : [],
+    [collection]
+  );
+
+  function openThumbnailViewer(id: string) {
+    setViewerItemId(id);
+    setViewerOpen(true);
+  }
 
   const defaultGrammarPointIds = useMemo(() => {
     if (!collection) return [];
@@ -612,12 +635,18 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
             )}
           </div>
           {collection.thumbnailUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={collection.thumbnailUrl}
-              alt={`${collection.title} thumbnail`}
-              className="h-40 w-full max-w-sm rounded-md border bg-muted/30 object-cover md:h-72 md:max-w-2xl md:object-contain"
-            />
+            <button
+              type="button"
+              onClick={() => openThumbnailViewer("lesson")}
+              className="w-full max-w-sm overflow-hidden rounded-md border bg-muted/30 text-left transition hover:ring-2 hover:ring-ring md:max-w-2xl"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={collection.thumbnailUrl}
+                alt={`${collection.title} thumbnail`}
+                className="h-40 w-full object-cover md:h-72 md:object-contain"
+              />
+            </button>
           ) : (
             <div className="flex h-40 max-w-sm items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground md:h-72 md:max-w-2xl">
               No thumbnail yet
@@ -647,6 +676,18 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
                 }}
               />
             </label>
+            {thumbnailItems.length > 0 && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() =>
+                  openThumbnailViewer(thumbnailItems[0]?.id ?? "lesson")
+                }
+              >
+                <Images className="size-4" />
+                View thumbnails
+              </Button>
+            )}
             {collection.thumbnailUrl && (
               <>
                 <a
@@ -700,57 +741,80 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
             key={scenario.id}
             className="flex items-center gap-2 rounded-md border border-border/60 p-3"
           >
-            {scenario.thumbnailUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={scenario.thumbnailUrl}
-                alt=""
-                title="Has its own thumbnail"
-                className="size-9 shrink-0 rounded border object-cover md:size-20 lg:size-24"
-              />
-            )}
-            <div className="flex min-w-0 flex-1 flex-col">
-              <Link
-                href={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
-                className="truncate text-sm font-medium hover:underline"
-              >
-                {scenario.menuTitle}
-              </Link>
-              <span className="truncate text-xs text-muted-foreground">
-                {scenario.id}
-              </span>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-              <ScenarioUpdatedLabel updatedAt={scenario.updatedAt} />
-              <ScenarioReadinessChips
-                readiness={scenario.readiness}
-                hrefBase={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
-                audioTitle={audioStatusTooltip(
-                  audioStatusById.get(scenario.id),
-                  scenario.readiness.audio !== "draft",
-                )}
-              />
-            </div>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => move(index, -1)}
-              disabled={index === 0 || reorderMutation.isPending}
-              aria-label="Move up"
-            >
-              <ArrowUp className="size-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => move(index, 1)}
-              disabled={
-                index === scenarios.length - 1 || reorderMutation.isPending
+            <button
+              type="button"
+              onClick={() => openThumbnailViewer(scenario.id)}
+              title={
+                scenario.thumbnailUrl
+                  ? "Scene thumbnail — click to browse"
+                  : collection.thumbnailUrl
+                    ? "Inherits the lesson thumbnail — click to browse"
+                    : "No thumbnail — click to browse"
               }
-              aria-label="Move down"
+              className="size-9 shrink-0 overflow-hidden rounded border bg-muted/30 transition hover:ring-2 hover:ring-ring md:size-20 lg:size-24"
             >
-              <ArrowDown className="size-3.5" />
-            </Button>
+              {scenario.thumbnailUrl || collection.thumbnailUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={scenario.thumbnailUrl ?? collection.thumbnailUrl ?? ""}
+                  alt=""
+                  className={`size-full object-cover ${
+                    scenario.thumbnailUrl ? "" : "opacity-70"
+                  }`}
+                />
+              ) : (
+                <span className="flex size-full items-center justify-center text-[10px] text-muted-foreground">
+                  —
+                </span>
+              )}
+            </button>
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <div className="min-w-0">
+                <Link
+                  href={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
+                  className="line-clamp-2 text-sm font-medium leading-snug break-words hover:underline"
+                >
+                  {scenario.menuTitle}
+                </Link>
+                <span className="mt-0.5 block break-all text-xs text-muted-foreground">
+                  {scenario.id}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                <ScenarioUpdatedLabel updatedAt={scenario.updatedAt} />
+                <ScenarioReadinessChips
+                  readiness={scenario.readiness}
+                  hrefBase={`/content/dialogues/${collectionId}/${scenarioSlug(scenario)}`}
+                  audioTitle={audioStatusTooltip(
+                    audioStatusById.get(scenario.id),
+                    scenario.readiness.audio !== "draft",
+                  )}
+                  className="max-w-none justify-start"
+                />
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center self-center">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => move(index, -1)}
+                disabled={index === 0 || reorderMutation.isPending}
+                aria-label="Move up"
+              >
+                <ArrowUp className="size-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => move(index, 1)}
+                disabled={
+                  index === scenarios.length - 1 || reorderMutation.isPending
+                }
+                aria-label="Move down"
+              >
+                <ArrowDown className="size-3.5" />
+              </Button>
+            </div>
           </div>
         ))}
       </div>
@@ -980,6 +1044,14 @@ export function CollectionEditor({ collectionId }: { collectionId: string }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <LessonThumbnailViewer
+        open={viewerOpen}
+        onOpenChange={setViewerOpen}
+        collectionId={collectionId}
+        items={thumbnailItems}
+        initialId={viewerItemId}
+      />
     </div>
   );
 }

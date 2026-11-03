@@ -1,14 +1,18 @@
 import "server-only";
 import { getProviderKey } from "@/lib/secrets";
+import {
+  geminiGenerateContentUrl,
+  geminiTextModel,
+  geminiThinkingConfig,
+} from "@/lib/gemini/text-model";
 import { grammarPointSchema, type GrammarPointInput } from "@/lib/content/types";
 import { validatePoint } from "@/lib/content/validator";
 
 // Ported from GrammarContentKit/Sources/GrammarContentKit/GrammarPointGenerator.swift
-// and GrammarSectionGenerator.swift. Prompt structure, retry loop (temperature 0.4
-// then 0.2, up to 3 attempts), and gold-example few-shot context mirror the Swift
+// and GrammarSectionGenerator.swift. Prompt structure, retry loop (up to 3
+// attempts with validation feedback; Gemini 3+ ignores temperature), and gold-example few-shot context mirror the Swift
 // implementation; see also lib/dialogue/gemini-generate.ts for the sibling port.
 
-const GEMINI_TEXT_MODEL = "gemini-2.5-flash";
 const MAX_ATTEMPTS = 3;
 
 export class GrammarGenerationError extends Error {}
@@ -41,11 +45,12 @@ function goldJSON(gold: GoldExample[]): string {
 
 async function requestGemini(
   apiKey: string,
-  prompt: string,
-  temperature: number
+  prompt: string
 ): Promise<string> {
+  const model = geminiTextModel();
+  const thinkingConfig = geminiThinkingConfig(model, "low");
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`,
+    geminiGenerateContentUrl(model),
     {
       method: "POST",
       headers: {
@@ -54,9 +59,11 @@ async function requestGemini(
       },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
+        // Gemini 3+ ignores sampling params; retries rely on the
+        // validation feedback appended to the prompt instead.
         generationConfig: {
-          temperature,
           responseMimeType: "application/json",
+          ...(thinkingConfig ? { thinkingConfig } : {}),
         },
       }),
     }
@@ -189,11 +196,10 @@ export async function generateGrammarPoint(
       prompt += `\n\nPrevious attempt failed validation: ${lastIssues.join("; ")}. Fix all issues.`;
     }
 
-    const temperature = attempt === 1 ? 0.4 : 0.2;
 
     let text: string;
     try {
-      text = await requestGemini(apiKey, prompt, temperature);
+      text = await requestGemini(apiKey, prompt);
     } catch (error) {
       lastIssues = [error instanceof Error ? error.message : String(error)];
       continue;
@@ -439,11 +445,10 @@ export async function regenerateSection(
     if (attempt > 1) {
       prompt += `\n\nPrevious attempt failed: ${lastError}. Fix and return valid JSON.`;
     }
-    const temperature = attempt === 1 ? 0.4 : 0.2;
 
     let text: string;
     try {
-      text = await requestGemini(apiKey, prompt, temperature);
+      text = await requestGemini(apiKey, prompt);
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
       continue;

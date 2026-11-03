@@ -196,7 +196,7 @@ export function DialogueList({
   return (
     <div
       className={cn(
-        "flex w-80 shrink-0 flex-col gap-3 border-r border-border/60 pr-4",
+        "flex w-80 max-w-80 shrink-0 flex-col gap-3 border-r border-border/60 pr-4",
         className,
       )}
     >

@@ -385,6 +385,8 @@ export const teachingPattern = pgTable("teaching_pattern", {
   id: text("id").primaryKey(), // slug
   form: text("form").notNull(), // Japanese form
   gloss: text("gloss").notNull(),
+  /** Textbook-style 1–2 sentence learner definition. Optional. */
+  description: text("description"),
   jlptBand: integer("jlpt_band").notNull().default(5),
   category: text("category").notNull(), // communicative function
   status: text("status").notNull().default("seed"), // seed | planned | tagged | live

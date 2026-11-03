@@ -12,14 +12,17 @@ export function toExportedTeachingPattern(row: {
   form: string;
   gloss: string;
   notes: string | null;
+  description?: string | null;
 }): ExportedTeachingPattern {
   const shortMeaning = row.gloss.trim();
   const formNote = row.notes?.trim();
+  const description = row.description?.trim();
   return {
     id: row.id,
     label: row.form.trim() || row.id,
     ...(shortMeaning ? { shortMeaning } : {}),
     ...(formNote ? { formNote } : {}),
+    ...(description ? { description } : {}),
   };
 }
 
@@ -35,6 +38,7 @@ export async function fetchExportedTeachingPatterns(
       form: true,
       gloss: true,
       notes: true,
+      description: true,
     },
   });
   const byId = new Map(rows.map((row) => [row.id, toExportedTeachingPattern(row)]));

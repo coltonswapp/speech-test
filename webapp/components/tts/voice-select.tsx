@@ -16,6 +16,11 @@ import {
 import { ttsApi } from "@/lib/tts/client";
 import { OPENAI_VOICES } from "@/lib/tts/voices";
 import { GEMINI_TTS_VOICES } from "@/lib/tts/gemini-voices";
+import {
+  GEMINI_LIBRARY_VOICES,
+  geminiVoiceLabel,
+} from "@/lib/tts/gemini-voice-catalog";
+import { usesSpeechMetadata } from "@/lib/gemini/models";
 
 const VOICES_BY_PROVIDER = {
   openai: OPENAI_VOICES,
@@ -40,6 +45,20 @@ export function VoiceSelect({
 }) {
   const voices: readonly string[] = VOICES_BY_PROVIDER[provider];
 
+  // ja-JP library voices only work on 3.8+ TTS; disable them otherwise.
+  const settingsQuery = useQuery({
+    queryKey: ["tts-settings"],
+    queryFn: () => ttsApi.getTtsSettings(),
+    enabled: provider === "gemini",
+  });
+  const ttsModel = settingsQuery.data?.geminiTtsModel;
+  const libraryVoices = provider === "gemini" ? GEMINI_LIBRARY_VOICES : [];
+  const libraryEnabled = !ttsModel || usesSpeechMetadata(ttsModel);
+  const items = [
+    ...voices.map((v) => ({ value: v, label: v })),
+    ...libraryVoices.map((v) => ({ value: v.voice, label: geminiVoiceLabel(v.voice) })),
+  ];
+
   const { data } = useQuery({
     queryKey: ["voice-previews"],
     queryFn: () => ttsApi.listVoicePreviews(),
@@ -51,7 +70,7 @@ export function VoiceSelect({
   const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
 
   const previewForVoice = (voice: string) =>
-    data?.previews.find((p) => p.provider === provider && p.voice === voice);
+    data?.previews?.find((p) => p.provider === provider && p.voice === voice);
 
   const handlePreview = (voice: string) => {
     const preview = previewForVoice(voice);
@@ -83,6 +102,7 @@ export function VoiceSelect({
     <div className="flex items-center gap-2">
       <Select
         value={value}
+        items={items}
         onValueChange={(v) => {
           if (v) onChange(v);
         }}
@@ -99,6 +119,18 @@ export function VoiceSelect({
               </SelectItem>
             ))}
           </SelectGroup>
+          {libraryVoices.length > 0 && (
+            <SelectGroup>
+              <SelectLabel>
+                ja-JP library (3.8 TTS only{libraryEnabled ? "" : " — switch model in Settings → Voices"})
+              </SelectLabel>
+              {libraryVoices.map((v) => (
+                <SelectItem key={v.voice} value={v.voice} disabled={!libraryEnabled}>
+                  {geminiVoiceLabel(v.voice)}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          )}
         </SelectContent>
       </Select>
       <Button

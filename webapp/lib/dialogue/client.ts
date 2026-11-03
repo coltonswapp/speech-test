@@ -38,8 +38,16 @@ export type ScenarioAudioStatus = {
 
 export type ScenarioReadinessSummary = {
   audio: "published" | "stale" | "draft";
+  /** Lockstep fallbacks; chips prefer `align`. */
   timing: "missing" | "partial" | "ready" | "done";
   sync: "missing" | "stale" | "tokens-only" | "ready" | "complete";
+  /** Combined aligner (timing + karaoke). */
+  align?: "missing" | "partial" | "ready" | "done" | "stale";
+  /** Human-ear review of the selected take alignment. */
+  review?: "pending" | "flagged" | "reviewed";
+  /** Gate A: scene has a published take. */
+  published?: "unpublished" | "published" | "stale";
+  publishedAt?: string | null;
   quiz?: "missing" | "ready" | "published";
   quizCount: number;
   quizWithEvidence: number;
@@ -602,4 +610,14 @@ export const dialogueApi = {
     `/api/content/dialogues/${collectionId}/export`,
   exportZipUrl: (collectionId: string) =>
     `/api/content/dialogues/${collectionId}/export-zip`,
+  thumbnailFileUrl: (
+    collectionId: string,
+    item: { kind: "lesson" | "scene"; slug: string | null },
+  ) => {
+    const params = new URLSearchParams({ kind: item.kind });
+    if (item.kind === "scene" && item.slug) params.set("slug", item.slug);
+    return `/api/content/dialogues/${encodeURIComponent(collectionId)}/thumbnails/file?${params}`;
+  },
+  thumbnailZipUrl: (collectionId: string) =>
+    `/api/content/dialogues/${encodeURIComponent(collectionId)}/thumbnails/zip`,
 };

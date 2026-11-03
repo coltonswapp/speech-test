@@ -22,14 +22,45 @@ export function pcm16ToWav(pcm: Buffer, sampleRate: number): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
+/**
+ * Finds the `fmt ` and `data` chunks by walking the RIFF chunk list. Gemini
+ * 3.8 TTS returns WAV with a C2PA provenance chunk *after* `data`, so slicing
+ * at byte 44 would append that metadata to the audio as noise.
+ */
+function parseWavChunks(wav: Buffer): { pcm: Buffer; sampleRate: number } {
+  let sampleRate = 0;
+  let offset = 12;
+  while (offset + 8 <= wav.length) {
+    const id = wav.toString("ascii", offset, offset + 4);
+    const size = wav.readUInt32LE(offset + 4);
+    const body = offset + 8;
+    if (id === "fmt " && body + 8 <= wav.length) {
+      sampleRate = wav.readUInt32LE(body + 4);
+    } else if (id === "data") {
+      const end = Math.min(body + size, wav.length);
+      return { pcm: wav.subarray(body, end), sampleRate };
+    }
+    offset = body + size + (size % 2);
+  }
+  throw new Error("WAV has no data chunk");
+}
+
 export function wavToPcm16(wav: Buffer): { pcm: Buffer; sampleRate: number } {
   if (wav.length < 44 || wav.toString("ascii", 0, 4) !== "RIFF") {
     throw new Error("Not a WAV file");
   }
-  const sampleRate = wav.readUInt32LE(24);
-  // Assumes the canonical 44-byte header this module writes (no extra chunks).
-  const pcm = wav.subarray(44);
-  return { pcm, sampleRate };
+  return parseWavChunks(wav);
+}
+
+/**
+ * Gemini TTS audio as raw 16-bit PCM: 3.1 and earlier return headerless
+ * `audio/l16`; 3.8+ returns `audio/wav`, which is unwrapped here.
+ */
+export function geminiAudioToPcm16(data: Buffer): Buffer {
+  if (data.length > 12 && data.toString("ascii", 0, 4) === "RIFF") {
+    return parseWavChunks(data).pcm;
+  }
+  return data;
 }
 
 export function pcm16ToFloat32(pcm: Buffer): Float32Array {

@@ -25,6 +25,12 @@ import {
   type VoicePreview,
 } from "@/lib/tts/client";
 import { cn } from "@/lib/utils";
+import { VoiceTakesPanel } from "@/components/tts/voice-takes-panel";
+import {
+  GEMINI_TTS_DEFAULT_MODEL,
+  GEMINI_TTS_MODELS,
+  isGeminiTtsModel,
+} from "@/lib/gemini/models";
 
 const GENDER_OPTIONS: { value: VoiceGender; label: string }[] = [
   { value: "female", label: "Female" },
@@ -604,6 +610,65 @@ function PairingGrid({
   );
 }
 
+const TTS_MODEL_ITEMS = GEMINI_TTS_MODELS.map((model) => ({
+  value: model.id,
+  label:
+    model.id === GEMINI_TTS_DEFAULT_MODEL ? `${model.label} (default)` : model.label,
+}));
+
+/** Studio-wide Gemini TTS model for new conversation takes (A/B 3.8 vs 3.8 Lite). */
+function TtsModelCard() {
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery({
+    queryKey: ["tts-settings"],
+    queryFn: () => ttsApi.getTtsSettings(),
+  });
+  const mutation = useMutation({
+    mutationFn: ttsApi.updateTtsSettings,
+    onSuccess: (data) => {
+      queryClient.setQueryData(["tts-settings"], data);
+      toast.success("TTS model updated");
+    },
+    onError: (error) => toast.error(error.message || "Could not save TTS model."),
+  });
+  const current = settingsQuery.data?.geminiTtsModel ?? GEMINI_TTS_DEFAULT_MODEL;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base font-medium">Gemini TTS model</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <p className="text-sm text-muted-foreground">
+          Used for every new conversation take. Takes from a non-default model
+          get a note with the model name so you can compare them.
+        </p>
+        <Select
+          value={current}
+          items={TTS_MODEL_ITEMS}
+          onValueChange={(value) => {
+            if (isGeminiTtsModel(value) && value !== current) mutation.mutate(value);
+          }}
+          disabled={settingsQuery.isLoading || mutation.isPending}
+        >
+          <SelectTrigger className="w-64">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {TTS_MODEL_ITEMS.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function VoicesSettings() {
   const queryClient = useQueryClient();
   const player = usePreviewPlayer();
@@ -773,6 +838,10 @@ export function VoicesSettings() {
 
   return (
     <div className="flex flex-col gap-6">
+      <TtsModelCard />
+
+      <VoiceTakesPanel />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-medium">

@@ -6,9 +6,15 @@ import {
   learnerTokenSyncForPublishedTake,
 } from "./publish-lockstep";
 import {
+  alignChipLabel,
   buildScenarioReadiness,
+  curriculumAlignReviewStatus,
+  curriculumAlignStatus,
+  curriculumPublishedStatus,
   curriculumSyncStatus,
   curriculumTimingStatus,
+  publishedChipLabel,
+  reviewChipLabel,
 } from "./scenario-readiness";
 import type { PublishedTokenSync, VariantTokenSync } from "./types";
 
@@ -155,6 +161,8 @@ describe("buildScenarioReadiness lock-step", () => {
     assert.equal(readiness.audio, "published");
     assert.equal(readiness.timing, "done");
     assert.equal(readiness.sync, "ready");
+    assert.equal(readiness.align, "ready");
+    assert.equal(readiness.published, "published");
     assert.equal(readiness.quiz, "published");
   });
 
@@ -178,6 +186,7 @@ describe("buildScenarioReadiness lock-step", () => {
     });
     assert.equal(readiness.audio, "stale");
     assert.equal(readiness.timing, "ready");
+    assert.equal(readiness.published, "stale");
     assert.equal(readiness.quiz, "ready");
   });
 
@@ -197,6 +206,8 @@ describe("buildScenarioReadiness lock-step", () => {
     assert.equal(readiness.audio, "draft");
     assert.equal(readiness.timing, "ready");
     assert.equal(readiness.sync, "ready");
+    assert.equal(readiness.align, "ready");
+    assert.equal(readiness.published, "unpublished");
     assert.equal(readiness.quiz, "ready");
     assert.equal(readiness.thumbnail, "missing");
   });
@@ -292,6 +303,134 @@ describe("buildScenarioReadiness lock-step", () => {
     });
     assert.equal(done.contentQa, "done");
     assert.equal(done.contentQaHasNote, true);
+  });
+
+  it("rolls aligner, ear-review, and Gate A publish into chips", () => {
+    const flagged = workingSync(["ab", "cd"], [
+      [0.1, 0.2],
+      [0.4, 0.5],
+    ]);
+    flagged.source = "auto";
+    flagged.flags = [{ code: "stamp-in-silence", lineIndex: 0, tokenIndex: 0 }];
+    const flaggedReadiness = buildScenarioReadiness({
+      publishedAudioUrl: null,
+      lines: twoLines,
+      quiz: [],
+      tokenSync: null,
+      workingMarks: [8000],
+      workingTokenSync: flagged,
+      contentHash: HASH,
+    });
+    assert.equal(flaggedReadiness.align, "ready");
+    assert.equal(flaggedReadiness.review, "flagged");
+    assert.equal(flaggedReadiness.published, "unpublished");
+    assert.equal(reviewChipLabel(flaggedReadiness.review), "review");
+    assert.equal(publishedChipLabel(flaggedReadiness.published), "pub —");
+
+    const reviewed = workingSync(["ab", "cd"], [
+      [0.1, 0.2],
+      [0.4, 0.5],
+    ]);
+    reviewed.source = "reviewed";
+    const publishedReadiness = buildScenarioReadiness({
+      publishedAudioUrl: "https://cdn.example/clip.m4a",
+      publishedVariantId: "take-1",
+      publishedAt: "2026-10-01T12:00:00.000Z",
+      lines: twoLines,
+      quiz: [],
+      tokenSync: publishedSync(["ab", "cd"], [
+        [0.1, 0.2],
+        [0.4, 0.5],
+      ]),
+      publishedMarks: [8000],
+      workingMarks: [8000],
+      workingTokenSync: reviewed,
+      contentHash: HASH,
+    });
+    assert.equal(publishedReadiness.align, "done");
+    assert.equal(publishedReadiness.review, "reviewed");
+    assert.equal(publishedReadiness.published, "published");
+    assert.equal(publishedReadiness.publishedAt, "2026-10-01T12:00:00.000Z");
+    assert.equal(alignChipLabel(publishedReadiness.align), "align");
+    assert.equal(reviewChipLabel(publishedReadiness.review), "review ✓");
+    assert.equal(publishedChipLabel(publishedReadiness.published), "published");
+  });
+});
+
+describe("curriculumAlignStatus", () => {
+  it("is done only when timing and karaoke both shipped", () => {
+    assert.equal(curriculumAlignStatus("done", "complete"), "done");
+    assert.equal(curriculumAlignStatus("done", "ready"), "ready");
+    assert.equal(curriculumAlignStatus("ready", "ready"), "ready");
+    assert.equal(curriculumAlignStatus("partial", "tokens-only"), "partial");
+    assert.equal(curriculumAlignStatus("missing", "stale"), "stale");
+    assert.equal(curriculumAlignStatus("missing", "missing"), "missing");
+  });
+});
+
+describe("curriculumAlignReviewStatus", () => {
+  it("treats reviewed and human as reviewed; flags as flagged", () => {
+    assert.equal(
+      curriculumAlignReviewStatus({ workingTokenSync: null }),
+      "pending",
+    );
+    const auto = workingSync(["ab"], [[0.1, 0.3]]);
+    auto.source = "auto";
+    assert.equal(
+      curriculumAlignReviewStatus({ workingTokenSync: auto }),
+      "pending",
+    );
+    auto.flags = [{ code: "no-gap", lineIndex: 0, tokenIndex: 0 }];
+    assert.equal(
+      curriculumAlignReviewStatus({ workingTokenSync: auto }),
+      "flagged",
+    );
+    const reviewed = workingSync(["ab"], [[0.1, 0.3]]);
+    reviewed.source = "reviewed";
+    assert.equal(
+      curriculumAlignReviewStatus({ workingTokenSync: reviewed }),
+      "reviewed",
+    );
+    const human = workingSync(["ab"], [[0.1, 0.3]]);
+    human.source = "human";
+    assert.equal(
+      curriculumAlignReviewStatus({ workingTokenSync: human }),
+      "reviewed",
+    );
+    const legacy = workingSync(["ab"], [[0.1, 0.3]]);
+    assert.equal(
+      curriculumAlignReviewStatus({ workingTokenSync: legacy }),
+      "reviewed",
+    );
+  });
+});
+
+describe("curriculumPublishedStatus", () => {
+  it("is unpublished until a take has landed via Gate A", () => {
+    assert.equal(
+      curriculumPublishedStatus({
+        publishedAudioUrl: null,
+        publishedVariantId: null,
+        audioStale: false,
+      }),
+      "unpublished",
+    );
+    assert.equal(
+      curriculumPublishedStatus({
+        publishedAudioUrl: "https://cdn.example/clip.m4a",
+        publishedVariantId: "take-1",
+        audioStale: false,
+      }),
+      "published",
+    );
+    assert.equal(
+      curriculumPublishedStatus({
+        publishedAudioUrl: "https://cdn.example/clip.m4a",
+        publishedVariantId: "take-1",
+        audioStale: true,
+      }),
+      "stale",
+    );
   });
 });
 

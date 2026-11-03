@@ -24,6 +24,7 @@ export type ScenarioReadinessSource = {
   collectionId?: string;
   publishedAudioUrl: string | null;
   publishedVariantId: string | null;
+  publishedAt?: Date | string | null;
   publishedContentHash?: string | null;
   publishedAmbienceHash?: string | null;
   ambienceAssetId?: string | null;
@@ -171,6 +172,8 @@ export async function loadScenarioReadinessById(
       scenario.id,
       buildScenarioReadiness({
         publishedAudioUrl: scenario.publishedAudioUrl,
+        publishedVariantId: scenario.publishedVariantId,
+        publishedAt: scenario.publishedAt ?? null,
         audioStale,
         karaokeStale,
         lines: scenario.lines,

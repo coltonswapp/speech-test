@@ -15,10 +15,13 @@
     "db:seed-patterns": "dotenv -e .env.local -- tsx scripts/seed-teaching-patterns.ts",
     "db:grammar-backfill-dump": "dotenv -e .env.local -- tsx scripts/grammar-backfill-dump.ts",
     "db:grammar-backfill-apply": "dotenv -e .env.local -- tsx scripts/grammar-backfill-apply.ts",
+    "db:pattern-description-dump": "dotenv -e .env.local -- tsx scripts/pattern-description-dump.ts",
+    "db:pattern-description-apply": "dotenv -e .env.local -- tsx scripts/pattern-description-apply.ts",
     "db:cleanup-scenario-links": "dotenv -e .env.local -- tsx scripts/cleanup-scenario-links.ts",
     "db:migrate-thumbnails": "dotenv -e .env.local -- tsx scripts/migrate-thumbnails.ts",
     "db:seed-voice-previews": "dotenv -e .env.local -- tsx scripts/seed-voice-previews.ts",
-    "eval:token-sync": "dotenv -e .env.local -- tsx scripts/eval-token-sync.ts"
+    "eval:token-sync": "dotenv -e .env.local -- tsx scripts/eval-token-sync.ts",
+    "tts:voice-catalog": "dotenv -e .env.local -- tsx scripts/generate-gemini-voice-catalog.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1085.0",

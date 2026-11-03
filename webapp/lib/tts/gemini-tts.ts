@@ -1,71 +1,25 @@
 import "server-only";
 import { getProviderKey } from "@/lib/secrets";
 import { GEMINI_TTS_DEFAULT_MODEL } from "@/lib/tts/gemini-voices";
+import {
+  buildGeminiConversationPayload,
+  resolveSpeakerLabels,
+  type ConversationDialogueLine,
+} from "@/lib/tts/gemini-tts-request";
+import { geminiAudioToPcm16 } from "@/lib/tts/wav";
 
-// Port of TTSCore/Sources/TTSCore/GeminiTTS.swift — multi-speaker conversation
-// synthesis via Gemini's generateContent API.
+// Multi-speaker conversation synthesis via Gemini's generateContent API.
+// Request shape (3.1 transcript vs 3.8 speechMetadata) lives in
+// gemini-tts-request.ts.
 
 export { GEMINI_TTS_VOICES, GEMINI_TTS_DEFAULT_MODEL } from "@/lib/tts/gemini-voices";
 
-export type ConversationSpeaker = "speaker1" | "speaker2";
-
-const DEFAULT_SPEAKER_LABEL: Record<ConversationSpeaker, string> = {
-  speaker1: "Speaker 1",
-  speaker2: "Speaker 2",
-};
-
-export type ConversationDialogueLine = {
-  speaker: ConversationSpeaker;
-  /** Clean Japanese dialogue (no audio tags). */
-  text: string;
-  /** Optional Gemini audio tag(s), e.g. "[softly]" — prepended in the TTS prompt only. */
-  delivery?: string;
-};
+export type {
+  ConversationSpeaker,
+  ConversationDialogueLine,
+} from "@/lib/tts/gemini-tts-request";
 
 export class GeminiTTSError extends Error {}
-
-/**
- * Labels used in the Gemini transcript + multiSpeakerVoiceConfig.speaker fields.
- * Prefer character names (Kaito/Mika) — generic "Speaker 1/2" is more prone to the
- * known multi-speaker voice-swap quirk on the first turn.
- */
-function resolveSpeakerLabels(params: {
-  speaker1Name?: string | null;
-  speaker2Name?: string | null;
-}): Record<ConversationSpeaker, string> {
-  const raw1 = params.speaker1Name?.trim() || "";
-  const raw2 = params.speaker2Name?.trim() || "";
-  if (raw1 && raw2 && raw1.toLowerCase() !== raw2.toLowerCase()) {
-    return { speaker1: raw1, speaker2: raw2 };
-  }
-  return { ...DEFAULT_SPEAKER_LABEL };
-}
-
-function spokenTextForPrompt(line: ConversationDialogueLine): string {
-  const text = line.text.trim();
-  const delivery = line.delivery?.trim();
-  return delivery ? `${delivery} ${text}` : text;
-}
-
-function buildTranscript(
-  lines: ConversationDialogueLine[],
-  labels: Record<ConversationSpeaker, string>
-): string {
-  const body = lines
-    .map((line) => `${labels[line.speaker]}: ${spokenTextForPrompt(line)}`)
-    .join("\n");
-  // Brief style cue helps Gemini keep voices attached to the right speaker.
-  const cue = `TTS dialogue. ${labels.speaker1} uses voice A; ${labels.speaker2} uses voice B. Keep each speaker's voice consistent for every line.\n\n`;
-  return `${cue}## Transcript:\n${body}`;
-}
-
-/** Strips a 44-byte WAV header if the response happens to be WAV-wrapped. */
-function stripWavHeaderIfPresent(data: Buffer): Buffer {
-  if (data.length > 44 && data.toString("ascii", 0, 4) === "RIFF") {
-    return data.subarray(44);
-  }
-  return data;
-}
 
 export async function synthesizeGeminiConversation(params: {
   lines: ConversationDialogueLine[];
@@ -92,38 +46,14 @@ export async function synthesizeGeminiConversation(params: {
     speaker1Name: params.speaker1Name,
     speaker2Name: params.speaker2Name,
   });
-  const transcript = buildTranscript(trimmedLines, labels);
-
-  const payload = {
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: transcript }],
-      },
-    ],
-    generationConfig: {
-      temperature: params.temperature ?? 1,
-      responseModalities: ["AUDIO"],
-      speechConfig: {
-        multiSpeakerVoiceConfig: {
-          speakerVoiceConfigs: [
-            {
-              speaker: labels.speaker1,
-              voiceConfig: {
-                prebuiltVoiceConfig: { voiceName: params.speaker1Voice },
-              },
-            },
-            {
-              speaker: labels.speaker2,
-              voiceConfig: {
-                prebuiltVoiceConfig: { voiceName: params.speaker2Voice },
-              },
-            },
-          ],
-        },
-      },
-    },
-  };
+  const payload = buildGeminiConversationPayload({
+    model,
+    lines: trimmedLines,
+    labels,
+    speaker1Voice: params.speaker1Voice,
+    speaker2Voice: params.speaker2Voice,
+    temperature: params.temperature,
+  });
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
@@ -145,16 +75,16 @@ export async function synthesizeGeminiConversation(params: {
   }
 
   const json = await response.json();
-  const parts = json?.candidates?.[0]?.content?.parts;
-  if (!Array.isArray(parts)) {
+  const responseParts = json?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(responseParts)) {
     throw new GeminiTTSError("Gemini returned no audio data.");
   }
 
-  for (const part of parts) {
+  for (const part of responseParts) {
     const base64 = part?.inlineData?.data;
     if (typeof base64 === "string" && base64.length > 0) {
-      const audioData = Buffer.from(base64, "base64");
-      return stripWavHeaderIfPresent(audioData);
+      // 3.8 returns WAV (with a trailing C2PA chunk); 3.1 returns raw PCM.
+      return geminiAudioToPcm16(Buffer.from(base64, "base64"));
     }
   }
 

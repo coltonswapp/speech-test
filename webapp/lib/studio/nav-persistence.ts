@@ -9,6 +9,8 @@ const REVIEW_EXPANDED_KEY = "studio:review-queue:expanded";
 const REVIEW_DISMISSED_KEY = "studio:review-queue:dismissed";
 /** Approved/published takes kept in the queue until explicit Remove. */
 const REVIEW_RETAINED_KEY = "studio:review-queue:retained";
+const REVIEW_JLPT_KEY = "studio:review-queue:jlpt";
+const REVIEW_SHOW_OLDER_KEY = "studio:review-queue:show-older";
 
 function readJson<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -59,6 +61,25 @@ export function readReviewExpanded(): Set<string> | null {
 
 export function writeReviewExpanded(expanded: Set<string>) {
   writeJson(REVIEW_EXPANDED_KEY, [...expanded]);
+}
+
+/** Last Review queue JLPT track (5/4/3). Used when `/tts/review` has no `?jlpt=`. */
+export function readReviewJlpt(): 5 | 4 | 3 | null {
+  const n = Number(readJson<unknown>(REVIEW_JLPT_KEY, null));
+  if (n === 5 || n === 4 || n === 3) return n;
+  return null;
+}
+
+export function writeReviewJlpt(level: 5 | 4 | 3) {
+  writeJson(REVIEW_JLPT_KEY, level);
+}
+
+export function readReviewShowOlderTakes(): boolean {
+  return readJson<unknown>(REVIEW_SHOW_OLDER_KEY, false) === true;
+}
+
+export function writeReviewShowOlderTakes(show: boolean) {
+  writeJson(REVIEW_SHOW_OLDER_KEY, show);
 }
 
 /** Soft-dismissed review takes: variantId → ISO timestamp. */

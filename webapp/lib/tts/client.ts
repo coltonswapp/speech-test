@@ -1,5 +1,8 @@
 import type { TokenSyncFlag } from "@/lib/dialogue/types";
 import { formatApiError } from "@/lib/api-error";
+import type { GeminiTtsModel } from "@/lib/gemini/models";
+import type { VoiceTakesManifest } from "@/lib/tts/voice-takes";
+import type { VoiceTakesBatchResult } from "@/lib/tts/voice-takes-batch";
 import type { VariantTokenSync } from "@/lib/dialogue/types";
 
 export type ProjectSummary = {
@@ -132,6 +135,7 @@ export type ReviewQueueResult = {
     }>;
     isPublishedTake: boolean;
     isSelectedTake: boolean;
+    scenarioPublishedAt?: string | null;
     flagCount: number;
     flagsByCode: Partial<Record<TokenSyncFlag["code"], number>>;
     flaggedLines: Array<{
@@ -252,6 +256,20 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const ttsApi = {
+  getVoiceTakes: () =>
+    request<{ manifest: VoiceTakesManifest | null }>("/api/tts/voice-takes"),
+  generateVoiceTakes: (body: { voice?: string; force?: boolean; exclude?: string[] } = {}) =>
+    request<VoiceTakesBatchResult>("/api/tts/voice-takes/generate", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getTtsSettings: () =>
+    request<{ geminiTtsModel: GeminiTtsModel }>("/api/tts/settings"),
+  updateTtsSettings: (geminiTtsModel: GeminiTtsModel) =>
+    request<{ geminiTtsModel: GeminiTtsModel }>("/api/tts/settings", {
+      method: "PUT",
+      body: JSON.stringify({ geminiTtsModel }),
+    }),
   listProjects: () =>
     request<{ projects: ProjectSummary[] }>("/api/tts/projects"),
   getProject: (id: string) =>

@@ -3,29 +3,27 @@
 import type { ReactNode, SyntheticEvent } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import type { ScenarioReadinessSummary } from "@/lib/dialogue/client";
 import {
+  formatPublishedAt,
+  type ScenarioReadinessSummary,
+} from "@/lib/dialogue/client";
+import {
+  alignChipLabel,
   contentQaChipLabel,
+  curriculumAlignStatus,
+  curriculumPublishedStatus,
   formatCurriculumUpdatedAt,
-  syncChipLabel,
+  publishedChipLabel,
+  reviewChipLabel,
   thumbnailChipLabel,
 } from "@/lib/dialogue/scenario-readiness";
+import {
+  readinessChipHref,
+  type ReadinessChipKey,
+} from "@/lib/dialogue/scenario-editor-deep-link";
 import { cn } from "@/lib/utils";
 
-/** Scenario editor section ids used by `?tab=` deep links. */
-export type ReadinessChipTab = "audio" | "quiz" | "overview";
-
-const CHIP_TAB: Record<
-  "audio" | "timing" | "sync" | "quiz" | "thumbnail" | "contentQa",
-  ReadinessChipTab
-> = {
-  audio: "audio",
-  timing: "audio",
-  sync: "audio",
-  quiz: "quiz",
-  thumbnail: "overview",
-  contentQa: "overview",
-};
+export type { ReadinessChipTab } from "@/lib/dialogue/scenario-editor-deep-link";
 
 function readinessChipClass(
   tone: "ok" | "warn" | "muted" | "draft",
@@ -49,13 +47,13 @@ function stopChipNavigation(event: SyntheticEvent) {
 
 function ReadinessChip({
   hrefBase,
-  tab,
+  chip,
   tone,
   title,
   children,
 }: {
   hrefBase?: string;
-  tab: ReadinessChipTab;
+  chip: ReadinessChipKey;
   tone: "ok" | "warn" | "muted" | "draft";
   title: string;
   children: ReactNode;
@@ -77,7 +75,7 @@ function ReadinessChip({
       title={title}
       render={
         <Link
-          href={`${hrefBase}?tab=${tab}`}
+          href={readinessChipHref(hrefBase, chip)}
           onClick={stopChipNavigation}
           onPointerDown={stopChipNavigation}
         />
@@ -111,18 +109,35 @@ export function ScenarioReadinessChips({
       : readiness.audio === "stale"
         ? ("warn" as const)
         : ("draft" as const);
-  const timingTone =
-    readiness.timing === "done"
+  const align =
+    readiness.align ??
+    curriculumAlignStatus(readiness.timing, readiness.sync);
+  const alignTone =
+    align === "done"
       ? ("ok" as const)
-      : readiness.timing === "ready" || readiness.timing === "partial"
+      : align === "ready" || align === "partial" || align === "stale"
         ? ("warn" as const)
         : ("muted" as const);
-  const syncTone =
-    readiness.sync === "complete"
+  const review = readiness.review ?? "pending";
+  const reviewTone =
+    review === "reviewed"
       ? ("ok" as const)
-      : readiness.sync === "stale" || readiness.sync === "ready"
+      : review === "flagged"
         ? ("warn" as const)
         : ("muted" as const);
+  const published =
+    readiness.published ??
+    curriculumPublishedStatus({
+      publishedAudioUrl: readiness.audio === "draft" ? null : "published",
+      audioStale: readiness.audio === "stale",
+    });
+  const publishedTone =
+    published === "published"
+      ? ("ok" as const)
+      : published === "stale"
+        ? ("warn" as const)
+        : ("muted" as const);
+  const publishedAtLabel = formatPublishedAt(readiness.publishedAt);
   const quizStatus =
     readiness.quiz ??
     (readiness.quizCount <= 0
@@ -157,13 +172,13 @@ export function ScenarioReadinessChips({
   return (
     <div
       className={cn(
-        "flex max-w-[min(100%,16rem)] flex-wrap items-center justify-end gap-1 sm:max-w-none",
+        "flex max-w-[min(100%,22rem)] flex-wrap items-center justify-end gap-1 sm:max-w-none",
         className,
       )}
     >
       <ReadinessChip
         hrefBase={hrefBase}
-        tab={CHIP_TAB.audio}
+        chip="audio"
         tone={audioTone}
         title={
           audioTitle ??
@@ -178,41 +193,57 @@ export function ScenarioReadinessChips({
       </ReadinessChip>
       <ReadinessChip
         hrefBase={hrefBase}
-        tab={CHIP_TAB.timing}
-        tone={timingTone}
+        chip="align"
+        tone={alignTone}
         title={
-          readiness.timing === "done"
-            ? "Line timing published with the current clip"
-            : readiness.timing === "ready"
-              ? "Line timing ready — republish to ship with audio"
-              : readiness.timing === "partial"
-                ? "Line timing partial"
-                : "Line timing missing"
+          align === "done"
+            ? "Aligner: line timing + token karaoke published with the current clip"
+            : align === "ready"
+              ? "Aligner ready — republish to ship timing and karaoke with audio"
+              : align === "partial"
+                ? "Aligner partial (line marks or karaoke incomplete)"
+                : align === "stale"
+                  ? "Aligner stale vs the last publish — republish to refresh karaoke"
+                  : "No aligner output yet (line timing and karaoke missing)"
         }
       >
-        timing
+        {alignChipLabel(align)}
       </ReadinessChip>
       <ReadinessChip
         hrefBase={hrefBase}
-        tab={CHIP_TAB.sync}
-        tone={syncTone}
+        chip="review"
+        tone={reviewTone}
         title={
-          readiness.sync === "complete"
-            ? "Token karaoke published with the current clip"
-            : readiness.sync === "ready"
-              ? "Token karaoke ready — republish to ship with audio"
-              : readiness.sync === "tokens-only"
-                ? "Tokens present, times incomplete"
-                : readiness.sync === "stale"
-                  ? "Token karaoke stale vs the last publish"
-                  : "No token sync"
+          review === "reviewed"
+            ? "Alignment has had its human-ear review pass (tokenSync source: reviewed or hand-stamped)"
+            : review === "flagged"
+              ? "Auto-stamped alignment still has flags — review in the queue or Token timing"
+              : "Alignment not yet reviewed by ear"
         }
       >
-        {syncChipLabel(readiness.sync)}
+        {reviewChipLabel(review)}
       </ReadinessChip>
       <ReadinessChip
         hrefBase={hrefBase}
-        tab={CHIP_TAB.quiz}
+        chip="published"
+        tone={publishedTone}
+        title={
+          published === "unpublished"
+            ? "No published take (Gate A) — scene is not in the learner CDN/DB yet"
+            : published === "stale"
+              ? `Published take is stale vs current lines or bed — republish (Gate A)${
+                  publishedAtLabel ? ` · last published ${publishedAtLabel}` : ""
+                }`
+              : `Has a published take (Gate A)${
+                  publishedAtLabel ? ` · last published ${publishedAtLabel}` : ""
+                }`
+        }
+      >
+        {publishedChipLabel(published)}
+      </ReadinessChip>
+      <ReadinessChip
+        hrefBase={hrefBase}
+        chip="quiz"
         tone={quizTone}
         title={
           quizStatus === "missing"
@@ -232,7 +263,7 @@ export function ScenarioReadinessChips({
       </ReadinessChip>
       <ReadinessChip
         hrefBase={hrefBase}
-        tab={CHIP_TAB.thumbnail}
+        chip="thumbnail"
         tone={thumbnailTone}
         title={
           thumbnail === "own"
@@ -246,7 +277,7 @@ export function ScenarioReadinessChips({
       </ReadinessChip>
       <ReadinessChip
         hrefBase={hrefBase}
-        tab={CHIP_TAB.contentQa}
+        chip="contentQa"
         tone={contentQaTone}
         title={
           contentQa === "done"

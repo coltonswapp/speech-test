@@ -124,6 +124,7 @@ export type TeachingPatternRow = {
   id: string;
   form: string;
   gloss: string;
+  description?: string | null;
   jlptBand: number;
   category: string;
   status: string;
@@ -150,6 +151,18 @@ export type TeachingPatternWriteInput = {
   id: string;
   form: string;
   gloss: string;
+  description?: string | null;
+  jlptBand?: number;
+  category?: string;
+  status?: string;
+  notes?: string | null;
+  orderIndex?: number;
+};
+
+export type TeachingPatternUpdateInput = {
+  form?: string;
+  gloss?: string;
+  description?: string | null;
   jlptBand?: number;
   category?: string;
   status?: string;
@@ -207,6 +220,14 @@ export const contentApi = {
     ),
   listPatterns: () =>
     request<TeachingPatternList>("/api/content/patterns"),
+  updatePattern: (id: string, body: TeachingPatternUpdateInput) =>
+    request<{ pattern: TeachingPatternRow }>(
+      `/api/content/patterns/${encodeURIComponent(id)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }
+    ),
   /** Insert-missing create. Pass one pattern, an array, or `{ patterns }`. */
   createPatterns: (
     body:

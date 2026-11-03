@@ -77,6 +77,7 @@ export function parseAddedPatternsJson(raw: string): TeachingPatternSeedRow[] {
       id: p.id,
       form: p.form.trim(),
       gloss: p.gloss.trim(),
+      description: p.description?.trim() ? p.description.trim() : null,
       jlptBand: p.jlptBand,
       category: p.category.trim() || "other",
       status: p.status.trim() || "seed",

@@ -6,7 +6,7 @@
 
 This is **content QA** (did a reviewer look over the dialogue + quiz for a scene?), not Studio **take review** (`reviewedAt` / flag clear on TTS variants). Do not conflate the two.
 
-Studio surfaces status on the existing readiness chip row (`audio · timing · sync · quiz · thumb · qa`), not a separate Progress page.
+Studio surfaces status on the existing readiness chip row (`audio · align · review · published · quiz · thumb · qa`), not a separate Progress page. `qa` is learner-client content QA — not the `review` chip (take alignment ear-pass).
 
 ---
 

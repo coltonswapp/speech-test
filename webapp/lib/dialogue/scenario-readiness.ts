@@ -15,6 +15,19 @@ export type AudioReadiness = "published" | "stale" | "draft";
 export type TimingReadiness = "missing" | "partial" | "ready" | "done";
 export type QuizReadiness = "missing" | "ready" | "published";
 /**
+ * Combined line-timing + token karaoke from the aligner. Replaces the
+ * separate timing + sync chips — both come from the same auto-stamp pass.
+ */
+export type AlignReadiness = "missing" | "partial" | "ready" | "done" | "stale";
+/**
+ * Human-ear review of the selected take's alignment.
+ * `reviewed` = tokenSync.source reviewed (or human-stamped);
+ * `flagged` = auto-stamp still has QA flags; `pending` otherwise.
+ */
+export type AlignReviewReadiness = "pending" | "flagged" | "reviewed";
+/** Gate A: scene has a published take in CDN/DB. */
+export type GateAPublishedReadiness = "unpublished" | "published" | "stale";
+/**
  * Scene thumbnail: optional override. Unset inherits the lesson thumb.
  * Phase 1 has no separate thumb "stale" — CDN URL lands on upload.
  */
@@ -29,8 +42,15 @@ export type ContentQaReadiness = "pending" | "dialogue" | "quiz" | "done";
 
 export type ScenarioReadiness = {
   audio: AudioReadiness;
+  /** Kept for lockstep tests / fallbacks; chips show `align`. */
   timing: TimingReadiness;
+  /** Kept for lockstep tests / fallbacks; chips show `align`. */
   sync: CurriculumSyncStatus;
+  align: AlignReadiness;
+  review: AlignReviewReadiness;
+  /** Gate A — published take on this scene. */
+  published: GateAPublishedReadiness;
+  publishedAt: string | null;
   quiz: QuizReadiness;
   quizCount: number;
   quizWithEvidence: number;
@@ -194,8 +214,65 @@ export function curriculumContentQaStatus(params: {
   return "pending";
 }
 
+/**
+ * Roll line-switch marks + token karaoke into one aligner chip.
+ * Stale karaoke wins; both published-and-current is `done`; studio-complete
+ * but not shipped is `ready` (amber until Gate A).
+ */
+export function curriculumAlignStatus(
+  timing: TimingReadiness,
+  sync: CurriculumSyncStatus,
+): AlignReadiness {
+  if (sync === "stale") return "stale";
+  if (timing === "done" && sync === "complete") return "done";
+  const timingOk = timing === "done" || timing === "ready";
+  const syncOk = sync === "complete" || sync === "ready";
+  if (timingOk && syncOk) return "ready";
+  if (timing === "partial" || sync === "tokens-only" || timingOk || syncOk) {
+    return "partial";
+  }
+  return "missing";
+}
+
+export function curriculumAlignReviewStatus(params: {
+  workingTokenSync: unknown;
+}): AlignReviewReadiness {
+  const sync = parseVariantTokenSync(params.workingTokenSync);
+  if (!sync) return "pending";
+  if (sync.source === "reviewed" || sync.source === "human") return "reviewed";
+  if ((sync.flags?.length ?? 0) > 0) return "flagged";
+  if (sync.source === "auto") return "pending";
+  // Legacy take with no provenance: stamps were tapped by hand.
+  const hasStamps = sync.lines.some((line) =>
+    line.tokens.some((token) => token.startSeconds != null),
+  );
+  return hasStamps ? "reviewed" : "pending";
+}
+
+export function curriculumPublishedStatus(params: {
+  publishedAudioUrl: string | null;
+  publishedVariantId?: string | null;
+  audioStale: boolean;
+}): GateAPublishedReadiness {
+  if (!params.publishedAudioUrl && !params.publishedVariantId) {
+    return "unpublished";
+  }
+  return params.audioStale ? "stale" : "published";
+}
+
+function isoOrNull(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 export function buildScenarioReadiness(params: {
   publishedAudioUrl: string | null;
+  publishedVariantId?: string | null;
+  publishedAt?: Date | string | null;
   audioStale?: boolean;
   karaokeStale?: boolean;
   lines: unknown;
@@ -224,22 +301,35 @@ export function buildScenarioReadiness(params: {
   });
   const publishedMarks = params.publishedMarks;
   const workingMarks = params.workingMarks ?? publishedMarks;
+  const timing = curriculumTimingStatus({
+    publishedAudio,
+    audioStale,
+    publishedMarks,
+    workingMarks,
+    spokenCount: spoken.length,
+  });
+  const sync = curriculumSyncStatus({
+    publishedTokenSync: params.tokenSync,
+    workingTokenSync: params.workingTokenSync,
+    contentHash: params.contentHash,
+    spokenTexts,
+    karaokeStale: params.karaokeStale === true,
+  });
+  const published = curriculumPublishedStatus({
+    publishedAudioUrl: params.publishedAudioUrl,
+    publishedVariantId: params.publishedVariantId,
+    audioStale,
+  });
   return {
     audio,
-    timing: curriculumTimingStatus({
-      publishedAudio,
-      audioStale,
-      publishedMarks,
-      workingMarks,
-      spokenCount: spoken.length,
-    }),
-    sync: curriculumSyncStatus({
-      publishedTokenSync: params.tokenSync,
+    timing,
+    sync,
+    align: curriculumAlignStatus(timing, sync),
+    review: curriculumAlignReviewStatus({
       workingTokenSync: params.workingTokenSync,
-      contentHash: params.contentHash,
-      spokenTexts,
-      karaokeStale: params.karaokeStale === true,
     }),
+    published,
+    publishedAt: published === "unpublished" ? null : isoOrNull(params.publishedAt),
     quiz: curriculumQuizStatus({
       quizCount: quiz.count,
       publishedAudio,
@@ -289,6 +379,41 @@ export function syncChipLabel(status: CurriculumSyncStatus): string {
       return "stale";
     case "missing":
       return "—";
+  }
+}
+
+export function alignChipLabel(status: AlignReadiness): string {
+  switch (status) {
+    case "done":
+    case "ready":
+    case "partial":
+      return "align";
+    case "stale":
+      return "align stale";
+    case "missing":
+      return "align —";
+  }
+}
+
+export function reviewChipLabel(status: AlignReviewReadiness): string {
+  switch (status) {
+    case "reviewed":
+      return "review ✓";
+    case "flagged":
+      return "review";
+    case "pending":
+      return "review —";
+  }
+}
+
+export function publishedChipLabel(status: GateAPublishedReadiness): string {
+  switch (status) {
+    case "published":
+      return "published";
+    case "stale":
+      return "pub stale";
+    case "unpublished":
+      return "pub —";
   }
 }
 

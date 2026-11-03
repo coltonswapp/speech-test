@@ -77,6 +77,8 @@ export type ReviewQueueTake = {
   siblings: ReviewQueueSiblingTake[];
   isPublishedTake: boolean;
   isSelectedTake: boolean;
+  /** Scene Gate A timestamp (`dialogue_scenario.published_at`), if any. */
+  scenarioPublishedAt: string | null;
   flagCount: number;
   flagsByCode: Partial<Record<TokenSyncFlag["code"], number>>;
   flaggedLines: ReviewQueueLine[];
@@ -235,6 +237,7 @@ export async function GET() {
       siblings: [],
       isPublishedTake: scenario?.publishedVariantId === variant.id,
       isSelectedTake: project.selectedVariantId === variant.id,
+      scenarioPublishedAt: scenario?.publishedAt?.toISOString() ?? null,
       flagCount: flags.length,
       flagsByCode,
       flaggedLines,

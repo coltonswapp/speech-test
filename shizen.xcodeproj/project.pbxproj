@@ -26,6 +26,7 @@
 		F6C0FM012FC0A00100000001 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6C0FM022FC0A00100000002 /* FoundationModels.framework */; };
 		F6DE0FAD2F957A8600FFF413 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F6DE0FAC2F957A8600FFF412 /* GRDB */; };
 		F6IK00102FINTERACT010 /* InteractionKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6IK00022FINTERACT002 /* InteractionKit */; };
+		F6PH00102FPOSTHOG010 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = F6PH00022FPOSTHOG002 /* PostHog */; };
 		F6SC00102FCONTENT010 /* GrammarContentKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6SC00022FCONTENT002 /* GrammarContentKit */; };
 		F6SUIS01SHADERBF01 /* SwiftUIShaders in Frameworks */ = {isa = PBXBuildFile; productRef = F6SUIS01SHADERPD01 /* SwiftUIShaders */; };
 /* End PBXBuildFile section */
@@ -82,6 +83,7 @@
 				048EF1FC416E45EF56C720F3 /* FirebaseCrashlytics in Frameworks */,
 				96B1B772760642EBA3E40B27 /* GoogleSignIn in Frameworks */,
 				F5505821A52E6FCD356402B5 /* Toast in Frameworks */,
+				F6PH00102FPOSTHOG010 /* PostHog in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -162,6 +164,7 @@
 				03AF6F52322288472537D9DE /* FirebaseCrashlytics */,
 				C1F1E933719E4FA8BB13297B /* GoogleSignIn */,
 				EBDB22F398BA7F1B9E709168 /* Toast */,
+				F6PH00022FPOSTHOG002 /* PostHog */,
 			);
 			productName = shizen;
 			productReference = F6DE0F8F2F957A7A00FFF406 /* shizen.app */;
@@ -198,6 +201,7 @@
 				191AD9F6F922007EEF22F274 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				5B2C880540C9F0950AC0CBFC /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				A83E8D4506493F86DAA1F5E4 /* XCRemoteSwiftPackageReference "toast-swift" */,
+				F6PH00012FPOSTHOG001 /* XCRemoteSwiftPackageReference "posthog-ios" */,
 				F6AA00012F957A880FFF001 /* XCLocalSwiftPackageReference "TTSCore" */,
 				F6IK00012FINTERACT001 /* XCLocalSwiftPackageReference "InteractionKit" */,
 				F6SC00012FCONTENT001 /* XCLocalSwiftPackageReference "GrammarContentKit" */,
@@ -535,6 +539,14 @@
 				minimumVersion = 6.0.0;
 			};
 		};
+		F6PH00012FPOSTHOG001 /* XCRemoteSwiftPackageReference "posthog-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/PostHog/posthog-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.93.2;
+			};
+		};
 		F6SUIS01SHADERREF01 /* XCRemoteSwiftPackageReference "SwiftUIShaders" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/krispuckett/SwiftUIShaders.git";
@@ -629,6 +641,11 @@
 		F6IK00022FINTERACT002 /* InteractionKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = InteractionKit;
+		};
+		F6PH00022FPOSTHOG002 /* PostHog */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F6PH00012FPOSTHOG001 /* XCRemoteSwiftPackageReference "posthog-ios" */;
+			productName = PostHog;
 		};
 		F6SC00022FCONTENT002 /* GrammarContentKit */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -43,18 +43,20 @@ final class KanjiSpotlightKanjiCardView: UIView {
         layoutIdentifier: .character(index: 0),
         cardWidth: KanjiSpotlightCardMetrics.subjectHeroWidth,
         glyphFontSize: KanjiSpotlightCardMetrics.subjectGlyphSize,
-        badgePlacement: .trailingEdgeCentered
+        badgePlacement: .trailingEdgeCentered,
+        heroStyle: .glass,
+        glowColor: ExperimentSettings.kanjiSpotlightHighlightColor
     )
     private let swipeHintLabel = UILabel()
     private let contentStack = UIStackView()
     private var collectionView: UICollectionView!
     private var collectionHeightConstraint: NSLayoutConstraint!
 
-    private var onReading: String?
-    private var kunReading: String?
+    /// One list row per reading type, e.g. ("On", "にち (nichi)、じつ (jitsu)").
+    private var readingRows: [(title: String, value: String)] = []
 
     private var headerRegistration: UICollectionView.SupplementaryRegistration<UICollectionViewListCell>!
-    private var readingsCellRegistration: UICollectionView.CellRegistration<KanjiSpotlightReadingsCell, Void>!
+    private var readingsCellRegistration: UICollectionView.CellRegistration<SlideReadingRowCell, Int>!
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -129,10 +131,11 @@ final class KanjiSpotlightKanjiCardView: UIView {
             supplementaryView.contentConfiguration = configuration
         }
 
-        readingsCellRegistration = UICollectionView.CellRegistration<KanjiSpotlightReadingsCell, Void> {
-            [weak self] cell, _, _ in
-            guard let self else { return }
-            cell.configure(on: self.onReading, kun: self.kunReading)
+        readingsCellRegistration = UICollectionView.CellRegistration<SlideReadingRowCell, Int> {
+            [weak self] cell, _, index in
+            guard let self, self.readingRows.indices.contains(index) else { return }
+            let row = self.readingRows[index]
+            cell.configure(title: row.title, value: row.value)
         }
 
         let layout = UICollectionViewCompositionalLayout { _, layoutEnvironment in
@@ -162,10 +165,7 @@ final class KanjiSpotlightKanjiCardView: UIView {
 
         let previousHeight = collectionHeightConstraint.constant
         collectionHeightConstraint.constant = 10_000
-        collectionView.collectionViewLayout.invalidateLayout()
-        collectionView.layoutIfNeeded()
-
-        let measured = collectionView.collectionViewLayout.collectionViewContentSize.height
+        let measured = slideListContentHeight(of: collectionView)
         let target = max(measured.rounded(.up) + 4, 1)
         collectionHeightConstraint.constant = target
 
@@ -182,9 +182,7 @@ final class KanjiSpotlightKanjiCardView: UIView {
         guard let character = subject.character.first else { return }
         heroView.configure(character: character, meaning: subject.badgeMeaning)
 
-        let readings = subject.detail.spotlightReadingLines
-        onReading = readings.on
-        kunReading = readings.kun
+        readingRows = slideReadingRows(for: subject.detail)
 
         collectionView.reloadData()
         collectionView.collectionViewLayout.invalidateLayout()
@@ -194,6 +192,10 @@ final class KanjiSpotlightKanjiCardView: UIView {
 
     func applyBadgeMeaning(_ meaning: String) {
         heroView.applyMeaning(meaning)
+    }
+
+    func applyHighlightColor(_ color: DialogueBubbleUnderglowColor) {
+        heroView.setGlowColor(color)
     }
 
     func applyIntroTitle(_ title: String) {
@@ -214,7 +216,7 @@ extension KanjiSpotlightKanjiCardView: UICollectionViewDataSource {
     func numberOfSections(in collectionView: UICollectionView) -> Int { 1 }
 
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        1
+        readingRows.count
     }
 
     func collectionView(
@@ -224,7 +226,7 @@ extension KanjiSpotlightKanjiCardView: UICollectionViewDataSource {
         collectionView.dequeueConfiguredReusableCell(
             using: readingsCellRegistration,
             for: indexPath,
-            item: ()
+            item: indexPath.item
         )
     }
 
@@ -240,85 +242,15 @@ extension KanjiSpotlightKanjiCardView: UICollectionViewDataSource {
     }
 }
 
-// MARK: - Readings cell (On + Kun with romaji)
-
-private final class KanjiSpotlightReadingsCell: UICollectionViewListCell {
-    private let rowStack = UIStackView()
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        setup()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setup()
-    }
-
-    private func setup() {
-        rowStack.axis = .horizontal
-        rowStack.alignment = .firstBaseline
-        rowStack.spacing = KanjiSpotlightCardMetrics.inset(16)
-        rowStack.distribution = .fillEqually
-        rowStack.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(rowStack)
-        NSLayoutConstraint.activate([
-            rowStack.topAnchor.constraint(
-                equalTo: contentView.topAnchor,
-                constant: KanjiSpotlightCardMetrics.inset(8)
-            ),
-            rowStack.bottomAnchor.constraint(
-                equalTo: contentView.bottomAnchor,
-                constant: -KanjiSpotlightCardMetrics.inset(8)
-            ),
-            rowStack.leadingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.leadingAnchor),
-            rowStack.trailingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.trailingAnchor),
-        ])
-    }
-
-    func configure(on: String?, kun: String?) {
-        rowStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        if let on, !on.isEmpty {
-            rowStack.addArrangedSubview(readingGroup(title: "On", value: on))
-        }
-        if let kun, !kun.isEmpty {
-            rowStack.addArrangedSubview(readingGroup(title: "Kun", value: kun))
-        }
-        if rowStack.arrangedSubviews.isEmpty {
-            rowStack.addArrangedSubview(readingGroup(title: "Reading", value: "—"))
-        }
-    }
-
-    private func readingGroup(title: String, value: String) -> UIView {
-        let titleLabel = UILabel()
-        titleLabel.text = title
-        titleLabel.font = .systemFont(ofSize: KanjiSpotlightCardMetrics.size(10), weight: .semibold)
-        titleLabel.textColor = .tertiaryLabel
-
-        let valueLabel = UILabel()
-        valueLabel.text = value
-        valueLabel.font = .systemFont(ofSize: KanjiSpotlightCardMetrics.size(13), weight: .medium)
-        valueLabel.textColor = .label
-        valueLabel.numberOfLines = 2
-        valueLabel.adjustsFontSizeToFitWidth = true
-        valueLabel.minimumScaleFactor = 0.7
-        valueLabel.lineBreakMode = .byWordWrapping
-
-        let stack = UIStackView(arrangedSubviews: [titleLabel, valueLabel])
-        stack.axis = .vertical
-        stack.alignment = .leading
-        stack.spacing = 1
-        return stack
-    }
-}
-
 // MARK: - Compound / verb showcase slide
 
 final class KanjiSpotlightEntryCardView: UIView {
     private let titleLabel = UILabel()
     private let wordHero = KanjiDecompositionWordHeroCard(
         fixedWidth: KanjiSpotlightCardMetrics.exampleHeroWidth,
-        heightToWidthRatio: 1.0
+        heightToWidthRatio: 1.0,
+        heroStyle: .glass,
+        glowColor: ExperimentSettings.kanjiSpotlightHighlightColor
     )
     private let glossLabel = UILabel()
     private var spotlightCharacter = ""
@@ -336,8 +268,8 @@ final class KanjiSpotlightEntryCardView: UIView {
     private func setup() {
         backgroundColor = ExperimentPalette.pageBackground
 
-        titleLabel.font = UIFontMetrics(forTextStyle: .title2).scaledFont(
-            for: .systemFont(ofSize: 24, weight: .bold)
+        titleLabel.font = UIFontMetrics(forTextStyle: .subheadline).scaledFont(
+            for: .systemFont(ofSize: 16, weight: .semibold)
         )
         titleLabel.textColor = .secondaryLabel
         titleLabel.textAlignment = .center
@@ -357,7 +289,7 @@ final class KanjiSpotlightEntryCardView: UIView {
         contentStack.axis = .vertical
         contentStack.alignment = .center
         contentStack.spacing = 24
-        contentStack.setCustomSpacing(32, after: titleLabel)
+        contentStack.setCustomSpacing(24, after: titleLabel)
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(contentStack)
         installKanjiSpotlightWatermark(in: self, placement: .bottom)
@@ -397,5 +329,6 @@ final class KanjiSpotlightEntryCardView: UIView {
 
     func applyHighlightColor(_ color: DialogueBubbleUnderglowColor) {
         wordHero.highlightSubstring(spotlightCharacter, color: color.tokenHighlightUIColor)
+        wordHero.setGlowColor(color)
     }
 }

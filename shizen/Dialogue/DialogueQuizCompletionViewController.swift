@@ -383,6 +383,11 @@ final class DialogueQuizCompletionViewController: UIViewController {
         let ratings = feedbackPage.ratings
         guard !ratings.isEmpty else { return }
         LessonFeedbackPrompt.markRated(context)
+        var properties: [String: Any] = ["lesson_id": context.scenarioId]
+        for (dimension, rating) in ratings {
+            properties["rating_\(dimension.rawValue)"] = rating
+        }
+        Analytics.track(.lessonFeedbackRated, properties)
         Task {
             await LLMGatewayClient.postLessonFeedback(context, ratings: ratings)
         }
@@ -765,9 +770,7 @@ struct DialogueLessonWrapUp: Hashable {
     ) -> DialogueLessonWrapUp {
         let totalPossible = collection.scenarios.reduce(0) { $0 + maximumPoints(for: $1) }
         let scenes = collection.scenarios.map { scenario in
-            let best = progress.attempts(scenarioID: scenario.id).max {
-                ($0.starCount, $0.points) < ($1.starCount, $1.points)
-            }
+            let best = progress.bestAttempt(scenarioID: scenario.id)
             let completed = progress.isCompleted(scenarioID: scenario.id)
             return Scene(
                 title: scenario.menuTitle,

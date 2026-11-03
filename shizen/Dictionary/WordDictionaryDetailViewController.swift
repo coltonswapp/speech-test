@@ -13,12 +13,25 @@ final class WordDictionaryDetailViewController: UIViewController {
     private let surface: String
     private let sentence: String?
     private let glossFraming: ContextualGlossFraming
+    private let storedContext: StoredWordContext?
+    private let sourceTitle: String?
+    private let lineEnglish: String?
     private let scrollView = UIScrollView()
     private let detailView = WordDictionaryDetailView()
 
-    init(surface: String, sentence: String? = nil, glossFraming: ContextualGlossFraming? = nil) {
+    init(
+        surface: String,
+        sentence: String? = nil,
+        glossFraming: ContextualGlossFraming? = nil,
+        storedContext: StoredWordContext? = nil,
+        sourceTitle: String? = nil,
+        lineEnglish: String? = nil
+    ) {
         self.surface = surface
         self.sentence = sentence
+        self.storedContext = storedContext
+        self.sourceTitle = sourceTitle
+        self.lineEnglish = lineEnglish
         let trimmedSurface = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedSentence = sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if let glossFraming {
@@ -39,15 +52,19 @@ final class WordDictionaryDetailViewController: UIViewController {
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.alwaysBounceVertical = true
+        // The sheet's top safe area changes with the detent (grabber only at
+        // medium, status bar plus grabber at large). A fixed pad from the view
+        // edge misses that, so pin the scroll view to the safe area directly.
+        scrollView.contentInsetAdjustmentBehavior = .never
         view.addSubview(scrollView)
         scrollView.addSubview(detailView)
 
         let inset: CGFloat = 20
         NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
+            scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
 
             detailView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: inset),
             detailView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: inset),
@@ -77,7 +94,14 @@ final class WordDictionaryDetailViewController: UIViewController {
         }
 #endif
 
-        detailView.configure(surface: surface, sentence: sentence, glossFraming: glossFraming)
+        detailView.configure(
+            surface: surface,
+            sentence: sentence,
+            glossFraming: glossFraming,
+            storedContext: storedContext,
+            sourceTitle: sourceTitle,
+            lineEnglish: lineEnglish
+        )
     }
 
     private func presentCompound(_ expression: String) {
@@ -164,24 +188,36 @@ enum WordDictionaryDetailSheetPresenter {
         surface: String,
         sentence: String? = nil,
         glossFraming: ContextualGlossFraming? = nil,
+        storedContext: StoredWordContext? = nil,
+        sourceTitle: String? = nil,
+        lineEnglish: String? = nil,
+        fullSheet: Bool = false,
         from viewController: UIViewController,
         animated: Bool = true
     ) {
         let trimmed = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        Analytics.track(.wordDetailOpened, ["from_sentence": sentence != nil])
 
         DefinitionCalloutPresenter.shared.dismiss(animated: true)
 
         let sheet = WordDictionaryDetailViewController(
             surface: trimmed,
             sentence: sentence,
-            glossFraming: glossFraming
+            glossFraming: glossFraming,
+            storedContext: storedContext,
+            sourceTitle: sourceTitle,
+            lineEnglish: lineEnglish
         )
         sheet.modalPresentationStyle = .pageSheet
         if let presentation = sheet.sheetPresentationController {
-            presentation.detents = [.medium(), .large()]
+            presentation.detents = fullSheet ? [.large()] : [.medium(), .large()]
+            if fullSheet {
+                presentation.selectedDetentIdentifier = .large
+            }
             presentation.prefersGrabberVisible = true
             presentation.prefersScrollingExpandsWhenScrolledToEdge = true
+            presentation.applySolidNonLargeBackground()
         }
         viewController.present(sheet, animated: animated)
     }
@@ -193,18 +229,25 @@ enum WordDictionaryDetailSheetPresenter {
         surface: String,
         sentence: String? = nil,
         glossFraming: ContextualGlossFraming? = nil,
+        storedContext: StoredWordContext? = nil,
+        sourceTitle: String? = nil,
+        lineEnglish: String? = nil,
         from viewController: UIViewController,
         animated: Bool = true
     ) {
         let trimmed = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        Analytics.track(.wordDetailOpened, ["from_sentence": sentence != nil])
 
         DefinitionCalloutPresenter.shared.dismiss(animated: true)
 
         let detail = WordDictionaryDetailViewController(
             surface: trimmed,
             sentence: sentence,
-            glossFraming: glossFraming
+            glossFraming: glossFraming,
+            storedContext: storedContext,
+            sourceTitle: sourceTitle,
+            lineEnglish: lineEnglish
         )
         if let nav = viewController.navigationController {
             nav.pushViewController(detail, animated: animated)

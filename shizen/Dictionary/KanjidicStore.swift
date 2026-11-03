@@ -72,7 +72,8 @@ final class KanjidicStore {
         }
     }
 
-    /// Ordered unique kanji in `surface` (CJK Extension A + Unified Ideographs), with a short English gloss from the first comma-separated meaning.
+    /// Ordered unique kanji in `surface` (CJK Extension A + Unified Ideographs), with a short English gloss.
+    /// The first listed meaning is used, unless it is a rare sense beginners rarely meet (探 → search, not grope).
     func briefInfo(forKanjiIn surface: String) -> [(character: String, briefMeaning: String)] {
         openDatabaseIfNeeded()
         let order = Self.orderedUniqueKanjiScalars(in: surface)
@@ -208,13 +209,18 @@ final class KanjidicStore {
         return (0x3400...0x4DBF).contains(v) || (0x4E00...0x9FFF).contains(v)
     }
 
+    /// KANJIDIC sometimes leads with a rare sense. Skip those and take the next meaning it lists.
+    private static let dispreferredLeadGlosses: Set<String> = [
+        "grope",
+    ]
+
     private static func briefMeaning(from meanings: String, maxLen: Int = 40) -> String {
-        let first =
-            meanings
+        let parts = meanings
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .first { !$0.isEmpty } ?? ""
-        if first.count <= maxLen { return String(first) }
-        return String(first.prefix(maxLen)) + "…"
+            .filter { !$0.isEmpty }
+        let chosen = parts.first { !Self.dispreferredLeadGlosses.contains($0.lowercased()) } ?? parts.first ?? ""
+        if chosen.count <= maxLen { return chosen }
+        return String(chosen.prefix(maxLen)) + "…"
     }
 }

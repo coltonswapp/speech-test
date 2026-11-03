@@ -10,7 +10,7 @@
 
 import UIKit
 
-final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDelegate {
+final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDelegate, ScreenshotQAPresenting {
 
     private let collectionID: String
     private let fallbackTitle: String?
@@ -26,6 +26,7 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
     private let chipRow = LessonMetaChipRow()
     private let titleLabel = UILabel()
     private let summaryLabel = UILabel()
+    private let scoreSummaryView = LessonScoreSummaryView()
     private let scenesStack = UIStackView()
     private let playButton = GlassIconButton(
         symbolName: "play.fill",
@@ -42,6 +43,12 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
     /// Local preview gate. Locked scenes open without marking them complete.
     private var previewsAllScenes = false
     private var progressObserver: NSObjectProtocol?
+    private var refreshObserver: NSObjectProtocol?
+    /// A newer lesson copy arrived while a scene was open; apply it on return.
+    private var hasPendingRefresh = false
+    /// Tags this screen's look-ahead audio downloads so leaving can cancel them.
+    private let prefetchOwner = UUID()
+    private var hasPlayedScoreFillThisAppearance = false
     private let topScrollEdgeInteraction: UIScrollEdgeElementContainerInteraction = {
         let interaction = UIScrollEdgeElementContainerInteraction()
         interaction.edge = .top
@@ -50,6 +57,8 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
 
     private static let horizontalInset: CGFloat = 20
     private static let heroHeightRatio: CGFloat = 0.42
+    /// Scenes after the next playable one whose audio is fetched ahead on unmetered networks.
+    private static let lookAheadSceneCount = 1
     private static let sceneTitlePlaceholder = "Some title of a scene"
     /// Last resort when the public export has no subtitle. Premise is not in that export.
     private static let summaryPlaceholder = "In this lesson, Kaito is traveling somewhere via train. He'll have to navigate to the station, by a ticket, & even deal with a platform change."
@@ -66,8 +75,12 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
     }
 
     deinit {
+        RemoteAudioCache.cancelPrefetches(owner: prefetchOwner)
         if let progressObserver {
             NotificationCenter.default.removeObserver(progressObserver)
+        }
+        if let refreshObserver {
+            NotificationCenter.default.removeObserver(refreshObserver)
         }
     }
 
@@ -82,8 +95,24 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
             object: DialogueProgressStore.shared,
             queue: .main
         ) { [weak self] _ in
-            self?.refreshSceneAccess()
-            self?.refreshOptionsMenu()
+            guard let self else { return }
+            self.refreshSceneAccess()
+            self.refreshOptionsMenu()
+            self.prefetchSceneAudio()
+            if self.viewIfLoaded?.window != nil, !self.loadingCoordinator.isLoading {
+                self.scoreSummaryView.playFillAnimation()
+            }
+        }
+        refreshObserver = NotificationCenter.default.addObserver(
+            forName: DialogueScenarioCollectionCatalog.didRefreshCollection,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let self,
+                  note.userInfo?[DialogueScenarioCollectionCatalog.collectionIDKey] as? String == self.collectionID
+            else { return }
+            self.hasPendingRefresh = true
+            self.applyPendingRefreshIfIdle()
         }
 
         loadingCoordinator.attach(to: view)
@@ -92,8 +121,12 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
             guard let self else { return }
             if let collection {
                 self.applyCollection(collection) {
-                    self.loadingCoordinator.finishLoading()
+                    self.loadingCoordinator.finishLoading {
+                        self.playScoreFillIfNeeded()
+                        self.applyPendingRefreshIfIdle()
+                    }
                 }
+                self.prefetchSceneAudio()
             } else if self.collection == nil {
                 self.loadingCoordinator.finishLoading {
                     self.showLoadFailure()
@@ -108,11 +141,27 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
         refreshSceneAccess()
         refreshOptionsMenu()
         attachTopScrollEdgeInteraction()
+        hasPlayedScoreFillThisAppearance = false
+        scoreSummaryView.markFillAnimationNeeded()
+        applyPendingRefreshIfIdle(appearing: true)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        playScoreFillIfNeeded()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         navigationController?.navigationBar.removeInteraction(topScrollEdgeInteraction)
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        // Backing out of the lesson, not pushing a scene: drop the look-ahead.
+        if isMovingFromParent || isBeingDismissed || navigationController?.isBeingDismissed == true {
+            RemoteAudioCache.cancelPrefetches(owner: prefetchOwner)
+        }
     }
 
     override func viewSafeAreaInsetsDidChange() {
@@ -182,6 +231,7 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
         scrollView.addSubview(contentStack)
 
         heroView.translatesAutoresizingMaskIntoConstraints = false
+        heroView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleHeroTap)))
         contentStack.addArrangedSubview(heroView)
         contentStack.setCustomSpacing(-LessonMetaChip.singleLineHeight / 2, after: heroView)
 
@@ -219,7 +269,11 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
         summaryLabel.textColor = .secondaryLabel
         summaryLabel.numberOfLines = 0
         bodyStack.addArrangedSubview(summaryLabel)
-        bodyStack.setCustomSpacing(28, after: summaryLabel)
+        bodyStack.setCustomSpacing(20, after: summaryLabel)
+
+        scoreSummaryView.isHidden = true
+        bodyStack.addArrangedSubview(scoreSummaryView)
+        bodyStack.setCustomSpacing(28, after: scoreSummaryView)
 
         scenesStack.axis = .vertical
         scenesStack.alignment = .fill
@@ -301,6 +355,49 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
                 to: row.thumbnailView,
                 completion: gate.arrive
             )
+        }
+    }
+
+    /// Swaps in a refreshed lesson copy only while this screen is on top, so an open
+    /// scene never changes under the learner. Otherwise it waits for the next appearance.
+    private func applyPendingRefreshIfIdle(appearing: Bool = false) {
+        guard hasPendingRefresh, collection != nil, !loadingCoordinator.isLoading else { return }
+        guard appearing || (viewIfLoaded?.window != nil && presentedViewController == nil) else { return }
+        guard let fresh = DialogueScenarioCollectionCatalog.readyCollection(id: collectionID) else { return }
+        hasPendingRefresh = false
+        applyCollection(fresh) {}
+        prefetchSceneAudio()
+    }
+
+    /// Downloads the next playable scene's clip and ambience bed at high priority,
+    /// then the scene after it as low-priority look-ahead. Runs again on progress
+    /// changes, so the window follows the learner. Cached files are skipped.
+    private func prefetchSceneAudio() {
+        guard let collection else { return }
+        let store = DialogueProgressStore.shared
+        let scenarios = collection.scenarios
+        guard !scenarios.isEmpty else { return }
+        let nextIndex = scenarios.firstIndex { !store.isCompleted(scenarioID: $0.id) } ?? 0
+        prefetchAudio(for: scenarios[nextIndex].example, priority: .high)
+        let lookAhead = scenarios.indices.dropFirst(nextIndex + 1).prefix(Self.lookAheadSceneCount)
+        for index in lookAhead {
+            prefetchAudio(for: scenarios[index].example, priority: .low)
+        }
+    }
+
+    private func prefetchAudio(for example: GrammarExample, priority: RemoteAudioCache.Priority) {
+        if let raw = example.publishedAudioUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let url = URL(string: raw),
+           url.scheme?.hasPrefix("http") == true {
+            RemoteAudioCache.prefetchFile(
+                for: url,
+                metadata: example.remoteAudioCacheMetadata,
+                priority: priority,
+                owner: prefetchOwner
+            )
+        }
+        if let bed = example.ambience {
+            RemoteAudioCache.prefetchBed(id: bed.id, remoteURL: bed.url, priority: priority, owner: prefetchOwner)
         }
     }
 
@@ -419,9 +516,8 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
             row.onStudy = { [weak self] in
                 self?.openScenario(id: scenario.id, mode: .viewLesson)
             }
-            row.onReplay = { [weak self] in
-                let mode: DialogueLessonSessionMode = scenario.quiz.isEmpty ? .attempt : .retakeQuiz
-                self?.openScenario(id: scenario.id, mode: mode)
+            row.onThumbnailTap = { [weak self] in
+                self?.presentThumbnailViewer(startingAt: index + 1)
             }
             scenesStack.addArrangedSubview(row)
             scenarioRows.append(row)
@@ -430,10 +526,62 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
 
     private func refreshSceneAccess() {
         guard let collection else { return }
-        for (row, scenario) in zip(scenarioRows, collection.scenarios) {
-            let stars = DialogueProgressStore.shared.displayedStarCount(scenarioID: scenario.id)
-            row.apply(access: access(for: scenario.id, in: collection), starCount: stars)
+        let store = DialogueProgressStore.shared
+        let wrapUp = DialogueLessonWrapUp.make(collection: collection, progress: store)
+        var lessonPoints = 0
+        var sceneCompletion: [Bool] = []
+        var sceneFills: [CGFloat] = []
+        for (index, (row, scenario)) in zip(scenarioRows, collection.scenarios).enumerated() {
+            let points = wrapUp.scenes[index].points
+            let completed = store.isCompleted(scenarioID: scenario.id)
+            sceneCompletion.append(completed)
+            if completed {
+                lessonPoints += points ?? 0
+            }
+            sceneFills.append(Self.scoreFill(points: points, scenario: scenario, completed: completed, store: store))
+            let best = store.bestAttempt(scenarioID: scenario.id)
+            let possible = DialogueLessonWrapUp.maximumPoints(for: scenario)
+            row.apply(
+                access: access(for: scenario.id, in: collection),
+                starCount: best?.starCount ?? (completed ? 1 : 0),
+                earnedPoints: best?.points,
+                possiblePoints: possible,
+                hardcore: DialogueHardcoreMode.isAvailable
+                    && store.hasHardcoreCompletion(scenarioID: scenario.id)
+            )
         }
+        scoreSummaryView.apply(
+            points: lessonPoints,
+            possible: wrapUp.totalPossiblePoints,
+            sceneFills: sceneFills,
+            sceneCompletion: sceneCompletion
+        )
+        scoreSummaryView.isHidden = collection.scenarios.isEmpty
+    }
+
+    /// Scene bar fill is that scene's best score over a perfect tally. Legacy
+    /// completions without points use stars so a finished scene is never empty.
+    private static func scoreFill(
+        points: Int?,
+        scenario: DialogueScenarioCollection.Scenario,
+        completed: Bool,
+        store: DialogueProgressStore
+    ) -> CGFloat {
+        let maximum = DialogueLessonWrapUp.maximumPoints(for: scenario)
+        if let points, maximum > 0 {
+            return min(1, CGFloat(points) / CGFloat(maximum))
+        }
+        guard completed else { return 0 }
+        return CGFloat(store.displayedStarCount(scenarioID: scenario.id))
+            / CGFloat(DialogueScoreRules.maxStars)
+    }
+
+    private func playScoreFillIfNeeded() {
+        guard collection != nil, !loadingCoordinator.isLoading else { return }
+        guard !hasPlayedScoreFillThisAppearance else { return }
+        hasPlayedScoreFillThisAppearance = true
+        view.layoutIfNeeded()
+        scoreSummaryView.playFillAnimation()
     }
 
     private func access(
@@ -521,20 +669,26 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
         return UIMenu(children: [qaMenu, unlock, resetMenu])
     }
 
-    private func presentContentQANote() {
+    func presentScreenshotQANote(from presenter: UIViewController) -> Bool {
+        presentContentQANote(from: presenter, forcesScreenshot: true)
+        return true
+    }
+
+    private func presentContentQANote(from presenter: UIViewController? = nil, forcesScreenshot: Bool = false) {
         let lessonTitle = lessonNavigationTitle
             ?? fallbackTitle
             ?? collection?.title
             ?? collectionID
         DialogueContentQANoteViewController.present(
-            from: self,
+            from: presenter ?? self,
             source: .dialogue,
             sourceId: collectionID,
             focusTitle: "Lesson",
             focusDetailLines: lessonQAFocusDetailLines(),
             lessonTitle: lessonTitle,
             lessonID: collectionID,
-            studioLink: ContentCMSClient.studioLessonEditorLink(collectionId: collectionID)
+            studioLink: ContentCMSClient.studioLessonEditorLink(collectionId: collectionID),
+            forcesScreenshot: forcesScreenshot
         )
     }
 
@@ -609,7 +763,91 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
             initialScenarioID: id,
             sessionMode: mode
         )
+        dialogue.analytics.source = "picker"
         navigationController?.pushViewController(dialogue, animated: true)
+    }
+
+    @objc private func handleHeroTap() {
+        presentThumbnailViewer(startingAt: 0)
+    }
+
+    /// Full-screen lesson images: the lesson's main thumbnail first, then each scene.
+    /// Zooms out of the tapped hero or row thumbnail.
+    private func presentThumbnailViewer(startingAt index: Int) {
+        guard let collection, (0 ... collection.scenarios.count).contains(index) else { return }
+        let lessonItem = LessonThumbnailViewerController.Item(
+            caption: lessonNavigationTitle ?? fallbackTitle ?? collection.title,
+            placeholder: heroView.imageView.image
+        )
+        let sceneItems = collection.scenarios.enumerated().map { offset, scenario in
+            LessonThumbnailViewerController.Item(
+                caption: sceneMenuTitle(number: offset + 1, title: scenario.menuTitle),
+                placeholder: scenarioRows.indices.contains(offset) ? scenarioRows[offset].thumbnailView.image : nil
+            )
+        }
+        let viewer = LessonThumbnailViewerController(
+            items: [lessonItem] + sceneItems,
+            initialIndex: index
+        ) { index, update in
+            let pixelSize = LessonThumbnailViewerController.fullImagePixelSize
+            if index == 0 {
+                LessonImageLoading.resolve(
+                    primaryURL: collection.thumbnailURL,
+                    fallbackURL: nil,
+                    bundledName: collection.sceneImageName,
+                    pixelSize: pixelSize,
+                    onImage: update
+                )
+                return
+            }
+            let sceneIndex = index - 1
+            guard collection.scenarios.indices.contains(sceneIndex) else { return }
+            LessonImageLoading.resolve(
+                primaryURL: collection.scenarios[sceneIndex].thumbnailURL,
+                fallbackURL: collection.thumbnailURL,
+                bundledName: collection.sceneImageName,
+                pixelSize: pixelSize,
+                onImage: update
+            )
+        }
+        viewer.sourceViewProvider = { [weak self] index in
+            guard let self else { return nil }
+            if index == 0 {
+                return self.heroView
+            }
+            let sceneIndex = index - 1
+            guard self.scenarioRows.indices.contains(sceneIndex) else { return nil }
+            return self.scenarioRows[sceneIndex].thumbnailView
+        }
+        viewer.onIndexChange = { [weak self] index in
+            guard let self else { return }
+            if index == 0 {
+                self.scrollView.contentOffset.y = 0
+                self.scrollView.layoutIfNeeded()
+            } else {
+                self.revealSceneRow(at: index - 1)
+            }
+        }
+        present(viewer, animated: true)
+    }
+
+    /// Keeps the current scene's row on screen behind the viewer so dismissal can zoom back into it.
+    private func revealSceneRow(at index: Int) {
+        guard scenarioRows.indices.contains(index) else { return }
+        let row = scenarioRows[index]
+        let rowFrame = row.convert(row.bounds, to: scrollView)
+        let barBottom = navigationController?.navigationBar.frame.maxY ?? view.safeAreaInsets.top
+        let visible = scrollView.bounds.inset(by: UIEdgeInsets(
+            top: barBottom + 12,
+            left: 0,
+            bottom: view.safeAreaInsets.bottom + 96,
+            right: 0
+        ))
+        guard !visible.contains(rowFrame) else { return }
+        let maxOffset = max(0, scrollView.contentSize.height - scrollView.bounds.height)
+        let targetY = rowFrame.midY - scrollView.bounds.height / 2
+        scrollView.contentOffset.y = min(max(0, targetY), maxOffset)
+        scrollView.layoutIfNeeded()
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -843,10 +1081,10 @@ private final class LessonMetaChip: UIView {
         addSubview(label)
 
         clipsToBounds = false
-        backgroundColor = .secondarySystemBackground
+        backgroundColor = ExperimentPalette.cardSurface
         layer.borderWidth = LessonSurfaceRim.width
         layer.cornerCurve = .continuous
-        layer.borderColor = LessonSurfaceRim.color.resolvedColor(with: traitCollection).cgColor
+        updateBorderColor()
 
         NSLayoutConstraint.activate([
             label.topAnchor.constraint(equalTo: topAnchor, constant: Self.verticalPadding),
@@ -863,7 +1101,7 @@ private final class LessonMetaChip: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         layer.cornerRadius = bounds.height / 2
-        layer.borderColor = LessonSurfaceRim.color.resolvedColor(with: traitCollection).cgColor
+        updateBorderColor()
     }
 
     override var intrinsicContentSize: CGSize {
@@ -877,8 +1115,229 @@ private final class LessonMetaChip: UIView {
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         guard traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) else { return }
-        backgroundColor = .secondarySystemBackground
-        layer.borderColor = LessonSurfaceRim.color.resolvedColor(with: traitCollection).cgColor
+        backgroundColor = ExperimentPalette.cardSurface
+        updateBorderColor()
+    }
+
+    private func updateBorderColor() {
+        let rim = traitCollection.userInterfaceStyle == .dark
+            ? LessonSurfaceRim.color
+            : ExperimentPalette.cardBorder
+        layer.borderColor = rim.resolvedColor(with: traitCollection).cgColor
+    }
+}
+
+// MARK: - Score summary
+
+/// Lesson score (sum of each completed scene's best run) and scene completion count.
+private final class LessonScoreSummaryView: UIView {
+
+    static let pillHeight: CGFloat = 8
+    static let fillDuration: TimeInterval = 0.58
+    private static let cascadeDelay: TimeInterval = 0.08
+
+    private let pointsLabel = UILabel()
+    private let possibleLabel = UILabel()
+    private let pillStack = UIStackView()
+    private let progressLabel = UILabel()
+    private var pills: [LessonSceneScoreBar] = []
+    private var sceneFills: [CGFloat] = []
+    private var needsFillAnimation = false
+    private let padding: CGFloat = 18
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = ExperimentPalette.cardSurface
+        layer.borderWidth = 1
+        layer.borderColor = ExperimentPalette.cardBorder.resolvedColor(with: traitCollection).cgColor
+        layer.cornerCurve = .continuous
+        layer.cornerRadius = 20
+        isAccessibilityElement = true
+
+        let caption = UILabel()
+        caption.text = "LESSON SCORE"
+        caption.font = .systemFont(ofSize: 11, weight: .bold)
+        caption.textColor = .secondaryLabel
+
+        let scoreFont = UIFont.systemFont(ofSize: 40, weight: .bold)
+        let roundedScoreFont = scoreFont.fontDescriptor.withDesign(.rounded)
+            .map { UIFont(descriptor: $0, size: 40) } ?? scoreFont
+        pointsLabel.font = roundedScoreFont
+        pointsLabel.textColor = .label
+        pointsLabel.setContentHuggingPriority(.required, for: .horizontal)
+        pointsLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        possibleLabel.font = roundedScoreFont.withSize(17)
+        possibleLabel.textColor = .secondaryLabel
+        possibleLabel.setContentHuggingPriority(.required, for: .horizontal)
+        possibleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        let scoreLine = UIStackView(arrangedSubviews: [pointsLabel, possibleLabel])
+        scoreLine.axis = .horizontal
+        scoreLine.alignment = .lastBaseline
+        scoreLine.spacing = 2
+
+        pillStack.axis = .horizontal
+        pillStack.alignment = .fill
+        pillStack.distribution = .fillEqually
+        pillStack.spacing = 6
+        pillStack.heightAnchor.constraint(equalToConstant: Self.pillHeight).isActive = true
+
+        progressLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        progressLabel.textColor = .secondaryLabel
+        progressLabel.numberOfLines = 1
+
+        let stack = UIStackView(arrangedSubviews: [caption, scoreLine, pillStack, progressLabel])
+        stack.axis = .vertical
+        stack.alignment = .leading
+        stack.spacing = 2
+        stack.setCustomSpacing(14, after: scoreLine)
+        stack.setCustomSpacing(10, after: pillStack)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: padding),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -padding),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: padding),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding),
+            pillStack.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
+        apply(points: 0, possible: 0, sceneFills: [], sceneCompletion: [])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// One bar per scene, in lesson order. Fill is that scene's score.
+    func apply(points: Int, possible: Int, sceneFills: [CGFloat], sceneCompletion: [Bool]) {
+        pointsLabel.text = "\(points)"
+        possibleLabel.text = "/\(possible)"
+        self.sceneFills = sceneFills
+
+        if pills.count != sceneFills.count {
+            pills.forEach { $0.removeFromSuperview() }
+            pills = sceneFills.map { _ in
+                let pill = LessonSceneScoreBar()
+                pillStack.addArrangedSubview(pill)
+                return pill
+            }
+        }
+
+        let completed = sceneCompletion.filter { $0 }.count
+        let total = sceneCompletion.count
+        progressLabel.text = "\(completed) of \(total) scenes completed"
+        accessibilityLabel = "Lesson score, \(points) of \(possible) points, \(completed) of \(total) scenes completed"
+    }
+
+    func markFillAnimationNeeded() {
+        for bar in pills {
+            bar.setFill(0, animated: false)
+        }
+    }
+
+    /// Empties the bars, then fills them left to right with a slight cascade.
+    func playFillAnimation() {
+        needsFillAnimation = true
+        tryPlayFillAnimation()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        tryPlayFillAnimation()
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) else { return }
+        layer.borderColor = ExperimentPalette.cardBorder.resolvedColor(with: traitCollection).cgColor
+    }
+
+    private func tryPlayFillAnimation() {
+        guard needsFillAnimation else { return }
+        guard !pills.isEmpty, pills.allSatisfy({ $0.bounds.width > 1 }) else { return }
+        needsFillAnimation = false
+
+        let fills = sceneFills
+        for bar in pills {
+            bar.setFill(0, animated: false)
+        }
+
+        guard !UIAccessibility.isReduceMotionEnabled else {
+            for (bar, fill) in zip(pills, fills) {
+                bar.setFill(fill, animated: false)
+            }
+            return
+        }
+
+        for (index, bar) in pills.enumerated() {
+            let fill = index < fills.count ? fills[index] : 0
+            bar.setFill(fill, animated: true, delay: Self.cascadeDelay * TimeInterval(index))
+        }
+    }
+}
+
+/// Track plus a leading fill. Width is the scene's score over a perfect tally.
+private final class LessonSceneScoreBar: UIView {
+
+    private let fillView = UIView()
+    private var fillWidthConstraint: NSLayoutConstraint!
+    private var fillFraction: CGFloat = 0
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .tertiarySystemFill
+        clipsToBounds = true
+        layer.cornerCurve = .continuous
+        layer.cornerRadius = LessonScoreSummaryView.pillHeight / 2
+
+        fillView.backgroundColor = LessonSceneStarsView.filledColor
+        fillView.layer.cornerCurve = .continuous
+        fillView.layer.cornerRadius = LessonScoreSummaryView.pillHeight / 2
+        fillView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(fillView)
+
+        fillWidthConstraint = fillView.widthAnchor.constraint(equalToConstant: 0)
+        NSLayoutConstraint.activate([
+            fillView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            fillView.topAnchor.constraint(equalTo: topAnchor),
+            fillView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            fillWidthConstraint,
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        layer.cornerRadius = bounds.height / 2
+        fillView.layer.cornerRadius = bounds.height / 2
+    }
+
+    func setFill(_ fraction: CGFloat, animated: Bool, delay: TimeInterval = 0) {
+        fillFraction = min(max(fraction, 0), 1)
+        let width = bounds.width * fillFraction
+        let apply = {
+            self.fillWidthConstraint.constant = width
+            self.layoutIfNeeded()
+        }
+        if animated {
+            UIView.animate(
+                withDuration: LessonScoreSummaryView.fillDuration,
+                delay: delay,
+                usingSpringWithDamping: 0.88,
+                initialSpringVelocity: 0.35,
+                options: [.curveEaseOut, .allowUserInteraction, .beginFromCurrentState]
+            ) {
+                apply()
+            }
+        } else {
+            apply()
+        }
     }
 }
 
@@ -895,7 +1354,8 @@ private final class LessonSceneRow: UIControl {
 
     var onOpen: (() -> Void)?
     var onStudy: (() -> Void)?
-    var onReplay: (() -> Void)?
+    /// Tapping the thumbnail opens the image viewer instead of the scene.
+    var onThumbnailTap: (() -> Void)?
 
     let thumbnailView = UIImageView()
 
@@ -904,12 +1364,18 @@ private final class LessonSceneRow: UIControl {
     private let eyebrowLabel = UILabel()
     private let titleLabel = UILabel()
     private let starsView = LessonSceneStarsView()
+    private let pointsLabel = UILabel()
+    /// Shown on finished scenes that were first heard in hardcore mode.
+    private let hardcoreBadgeView = UIImageView()
+    private let scoreLine = UIStackView()
     private let startButton = UIButton(type: .custom)
     private let lockedButton = UIButton(type: .custom)
-    private let studyButton = UIButton(type: .custom)
-    private let replayButton = UIButton(type: .custom)
-    private var textTrailingToActions: NSLayoutConstraint?
-    private var textTrailingToRow: NSLayoutConstraint?
+    private let chevronView = UIImageView()
+    /// Grows so Preview / Start Lesson sit on the row’s bottom edge when the thumbnail is taller than the title.
+    private let startButtonSpacer = UIView()
+    private var textStackBottomConstraint: NSLayoutConstraint!
+    private var textTrailingToChevron: NSLayoutConstraint!
+    private var textTrailingToRow: NSLayoutConstraint!
     private var access: Access = .locked
 
     init(sceneNumber: Int, title: String, durationText: String?) {
@@ -929,10 +1395,15 @@ private final class LessonSceneRow: UIControl {
         thumbnailView.layer.cornerCurve = .continuous
         thumbnailView.translatesAutoresizingMaskIntoConstraints = false
         thumbnailView.isAccessibilityElement = false
-        thumbnailView.setContentHuggingPriority(.fittingSizeLevel, for: .horizontal)
-        thumbnailView.setContentHuggingPriority(.fittingSizeLevel, for: .vertical)
-        thumbnailView.setContentCompressionResistancePriority(.fittingSizeLevel, for: .horizontal)
-        thumbnailView.setContentCompressionResistancePriority(.fittingSizeLevel, for: .vertical)
+        thumbnailView.isUserInteractionEnabled = true
+        thumbnailView.addGestureRecognizer(UITapGestureRecognizer(
+            target: self,
+            action: #selector(handleThumbnailTap)
+        ))
+        thumbnailView.setContentHuggingPriority(.required, for: .horizontal)
+        thumbnailView.setContentHuggingPriority(.required, for: .vertical)
+        thumbnailView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        thumbnailView.setContentCompressionResistancePriority(.required, for: .vertical)
 
         if let durationText, !durationText.isEmpty {
             eyebrowLabel.text = "Scene \(sceneNumber) · \(durationText)"
@@ -972,33 +1443,60 @@ private final class LessonSceneRow: UIControl {
         )
         startButton.isHidden = true
         lockedButton.isHidden = true
-        starsView.isHidden = true
 
-        configureSideButton(studyButton, title: "Study", emphasized: false)
-        configureSideButton(replayButton, title: "Replay", emphasized: true)
-        studyButton.addAction(UIAction { [weak self] _ in
-            self?.onStudy?()
-        }, for: .touchUpInside)
-        replayButton.addAction(UIAction { [weak self] _ in
-            self?.onReplay?()
-        }, for: .touchUpInside)
+        pointsLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
+        pointsLabel.textColor = .secondaryLabel
+        pointsLabel.isAccessibilityElement = false
+        pointsLabel.isHidden = true
+        pointsLabel.setContentHuggingPriority(.required, for: .horizontal)
+        pointsLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        let actionStack = UIStackView(arrangedSubviews: [studyButton, replayButton])
-        actionStack.axis = .vertical
-        actionStack.alignment = .fill
-        actionStack.spacing = 6
-        actionStack.translatesAutoresizingMaskIntoConstraints = false
-        actionStack.setContentHuggingPriority(.required, for: .horizontal)
-        actionStack.setContentCompressionResistancePriority(.required, for: .horizontal)
+        hardcoreBadgeView.image = DialogueHardcoreMode.icon
+        hardcoreBadgeView.tintColor = .secondaryLabel
+        hardcoreBadgeView.contentMode = .scaleAspectFit
+        hardcoreBadgeView.isAccessibilityElement = false
+        hardcoreBadgeView.isHidden = true
+        hardcoreBadgeView.setContentHuggingPriority(.required, for: .horizontal)
+        hardcoreBadgeView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        hardcoreBadgeView.widthAnchor.constraint(equalToConstant: 14).isActive = true
+        hardcoreBadgeView.heightAnchor.constraint(equalToConstant: 14).isActive = true
 
-        let textStack = UIStackView(arrangedSubviews: [eyebrowLabel, titleLabel, starsView, startButton, lockedButton])
+        scoreLine.addArrangedSubview(starsView)
+        scoreLine.addArrangedSubview(pointsLabel)
+        scoreLine.addArrangedSubview(hardcoreBadgeView)
+        scoreLine.axis = .horizontal
+        scoreLine.alignment = .center
+        scoreLine.spacing = 8
+        scoreLine.isHidden = true
+
+        chevronView.image = UIImage(systemName: "chevron.right")
+        chevronView.tintColor = .tertiaryLabel
+        chevronView.contentMode = .scaleAspectFit
+        chevronView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
+        chevronView.translatesAutoresizingMaskIntoConstraints = false
+        chevronView.isAccessibilityElement = false
+        chevronView.isHidden = true
+        chevronView.setContentHuggingPriority(.required, for: .horizontal)
+        chevronView.setContentHuggingPriority(.required, for: .vertical)
+        chevronView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        chevronView.setContentCompressionResistancePriority(.required, for: .vertical)
+
+        startButtonSpacer.isHidden = true
+        startButtonSpacer.setContentHuggingPriority(UILayoutPriority(1), for: .vertical)
+        startButtonSpacer.setContentCompressionResistancePriority(UILayoutPriority(1), for: .vertical)
+
+        let textStack = UIStackView(arrangedSubviews: [
+            eyebrowLabel, titleLabel, scoreLine, startButtonSpacer, startButton, lockedButton,
+        ])
         textStack.axis = .vertical
         textStack.alignment = .leading
         textStack.spacing = 4
         textStack.setCustomSpacing(8, after: titleLabel)
+        textStack.setCustomSpacing(12, after: scoreLine)
+        textStack.setCustomSpacing(0, after: startButtonSpacer)
         textStack.translatesAutoresizingMaskIntoConstraints = false
         textStack.isUserInteractionEnabled = false
-        textStack.setContentHuggingPriority(.required, for: .vertical)
+        textStack.setContentHuggingPriority(.defaultLow, for: .vertical)
         textStack.setContentCompressionResistancePriority(.required, for: .vertical)
         eyebrowLabel.setContentHuggingPriority(.required, for: .vertical)
         eyebrowLabel.setContentCompressionResistancePriority(.required, for: .vertical)
@@ -1007,86 +1505,171 @@ private final class LessonSceneRow: UIControl {
 
         addSubview(thumbnailView)
         addSubview(textStack)
-        addSubview(actionStack)
+        addSubview(chevronView)
         addAction(UIAction { [weak self] _ in
             guard let self else { return }
-            guard self.access == .next || self.access == .preview else { return }
-            self.onOpen?()
+            switch self.access {
+            case .next:
+                self.onOpen?()
+            case .preview, .completed:
+                self.onStudy?()
+            default:
+                return
+            }
         }, for: .touchUpInside)
 
-        let textBottom = textStack.bottomAnchor.constraint(equalTo: bottomAnchor)
-        textBottom.priority = UILayoutPriority(999)
-        let trailingToActions = textStack.trailingAnchor.constraint(equalTo: actionStack.leadingAnchor, constant: -12)
-        let trailingToRow = textStack.trailingAnchor.constraint(equalTo: trailingAnchor)
-        textTrailingToActions = trailingToActions
-        textTrailingToRow = trailingToRow
-        trailingToRow.isActive = true
+        textStackBottomConstraint = textStack.bottomAnchor.constraint(equalTo: bottomAnchor)
+        textStackBottomConstraint.isActive = false
+        textTrailingToChevron = textStack.trailingAnchor.constraint(
+            equalTo: chevronView.leadingAnchor,
+            constant: -10
+        )
+        textTrailingToRow = textStack.trailingAnchor.constraint(equalTo: trailingAnchor)
+        textTrailingToRow.isActive = true
 
         NSLayoutConstraint.activate([
             thumbnailView.topAnchor.constraint(equalTo: topAnchor),
             thumbnailView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            thumbnailView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            thumbnailView.heightAnchor.constraint(greaterThanOrEqualToConstant: 112),
-            thumbnailView.widthAnchor.constraint(equalTo: thumbnailView.heightAnchor),
+            thumbnailView.widthAnchor.constraint(equalToConstant: 112),
+            thumbnailView.heightAnchor.constraint(equalToConstant: 112),
+            thumbnailView.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
 
             textStack.topAnchor.constraint(equalTo: topAnchor),
             textStack.leadingAnchor.constraint(equalTo: thumbnailView.trailingAnchor, constant: 14),
-
-            actionStack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            actionStack.trailingAnchor.constraint(equalTo: trailingAnchor),
-
             textStack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
-            textBottom,
+
+            chevronView.centerYAnchor.constraint(equalTo: thumbnailView.centerYAnchor),
+            chevronView.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
 
-        apply(access: .locked, starCount: 0)
+        apply(access: .locked, starCount: 0, earnedPoints: nil, possiblePoints: 0, hardcore: false)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func apply(access: Access, starCount: Int) {
+    func apply(
+        access: Access,
+        starCount: Int,
+        earnedPoints: Int?,
+        possiblePoints: Int,
+        hardcore: Bool
+    ) {
         self.access = access
         let finished = access == .completed
-        // Stay enabled once finished so Study and Replay can take the tap.
-        // A disabled control drops touches for its subviews too.
-        isEnabled = access != .locked
-        isAccessibilityElement = access != .completed
+        // Stays enabled when locked so the thumbnail still takes taps; the row action and highlight check `access`.
+        isEnabled = true
+        isAccessibilityElement = true
         let showsStart = access == .next || access == .preview
         startButton.isHidden = !showsStart
+        startButtonSpacer.isHidden = !showsStart
+        textStackBottomConstraint.isActive = showsStart
         if showsStart {
             setFilledButtonTitle(startButton, access == .preview ? "Preview" : "Start Lesson")
         }
         lockedButton.isHidden = access != .locked
-        starsView.isHidden = !finished
+        scoreLine.isHidden = false
+        applyPointsLabel(finished: finished, earnedPoints: earnedPoints, possiblePoints: possiblePoints)
         if finished {
             starsView.setEarned(starCount)
-        }
-        studyButton.isHidden = !finished
-        replayButton.isHidden = !finished
-        if finished {
-            textTrailingToRow?.isActive = false
-            textTrailingToActions?.isActive = true
         } else {
-            textTrailingToActions?.isActive = false
-            textTrailingToRow?.isActive = true
+            starsView.setUnscored()
         }
+        hardcoreBadgeView.isHidden = !(finished && hardcore)
+        chevronView.isHidden = !finished
+        if finished {
+            textTrailingToRow.isActive = false
+            textTrailingToChevron.isActive = true
+        } else {
+            textTrailingToChevron.isActive = false
+            textTrailingToRow.isActive = true
+        }
+
+        let pointsAccessibility = Self.pointsAccessibilityLabel(
+            finished: finished,
+            earnedPoints: earnedPoints,
+            possiblePoints: possiblePoints
+        )
+        if finished, let pointsAccessibility {
+            starsView.accessibilityLabel = "\(starsView.accessibilityLabel ?? ""), \(pointsAccessibility)"
+        }
+
+        let pointsSuffix = pointsAccessibility.map { ", \($0)" } ?? ""
 
         switch access {
         case .completed:
-            accessibilityLabel = "Scene \(sceneNumber), \(titleText)"
-            accessibilityTraits = []
+            accessibilityLabel = hardcore
+                ? "Scene \(sceneNumber), \(titleText), Hardcore\(pointsSuffix), Study"
+                : "Scene \(sceneNumber), \(titleText)\(pointsSuffix), Study"
+            accessibilityTraits = .button
         case .next:
-            accessibilityLabel = "Scene \(sceneNumber), \(titleText), Start lesson"
+            accessibilityLabel = "Scene \(sceneNumber), \(titleText)\(pointsSuffix), Start lesson"
             accessibilityTraits = .button
         case .preview:
-            accessibilityLabel = "Scene \(sceneNumber), \(titleText), Preview"
+            accessibilityLabel = "Scene \(sceneNumber), \(titleText)\(pointsSuffix), Preview"
             accessibilityTraits = .button
         case .locked:
-            accessibilityLabel = "Scene \(sceneNumber), \(titleText), Locked"
+            accessibilityLabel = "Scene \(sceneNumber), \(titleText)\(pointsSuffix), Locked"
             accessibilityTraits = [.button, .notEnabled]
         }
+    }
+
+    private func applyPointsLabel(finished: Bool, earnedPoints: Int?, possiblePoints: Int) {
+        guard possiblePoints > 0 else {
+            pointsLabel.isHidden = true
+            pointsLabel.attributedText = nil
+            return
+        }
+        let font = pointsLabel.font ?? .monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
+        let suffix = "/\(possiblePoints) points"
+        if finished {
+            if let earnedPoints, earnedPoints < possiblePoints {
+                pointsLabel.isHidden = false
+                let text = NSMutableAttributedString(
+                    string: "\(earnedPoints)",
+                    attributes: [.font: font, .foregroundColor: UIColor.label]
+                )
+                text.append(NSAttributedString(
+                    string: suffix,
+                    attributes: [.font: font, .foregroundColor: UIColor.secondaryLabel]
+                ))
+                pointsLabel.attributedText = text
+            } else if earnedPoints == nil {
+                pointsLabel.isHidden = false
+                pointsLabel.attributedText = NSAttributedString(
+                    string: "—\(suffix)",
+                    attributes: [.font: font, .foregroundColor: UIColor.secondaryLabel]
+                )
+            } else if let earnedPoints {
+                pointsLabel.isHidden = false
+                pointsLabel.attributedText = NSAttributedString(
+                    string: "\(earnedPoints) points",
+                    attributes: [.font: font, .foregroundColor: UIColor.secondaryLabel]
+                )
+            }
+        } else {
+            pointsLabel.isHidden = false
+            pointsLabel.attributedText = NSAttributedString(
+                string: "\(possiblePoints) points",
+                attributes: [.font: font, .foregroundColor: UIColor.secondaryLabel]
+            )
+        }
+    }
+
+    private static func pointsAccessibilityLabel(
+        finished: Bool,
+        earnedPoints: Int?,
+        possiblePoints: Int
+    ) -> String? {
+        guard possiblePoints > 0 else { return nil }
+        if finished {
+            if let earnedPoints {
+                return "\(earnedPoints) of \(possiblePoints) points"
+            }
+            return "\(possiblePoints) points possible"
+        }
+        return "\(possiblePoints) points available"
     }
 
     override func layoutSubviews() {
@@ -1095,27 +1678,19 @@ private final class LessonSceneRow: UIControl {
         thumbnailView.layer.borderColor = LessonSurfaceRim.color.resolvedColor(with: traitCollection).cgColor
     }
 
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        if access == .completed {
-            for button in [studyButton, replayButton] where !button.isHidden {
-                let local = button.convert(point, from: self)
-                if let hit = button.hitTest(local, with: event) {
-                    return hit
-                }
-            }
-        }
-        return super.hitTest(point, with: event)
-    }
-
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         guard traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) else { return }
         thumbnailView.layer.borderColor = LessonSurfaceRim.color.resolvedColor(with: traitCollection).cgColor
     }
 
+    @objc private func handleThumbnailTap() {
+        onThumbnailTap?()
+    }
+
     override var isHighlighted: Bool {
         didSet {
-            guard access == .next || access == .preview else { return }
+            guard access == .next || access == .preview || access == .completed else { return }
             alpha = isHighlighted ? 0.55 : 1
         }
     }
@@ -1157,33 +1732,6 @@ private final class LessonSceneRow: UIControl {
         button.configuration = config
     }
 
-    private func configureSideButton(_ button: UIButton, title: String, emphasized: Bool) {
-        var config = UIButton.Configuration.filled()
-        config.cornerStyle = .capsule
-        if emphasized {
-            let yellow = PrimaryButton.appearance(for: .yellow)
-            config.baseBackgroundColor = yellow.backgroundColor
-            config.baseForegroundColor = yellow.titleColor
-        } else {
-            config.baseBackgroundColor = .secondarySystemBackground
-            config.baseForegroundColor = .label
-        }
-        config.title = title
-        config.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 14)
-        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
-            var outgoing = incoming
-            outgoing.font = .systemFont(ofSize: 15, weight: .semibold)
-            return outgoing
-        }
-        button.configuration = config
-        button.accessibilityLabel = title
-        button.isHidden = true
-        button.setContentHuggingPriority(.required, for: .horizontal)
-        button.setContentHuggingPriority(.required, for: .vertical)
-        button.setContentCompressionResistancePriority(.required, for: .horizontal)
-        button.setContentCompressionResistancePriority(.required, for: .vertical)
-    }
-
     private static let lockedBackground = UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? .tertiarySystemFill
@@ -1191,20 +1739,30 @@ private final class LessonSceneRow: UIControl {
     }
 }
 
-/// Three stars for a finished scene. Filled stars are the best score.
+/// Three equal stars for a scene. Filled stars are the best score.
+/// A scene with no score yet shows the same three, faint.
 private final class LessonSceneStarsView: UIView {
 
-    private static let filledColor = UIColor(red: 253 / 255, green: 200 / 255, blue: 1 / 255, alpha: 1)
+    static let filledColor = UIColor(red: 253 / 255, green: 200 / 255, blue: 1 / 255, alpha: 1)
+    private static let emptyColor = UIColor.tertiaryLabel
+    private static let faintColor = UIColor.quaternaryLabel
+    private static let pointSize: CGFloat = 14
+
     private let starViews: [UIImageView]
 
     override init(frame: CGRect) {
-        let symbol = UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
+        let symbol = UIImage.SymbolConfiguration(pointSize: Self.pointSize, weight: .semibold)
         starViews = (0..<3).map { _ in
             let imageView = UIImageView(image: UIImage(systemName: "star.fill", withConfiguration: symbol))
-            imageView.tintColor = .tertiaryLabel
             imageView.contentMode = .scaleAspectFit
             imageView.setContentHuggingPriority(.required, for: .horizontal)
             imageView.setContentCompressionResistancePriority(.required, for: .horizontal)
+            imageView.translatesAutoresizingMaskIntoConstraints = false
+            let side = Self.pointSize + 1
+            NSLayoutConstraint.activate([
+                imageView.widthAnchor.constraint(equalToConstant: side),
+                imageView.heightAnchor.constraint(equalToConstant: side),
+            ])
             return imageView
         }
         super.init(frame: frame)
@@ -1221,9 +1779,8 @@ private final class LessonSceneStarsView: UIView {
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            heightAnchor.constraint(equalToConstant: 16),
         ])
-        setEarned(0)
+        setUnscored()
     }
 
     required init?(coder: NSCoder) {
@@ -1233,9 +1790,17 @@ private final class LessonSceneStarsView: UIView {
     func setEarned(_ earned: Int) {
         let clamped = min(max(earned, 0), starViews.count)
         for (index, star) in starViews.enumerated() {
-            star.tintColor = index < clamped ? Self.filledColor : .tertiaryLabel
+            star.tintColor = index < clamped ? Self.filledColor : Self.emptyColor
         }
         accessibilityLabel = "\(clamped) of \(starViews.count) stars"
+    }
+
+    /// Placeholder for a scene that has not been scored.
+    func setUnscored() {
+        for star in starViews {
+            star.tintColor = Self.faintColor
+        }
+        accessibilityLabel = "No score yet"
     }
 }
 
@@ -1251,13 +1816,32 @@ private enum LessonImageLoading {
         to imageView: UIImageView,
         completion: (() -> Void)? = nil
     ) {
+        resolve(
+            primaryURL: primaryURL,
+            fallbackURL: fallbackURL,
+            bundledName: bundledName,
+            pixelSize: pixelSize,
+            onImage: { [weak imageView] image in imageView?.image = image },
+            completion: completion
+        )
+    }
+
+    /// Bundled art first (synchronously), then the first remote URL that loads.
+    static func resolve(
+        primaryURL: URL?,
+        fallbackURL: URL?,
+        bundledName: String?,
+        pixelSize: CGFloat,
+        onImage: @escaping (UIImage) -> Void,
+        completion: (() -> Void)? = nil
+    ) {
         if let bundledName,
            let bundled = LessonThumbnailLoader.bundledImage(
                named: bundledName,
                targetPixelSize: pixelSize,
                variant: .color
            ) {
-            imageView.image = bundled
+            onImage(bundled)
         }
 
         let urls = [primaryURL, fallbackURL].compactMap { $0 }.uniqued()
@@ -1269,7 +1853,7 @@ private enum LessonImageLoading {
             url: url,
             remaining: Array(urls.dropFirst()),
             pixelSize: pixelSize,
-            into: imageView,
+            onImage: onImage,
             completion: completion
         )
     }
@@ -1278,7 +1862,7 @@ private enum LessonImageLoading {
         url: URL,
         remaining: [URL],
         pixelSize: CGFloat,
-        into imageView: UIImageView,
+        onImage: @escaping (UIImage) -> Void,
         completion: (() -> Void)?
     ) {
         if let cached = LessonThumbnailLoader.cachedImage(
@@ -1286,24 +1870,20 @@ private enum LessonImageLoading {
             targetPixelSize: pixelSize,
             variant: .color
         ) {
-            imageView.image = cached
+            onImage(cached)
             completion?()
             return
         }
-        LessonThumbnailLoader.load(url: url, targetPixelSize: pixelSize, variant: .color) { [weak imageView] image in
-            guard let imageView else {
-                completion?()
-                return
-            }
+        LessonThumbnailLoader.load(url: url, targetPixelSize: pixelSize, variant: .color) { image in
             if let image {
-                imageView.image = image
+                onImage(image)
                 completion?()
             } else if let next = remaining.first {
                 load(
                     url: next,
                     remaining: Array(remaining.dropFirst()),
                     pixelSize: pixelSize,
-                    into: imageView,
+                    onImage: onImage,
                     completion: completion
                 )
             } else {

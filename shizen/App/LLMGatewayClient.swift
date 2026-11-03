@@ -162,6 +162,44 @@ enum LLMGatewayClient {
         query: [String: String] = [:],
         body: Data?
     ) async throws -> Data {
+        do {
+            return try await performRequest(path, method: method, query: query, body: body)
+        } catch {
+            reportFailure(error, path: path)
+            throw error
+        }
+    }
+
+    /// `gateway_request_failed` for real failures; cancellations and signed-out/unconfigured states are expected.
+    private static func reportFailure(_ error: Error, path: String) {
+        if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
+        let kind: String
+        var properties: [String: Any] = ["endpoint": path]
+        switch error {
+        case LLMGatewayError.notConfigured, LLMGatewayError.notSignedIn:
+            return
+        case LLMGatewayError.unauthorized: kind = "unauthorized"
+        case LLMGatewayError.invalidRequest: kind = "invalid_request"
+        case LLMGatewayError.upstream: kind = "upstream"
+        case LLMGatewayError.httpStatus(let status):
+            kind = "http_status"
+            properties["status"] = status
+        case LLMGatewayError.invalidResponse: kind = "invalid_response"
+        case let urlError as URLError:
+            kind = "network"
+            properties["url_error_code"] = urlError.code.rawValue
+        default: kind = "other"
+        }
+        properties["error"] = kind
+        Analytics.track(.gatewayRequestFailed, properties)
+    }
+
+    private static func performRequest(
+        _ path: String,
+        method: String,
+        query: [String: String],
+        body: Data?
+    ) async throws -> Data {
         guard let baseURL else { throw LLMGatewayError.notConfigured }
         guard let user = Auth.auth().currentUser, !user.isAnonymous else {
             throw LLMGatewayError.notSignedIn

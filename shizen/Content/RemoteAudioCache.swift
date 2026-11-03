@@ -8,7 +8,7 @@
 import CryptoKit
 import Foundation
 
-struct RemoteAudioCacheMetadata: Codable, Equatable, Hashable {
+nonisolated struct RemoteAudioCacheMetadata: Codable, Equatable, Hashable, Sendable {
     let publishedVariantId: String?
     let publishedContentHash: String?
     let publishedAt: String?
@@ -34,9 +34,36 @@ struct RemoteAudioCacheMetadata: Codable, Equatable, Hashable {
     }
 }
 
-enum RemoteAudioCache {
+nonisolated enum RemoteAudioCache {
 
-    private static let ioQueue = DispatchQueue(label: "shizen.remote-audio-cache", qos: .utility)
+    /// How urgently a download is needed. `.high` is a scene the learner is opening or
+    /// about to open. `.low` is look-ahead: low URLSession priority, Wi-Fi or other
+    /// unmetered networks only, and cancellable with `cancelPrefetches(owner:)`.
+    nonisolated enum Priority: Sendable {
+        case low
+        case high
+
+        fileprivate var taskPriority: Float {
+            switch self {
+            case .low: URLSessionTask.lowPriority
+            case .high: URLSessionTask.highPriority
+            }
+        }
+
+        fileprivate var allowsMeteredNetworks: Bool { self == .high }
+    }
+
+    /// Dedicated session so lesson audio does not queue behind `URLSession.shared`
+    /// traffic. Files are cached on disk by this type, so the URL cache is off.
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.httpMaximumConnectionsPerHost = 4
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        return URLSession(configuration: configuration)
+    }()
+
+    private static let downloads = DownloadTable()
 
     static func cachedFileCount() -> Int {
         guard let files = try? FileManager.default.contentsOfDirectory(
@@ -92,6 +119,44 @@ enum RemoteAudioCache {
         remoteURL: URL,
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
+        loadBed(id: id, remoteURL: remoteURL, priority: .high, owner: nil, completion: completion)
+    }
+
+    static func ensureLocalFile(
+        for remoteURL: URL,
+        metadata: RemoteAudioCacheMetadata? = nil,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        loadFile(for: remoteURL, metadata: metadata, priority: .high, owner: nil, completion: completion)
+    }
+
+    /// Warms the cache for a scene clip without a caller waiting on it.
+    static func prefetchFile(
+        for remoteURL: URL,
+        metadata: RemoteAudioCacheMetadata? = nil,
+        priority: Priority,
+        owner: UUID
+    ) {
+        loadFile(for: remoteURL, metadata: metadata, priority: priority, owner: owner) { _ in }
+    }
+
+    /// Warms the cache for an ambience bed without a caller waiting on it.
+    static func prefetchBed(id: String, remoteURL: URL, priority: Priority, owner: UUID) {
+        loadBed(id: id, remoteURL: remoteURL, priority: priority, owner: owner) { _ in }
+    }
+
+    /// Stops `.low` prefetches started by `owner` that nobody else needs.
+    static func cancelPrefetches(owner: UUID) {
+        Task { await downloads.cancelPrefetches(owner: owner) }
+    }
+
+    private static func loadBed(
+        id: String,
+        remoteURL: URL,
+        priority: Priority,
+        owner: UUID?,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
         let trimmed = sanitizedBedId(id)
         guard !trimmed.isEmpty else {
             completion(.failure(CacheError.downloadFailed))
@@ -102,35 +167,30 @@ enum RemoteAudioCache {
             return
         }
 
-        ioQueue.async {
+        let destination = bedCacheFileURL(id: trimmed)
+        Task {
+            let result: Result<URL, Error>
             do {
-                let destination = bedCacheFileURL(id: trimmed)
-                try FileManager.default.createDirectory(
-                    at: destination.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                let (tempURL, response) = try syncDownload(from: remoteURL)
-                defer { try? FileManager.default.removeItem(at: tempURL) }
-                guard let http = response as? HTTPURLResponse,
-                      (200 ... 299).contains(http.statusCode) else {
-                    throw CacheError.downloadFailed
-                }
-                try? FileManager.default.removeItem(at: destination)
-                try FileManager.default.moveItem(at: tempURL, to: destination)
-                DispatchQueue.main.async {
-                    completion(.success(destination))
-                }
+                result = .success(try await downloads.file(at: destination, priority: priority, owner: owner) { priority in
+                    let tempURL = try await download(from: remoteURL, priority: priority)
+                    defer { try? FileManager.default.removeItem(at: tempURL) }
+                    try? FileManager.default.removeItem(at: destination)
+                    try FileManager.default.moveItem(at: tempURL, to: destination)
+                })
             } catch {
-                DispatchQueue.main.async {
-                    completion(.failure(error))
-                }
+                result = .failure(error)
+            }
+            DispatchQueue.main.async {
+                completion(result)
             }
         }
     }
 
-    static func ensureLocalFile(
+    private static func loadFile(
         for remoteURL: URL,
-        metadata: RemoteAudioCacheMetadata? = nil,
+        metadata: RemoteAudioCacheMetadata?,
+        priority: Priority,
+        owner: UUID?,
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
         if remoteURL.isFileURL {
@@ -142,60 +202,49 @@ enum RemoteAudioCache {
             return
         }
 
-        ioQueue.async {
+        let destination = cacheFileURL(for: remoteURL)
+        Task {
+            let result: Result<URL, Error>
             do {
-                let destination = cacheFileURL(for: remoteURL)
-                try FileManager.default.createDirectory(
-                    at: destination.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                let (tempURL, response) = try syncDownload(from: remoteURL)
-                defer { try? FileManager.default.removeItem(at: tempURL) }
-                guard let http = response as? HTTPURLResponse,
-                      (200 ... 299).contains(http.statusCode) else {
-                    throw CacheError.downloadFailed
-                }
-                invalidateCachedFile(for: remoteURL)
-                try FileManager.default.moveItem(at: tempURL, to: destination)
-                if let metadata, metadata.requiresValidation {
-                    try writeMetadata(metadata, for: remoteURL)
-                }
-                DispatchQueue.main.async {
-                    completion(.success(destination))
-                }
+                result = .success(try await downloads.file(at: destination, priority: priority, owner: owner) { priority in
+                    let tempURL = try await download(from: remoteURL, priority: priority)
+                    defer { try? FileManager.default.removeItem(at: tempURL) }
+                    invalidateCachedFile(for: remoteURL)
+                    try FileManager.default.moveItem(at: tempURL, to: destination)
+                    if let metadata, metadata.requiresValidation {
+                        try writeMetadata(metadata, for: remoteURL)
+                    }
+                })
             } catch {
-                DispatchQueue.main.async {
-                    completion(.failure(error))
-                }
+                result = .failure(error)
+            }
+            DispatchQueue.main.async {
+                completion(result)
             }
         }
     }
 
-    private static func syncDownload(from url: URL) throws -> (URL, URLResponse) {
-        var result: Result<(URL, URLResponse), Error>?
-        let semaphore = DispatchSemaphore(value: 0)
-        let task = URLSession.shared.downloadTask(with: url) { tempURL, response, error in
-            defer { semaphore.signal() }
-            if let error {
-                result = .failure(error)
-                return
-            }
-            guard let tempURL, let response else {
-                result = .failure(CacheError.downloadFailed)
-                return
-            }
-            result = .success((tempURL, response))
+    /// Downloads to a temp file the caller must move or delete.
+    private static func download(from url: URL, priority: Priority) async throws -> URL {
+        try FileManager.default.createDirectory(
+            at: cacheDirectoryURL(),
+            withIntermediateDirectories: true
+        )
+        var request = URLRequest(url: url)
+        request.allowsExpensiveNetworkAccess = priority.allowsMeteredNetworks
+        request.allowsConstrainedNetworkAccess = priority.allowsMeteredNetworks
+        let (tempURL, response) = try await session.download(
+            for: request,
+            delegate: PriorityDelegate(priority: priority.taskPriority)
+        )
+        // A cancelled prefetch must not move a file under a download that replaced it.
+        guard !Task.isCancelled,
+              let http = response as? HTTPURLResponse,
+              (200 ... 299).contains(http.statusCode) else {
+            try? FileManager.default.removeItem(at: tempURL)
+            throw Task.isCancelled ? CancellationError() : CacheError.downloadFailed
         }
-        task.resume()
-        semaphore.wait()
-        switch result {
-        case .success(let pair):
-            return pair
-        case .failure(let error):
-            throw error
-        case .none:
-            throw CacheError.downloadFailed
-        }
+        return tempURL
     }
 
     private static func invalidateCachedFile(for remoteURL: URL) {
@@ -246,12 +295,85 @@ enum RemoteAudioCache {
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 
-    private enum CacheError: LocalizedError {
+    private nonisolated enum CacheError: LocalizedError {
         case downloadFailed
 
         var errorDescription: String? {
             "Failed to download remote audio."
         }
+    }
+}
+
+/// Downloads already in progress, keyed by the cache file they fill. A repeat
+/// request joins the running download. A `.high` request never joins a `.low` one,
+/// since that may be held to Wi-Fi; it replaces it instead.
+private actor DownloadTable {
+    private final class Job {
+        let task: Task<Void, Error>
+        let priority: RemoteAudioCache.Priority
+        /// Prefetch owners waiting on this job. Only `.low` jobs are cancelled by owner.
+        var owners: Set<UUID>
+
+        init(task: Task<Void, Error>, priority: RemoteAudioCache.Priority, owners: Set<UUID>) {
+            self.task = task
+            self.priority = priority
+            self.owners = owners
+        }
+    }
+
+    private var jobs: [URL: Job] = [:]
+
+    func file(
+        at destination: URL,
+        priority: RemoteAudioCache.Priority,
+        owner: UUID?,
+        install: @escaping @Sendable (RemoteAudioCache.Priority) async throws -> Void
+    ) async throws -> URL {
+        if let job = jobs[destination], job.priority == .high || priority == .low {
+            if let owner {
+                job.owners.insert(owner)
+            }
+            try await job.task.value
+            return destination
+        }
+        jobs[destination]?.task.cancel()
+        // Detached so the download and file move run off this actor.
+        let job = Job(
+            task: Task.detached { try await install(priority) },
+            priority: priority,
+            owners: owner.map { [$0] } ?? []
+        )
+        jobs[destination] = job
+        defer {
+            if jobs[destination] === job {
+                jobs[destination] = nil
+            }
+        }
+        try await job.task.value
+        return destination
+    }
+
+    func cancelPrefetches(owner: UUID) {
+        for (destination, job) in jobs where job.priority == .low {
+            job.owners.remove(owner)
+            if job.owners.isEmpty {
+                job.task.cancel()
+                jobs[destination] = nil
+            }
+        }
+    }
+}
+
+/// Sets the URLSession task priority once the async API creates the task.
+private nonisolated final class PriorityDelegate: NSObject, URLSessionTaskDelegate, Sendable {
+    private let priority: Float
+
+    init(priority: Float) {
+        self.priority = priority
+    }
+
+    func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
+        task.priority = priority
     }
 }
 

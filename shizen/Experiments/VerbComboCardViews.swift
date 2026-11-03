@@ -16,101 +16,6 @@ private enum VerbComboCardMetrics {
     static let headerGap: CGFloat = 28
 }
 
-private final class VerbComboHeroCard: UIView {
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        configure()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        configure()
-    }
-
-    private func configure() {
-        clipsToBounds = false
-        layer.cornerRadius = 10
-        layer.cornerCurve = .continuous
-        layer.masksToBounds = false
-        backgroundColor = ExperimentPalette.cardSurface
-        layer.borderWidth = ExperimentCardStroke.normalWidth
-        layer.shadowColor = UIColor.black.cgColor
-        layer.shadowRadius = 4
-        layer.shadowOffset = CGSize(width: 0, height: 1)
-        applyBorderColor()
-        applyShadowOpacity()
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: 10).cgPath
-    }
-
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        applyBorderColor()
-        applyShadowOpacity()
-    }
-
-    private func applyBorderColor() {
-        layer.borderColor = ExperimentPalette.cardBorder
-            .resolvedColor(with: traitCollection).cgColor
-    }
-
-    private func applyShadowOpacity() {
-        layer.shadowOpacity = traitCollection.userInterfaceStyle == .dark ? 0.35 : 0.08
-    }
-}
-
-private func verbComboTextHasKanji(_ text: String) -> Bool {
-    text.unicodeScalars.contains { (0x4E00...0x9FFF).contains($0.value) }
-}
-
-private func verbComboCenteredJapanese(_ text: String, font: UIFont) -> NSAttributedString {
-    let base = JapaneseFuriganaBuilder.attributedString(for: text, font: font, textColor: .label)
-    let centered = NSMutableAttributedString(attributedString: base)
-    guard centered.length > 0 else { return centered }
-    let range = NSRange(location: 0, length: centered.length)
-    let existing = (centered.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)
-        ?? NSParagraphStyle.default
-    let paragraph = (existing.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
-    paragraph.alignment = .center
-    centered.addAttribute(.paragraphStyle, value: paragraph, range: range)
-    return centered
-}
-
-private func verbComboApplyJapanese(
-    _ text: String,
-    to label: FuriganaTranscriptLabel,
-    font: UIFont
-) {
-    label.numberOfLines = 0
-    label.textAlignment = .center
-    label.lineBreakMode = .byWordWrapping
-    // Ruby height stays inside the label. Leaving this on reports the ruby
-    // inset twice, so Auto Layout centers the glyphs below the card.
-    label.verticalTextInsetsAffectAlignmentRect = false
-    if verbComboTextHasKanji(text) {
-        JapaneseFuriganaBuilder.applyScrubDisplay(
-            to: label,
-            attributed: verbComboCenteredJapanese(text, font: font),
-            contentInsets: UIEdgeInsets(
-                top: JapaneseFuriganaBuilder.wordDetailRubyTopInset(for: font),
-                left: 0,
-                bottom: 2,
-                right: 0
-            )
-        )
-    } else {
-        label.textInsets = .zero
-        label.attributedText = nil
-        label.font = font
-        label.text = text
-        label.textColor = .label
-    }
-    label.textAlignment = .center
-}
-
 private func verbComboPinHero(_ hero: UIView, in host: UIView) {
     hero.translatesAutoresizingMaskIntoConstraints = false
     host.addSubview(hero)
@@ -150,7 +55,7 @@ private func verbComboPinHeader(_ header: UIView, above hero: UIView, in host: U
 
 final class VerbComboHookCardView: UIView {
     private let questionLabel = UILabel()
-    private let heroCard = VerbComboHeroCard()
+    private let heroCard = SlideHeroCardView()
     private let verbLabel = FuriganaTranscriptLabel()
 
     override init(frame: CGRect) {
@@ -180,7 +85,7 @@ final class VerbComboHookCardView: UIView {
     }
 
     func configure(hookVerb: String) {
-        verbComboApplyJapanese(hookVerb, to: verbLabel, font: .systemFont(ofSize: 40, weight: .bold))
+        SlideJapaneseText.apply(hookVerb, to: verbLabel, font: .systemFont(ofSize: 40, weight: .bold))
         setNeedsLayout()
     }
 }
@@ -188,7 +93,7 @@ final class VerbComboHookCardView: UIView {
 // MARK: - Still 2
 
 final class VerbComboRuleCardView: UIView {
-    private let heroCard = VerbComboHeroCard()
+    private let heroCard = SlideHeroCardView()
     private let ruleLabel = UILabel()
 
     override init(frame: CGRect) {
@@ -223,7 +128,7 @@ final class VerbComboRuleCardView: UIView {
 
 final class VerbComboExampleCardView: UIView {
     private let compoundLabel = FuriganaTranscriptLabel()
-    private let heroCard = VerbComboHeroCard()
+    private let heroCard = SlideHeroCardView()
     private let exampleLabel = FuriganaTranscriptLabel()
     private let englishLabel = UILabel()
 
@@ -264,12 +169,12 @@ final class VerbComboExampleCardView: UIView {
     }
 
     func configure(example: VerbComboExample) {
-        verbComboApplyJapanese(
+        SlideJapaneseText.apply(
             example.compound,
             to: compoundLabel,
             font: .systemFont(ofSize: 32, weight: .bold)
         )
-        verbComboApplyJapanese(
+        SlideJapaneseText.apply(
             example.exampleLine,
             to: exampleLabel,
             font: .systemFont(ofSize: 22, weight: .semibold)

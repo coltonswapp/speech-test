@@ -102,6 +102,9 @@ final class SettingsViewController: UIViewController {
     private nonisolated enum DebugDestination: Int, CaseIterable, Hashable, Sendable {
         case onboarding
         case journeyOnboarding
+        case tutorOnboarding
+        case naturalOnboarding
+        case listenFirstOnboarding
         case textToSpeech
         case kanaLearningFlow
         case kanaProgressPath
@@ -135,16 +138,25 @@ final class SettingsViewController: UIViewController {
         case swiftUIShaders
         case registerLadder
         case verbCombo
+        case slideComponents
+        case wordSlideshows
         case dialogueContentRecording
         case dialogueLessonWrapUp
         case stageLayouts
         case pillField
         case spanHighlight
+        case mascot
+        case paywalls
+        case teamNote
+        case teamNoteHana
 
         var title: String {
             switch self {
             case .onboarding: return "Auth + onboarding"
             case .journeyOnboarding: return "Journey onboarding"
+            case .tutorOnboarding: return "Tutor-led onboarding"
+            case .naturalOnboarding: return "Listening-first onboarding"
+            case .listenFirstOnboarding: return "Listening-first onboarding v2"
             case .textToSpeech: return "Text to Speech"
             case .kanaLearningFlow: return "Kana learning flow"
             case .kanaProgressPath: return "Kana progress path"
@@ -178,11 +190,17 @@ final class SettingsViewController: UIViewController {
             case .swiftUIShaders: return "SwiftUI shaders"
             case .registerLadder: return "Register ladder"
             case .verbCombo: return "Verb combinations"
+            case .slideComponents: return "Slide components"
+            case .wordSlideshows: return "Word slideshows"
             case .dialogueContentRecording: return "Dialogue Replay"
             case .dialogueLessonWrapUp: return "Lesson wrap-up"
             case .stageLayouts: return "Stage layouts"
             case .pillField: return "Pill field"
             case .spanHighlight: return "Multi-select highlight"
+            case .mascot: return "Mascot"
+            case .paywalls: return "Paywalls"
+            case .teamNote: return "Team note"
+            case .teamNoteHana: return "Team note · Hana"
             }
         }
 
@@ -190,6 +208,9 @@ final class SettingsViewController: UIViewController {
             switch self {
             case .onboarding: return "Landing stubs · survey / slider / listening quiz · placeholder demos"
             case .journeyOnboarding: return "Same landing · questions first · ear test · trial · auth at the end"
+            case .tutorOnboarding: return "Chat with Hana · name, goal, level · fake roleplay · streamed plan"
+            case .naturalOnboarding: return "Hana · textbook vs real · blind listen + gist · dissect spoken forms"
+            case .listenFirstOnboarding: return "Payoff first · one shared conversation · unsquash · tap to skip · resumes"
             case .textToSpeech: return "Stream OpenAI TTS · sentence chunks · lyrics"
             case .kanaLearningFlow: return "Progress tiles · hiragana & katakana lessons · SRS"
             case .kanaProgressPath: return "Row-by-row hiragana lessons · SRS · chart"
@@ -209,7 +230,7 @@ final class SettingsViewController: UIViewController {
             case .kanaLessonComplete: return "Preview summary · entry animation & encouragement"
             case .kanaLessonEncouragementBreak: return "Mid-lesson combo break · notch audio · header slides away"
             case .emojiStickers: return "Die-cut white halo · pick preset or type"
-            case .explosions: return "Tap to burst · pick emojis · size presets"
+            case .explosions: return "Tap to burst · emojis or mascots · size presets"
             case .feedbackSounds: return "Play success chimes and incorrect dong"
             case .vocabSpeaking: return "3 steps · speak the word with the mic"
             case .realtimeTutor: return "Speech-to-speech Japanese tutor · gpt-realtime-2"
@@ -223,11 +244,17 @@ final class SettingsViewController: UIViewController {
             case .swiftUIShaders: return "Kris Puckett Metal shaders · playground"
             case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
             case .verbCombo: return "5 stills · hook, rule, 3 examples · Gemini · export cards"
+            case .slideComponents: return "Every slideshow card & building block · sample data · export"
+            case .wordSlideshows: return "Prompt → word list or pairs · Apple Intelligence · review · export"
             case .dialogueContentRecording: return "TikTok stage · conversation, two-pass, or quiz"
             case .dialogueLessonWrapUp: return "End-lesson sheet · thumbnail · per-scene scores"
             case .stageLayouts: return "Defined onboarding layouts · title rises in · assets shift"
             case .pillField: return "Study-method capsules · size, depth, blur, haptics"
             case .spanHighlight: return "Fill, band color, height, and corner radius"
+            case .mascot: return "Flower character · expressions, eyes, spring tuner"
+            case .paywalls: return "Custom paywall variants · mock offering · trial states"
+            case .teamNote: return "Pre-paywall letter from the team · Continue opens the paywalls"
+            case .teamNoteHana: return "Same note told by Hana in chat bubbles · Continue opens the paywalls"
             }
         }
 
@@ -235,6 +262,9 @@ final class SettingsViewController: UIViewController {
             switch self {
             case .onboarding: return "person.crop.circle.badge.checkmark"
             case .journeyOnboarding: return "door.left.hand.open"
+            case .tutorOnboarding: return "bubble.left.and.text.bubble.right"
+            case .naturalOnboarding: return "ear"
+            case .listenFirstOnboarding: return "ear.badge.waveform"
             case .textToSpeech: return "waveform"
             case .kanaLearningFlow: return "square.grid.2x2"
             case .kanaProgressPath: return "point.topleft.down.curvedto.point.bottomright.up"
@@ -268,11 +298,17 @@ final class SettingsViewController: UIViewController {
             case .swiftUIShaders: return "sparkles"
             case .registerLadder: return "text.badge.star"
             case .verbCombo: return "plus.forwardslash.minus"
+            case .slideComponents: return "square.grid.2x2"
+            case .wordSlideshows: return "apple.intelligence"
             case .dialogueContentRecording: return "video"
             case .dialogueLessonWrapUp: return "flag.checkered"
             case .stageLayouts: return "square.stack.3d.up"
             case .pillField: return "capsule"
             case .spanHighlight: return "highlighter"
+            case .mascot: return "camera.macro"
+            case .paywalls: return "creditcard"
+            case .teamNote: return "envelope.open"
+            case .teamNoteHana: return "bubble.left.and.text.bubble.right"
             }
         }
     }
@@ -284,6 +320,18 @@ final class SettingsViewController: UIViewController {
         view.backgroundColor = .systemGroupedBackground
         configureCollectionView()
         configureDataSource()
+        applySnapshot()
+
+        // The login sheet can sign in or out while Settings stays on screen.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(authUserDidChange),
+            name: AuthService.userDidChangeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func authUserDidChange() {
         applySnapshot()
     }
 
@@ -673,6 +721,8 @@ final class SettingsViewController: UIViewController {
                     .lemmaResolution,
                     .kanjiDecomposition,
                     .verbCombo,
+                    .slideComponents,
+                    .wordSlideshows,
                     .kanjiSpotlight,
                 ]) ?? []
             }
@@ -681,9 +731,16 @@ final class SettingsViewController: UIViewController {
                 self?.debugItems([
                     .onboarding,
                     .journeyOnboarding,
+                    .tutorOnboarding,
+                    .naturalOnboarding,
+                    .listenFirstOnboarding,
                     .stageLayouts,
                     .pillField,
                     .spanHighlight,
+                    .mascot,
+                    .paywalls,
+                    .teamNote,
+                    .teamNoteHana,
                     .emojiStickers,
                     .explosions,
                     .feedbackSounds,
@@ -750,7 +807,7 @@ final class SettingsViewController: UIViewController {
         switch item {
         case .account(_, _, let isSignedIn):
             if isSignedIn {
-                confirmLogOut()
+                navigationController?.pushViewController(UserProfileViewController(), animated: true)
             } else {
                 let presenter = navigationController ?? self
                 presenter.present(AuthLandingViewController.makeLoginSheet(), animated: true)
@@ -811,30 +868,6 @@ final class SettingsViewController: UIViewController {
     private func requestAppReview() {
         guard let scene = view.window?.windowScene else { return }
         AppStore.requestReview(in: scene)
-    }
-
-    private func confirmLogOut() {
-        let alert = UIAlertController(
-            title: "Log out?",
-            message: "You can sign in again with Apple or Google.",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        alert.addAction(UIAlertAction(title: "Log Out", style: .destructive) { [weak self] _ in
-            do {
-                try AuthService.shared.signOut()
-                self?.applySnapshot()
-            } catch {
-                let failure = UIAlertController(
-                    title: "Couldn’t log out",
-                    message: error.localizedDescription,
-                    preferredStyle: .alert
-                )
-                failure.addAction(UIAlertAction(title: "OK", style: .default))
-                self?.present(failure, animated: true)
-            }
-        })
-        present(alert, animated: true)
     }
 
     private func presentClearAudioCacheConfirmation() {
@@ -905,6 +938,12 @@ final class SettingsViewController: UIViewController {
             presentOnboardingPlayground()
         case .journeyOnboarding:
             presentOnboardingPlayground(entry: .journey)
+        case .tutorOnboarding:
+            present(TutorOnboardingHostController(), animated: true)
+        case .naturalOnboarding:
+            present(NaturalOnboardingHostController(), animated: true)
+        case .listenFirstOnboarding:
+            present(ListenFirstOnboardingHostController(), animated: true)
         case .textToSpeech:
             navigationController?.pushViewController(
                 TextToSpeechExperimentViewController(),
@@ -1038,6 +1077,16 @@ final class SettingsViewController: UIViewController {
                 VerbComboPromptViewController(),
                 animated: true
             )
+        case .slideComponents:
+            navigationController?.pushViewController(
+                SlideComponentShowcaseViewController(),
+                animated: true
+            )
+        case .wordSlideshows:
+            navigationController?.pushViewController(
+                WordSlideshowPromptViewController(),
+                animated: true
+            )
         case .stageLayouts:
             let page = OnboardingStageLayoutExperimentViewController()
             page.modalPresentationStyle = .fullScreen
@@ -1051,6 +1100,20 @@ final class SettingsViewController: UIViewController {
                 MultiSelectHighlightExperimentViewController(),
                 animated: true
             )
+        case .mascot:
+            navigationController?.pushViewController(
+                MascotPlaygroundViewController(),
+                animated: true
+            )
+        case .paywalls:
+            navigationController?.pushViewController(
+                PaywallExperimentViewController(),
+                animated: true
+            )
+        case .teamNote:
+            present(NaturalTeamNotePlaygroundController(), animated: true)
+        case .teamNoteHana:
+            present(NaturalTeamNotePlaygroundController(variant: .hana), animated: true)
         }
     }
 

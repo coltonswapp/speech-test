@@ -29,6 +29,17 @@ struct KanaLessonSessionMetrics {
         var copy = self
         return copy
     }
+
+    /// Result properties shared by kana and grammar `lesson_*` events.
+    var analyticsProperties: [String: Any] {
+        [
+            "correct_count": correctCount,
+            "wrong_count": wrongCount,
+            "best_streak": bestStreak,
+            "lives_remaining": livesRemaining,
+            "seconds": Int(elapsed.rounded()),
+        ]
+    }
 }
 
 enum KanaLessonEncouragementPolicy {

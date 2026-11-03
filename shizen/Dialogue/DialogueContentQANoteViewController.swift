@@ -32,11 +32,15 @@ final class DialogueContentQANoteViewController: UIViewController, UITextViewDel
     private let sceneTitle: String?
     private let sceneSlug: String?
     private let studioLink: String
+    /// Screenshot shortcut. The chip starts on even if the last menu note turned it off.
+    private let forcesScreenshot: Bool
 
     private let scrollView = UIScrollView()
     private let stack = UIStackView()
     private let noteTextView = UITextView()
     private let sendButton = PrimaryButton(type: .system)
+    /// Include-screenshot toggle. Not a routing tag, so it stays out of the note text.
+    private let includeScreenshotTag = GlassTagControl(title: "#screenshot")
     private let contextDisclosureButton = UIButton(type: .system)
     private let contextChevron = UIImageView()
     private let contextBodyLabel = UILabel()
@@ -54,7 +58,8 @@ final class DialogueContentQANoteViewController: UIViewController, UITextViewDel
         lessonID: String,
         sceneTitle: String? = nil,
         sceneSlug: String? = nil,
-        studioLink: String
+        studioLink: String,
+        forcesScreenshot: Bool = false
     ) {
         self.source = source
         self.sourceId = sourceId
@@ -65,6 +70,7 @@ final class DialogueContentQANoteViewController: UIViewController, UITextViewDel
         self.sceneTitle = sceneTitle
         self.sceneSlug = sceneSlug
         self.studioLink = studioLink
+        self.forcesScreenshot = forcesScreenshot
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -260,12 +266,31 @@ final class DialogueContentQANoteViewController: UIViewController, UITextViewDel
         return wrap
     }
 
+    @objc private func includeScreenshotChanged() {
+        Self.includeScreenshot = includeScreenshotTag.isSelected
+    }
+
+    /// Last choice on this sheet. On until the user turns it off.
+    private static var includeScreenshot: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: includeScreenshotKey) == nil { return true }
+            return UserDefaults.standard.bool(forKey: includeScreenshotKey)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: includeScreenshotKey) }
+    }
+
+    private static let includeScreenshotKey = "ContentQANoteIncludeScreenshot"
+
     private func makeTagFlow() -> UIView {
         tagButtons = ContentQANoteTag.allCases.map { tag in
             (tag, GlassTagControl(title: tag.hashtag))
         }
+        UIView.performWithoutAnimation {
+            includeScreenshotTag.isSelected = forcesScreenshot || Self.includeScreenshot
+        }
+        includeScreenshotTag.addTarget(self, action: #selector(includeScreenshotChanged), for: .valueChanged)
         let flow = GlassTagFlowView()
-        flow.setTags(tagButtons.map(\.button))
+        flow.setTags(tagButtons.map(\.button) + [includeScreenshotTag])
         flow.setContentCompressionResistancePriority(.required, for: .vertical)
         return flow
     }
@@ -289,6 +314,9 @@ final class DialogueContentQANoteViewController: UIViewController, UITextViewDel
             "Looking at: \(focusTitle)",
         ]
         lines.append(contentsOf: focusDetailLines)
+        if source == .screen {
+            return lines
+        }
         lines.append("")
         lines.append("Lesson: \(lessonTitle) (\(lessonID))")
         if let sceneTitle, let sceneSlug {
@@ -308,7 +336,8 @@ final class DialogueContentQANoteViewController: UIViewController, UITextViewDel
         lessonID: String,
         sceneTitle: String? = nil,
         sceneSlug: String? = nil,
-        studioLink: String
+        studioLink: String,
+        forcesScreenshot: Bool = false
     ) {
         let note = DialogueContentQANoteViewController(
             source: source,
@@ -319,7 +348,8 @@ final class DialogueContentQANoteViewController: UIViewController, UITextViewDel
             lessonID: lessonID,
             sceneTitle: sceneTitle,
             sceneSlug: sceneSlug,
-            studioLink: studioLink
+            studioLink: studioLink,
+            forcesScreenshot: forcesScreenshot
         )
         let sheet = UINavigationController(rootViewController: note)
         sheet.modalPresentationStyle = .pageSheet
@@ -327,6 +357,7 @@ final class DialogueContentQANoteViewController: UIViewController, UITextViewDel
             presentation.detents = [.medium(), .large()]
             presentation.selectedDetentIdentifier = .large
             presentation.prefersGrabberVisible = true
+            presentation.applySolidNonLargeBackground(ExperimentPalette.pageBackground)
         }
         presenter.present(sheet, animated: true)
     }
@@ -357,6 +388,12 @@ final class DialogueContentQANoteViewController: UIViewController, UITextViewDel
         }
         view.endEditing(true)
         setSending(true)
+        let screenshotJPEG: String?
+        if includeScreenshotTag.isSelected {
+            screenshotJPEG = lessonHostView().flatMap(LessonHostSnapshot.jpegBase64(of:))
+        } else {
+            screenshotJPEG = nil
+        }
         let note = ContentCMSClient.QANote(
             source: source,
             sourceId: sourceId,
@@ -365,7 +402,7 @@ final class DialogueContentQANoteViewController: UIViewController, UITextViewDel
             metadata: .init(
                 url: studioLink,
                 createdAt: Date(),
-                screenshotJPEG: lessonHostView().flatMap(LessonHostSnapshot.jpegBase64(of:))
+                screenshotJPEG: screenshotJPEG
             )
         )
         ContentCMSClient.sendQANote(note) { [weak self] result in
@@ -392,6 +429,7 @@ final class DialogueContentQANoteViewController: UIViewController, UITextViewDel
     private func setSending(_ sending: Bool) {
         isSending = sending
         sendButton.isEnabled = !sending
+        includeScreenshotTag.isEnabled = !sending
         sendButton.setTitle(sending ? "Sending…" : "Send to agent", for: .normal)
         isModalInPresentation = sending
     }

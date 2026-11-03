@@ -21,6 +21,8 @@ struct DialogueScenarioAttempt: Codable, Equatable {
     var scenarioID: String
     var starCount: Int
     var points: Int
+    /// First listen ran in hardcore mode (live meters only, no transcript).
+    var hardcore: Bool = false
 }
 
 struct DialogueProgressSnapshot: Codable, Equatable {
@@ -111,8 +113,15 @@ final class DialogueProgressStore: LessonProgressProviding {
         snapshot.scenarioAttempts[scenarioID] ?? []
     }
 
+    /// Best scored run for a scene: highest `(starCount, points)`, same ordering as `DialogueLessonWrapUp.make`.
+    func bestAttempt(scenarioID: String) -> DialogueScenarioAttempt? {
+        attempts(scenarioID: scenarioID).max {
+            ($0.starCount, $0.points) < ($1.starCount, $1.points)
+        }
+    }
+
     func bestStarCount(scenarioID: String) -> Int? {
-        attempts(scenarioID: scenarioID).map(\.starCount).max()
+        bestAttempt(scenarioID: scenarioID)?.starCount
     }
 
     func lastAttempt(scenarioID: String) -> DialogueScenarioAttempt? {
@@ -123,10 +132,20 @@ final class DialogueProgressStore: LessonProgressProviding {
         lastAttempt(scenarioID: scenarioID)?.points
     }
 
+    func hasHardcoreCompletion(scenarioID: String) -> Bool {
+        attempts(scenarioID: scenarioID).contains(where: \.hardcore)
+    }
+
     /// Stars to render on the picker: best recorded run, or 1 for legacy completions.
     func displayedStarCount(scenarioID: String) -> Int {
         if let best = bestStarCount(scenarioID: scenarioID) { return best }
         return isCompleted(scenarioID: scenarioID) ? 1 : 0
+    }
+
+    /// Sum of `displayedStarCount` across every scene with a recorded run or completion.
+    func totalDisplayedStarCount() -> Int {
+        let ids = snapshot.completedScenarioIDs.union(snapshot.scenarioAttempts.keys)
+        return ids.reduce(0) { $0 + displayedStarCount(scenarioID: $1) }
     }
 
     func hasRecordedProgress(scenarioID: String) -> Bool {
@@ -153,7 +172,8 @@ final class DialogueProgressStore: LessonProgressProviding {
         starCount: Int? = nil,
         points: Int? = nil,
         date: Date = Date(),
-        countsTowardDaily: Bool = true
+        countsTowardDaily: Bool = true,
+        hardcore: Bool = false
     ) {
         guard !scenarioID.isEmpty else { return }
         pendingRemovalIDs.remove(scenarioID)
@@ -183,7 +203,8 @@ final class DialogueProgressStore: LessonProgressProviding {
                 at: date,
                 scenarioID: scenarioID,
                 starCount: min(max(starCount, 0), DialogueScoreRules.maxStars),
-                points: min(max(points ?? 0, 0), 100_000)
+                points: min(max(points ?? 0, 0), 100_000),
+                hardcore: hardcore
             )
             snapshot.scenarioAttempts[scenarioID, default: []].append(attempt)
             let payload = attemptPayload(attempt)
@@ -350,7 +371,8 @@ final class DialogueProgressStore: LessonProgressProviding {
                     at: at,
                     scenarioID: scenarioID,
                     starCount: starCount,
-                    points: points
+                    points: points,
+                    hardcore: map["hardcore"] as? Bool ?? false
                 )
             )
         }
@@ -371,13 +393,18 @@ final class DialogueProgressStore: LessonProgressProviding {
     }
 
     private func attemptPayload(_ attempt: DialogueScenarioAttempt) -> [String: Any] {
-        [
+        var payload: [String: Any] = [
             "id": attempt.id,
             "at": Timestamp(date: attempt.at),
             "scenarioId": attempt.scenarioID,
             "starCount": attempt.starCount,
             "points": attempt.points,
         ]
+        // Only written when set so older payloads stay identical for `arrayRemove`.
+        if attempt.hardcore {
+            payload["hardcore"] = true
+        }
+        return payload
     }
 
     private static func emptyShell() -> [String: Any] {

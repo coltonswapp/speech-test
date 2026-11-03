@@ -3,8 +3,15 @@ import UIKit
 
 class OnboardingViewController: UIViewController {
 
+    /// Stable snake_case id; also the `step_name` on `onboarding_step_viewed`.
     var onboardingStepId: String?
     weak var coordinator: OnboardingCoordinator?
+
+    /// Sets `onboardingStepId` inline in a flow's step list.
+    func withStepId(_ id: String) -> Self {
+        onboardingStepId = id
+        return self
+    }
 
     let headerContainerView = UIView()
     let labelStack: UIStackView = {
@@ -36,6 +43,17 @@ class OnboardingViewController: UIViewController {
 
     private(set) var ctaButton: PrimaryButton?
     private var buttonBottomConstraint: NSLayoutConstraint?
+
+    /// In-place sub-steps this controller animates through; each one advances the progress bar.
+    var progressBeatCount: Int { 1 }
+    private(set) var progressBeat = 0
+
+    var hidesOnboardingBackButton: Bool { false }
+
+    func advanceProgressBeat(to beat: Int) {
+        progressBeat = min(max(0, beat), progressBeatCount - 1)
+        coordinator?.stepBeatDidChange(self)
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -127,8 +145,34 @@ class OnboardingViewController: UIViewController {
     }
 
     func explodeEmoji(from view: UIView, preset: ExplosionPreset = .small) {
+        OnboardingCelebration.burst(preset, from: view)
+    }
+}
+
+/// Emoji bursts for wins. Under Reduce Motion they become a single soft scale-and-fade on the
+/// element that won; callers keep their haptics either way.
+enum OnboardingCelebration {
+
+    static func burst(_ preset: ExplosionPreset, from view: UIView, at point: CGPoint? = nil) {
+        guard !UIAccessibility.isReduceMotionEnabled else {
+            softPulse(view)
+            return
+        }
         guard let window = view.window else { return }
-        let point = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: window)
-        ExplosionManager.trigger(preset, at: point)
+        let local = point ?? CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+        ExplosionManager.trigger(preset, at: view.convert(local, to: window))
+    }
+
+    private static func softPulse(_ view: UIView) {
+        let original = view.transform
+        UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut, .allowUserInteraction], animations: {
+            view.transform = original.scaledBy(x: 1.05, y: 1.05)
+            view.alpha = 0.85
+        }, completion: { _ in
+            UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseIn, .allowUserInteraction]) {
+                view.transform = original
+                view.alpha = 1
+            }
+        })
     }
 }

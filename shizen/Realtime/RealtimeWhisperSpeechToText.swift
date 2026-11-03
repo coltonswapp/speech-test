@@ -49,6 +49,11 @@ struct WhisperTranscriptionUsage: Equatable {
         )
     }
 
+    /// One line for the Role Play completion sheet.
+    func spendSummary(engine: String) -> String {
+        String(format: "Spent $%.4f · %@ · %.0fs audio", estimatedCostUSD, engine, audioSeconds)
+    }
+
     func completionBreakdown() -> String {
         [
             "GPT Whisper",

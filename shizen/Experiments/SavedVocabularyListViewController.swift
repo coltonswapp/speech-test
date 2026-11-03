@@ -156,10 +156,14 @@ extension SavedVocabularyListViewController: UITableViewDataSource, UITableViewD
         tableView.deselectRow(at: indexPath, animated: true)
         guard items.indices.contains(indexPath.row) else { return }
         let item = items[indexPath.row]
-        WordDictionaryDetailSheetPresenter.push(
+        WordDictionaryDetailSheetPresenter.present(
             surface: item.surface,
             sentence: item.sentence,
             glossFraming: .word,
+            storedContext: item.storedContext,
+            sourceTitle: item.sourceTitle,
+            lineEnglish: item.lineEnglish,
+            fullSheet: true,
             from: self
         )
     }

@@ -37,6 +37,7 @@ final class GrammarLessonCoordinator: NSObject {
     }
 
     func makeCoordinator() -> ProgressiveContainerCoordinator {
+        Analytics.track(.lessonStarted, analyticsProperties)
         let steps = GrammarLessonContentBuilder.lessonSteps(for: point)
         let coordinator = ProgressiveContainerCoordinator(steps: steps)
         coordinator.delegate = self
@@ -65,6 +66,10 @@ final class GrammarLessonCoordinator: NSObject {
         }
     }
 
+    private var analyticsProperties: [String: Any] {
+        ["lesson_type": "grammar", "lesson_id": point.id]
+    }
+
     private func handleDrillResult(correct: Bool) {
         guard !didPresentSummary else { return }
         let failedOut = sessionTracker.recordAnswer(correct: correct, encouragementEnabled: false)
@@ -83,6 +88,8 @@ final class GrammarLessonCoordinator: NSObject {
         guard !didPresentSummary, let progressiveCoordinator else { return }
         didPresentSummary = true
         sessionTracker.endSession()
+        let event: Analytics.Event = outcome == .completed ? .lessonCompleted : .lessonFailed
+        Analytics.track(event, analyticsProperties.merging(sessionTracker.metrics.analyticsProperties) { _, new in new })
 
         let summary = GrammarLessonSummaryStepViewController(
             point: point,
@@ -119,6 +126,11 @@ extension GrammarLessonCoordinator: ProgressiveContainerCoordinatorDelegate {
         coordinator.delegate = nil
         progressiveCoordinator = nil
         sessionTracker.endSession()
+        if !didPresentSummary {
+            var properties = analyticsProperties.merging(sessionTracker.metrics.analyticsProperties) { _, new in new }
+            properties["furthest_stage"] = "drills"
+            Analytics.track(.lessonAbandoned, properties)
+        }
         delegate?.grammarLessonSessionDidCancel(point: point)
     }
 }

@@ -248,6 +248,8 @@ struct DialogueBubbleUnderglowConfiguration {
     var cornerRadius: CGFloat = 36
     /// Softens the underglow edges via radial falloff and outer shadow blur.
     var blurRadius: CGFloat = 14
+    /// Halo the blur casts past the glass; kept low so it doesn't read as a drop shadow.
+    var shadowOpacity: CGFloat = 0.3
     var color: DialogueBubbleUnderglowColor = .yellow
 
     static let `default` = DialogueBubbleUnderglowConfiguration()
@@ -298,6 +300,19 @@ struct DialogueBubbleUnderglowConfiguration {
         )
     }
 
+    /// Shadow-casting shape inside a glow view padded by `padding`. Pulled in
+    /// horizontally by the blur so the halo stays under the glass instead of
+    /// leaking past the bubble's left and right edges.
+    func shadowShapeRect(coreSize: CGSize, padding: CGFloat) -> CGRect {
+        let sideInset = min(blurRadius, coreSize.width / 2)
+        return CGRect(
+            x: padding + sideInset,
+            y: padding,
+            width: coreSize.width - sideInset * 2,
+            height: coreSize.height
+        )
+    }
+
     func debugSummary() -> String {
         let edgeName: String
         switch verticalEdge {
@@ -315,6 +330,7 @@ struct DialogueBubbleUnderglowConfiguration {
         opacity: \(format(opacity))
         cornerRadius: \(format(cornerRadius))
         blurRadius: \(format(blurRadius))
+        shadowOpacity: \(format(shadowOpacity))
         color: .\(color.title.lowercased())
         """
     }

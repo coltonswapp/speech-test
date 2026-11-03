@@ -7,6 +7,10 @@ final class OnboardingContainerViewController: UIViewController {
 
     private let onboardingNavigationController: UINavigationController
     private let backButton = OnboardingChrome.makeCircularIconButton(symbolName: "chevron.left")
+    #if DEBUG
+    /// Debug builds only: jumps straight to the next step, skipping the current one's animations.
+    private let debugSkipButton = OnboardingChrome.makeCircularIconButton(symbolName: "forward.end.fill")
+    #endif
     private let progressView = UIProgressView(progressViewStyle: .bar)
     private let containerView = UIView()
     private var progressLeadingToBack: NSLayoutConstraint!
@@ -27,11 +31,17 @@ final class OnboardingContainerViewController: UIViewController {
         setupUI()
         embedChildNavigation()
         view.bringSubviewToFront(backButton)
+        #if DEBUG
+        view.bringSubviewToFront(debugSkipButton)
+        #endif
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         view.bringSubviewToFront(backButton)
+        #if DEBUG
+        view.bringSubviewToFront(debugSkipButton)
+        #endif
         applyRoundedProgressAppearance()
     }
 
@@ -42,13 +52,8 @@ final class OnboardingContainerViewController: UIViewController {
         progressLeadingToEdge.isActive = hidden
     }
 
-    func updateProgress(step: Int, totalSteps: Int) {
-        guard totalSteps > 0 else {
-            progressView.setProgress(0, animated: false)
-            return
-        }
-        let progress = Float(step + 1) / Float(totalSteps)
-        progressView.setProgress(min(1, progress), animated: true)
+    func setProgress(_ progress: Float) {
+        progressView.setProgress(min(1, max(0, progress)), animated: true)
     }
 
     private func setupUI() {
@@ -88,10 +93,23 @@ final class OnboardingContainerViewController: UIViewController {
             backButton.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 16),
 
             progressLeadingToBack,
-            progressView.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -20),
             progressView.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
             progressView.heightAnchor.constraint(equalToConstant: 6),
         ])
+
+        #if DEBUG
+        debugSkipButton.setSymbol("forward.end.fill", tintColor: .systemOrange)
+        debugSkipButton.accessibilityLabel = "Skip step (debug)"
+        debugSkipButton.addTarget(self, action: #selector(debugSkipTapped), for: .touchUpInside)
+        view.addSubview(debugSkipButton)
+        NSLayoutConstraint.activate([
+            debugSkipButton.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
+            debugSkipButton.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -16),
+            progressView.trailingAnchor.constraint(equalTo: debugSkipButton.leadingAnchor, constant: -12),
+        ])
+        #else
+        progressView.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -20).isActive = true
+        #endif
 
         let backHidden = backButton.isHidden
         progressLeadingToBack.isActive = !backHidden
@@ -124,4 +142,11 @@ final class OnboardingContainerViewController: UIViewController {
         HapticsHelper.lightHaptic()
         coordinator?.back()
     }
+
+    #if DEBUG
+    @objc private func debugSkipTapped() {
+        HapticsHelper.lightHaptic()
+        coordinator?.next()
+    }
+    #endif
 }

@@ -28,55 +28,6 @@ private enum RegisterLadderCardMetrics {
         .scaledFont(for: .systemFont(ofSize: 17, weight: .medium))
 }
 
-// MARK: - Shared hero card chrome
-
-private final class RegisterLadderHeroCard: UIView {
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        configure()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        configure()
-    }
-
-    private func configure() {
-        clipsToBounds = false
-        layer.cornerRadius = 10
-        layer.cornerCurve = .continuous
-        layer.masksToBounds = false
-        backgroundColor = ExperimentPalette.cardSurface
-        layer.borderWidth = ExperimentCardStroke.normalWidth
-        layer.shadowColor = UIColor.black.cgColor
-        layer.shadowRadius = 4
-        layer.shadowOffset = CGSize(width: 0, height: 1)
-        applyBorderColor()
-        applyShadowOpacity()
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: 10).cgPath
-    }
-
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        applyBorderColor()
-        applyShadowOpacity()
-        setNeedsLayout()
-    }
-
-    private func applyBorderColor() {
-        layer.borderColor = ExperimentPalette.cardBorder
-            .resolvedColor(with: traitCollection).cgColor
-    }
-
-    private func applyShadowOpacity() {
-        layer.shadowOpacity = traitCollection.userInterfaceStyle == .dark ? 0.35 : 0.08
-    }
-}
-
 // MARK: - Shared helpers
 
 private func installRegisterLadderWatermark(in host: UIView) {
@@ -159,7 +110,7 @@ private func centeredAttributedJapanese(_ text: String, font: UIFont) -> NSAttri
 final class RegisterLadderHookCardView: UIView {
     private let eyebrowLabel = UILabel()
     private let questionLabel = UILabel()
-    private let heroCard = RegisterLadderHeroCard()
+    private let heroCard = SlideHeroCardView()
     private let heroEnglishLabel = UILabel()
     private let formatLabel = UILabel()
 
@@ -257,7 +208,7 @@ final class RegisterLadderLevelCardView: UIView {
 
     private let eyebrowLabel = UILabel()
     private let registerTitleLabel = UILabel()
-    private let heroCard = RegisterLadderHeroCard()
+    private let heroCard = SlideHeroCardView()
     private let japaneseLabel = FuriganaTranscriptLabel()
     private let audienceLabel = UILabel()
 
@@ -388,7 +339,7 @@ final class RegisterLadderWhyCardView: UIView {
     private let eyebrowLabel = UILabel()
     private let titleLabel = UILabel()
     private let whyLabel = UILabel()
-    private let heroCard = RegisterLadderHeroCard()
+    private let heroCard = SlideHeroCardView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)

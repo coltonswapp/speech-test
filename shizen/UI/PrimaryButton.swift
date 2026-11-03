@@ -5,7 +5,8 @@
 
 import UIKit
 
-/// Full-width CTA with blue (Check) and yellow (Next) style presets.
+/// Full-width CTA with blue (Check) and yellow (Next) style presets, plus
+/// `secondary` (secondary system background) and `tertiary` (no background) for lower-emphasis actions.
 final class PrimaryButton: UIButton {
 
     static let preferredHeight: CGFloat = 55
@@ -20,6 +21,8 @@ final class PrimaryButton: UIButton {
     enum Style {
         case blue
         case yellow
+        case secondary
+        case tertiary
     }
 
     struct Appearance {
@@ -94,6 +97,28 @@ final class PrimaryButton: UIButton {
                 highlightedBackgroundColor: UIColor(red: 245 / 255, green: 190 / 255, blue: 0 / 255, alpha: 1),
                 disabledBackgroundColor: UIColor(red: 210 / 255, green: 205 / 255, blue: 188 / 255, alpha: 1),
                 disabledTitleColor: UIColor(red: 132 / 255, green: 124 / 255, blue: 108 / 255, alpha: 1)
+            )
+        case .secondary:
+            Appearance(
+                backgroundColor: .secondarySystemBackground,
+                titleColor: .label,
+                strokeColor: .clear,
+                strokeWidth: 0,
+                cornerRadius: 14,
+                highlightedBackgroundColor: .tertiarySystemBackground,
+                disabledBackgroundColor: .secondarySystemBackground,
+                disabledTitleColor: .tertiaryLabel
+            )
+        case .tertiary:
+            Appearance(
+                backgroundColor: .clear,
+                titleColor: .label,
+                strokeColor: .clear,
+                strokeWidth: 0,
+                cornerRadius: 14,
+                highlightedBackgroundColor: .tertiarySystemFill,
+                disabledBackgroundColor: .clear,
+                disabledTitleColor: .tertiaryLabel
             )
         }
     }

@@ -60,6 +60,9 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
     private let compareOnDeviceLabel = UILabel()
     private let compareWhisperLabel = UILabel()
     private var compareOnDeviceText = ""
+    /// On-device finals from earlier recognition tasks this turn. Apple Speech
+    /// ends a task on a pause; the next one starts empty.
+    private var onDeviceCarriedText = ""
     private var compareWhisperText = ""
     private var compareTargetJapanese = ""
     private var compareTurnSnapshots: [RolePlayCompareTurnSnapshot] = []
@@ -69,6 +72,9 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
     private var currentWhisperTurnCap: TimeInterval?
     private var whisperIdleWatchdog: DispatchWorkItem?
     private let speakingMeter = SpeakingMeterPillView()
+    private let turnPrompt = RolePlayTurnPromptView()
+    private weak var completionSheet: RolePlayCompletionViewController?
+    private weak var recognizerDetailsSheet: DialogueRolePlaySheetViewController?
 
     private static let linePlayGlyphColor = UIColor.systemYellow
 
@@ -119,7 +125,8 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         line: DialogueLineDisplay,
         nextLine: DialogueLineDisplay
     ) -> CGFloat {
-        if line.isStageLine || nextLine.isStageLine {
+        // Hear sits beside the bubble; only the DEBUG mic chrome needs room above.
+        if line.isStageLine || nextLine.isStageLine || !usesSpeechRecognition {
             return super.dialogueSpacingAfterLineRow(line: line, nextLine: nextLine)
         }
         let chromeClearance = DialogueBubbleSwipeRevealContainer.accessoryChromeSize + 10
@@ -225,6 +232,7 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         previewLineIndex = nil
         completedLearnerLineIndices.removeAll()
         matchedNormalizedCount = 0
+        onDeviceCarriedText = ""
         compareTurnSnapshots.removeAll()
         compareOnDeviceText = ""
         compareWhisperText = ""
@@ -256,14 +264,19 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         ) { [weak self] _ in
             self?.presentRolePicker(animated: true)
         }
-        return UIMenu(children: [
+        var children: [UIMenuElement] = [
             makePlaybackSpeedMenu(),
             makeStageLinePauseMenu(),
-            makeSpeechRecognizerMenu(),
+        ]
+        #if DEBUG
+        children.append(makeSpeechRecognizerMenu())
+        #endif
+        children += [
             makeTokenSyncMenuAction(),
             makeTokenHighlightPreviewAction(),
             switchRole,
-        ])
+        ]
+        return UIMenu(children: children)
     }
 
     override func dialogueRefreshOverflowMenu() {
@@ -292,12 +305,37 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
                 self?.selectSpeechRecognizerBackend(backend)
             }
         }
+        let lineHint = UIAction(
+            title: "Hint With Line",
+            subtitle: "On Device only · lenient",
+            image: UIImage(systemName: "text.badge.checkmark"),
+            attributes: speechRecognizerBackend == .onDevice ? [] : [.disabled],
+            state: usesOnDeviceLineHint ? .on : .off
+        ) { [weak self] _ in
+            self?.toggleOnDeviceLineHint()
+        }
         return UIMenu(
             title: "Speech Recognition",
             image: UIImage(systemName: "waveform"),
-            options: .singleSelection,
-            children: actions
+            children: [
+                UIMenu(options: [.displayInline, .singleSelection], children: actions),
+                UIMenu(options: .displayInline, children: [lineHint]),
+            ]
         )
+    }
+
+    private var usesOnDeviceLineHint: Bool {
+        ExperimentSettings.rolePlayOnDeviceUsesLineHint
+    }
+
+    private func toggleOnDeviceLineHint() {
+        ExperimentSettings.rolePlayOnDeviceUsesLineHint.toggle()
+        dialogueRefreshOverflowMenu()
+        guard speechRecognizerBackend == .onDevice else { return }
+        onDeviceCarriedText = ""
+        teardownSpeechRecognition()
+        guard case .awaitingLearner(let index) = phase, !isPreviewingLearnerAudio else { return }
+        startListening(for: index)
     }
 
     private func selectSpeechRecognizerBackend(_ backend: RolePlaySpeechRecognizerBackend) {
@@ -305,6 +343,7 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         ExperimentSettings.rolePlaySpeechRecognizerBackend = backend
         dialogueRefreshOverflowMenu()
         compareOnDeviceText = ""
+        onDeviceCarriedText = ""
         compareWhisperText = ""
         updateCompareCard()
 
@@ -336,10 +375,12 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
                 ? .trailing
                 : .leading
         }
+        container.chromePlacement = .besideBubble
         container.leadingAccessoryActiveColor = Self.successColor
         container.trailingAccessoryActiveColor = Self.linePlayGlyphColor
+        container.trailingAccessoryCompletionColor = Self.successColor
         container.onTrailingAccessoryTap = { [weak self] in
-            self?.replayLine(at: index)
+            self?.toggleLinePlayback(at: index)
         }
     }
 
@@ -421,7 +462,12 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         !isLearnerLine(at: index)
     }
 
-    override func dialogueReservesAccessoryChromeHeight() -> Bool { true }
+    override func dialogueReservesAccessoryChromeHeight() -> Bool { usesSpeechRecognition }
+
+    override func dialoguePlaybackPhaseDidChange() {
+        updateLeadingAccessories()
+        completionSheet?.setPlayingLine(playingLineIndex)
+    }
 
     override func dialoguePlayPauseSymbolName(isPlaying: Bool) -> String {
         if isAwaitingLearner {
@@ -432,7 +478,7 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
 
     override func dialoguePlayPauseAccessibilityLabel(isPlaying: Bool) -> String {
         if isAwaitingLearner {
-            return "Skip line"
+            return usesSpeechRecognition ? "Skip line" : "Done speaking"
         }
         return super.dialoguePlayPauseAccessibilityLabel(isPlaying: isPlaying)
     }
@@ -446,6 +492,11 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
 
     // MARK: - Flow
 
+    /// Off in release: no mic, the learner reads aloud and taps the checkmark.
+    private var usesSpeechRecognition: Bool {
+        speechRecognizerBackend != .off
+    }
+
     private var isAwaitingLearner: Bool {
         if case .awaitingLearner = phase { return true }
         return false
@@ -458,6 +509,7 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         }
         completedLearnerLineIndices.removeAll()
         matchedNormalizedCount = 0
+        onDeviceCarriedText = ""
         compareTurnSnapshots.removeAll()
         compareOnDeviceText = ""
         compareWhisperText = ""
@@ -510,6 +562,7 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         pendingCloudRevealIndex = nil
         pauseLearnerListening()
         matchedNormalizedCount = 0
+        onDeviceCarriedText = ""
 
         guard dialogueDisplayLines.indices.contains(index) else {
             presentCompletion()
@@ -665,6 +718,7 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         previewLineIndex = nil
         completedLearnerLineIndices.insert(index)
         matchedNormalizedCount = 0
+        onDeviceCarriedText = ""
         pendingCheckmarkBounceIndex = index
         successHaptic.notificationOccurred(.success)
         successHaptic.prepare()
@@ -681,6 +735,32 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
                 self.pauseLearnerListening()
             }
             self.advance(to: index + 1)
+        }
+    }
+
+    /// Line whose audio is audible right now — its side button shows pause.
+    private var playingLineIndex: Int? {
+        guard dialoguePlaybackPhase == .playing else { return nil }
+        if isPreviewingLearnerAudio { return previewLineIndex }
+        if case .playingOther(let index) = phase { return index }
+        return nil
+    }
+
+    /// Side button tap: pause what's playing on this line, else play it.
+    private func toggleLinePlayback(at index: Int) {
+        guard playingLineIndex == index else {
+            if case .playingOther(let current) = phase, current == index,
+               dialoguePlaybackPhase == .paused, !isPreviewingLearnerAudio {
+                dialogueResumePlayback()
+                return
+            }
+            replayLine(at: index)
+            return
+        }
+        if isPreviewingLearnerAudio {
+            finishLearnerPreview(resumeListening: true)
+        } else {
+            dialoguePausePlayback()
         }
     }
 
@@ -713,6 +793,7 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         prewarmPlaybackSession()
         if case .awaitingLearner(let current) = phase, current == index {
             matchedNormalizedCount = 0
+            onDeviceCarriedText = ""
         }
         updateLeadingAccessories()
         playLearnerPreview(at: index)
@@ -893,29 +974,39 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         }()
         let isListening = isSpeechRecognitionRunning && !isPreviewingLearnerAudio
 
+        let playingIndex = playingLineIndex
+
         forEachBubbleSwipeContainer { index, container in
-            let bounce = pendingCheckmarkBounceIndex == index
-            if awaitingIndex == index {
-                if completedLearnerLineIndices.contains(index) {
-                    container.setLeadingAccessory(.checkmark, animated: true, bounce: bounce)
-                } else {
-                    container.setLeadingAccessory(
-                        isPreviewingLearnerAudio || whisperListenHalted
-                            ? .microphoneOff
-                            : .microphone,
-                        animated: true
-                    )
-                    container.setLeadingAccessoryPulse(isListening)
-                }
+            let isCompleted = completedLearnerLineIndices.contains(index)
+            // Above-bubble chrome is now only the DEBUG listening mic; the
+            // completion check lives in the side button.
+            if awaitingIndex == index, !isCompleted, usesSpeechRecognition {
+                container.setLeadingAccessory(
+                    isPreviewingLearnerAudio || whisperListenHalted
+                        ? .microphoneOff
+                        : .microphone,
+                    animated: true
+                )
+                container.setLeadingAccessoryPulse(isListening)
             } else {
                 container.setLeadingAccessory(.hidden, animated: true)
             }
 
-            // Hear stays on revealed rows so the user can replay a line; hide
-            // only after that learner turn is done.
-            let showHear = index <= highestRevealedIndex
-                && !completedLearnerLineIndices.contains(index)
-            container.setTrailingAccessory(showHear ? .speaker : .hidden, animated: true)
+            // Side button: play / pause on revealed lines; a finished learner
+            // line morphs into the blue check.
+            let trailing: DialogueBubbleSwipeRevealContainer.TrailingAccessory
+            if isCompleted {
+                trailing = .checkmark
+            } else if index <= highestRevealedIndex {
+                trailing = playingIndex == index ? .pause : .play
+            } else {
+                trailing = .hidden
+            }
+            container.setTrailingAccessory(
+                trailing,
+                animated: true,
+                bounce: pendingCheckmarkBounceIndex == index
+            )
         }
         updateSpeakingMeter()
     }
@@ -923,18 +1014,23 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
     private func configureSpeakingMeter() {
         speakingMeter.isUserInteractionEnabled = false
         speakingMeter.listeningBarColor = Self.successColor
-        dialogueInstallTransportCenterView(speakingMeter)
-        let preferredWidth = speakingMeter.widthAnchor.constraint(
-            equalTo: nestedPagingTransportBarView.widthAnchor,
-            multiplier: SpeakingMeterPillView.preferredWidthMultiplier
-        )
-        preferredWidth.priority = .defaultHigh
-        NSLayoutConstraint.activate([
-            speakingMeter.widthAnchor.constraint(
-                lessThanOrEqualToConstant: SpeakingMeterPillView.maxWidth
-            ),
-            preferredWidth,
-        ])
+        speakingMeter.glowsWhileListening = true
+        speakingMeter.reactsToVoice = true
+        turnPrompt.tintedTextColor = Self.successColor
+        for centerView in [speakingMeter, turnPrompt] as [UIView] {
+            dialogueInstallTransportCenterView(centerView)
+            let preferredWidth = centerView.widthAnchor.constraint(
+                equalTo: nestedPagingTransportBarView.widthAnchor,
+                multiplier: SpeakingMeterPillView.preferredWidthMultiplier
+            )
+            preferredWidth.priority = .defaultHigh
+            NSLayoutConstraint.activate([
+                centerView.widthAnchor.constraint(
+                    lessThanOrEqualToConstant: SpeakingMeterPillView.maxWidth
+                ),
+                preferredWidth,
+            ])
+        }
 
         whisperSpeechToText.onInputLevel = { [weak self] level in
             self?.handleSpeakingMeterLevel(level)
@@ -956,7 +1052,17 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         return true
     }
 
+    /// Without recognition, the "Your Turn" pill stands in for the meter.
+    private var shouldShowTurnPrompt: Bool {
+        guard !usesSpeechRecognition else { return false }
+        guard case .awaitingLearner(let index) = phase else { return false }
+        guard !completedLearnerLineIndices.contains(index) else { return false }
+        return !isPreviewingLearnerAudio && !isPresentingSheet
+    }
+
     private func updateSpeakingMeter() {
+        speakingMeter.isHidden = !usesSpeechRecognition
+        turnPrompt.setShowingPrompt(shouldShowTurnPrompt, animated: true)
         if shouldDriveSpeakingMeter {
             speakingMeter.setMode(.listening)
         } else {
@@ -1127,6 +1233,10 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         guard case .awaitingLearner(let current) = phase, current == index else { return }
         guard !completedLearnerLineIndices.contains(index) else { return }
         guard dialogueDisplayLines.indices.contains(index) else { return }
+        guard usesSpeechRecognition else {
+            updateLeadingAccessories()
+            return
+        }
 
         let generation = sttGeneration + 1
         sttGeneration = generation
@@ -1166,7 +1276,7 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         // Only hint the current line. Neighboring lines make ASR paste the
         // rest of the transcript (or the next line) after a short pause.
         // GPT Whisper / compare sessions do not accept contextual prompts.
-        let contextual = backend == .onDevice ? [target] : []
+        let contextual = backend == .onDevice && usesOnDeviceLineHint ? [target] : []
         compareOnDeviceText = ""
         compareWhisperText = ""
         compareTargetJapanese = target
@@ -1180,6 +1290,8 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
 
         do {
             switch backend {
+            case .off:
+                return
             case .onDevice:
                 if whisperSpeechToText.isRunning { whisperSpeechToText.stop() }
                 try startOnDeviceCapture(
@@ -1315,6 +1427,13 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         guard dialogueDisplayLines.indices.contains(lineIndex) else { return }
 
         let target = dialogueDisplayLines[lineIndex].japanese
+        var text = text
+        if source == .onDevice {
+            text = onDeviceCarriedText + text
+            if isFinal {
+                onDeviceCarriedText = text
+            }
+        }
         if speechRecognizerBackend == .compare {
             switch source {
             case .onDevice: compareOnDeviceText = text
@@ -1371,6 +1490,7 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         let jumpLimit = isFinal ? max(2, targetCount / 8) : max(4, targetCount / 6)
         let looksLikePromptFill =
             source == .onDevice
+            && usesOnDeviceLineHint
             && previous > 0
             && !nearEnd
             && jump > jumpLimit
@@ -1472,7 +1592,18 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
                 + whisperSpeechToText.sessionUsage.debugLine(prefix: "Session")
             view.bringSubviewToFront(debugStack)
         }
-        rolePlaySheet?.updateUsageText(completionUsageText())
+        recognizerDetailsSheet?.updateUsage(
+            costSummary: completionCostSummary(),
+            usageText: completionUsageText()
+        )
+    }
+
+    private func completionCostSummary() -> String? {
+        guard usesSpeechRecognition else { return nil }
+        guard speechRecognizerBackend.usesWhisper else {
+            return "Spent $0.00 · \(speechRecognizerBackend.title)"
+        }
+        return whisperSpeechToText.sessionUsage.spendSummary(engine: speechRecognizerBackend.title)
     }
 
     private func completionUsageText() -> String? {
@@ -1609,13 +1740,75 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
             dialogueMarkScenarioCompleted()
         }
         ExperimentFeedbackSound.playLessonComplete()
-        presentRolePlaySheet(
-            .complete(
-                usageText: completionUsageText(),
-                compareSnapshots: compareTurnSnapshots
-            ),
-            animated: true
-        )
+        presentCompletionSheet()
+    }
+
+    private func presentCompletionSheet() {
+        guard let recap = makeRecap() else { return }
+        if let presented = presentedViewController {
+            presented.dismiss(animated: true) { [weak self] in
+                self?.presentCompletionSheet()
+            }
+            return
+        }
+        isPresentingSheet = true
+        dialogueSetTransportBarHidden(true)
+        updateCompareCard()
+        updateSpeakingMeter()
+
+        let completion = RolePlayCompletionViewController(recap: recap)
+        completion.onPlayAs = { [weak self] speaker in
+            self?.selectLearnerSpeaker(speaker)
+        }
+        completion.onSwitchRoles = { [weak self] in
+            self?.presentRolePicker(animated: true)
+        }
+        completion.onReplay = { [weak self] in
+            self?.beginRolePlay()
+        }
+        completion.onClose = { [weak self] in
+            self?.dismissRolePlaySheet(animated: true) {
+                self?.dismissRolePlay()
+            }
+        }
+        completion.onDismissed = { [weak self, weak completion] in
+            guard let self, self.completionSheet === completion else { return }
+            self.completionSheet = nil
+            self.handleSheetDismissed()
+        }
+        completion.onToggleLinePlayback = { [weak self] index in
+            self?.toggleLinePlayback(at: index)
+        }
+        completion.onSelectPattern = { [weak self, weak completion] pattern in
+            guard let completion else { return }
+            self?.rolePlayRecapSource?.presentPattern(pattern, completion)
+        }
+        #if DEBUG
+        if usesSpeechRecognition {
+            completion.onShowRecognizerDetails = { [weak self, weak completion] in
+                guard let self, let completion else { return }
+                self.presentRecognizerDetails(from: completion)
+            }
+        }
+        #endif
+        completion.modalPresentationStyle = .pageSheet
+        completionSheet = completion
+        present(completion, animated: true)
+    }
+
+    private func presentRecognizerDetails(from presenter: UIViewController) {
+        let details = DialogueRolePlaySheetViewController(mode: .recognizerDetails(
+            costSummary: completionCostSummary(),
+            usageText: completionUsageText(),
+            compareSnapshots: compareTurnSnapshots
+        ))
+        details.onDone = { [weak details] in
+            details?.dismiss(animated: true)
+        }
+        let nav = UINavigationController(rootViewController: details)
+        nav.modalPresentationStyle = .pageSheet
+        recognizerDetailsSheet = details
+        presenter.present(nav, animated: true)
     }
 
     private func presentRolePlaySheet(
@@ -1648,12 +1841,6 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         sheet.onSelectSpeaker = { [weak self] speaker in
             self?.selectLearnerSpeaker(speaker)
         }
-        sheet.onReplay = { [weak self] in
-            self?.beginRolePlay()
-        }
-        sheet.onSwitchRoles = { [weak self] in
-            self?.presentRolePicker(animated: true)
-        }
         sheet.onDone = { [weak self] in
             self?.dismissRolePlaySheet(animated: true) {
                 self?.dismissRolePlay()
@@ -1678,7 +1865,7 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
             case .pickRole:
                 presentation.detents = [.medium()]
                 presentation.prefersScrollingExpandsWhenScrolledToEdge = false
-            case .complete:
+            case .recognizerDetails:
                 presentation.detents = [.medium(), .large()]
                 presentation.prefersScrollingExpandsWhenScrolledToEdge = true
             }
@@ -1718,6 +1905,53 @@ final class DialogueRolePlayViewController: DialogueExperimentViewController {
         dialogueSetTransportBarHidden(false)
         updateCompareCard()
         updateSpeakingMeter()
+    }
+
+    // MARK: - Recap
+
+    private func makeRecap() -> RolePlayRecap? {
+        guard let learner = learnerSpeaker else { return nil }
+        let source = rolePlayRecapSource
+        let scenePatternRefs = source?.highlights.grammarPatterns ?? []
+
+        func recapPattern(_ ref: DialogueGrammarPatternRef) -> RolePlayRecap.Pattern {
+            let catalog = source?.teachingPattern(ref)
+            let meaning = catalog?.shortMeaning ?? catalog?.description
+            return RolePlayRecap.Pattern(
+                ref: ref,
+                label: ref.label,
+                meaning: meaning?.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        }
+
+        var lines: [RolePlayRecap.Line] = []
+        for (index, line) in dialogueDisplayLines.enumerated()
+        where line.isSpokenLine && line.speaker == learner {
+            let spoken = spokenIndex(forDisplayIndex: index)
+            let refs = scenePatternRefs.filter { ref in
+                guard let spoken else { return false }
+                return ref.sourceSpokenIndices?.contains(spoken) == true
+            }
+            let japanese = line.japanese.trimmingCharacters(in: .whitespacesAndNewlines)
+            let highlight = refs.lazy.compactMap {
+                RolePlayRecap.highlightRange(ofPatternLabel: $0.label, in: japanese)
+            }.first
+            lines.append(RolePlayRecap.Line(
+                displayIndex: index,
+                japanese: japanese,
+                english: line.english,
+                patterns: refs.map(recapPattern),
+                highlightRange: highlight
+            ))
+        }
+
+        let speakers = uniqueSpeakers()
+        return RolePlayRecap(
+            learnerSpeaker: learner,
+            nextSpeaker: speakers.count == 2 ? speakers.first(where: { $0 != learner }) : nil,
+            spokenLineCount: lines.count,
+            lines: RolePlayRecap.featuredLines(from: lines)
+        )
     }
 
     private func selectLearnerSpeaker(_ speaker: String) {

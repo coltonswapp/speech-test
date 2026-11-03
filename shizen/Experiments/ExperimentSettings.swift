@@ -30,12 +30,16 @@ enum RepeatAfterMeReplyLimit: String, CaseIterable {
 }
 
 enum RolePlaySpeechRecognizerBackend: String, CaseIterable {
+    /// No mic: the learner says the line aloud and taps the checkmark.
+    /// The only mode outside DEBUG builds.
+    case off
     case onDevice
     case gptRealtimeWhisper
     case compare
 
     var title: String {
         switch self {
+        case .off: return "Off · Tap to Continue"
         case .onDevice: return "On Device"
         case .gptRealtimeWhisper: return "GPT Whisper"
         case .compare: return "Compare Both"
@@ -44,6 +48,7 @@ enum RolePlaySpeechRecognizerBackend: String, CaseIterable {
 
     var symbolName: String {
         switch self {
+        case .off: return "hand.tap"
         case .onDevice: return "iphone"
         case .gptRealtimeWhisper: return "cloud"
         case .compare: return "rectangle.split.2x1"
@@ -181,6 +186,7 @@ enum ExperimentSettings {
     private static let repeatAfterMeReplyLimitKey = "ExperimentRepeatAfterMeReplyLimit"
     private static let repeatAfterMeHarshModeKey = "ExperimentRepeatAfterMeHarshMode"
     private static let rolePlaySpeechRecognizerBackendKey = "ExperimentRolePlaySpeechRecognizerBackend"
+    private static let rolePlayOnDeviceUsesLineHintKey = "ExperimentRolePlayOnDeviceUsesLineHint"
     private static let dialogueContentBubbleStyleKey = "ExperimentDialogueContentBubbleStyle"
     private static let dialogueContentSecondPassRateKey = "ExperimentDialogueContentSecondPassRate"
     private static let dialogueContentShowsStageLinesKey = "ExperimentDialogueContentShowsStageLines"
@@ -199,6 +205,10 @@ enum ExperimentSettings {
     private static let spanHighlightBandHeightKey = "ExperimentSpanHighlightBandHeight"
     private static let spanHighlightCornerRadiusKey = "ExperimentSpanHighlightCornerRadius"
     private static let kanjiDecompositionFormatKey = "ExperimentKanjiDecompositionFormat"
+    private static let slideHeroStyleKey = "ExperimentSlideHeroStyle"
+    private static let slideHeroGlowColorKey = "ExperimentSlideHeroGlowColor"
+    private static let wordSlideshowGlowModeKey = "ExperimentWordSlideshowGlowMode"
+    private static let wordSlideshowMeaningColorKey = "ExperimentWordSlideshowMeaningColor"
     private static let explosionEmojisKey = "ExperimentExplosionEmojis"
     private static let llmServerUsageEnabledKey = "ExperimentLLMServerUsageEnabled"
 
@@ -262,14 +272,26 @@ enum ExperimentSettings {
     }
 
     /// Role Play speech recognition: Apple on-device ASR or OpenAI gpt-realtime-whisper.
+    /// Speech recognition in Role Play is DEBUG-only; release always taps through.
     static var rolePlaySpeechRecognizerBackend: RolePlaySpeechRecognizerBackend {
         get {
+            #if DEBUG
             guard let raw = UserDefaults.standard.string(forKey: rolePlaySpeechRecognizerBackendKey),
                   let value = RolePlaySpeechRecognizerBackend(rawValue: raw)
             else { return .onDevice }
             return value
+            #else
+            return .off
+            #endif
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: rolePlaySpeechRecognizerBackendKey) }
+    }
+
+    /// Hands Apple Speech the target line as a contextual string. Off by
+    /// default: the hint makes it return the line for near-miss audio.
+    static var rolePlayOnDeviceUsesLineHint: Bool {
+        get { UserDefaults.standard.bool(forKey: rolePlayOnDeviceUsesLineHintKey) }
+        set { UserDefaults.standard.set(newValue, forKey: rolePlayOnDeviceUsesLineHintKey) }
     }
 
     /// Dialogue Replay chrome: glass bubbles or Messages-style colored tails.
@@ -420,6 +442,46 @@ enum ExperimentSettings {
             return value
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: kanjiDecompositionFormatKey) }
+    }
+
+    /// Plate behind the main subject on every slideshow card.
+    static var slideHeroStyle: SlideHeroStyle {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: slideHeroStyleKey),
+                  let value = SlideHeroStyle(rawValue: raw)
+            else { return .solid }
+            return value
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: slideHeroStyleKey) }
+    }
+
+    /// Underglow tint behind glass slideshow hero cards.
+    static var slideHeroGlowColor: DialogueBubbleUnderglowColor {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: slideHeroGlowColorKey),
+                  let value = DialogueBubbleUnderglowColor(storageKey: raw)
+            else { return .yellow }
+            return value
+        }
+        set { UserDefaults.standard.set(newValue.storageKey, forKey: slideHeroGlowColorKey) }
+    }
+
+    /// Word slideshow card glow: shuffled per slideshow, or one color.
+    static var wordSlideshowGlowMode: WordSlideshowGlowMode {
+        get {
+            UserDefaults.standard.string(forKey: wordSlideshowGlowModeKey)
+                .map(WordSlideshowGlowMode.init(storageKey:)) ?? .shuffled
+        }
+        set { UserDefaults.standard.set(newValue.storageKey, forKey: wordSlideshowGlowModeKey) }
+    }
+
+    /// Word slideshow meaning-badge text color.
+    static var wordSlideshowMeaningColor: WordSlideshowMeaningColor {
+        get {
+            UserDefaults.standard.string(forKey: wordSlideshowMeaningColorKey)
+                .map(WordSlideshowMeaningColor.init(storageKey:)) ?? .standard
+        }
+        set { UserDefaults.standard.set(newValue.storageKey, forKey: wordSlideshowMeaningColorKey) }
     }
 
     /// Wash behind the subject kanji on Kanji Spotlight example slides.

@@ -153,10 +153,20 @@ enum GeminiCommonUses {
 /// Feature `span_breakdown`.
 enum GeminiSpanBreakdown {
 
+    /// One content word inside the span. `lemma` is the dictionary form (探そう → 探す).
+    struct Component: Equatable {
+        let surface: String
+        let lemma: String
+        let reading: String
+        let gloss: String
+    }
+
     struct Result: Equatable {
         let inThisSentence: String
         let otherUses: [String]
         let partsNote: String
+        /// Empty when an older response has no structured breakdown. The card keeps the inline parts line.
+        let components: [Component]
     }
 
     struct Explanation {
@@ -222,13 +232,33 @@ enum GeminiSpanBreakdown {
         return explanation
     }
 
+    private struct ComponentPayload: Decodable {
+        let surface: String
+        let lemma: String
+        let reading: String
+        let gloss: String
+
+        enum CodingKeys: String, CodingKey {
+            case surface, lemma, reading, gloss
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            surface = try container.decodeIfPresent(String.self, forKey: .surface) ?? ""
+            lemma = try container.decodeIfPresent(String.self, forKey: .lemma) ?? ""
+            reading = try container.decodeIfPresent(String.self, forKey: .reading) ?? ""
+            gloss = try container.decodeIfPresent(String.self, forKey: .gloss) ?? ""
+        }
+    }
+
     private struct Payload: Decodable {
         let inThisSentence: String
         let otherUses: [String]
         let partsNote: String
+        let components: [ComponentPayload]
 
         enum CodingKeys: String, CodingKey {
-            case inThisSentence, otherUses, partsNote
+            case inThisSentence, otherUses, partsNote, components
         }
 
         init(from decoder: Decoder) throws {
@@ -236,6 +266,8 @@ enum GeminiSpanBreakdown {
             inThisSentence = try container.decode(String.self, forKey: .inThisSentence)
             otherUses = try container.decodeIfPresent([String].self, forKey: .otherUses) ?? []
             partsNote = try container.decodeIfPresent(String.self, forKey: .partsNote) ?? ""
+            // A missing or malformed array must not fail the rest of the breakdown.
+            components = (try? container.decode([ComponentPayload].self, forKey: .components)) ?? []
         }
     }
 
@@ -252,12 +284,57 @@ enum GeminiSpanBreakdown {
         }
         var note = glossWithoutVerbLabel(payload.partsNote.trimmingCharacters(in: .whitespacesAndNewlines))
         if note == here || note == surface || note.count > 160 { note = "" }
-        return Result(inThisSentence: here, otherUses: others, partsNote: note)
+        return Result(
+            inThisSentence: here,
+            otherUses: others,
+            partsNote: note,
+            components: sanitizedComponents(payload.components, span: surface)
+        )
+    }
+
+    /// Particles and auxiliaries. Exact match only, so 名前 stays and な does not.
+    private static let skippedComponentSurfaces: Set<String> = [
+        "を", "が", "に", "へ", "で", "と", "は", "も", "の", "か", "や", "ね", "よ", "わ", "ぞ", "さ", "な",
+        "から", "まで", "より", "って", "て", "ば", "たら", "なら",
+        "です", "ます", "ました", "ません", "でした", "だった", "だ",
+        "た", "ない", "なかった", "う", "よう",
+    ]
+
+    private static func sanitizedComponents(_ payloads: [ComponentPayload], span: String) -> [Component] {
+        var items: [Component] = []
+        var seen = Set<String>()
+        for payload in payloads {
+            let surface = payload.surface.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lemmaRaw = payload.lemma.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lemma = lemmaRaw.isEmpty ? surface : lemmaRaw
+            let written = surface.isEmpty ? lemma : surface
+            let gloss = glossWithoutVerbLabel(payload.gloss.trimmingCharacters(in: .whitespacesAndNewlines))
+                .trimmingCharacters(in: CharacterSet(charactersIn: ".。"))
+            guard !written.isEmpty, !lemma.isEmpty, !gloss.isEmpty else { continue }
+            guard written.count <= 40, lemma.count <= 40 else { continue }
+            if skippedComponentSurfaces.contains(written) || skippedComponentSurfaces.contains(lemma) { continue }
+            guard seen.insert(lemma).inserted else { continue }
+            let reading = payload.reading.trimmingCharacters(in: .whitespacesAndNewlines)
+            items.append(Component(surface: written, lemma: lemma, reading: reading, gloss: gloss))
+            if items.count == 12 { break }
+        }
+        let pieces = items.filter { item in
+            // Drop a single character that is only a piece of another component (学 inside 学食).
+            let keys = [item.surface, item.lemma].filter { $0.count == 1 }
+            guard !keys.isEmpty else { return true }
+            return !items.contains { other in
+                guard other.lemma != item.lemma else { return false }
+                let hosts = [other.surface, other.lemma]
+                return keys.contains { key in hosts.contains { $0.contains(key) } }
+            }
+        }
+        let words = pieces.filter { $0.surface != span && $0.lemma != span }
+        return Array((words.isEmpty ? pieces : words).prefix(8))
     }
 
     private static func cacheKey(for request: Request) -> String {
         [
-            "gemini-span-breakdown-v5-gateway",
+            "gemini-span-breakdown-v7-gateway",
             request.sentence,
             request.surface,
         ].joined(separator: "\u{1F}")

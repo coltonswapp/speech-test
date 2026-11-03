@@ -15,6 +15,7 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
     private let contentStack = UIStackView()
     private let dailyDialogueCard = DailyDialogueCardView()
     private let decksStack = UIStackView()
+    private let stacksSubtitleLabel = UILabel()
     private let progressStore = DialogueProgressStore.shared
 
     private static let horizontalInset: CGFloat = 16
@@ -78,13 +79,10 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
     }
 
     private func configureStacksSection() {
-        let header = makeSectionHeader(
-            title: "Stacks",
-            subtitle: "Tap a folder to see its words"
-        )
+        let header = makeSectionHeader(title: "Stacks", subtitleLabel: stacksSubtitleLabel)
 
         decksStack.axis = .vertical
-        decksStack.spacing = 14
+        decksStack.spacing = 10
         decksStack.translatesAutoresizingMaskIntoConstraints = false
 
         let sectionStack = UIStackView(arrangedSubviews: [header, decksStack])
@@ -111,23 +109,17 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
         ])
     }
 
-    private func makeSectionHeader(title: String, subtitle: String?) -> UIStackView {
+    private func makeSectionHeader(title: String, subtitleLabel: UILabel) -> UIStackView {
         let titleLabel = UILabel()
         titleLabel.text = title
         titleLabel.font = .systemFont(ofSize: 20, weight: .bold)
         titleLabel.textColor = .label
 
-        var arrangedSubviews: [UIView] = [titleLabel]
-        if let subtitle, !subtitle.isEmpty {
-            let subtitleLabel = UILabel()
-            subtitleLabel.text = subtitle
-            subtitleLabel.font = .preferredFont(forTextStyle: .subheadline)
-            subtitleLabel.textColor = .secondaryLabel
-            subtitleLabel.numberOfLines = 0
-            arrangedSubviews.append(subtitleLabel)
-        }
+        subtitleLabel.font = .preferredFont(forTextStyle: .subheadline)
+        subtitleLabel.textColor = .secondaryLabel
+        subtitleLabel.numberOfLines = 0
 
-        let stack = UIStackView(arrangedSubviews: arrangedSubviews)
+        let stack = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
         stack.axis = .vertical
         stack.spacing = 4
         // Match the leading edge of content inside the Daily Dialogue card (18pt inset).
@@ -160,7 +152,15 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
             view.removeFromSuperview()
         }
 
-        for folder in SavedVocabularyStore.shared.folders() {
+        let folders = SavedVocabularyStore.shared.folders()
+        let totalWords = folders.reduce(0) { $0 + $1.items.count }
+        switch totalWords {
+        case 0: stacksSubtitleLabel.text = "No words saved yet"
+        case 1: stacksSubtitleLabel.text = "1 word saved"
+        default: stacksSubtitleLabel.text = "\(totalWords) words saved"
+        }
+
+        for folder in folders {
             let preview = Self.preview(for: folder)
             let card = PracticeDeckPreviewCardView()
             card.configure(with: preview)
@@ -172,12 +172,14 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
     }
 
     private static func preview(for folder: SavedVocabularyFolder) -> PracticeDeckPreview {
-        PracticeDeckPreview(
+        // Front card shows the newest word; the next few trail under the title.
+        let newestFirst = folder.items.sorted { $0.createdAt > $1.createdAt }
+        return PracticeDeckPreview(
             id: folder.id,
             title: folder.name,
             subtitle: folder.subtitle,
             sampleJapanese: folder.sampleJapanese,
-            accentLabel: folder.id == SavedVocabularyStore.inboxID ? "Inbox" : "Folder"
+            recentWords: newestFirst.dropFirst().prefix(3).map(\.surface)
         )
     }
 
@@ -188,6 +190,7 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
             collectionID: DialogueScenarioCollectionCatalog.trainStationID,
             prefersNextIncompleteScenario: true
         )
+        dialogue.analytics.source = "home"
         navigationController?.pushViewController(dialogue, animated: true)
     }
 
@@ -206,7 +209,7 @@ private struct PracticeDeckPreview {
     let title: String
     let subtitle: String
     let sampleJapanese: String
-    let accentLabel: String
+    let recentWords: [String]
 }
 
 // MARK: - Deck preview card
@@ -219,10 +222,9 @@ private final class PracticeDeckPreviewCardView: UIControl {
 
     private let cardView = UIView()
     private let miniStack = PracticeMiniFlashcardStackView()
-    private let badgeLabel = UILabel()
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
-    private let chevronView = UIImageView()
+    private let recentWordsLabel = UILabel()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -234,9 +236,10 @@ private final class PracticeDeckPreviewCardView: UIControl {
     }
 
     func configure(with deck: PracticeDeckPreview) {
-        badgeLabel.text = deck.accentLabel.uppercased()
         titleLabel.text = deck.title
         subtitleLabel.text = deck.subtitle
+        recentWordsLabel.text = deck.recentWords.joined(separator: " · ")
+        recentWordsLabel.isHidden = deck.recentWords.isEmpty
         miniStack.configure(frontJapanese: deck.sampleJapanese)
     }
 
@@ -244,14 +247,10 @@ private final class PracticeDeckPreviewCardView: UIControl {
         cardView.translatesAutoresizingMaskIntoConstraints = false
         cardView.isUserInteractionEnabled = false
         cardView.backgroundColor = ExperimentPalette.cardSurface
-        cardView.layer.cornerRadius = 22
+        cardView.layer.cornerRadius = 18
         cardView.layer.cornerCurve = .continuous
         cardView.layer.borderWidth = ExperimentCardStroke.normalWidth
         cardView.layer.borderColor = ExperimentPalette.cardBorder.cgColor
-
-        badgeLabel.font = .systemFont(ofSize: 11, weight: .bold)
-        badgeLabel.textColor = .tertiaryLabel
-        badgeLabel.translatesAutoresizingMaskIntoConstraints = false
 
         titleLabel.font = .systemFont(ofSize: 17, weight: .bold)
         titleLabel.textColor = .label
@@ -261,27 +260,26 @@ private final class PracticeDeckPreviewCardView: UIControl {
         subtitleLabel.textColor = .secondaryLabel
         subtitleLabel.numberOfLines = 2
 
-        let textColumn = UIStackView(arrangedSubviews: [badgeLabel, titleLabel, subtitleLabel])
+        recentWordsLabel.font = .systemFont(ofSize: 14, weight: .regular)
+        recentWordsLabel.textColor = .tertiaryLabel
+        recentWordsLabel.numberOfLines = 1
+        recentWordsLabel.lineBreakMode = .byTruncatingTail
+
+        let textColumn = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel, recentWordsLabel])
         textColumn.axis = .vertical
-        textColumn.spacing = 4
+        textColumn.spacing = 2
         textColumn.alignment = .leading
-        textColumn.setCustomSpacing(2, after: badgeLabel)
+        textColumn.setCustomSpacing(6, after: subtitleLabel)
         textColumn.translatesAutoresizingMaskIntoConstraints = false
         textColumn.isUserInteractionEnabled = false
-
-        chevronView.translatesAutoresizingMaskIntoConstraints = false
-        chevronView.image = UIImage(systemName: "chevron.right")
-        chevronView.tintColor = .tertiaryLabel
-        chevronView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
-        chevronView.setContentHuggingPriority(.required, for: .horizontal)
 
         miniStack.translatesAutoresizingMaskIntoConstraints = false
         miniStack.isUserInteractionEnabled = false
 
-        let row = UIStackView(arrangedSubviews: [miniStack, textColumn, chevronView])
+        let row = UIStackView(arrangedSubviews: [miniStack, textColumn])
         row.axis = .horizontal
         row.alignment = .center
-        row.spacing = 16
+        row.spacing = 14
         row.translatesAutoresizingMaskIntoConstraints = false
         row.isUserInteractionEnabled = false
 
@@ -294,13 +292,14 @@ private final class PracticeDeckPreviewCardView: UIControl {
             cardView.trailingAnchor.constraint(equalTo: trailingAnchor),
             cardView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            row.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 16),
-            row.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 16),
-            row.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -16),
-            row.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -16),
+            // 18pt leading matches the Stacks header and Daily Dialogue card content.
+            row.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 12),
+            row.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 18),
+            row.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -18),
+            row.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -12),
 
-            miniStack.widthAnchor.constraint(equalToConstant: 88),
-            miniStack.heightAnchor.constraint(equalToConstant: 96),
+            miniStack.widthAnchor.constraint(equalToConstant: 76),
+            miniStack.heightAnchor.constraint(equalToConstant: 76),
         ])
 
         addTarget(self, action: #selector(handleTap), for: .touchUpInside)
@@ -332,8 +331,8 @@ private final class PracticeDeckPreviewCardView: UIControl {
 
 // MARK: - Mini flashcard stack
 
-/// Static 3-card stack that echoes `FlashcardStackView` geometry (scale + y-offset
-/// + slight tilt on back cards) for home previews.
+/// Static 3-card fan for home previews: back cards peek out left and right with
+/// a slight tilt so the deck reads as a stack at a glance.
 private final class PracticeMiniFlashcardStackView: UIView {
 
     private let backCard = UIView()
@@ -341,9 +340,11 @@ private final class PracticeMiniFlashcardStackView: UIView {
     private let frontCard = UIView()
     private let japaneseLabel = UILabel()
 
-    private static let cardCornerRadius: CGFloat = 12
-    private static let scaleRatio: CGFloat = 0.92
-    private static let verticalOffset: CGFloat = 8
+    private static let cardSize = CGSize(width: 56, height: 64)
+    private static let cardCornerRadius: CGFloat = 10
+    private static let fanOffset: CGFloat = 6
+    /// Width available to the front label (card width minus 5pt each side).
+    private static let labelWidth: CGFloat = 46
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -356,6 +357,22 @@ private final class PracticeMiniFlashcardStackView: UIView {
 
     func configure(frontJapanese: String) {
         japaneseLabel.text = frontJapanese
+        // Single words stay big; longer phrases drop size and wrap to two lines
+        // instead of truncating after a couple of characters.
+        switch frontJapanese.count {
+        case ...2:
+            japaneseLabel.font = .systemFont(ofSize: 22, weight: .semibold)
+            japaneseLabel.numberOfLines = 1
+            japaneseLabel.adjustsFontSizeToFitWidth = true
+        case 3:
+            japaneseLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+            japaneseLabel.numberOfLines = 1
+            japaneseLabel.adjustsFontSizeToFitWidth = true
+        default:
+            japaneseLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+            japaneseLabel.numberOfLines = 2
+            japaneseLabel.adjustsFontSizeToFitWidth = false
+        }
     }
 
     private func configure() {
@@ -364,38 +381,32 @@ private final class PracticeMiniFlashcardStackView: UIView {
 
         [backCard, midCard, frontCard].forEach { card in
             card.translatesAutoresizingMaskIntoConstraints = false
-            card.backgroundColor = ExperimentPalette.cardSurface
             card.layer.cornerRadius = Self.cardCornerRadius
             card.layer.cornerCurve = .continuous
             card.layer.borderWidth = ExperimentCardStroke.normalWidth
-            card.layer.borderColor = ExperimentPalette.cardBorder.cgColor
             card.layer.shadowColor = UIColor.black.cgColor
-            card.layer.shadowOpacity = 0.1
-            card.layer.shadowRadius = 4
-            card.layer.shadowOffset = CGSize(width: 0, height: 2)
+            card.layer.shadowRadius = 3
+            card.layer.shadowOffset = CGSize(width: 0, height: 1)
             addSubview(card)
         }
+        applyColors()
 
         // Draw back → mid → front.
         sendSubviewToBack(backCard)
         bringSubviewToFront(frontCard)
 
         japaneseLabel.translatesAutoresizingMaskIntoConstraints = false
-        japaneseLabel.font = .systemFont(ofSize: 28, weight: .semibold)
         japaneseLabel.textColor = .label
         japaneseLabel.textAlignment = .center
-        japaneseLabel.adjustsFontSizeToFitWidth = true
-        japaneseLabel.minimumScaleFactor = 0.5
+        japaneseLabel.lineBreakMode = .byTruncatingTail
+        japaneseLabel.minimumScaleFactor = 0.6
         frontCard.addSubview(japaneseLabel)
-
-        let cardWidth: CGFloat = 72
-        let cardHeight: CGFloat = 80
 
         NSLayoutConstraint.activate([
             frontCard.centerXAnchor.constraint(equalTo: centerXAnchor),
-            frontCard.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -4),
-            frontCard.widthAnchor.constraint(equalToConstant: cardWidth),
-            frontCard.heightAnchor.constraint(equalToConstant: cardHeight),
+            frontCard.centerYAnchor.constraint(equalTo: centerYAnchor),
+            frontCard.widthAnchor.constraint(equalToConstant: Self.cardSize.width),
+            frontCard.heightAnchor.constraint(equalToConstant: Self.cardSize.height),
 
             midCard.centerXAnchor.constraint(equalTo: frontCard.centerXAnchor),
             midCard.centerYAnchor.constraint(equalTo: frontCard.centerYAnchor),
@@ -407,8 +418,8 @@ private final class PracticeMiniFlashcardStackView: UIView {
             backCard.widthAnchor.constraint(equalTo: frontCard.widthAnchor),
             backCard.heightAnchor.constraint(equalTo: frontCard.heightAnchor),
 
-            japaneseLabel.leadingAnchor.constraint(equalTo: frontCard.leadingAnchor, constant: 6),
-            japaneseLabel.trailingAnchor.constraint(equalTo: frontCard.trailingAnchor, constant: -6),
+            japaneseLabel.centerXAnchor.constraint(equalTo: frontCard.centerXAnchor),
+            japaneseLabel.widthAnchor.constraint(equalToConstant: Self.labelWidth),
             japaneseLabel.centerYAnchor.constraint(equalTo: frontCard.centerYAnchor),
         ])
 
@@ -416,22 +427,25 @@ private final class PracticeMiniFlashcardStackView: UIView {
     }
 
     private func applyStackTransforms() {
-        midCard.transform = CGAffineTransform(translationX: 0, y: Self.verticalOffset)
-            .scaledBy(x: Self.scaleRatio, y: Self.scaleRatio)
-            .rotated(by: 4 * .pi / 180)
-        backCard.transform = CGAffineTransform(translationX: 0, y: Self.verticalOffset * 2)
-            .scaledBy(x: pow(Self.scaleRatio, 2), y: pow(Self.scaleRatio, 2))
-            .rotated(by: -5.5 * .pi / 180)
+        midCard.transform = CGAffineTransform(translationX: Self.fanOffset, y: 1)
+            .rotated(by: 6 * .pi / 180)
+        backCard.transform = CGAffineTransform(translationX: -Self.fanOffset, y: 2)
+            .rotated(by: -7 * .pi / 180)
+    }
+
+    private func applyColors() {
+        let isDark = traitCollection.userInterfaceStyle == .dark
+        [backCard, midCard, frontCard].forEach {
+            $0.backgroundColor = ExperimentPalette.cardSurface
+            $0.layer.borderColor = ExperimentPalette.cardBorder.cgColor
+            $0.layer.shadowOpacity = isDark ? 0.35 : 0.08
+        }
     }
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
-            [backCard, midCard, frontCard].forEach {
-                $0.layer.borderColor = ExperimentPalette.cardBorder.cgColor
-                $0.backgroundColor = ExperimentPalette.cardSurface
-                $0.layer.shadowOpacity = traitCollection.userInterfaceStyle == .dark ? 0.35 : 0.1
-            }
+            applyColors()
         }
     }
 }

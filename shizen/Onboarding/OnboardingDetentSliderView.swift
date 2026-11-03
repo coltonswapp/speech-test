@@ -9,6 +9,28 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
     private static let trackPadding: CGFloat = thumbInset
 
     var onIndexChanged: ((Int) -> Void)?
+    /// Fires when a drag ends, with the detent the knob settles on.
+    var onRelease: ((Int) -> Void)?
+    /// Fires whenever the knob moves (drag, snap, or initial placement). Read `knobCenterInWindow()`.
+    var onKnobMoved: (() -> Void)?
+
+    /// Optional label inside the track (e.g. "Slide to promise"); fades as the knob travels.
+    var trackTitle: String? {
+        didSet {
+            trackTitleLabel.text = trackTitle
+            trackTitleLabel.isHidden = trackTitle == nil
+        }
+    }
+    private let trackTitleLabel = UILabel()
+
+    /// Hide the detent ticks, e.g. for a two-position slide-to-confirm.
+    var showsTicks = true {
+        didSet { ticksContainer.isHidden = !showsTicks }
+    }
+
+    /// Slide-to-confirm feel: ticks come closer together and hit harder as the knob nears the end,
+    /// in place of the detent bump.
+    var rampsHaptics = false
 
     private(set) var selectedIndex = 0
     private var detentCount = 2
@@ -26,6 +48,11 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
     private var offset: CGFloat = 0
 
     private let detentHaptic = UIImpactFeedbackGenerator(style: .rigid)
+    private let rampHaptic = UIImpactFeedbackGenerator(style: .medium)
+    /// Where the last ramp tick fired; the next fires once the knob has moved the current spacing.
+    private var lastRampTickOffset: CGFloat = 0
+    private static let rampSpacing: ClosedRange<CGFloat> = 5...30
+    private static let rampIntensity: ClosedRange<CGFloat> = 0.2...1
 
     init(detentCount: Int, selectedIndex: Int = 0) {
         let glassEffect = UIGlassEffect(style: .regular)
@@ -45,6 +72,7 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
         super.didMoveToWindow()
         guard window != nil else { return }
         detentHaptic.prepare()
+        if rampsHaptics { rampHaptic.prepare() }
     }
 
     override func layoutSubviews() {
@@ -54,6 +82,7 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
             didInstallInitialOffset = true
             offset = offset(for: selectedIndex)
             knobLeadingConstraint.constant = offset
+            onKnobMoved?()
         }
     }
 
@@ -81,10 +110,12 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
             ) {
                 self.knobLeadingConstraint.constant = target
                 self.layoutIfNeeded()
+                self.updateTrackTitleFade()
             }
         } else {
             knobLeadingConstraint.constant = target
         }
+        onKnobMoved?()
     }
 
     private func setup() {
@@ -102,6 +133,20 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
 
         knobContainer.translatesAutoresizingMaskIntoConstraints = false
         knobContainer.isUserInteractionEnabled = true
+
+        trackTitleLabel.font = .systemFont(ofSize: 16, weight: .semibold)
+        trackTitleLabel.textColor = .secondaryLabel
+        trackTitleLabel.textAlignment = .center
+        trackTitleLabel.adjustsFontSizeToFitWidth = true
+        trackTitleLabel.minimumScaleFactor = 0.8
+        trackTitleLabel.isHidden = true
+        trackTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(trackTitleLabel)
+        NSLayoutConstraint.activate([
+            trackTitleLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            trackTitleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Self.knobSize + 16),
+            trackTitleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+        ])
 
         contentView.addSubview(knobContainer)
         knobContainer.addSubview(knobView)
@@ -138,6 +183,32 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: OnboardingDetentSliderView, _) in
             view.knobView.backgroundColor = .secondarySystemBackground
         }
+    }
+
+    /// Stops the knob from moving, e.g. once a commitment slide has landed.
+    func lock() {
+        knobContainer.isUserInteractionEnabled = false
+    }
+
+    private func updateTrackTitleFade() {
+        trackTitleLabel.alpha = max(0, 1 - progress(at: knobLeadingConstraint.constant) * 1.6)
+    }
+
+    /// 0 at the start of the track, 1 at the end.
+    private func progress(at offset: CGFloat) -> CGFloat {
+        let range = travelRange
+        let span = range.upperBound - range.lowerBound
+        return span > 0 ? (offset - range.lowerBound) / span : 0
+    }
+
+    private func playRampTickIfDue() {
+        let t = min(1, max(0, progress(at: offset)))
+        let spacing = Self.rampSpacing.upperBound - (Self.rampSpacing.upperBound - Self.rampSpacing.lowerBound) * t
+        guard abs(offset - lastRampTickOffset) >= spacing else { return }
+        lastRampTickOffset = offset
+        let intensity = Self.rampIntensity.lowerBound + (Self.rampIntensity.upperBound - Self.rampIntensity.lowerBound) * t * t
+        rampHaptic.impactOccurred(intensity: intensity)
+        rampHaptic.prepare()
     }
 
     private func rebuildTicks() {
@@ -194,7 +265,9 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
         switch gesture.state {
         case .began:
             gestureStartOffset = offset
+            lastRampTickOffset = offset
             detentHaptic.prepare()
+            if rampsHaptics { rampHaptic.prepare() }
 
         case .changed:
             let translation = gesture.translation(in: self).x
@@ -202,17 +275,24 @@ final class OnboardingDetentSliderView: UIVisualEffectView {
             offset = min(range.upperBound, max(range.lowerBound, gestureStartOffset + translation))
             knobLeadingConstraint.constant = offset
             layoutIfNeeded()
+            updateTrackTitleFade()
+            onKnobMoved?()
+            if rampsHaptics { playRampTickIfDue() }
 
             let nearest = nearestIndex(for: offset)
             if nearest != selectedIndex {
                 selectedIndex = nearest
-                detentHaptic.impactOccurred(intensity: 0.85)
-                detentHaptic.prepare()
+                if !rampsHaptics {
+                    detentHaptic.impactOccurred(intensity: 0.85)
+                    detentHaptic.prepare()
+                }
                 onIndexChanged?(nearest)
             }
 
         case .ended, .cancelled, .failed:
-            setSelectedIndex(nearestIndex(for: offset), animated: true)
+            let settled = nearestIndex(for: offset)
+            setSelectedIndex(settled, animated: true)
+            onRelease?(settled)
 
         default:
             break

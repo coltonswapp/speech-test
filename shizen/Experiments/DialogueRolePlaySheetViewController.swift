@@ -2,8 +2,8 @@
 //  DialogueRolePlaySheetViewController.swift
 //  shizen
 //
-//  Native page sheet for Role Play speaker choice and the completion recap.
-//  Expanding completion to the large detent reveals STT debug stats.
+//  Native page sheet for Role Play speaker choice, plus the DEBUG recognizer
+//  details (usage + on-device vs Whisper) linked from the completion screen.
 //
 
 import UIKit
@@ -18,15 +18,15 @@ final class DialogueRolePlaySheetViewController: UIViewController, UISheetPresen
 
     enum Mode {
         case pickRole(speakers: [String])
-        case complete(
+        /// DEBUG only — reached from the completion screen.
+        case recognizerDetails(
+            costSummary: String?,
             usageText: String?,
             compareSnapshots: [RolePlayCompareTurnSnapshot]
         )
     }
 
     var onSelectSpeaker: ((String) -> Void)?
-    var onReplay: (() -> Void)?
-    var onSwitchRoles: (() -> Void)?
     var onDone: (() -> Void)?
     var onDismissed: (() -> Void)?
 
@@ -37,6 +37,7 @@ final class DialogueRolePlaySheetViewController: UIViewController, UISheetPresen
     private let rootStack = UIStackView()
     private let debugStack = UIStackView()
     private let usageLabel = UILabel()
+    private let costSummaryLabel = UILabel()
     private let compareStack = UIStackView()
     private let buttonsStack = UIStackView()
 
@@ -73,11 +74,13 @@ final class DialogueRolePlaySheetViewController: UIViewController, UISheetPresen
         updateDebugVisibility(animated: animated)
     }
 
-    func updateUsageText(_ text: String?) {
-        guard case .complete(let current, let snapshots) = mode else { return }
-        guard current != text else { return }
+    func updateUsage(costSummary: String?, usageText text: String?) {
+        guard case .recognizerDetails(let currentSummary, let current, let snapshots) = mode else { return }
+        guard current != text || currentSummary != costSummary else { return }
+        costSummaryLabel.text = costSummary
+        costSummaryLabel.isHidden = costSummary == nil
         let previousHadDebug = hasDebugContent
-        mode = .complete(usageText: text, compareSnapshots: snapshots)
+        mode = .recognizerDetails(costSummary: costSummary, usageText: text, compareSnapshots: snapshots)
         rebuildDebugContent()
         updateDebugVisibility(animated: false)
         if previousHadDebug != hasDebugContent {
@@ -106,6 +109,16 @@ final class DialogueRolePlaySheetViewController: UIViewController, UISheetPresen
         compareStack.alignment = .fill
         compareStack.spacing = 10
 
+        costSummaryLabel.font = UIFont.monospacedDigitSystemFont(
+            ofSize: UIFont.preferredFont(forTextStyle: .footnote).pointSize,
+            weight: .regular
+        )
+        costSummaryLabel.adjustsFontForContentSizeCategory = true
+        costSummaryLabel.textColor = .secondaryLabel
+        costSummaryLabel.textAlignment = .center
+        costSummaryLabel.numberOfLines = 0
+        costSummaryLabel.isHidden = true
+
         buttonsStack.axis = .vertical
         buttonsStack.alignment = .fill
         buttonsStack.spacing = Self.buttonSpacing
@@ -117,6 +130,7 @@ final class DialogueRolePlaySheetViewController: UIViewController, UISheetPresen
         rootStack.alignment = .fill
         rootStack.spacing = 16
         rootStack.addArrangedSubview(buttonsStack)
+        rootStack.addArrangedSubview(costSummaryLabel)
         rootStack.addArrangedSubview(debugStack)
 
         view.addSubview(scrollView)
@@ -143,10 +157,11 @@ final class DialogueRolePlaySheetViewController: UIViewController, UISheetPresen
             navigationItem.subtitle = "Speak as 1 of \(speakers.count) people"
             navigationItem.rightBarButtonItem = nil
             navigationController?.isModalInPresentation = true
+            costSummaryLabel.isHidden = true
             rebuildPickerButtons(speakers: speakers)
-        case .complete:
-            title = "Role play complete"
-            navigationItem.subtitle = "Speaking proficiency comes through repetition & imitation."
+        case .recognizerDetails(let costSummary, _, _):
+            title = "Recognizer details"
+            navigationItem.subtitle = nil
             navigationItem.rightBarButtonItem = UIBarButtonItem(
                 systemItem: .done,
                 primaryAction: UIAction { [weak self] _ in
@@ -154,7 +169,9 @@ final class DialogueRolePlaySheetViewController: UIViewController, UISheetPresen
                 }
             )
             navigationController?.isModalInPresentation = false
-            rebuildCompletionButtons()
+            costSummaryLabel.text = costSummary
+            costSummaryLabel.isHidden = costSummary == nil
+            clearButtons()
         }
         rebuildDebugContent()
     }
@@ -173,33 +190,6 @@ final class DialogueRolePlaySheetViewController: UIViewController, UISheetPresen
         }
     }
 
-    private func rebuildCompletionButtons() {
-        clearButtons()
-
-        let row = UIStackView()
-        row.axis = .horizontal
-        row.alignment = .fill
-        row.distribution = .fillEqually
-        row.spacing = Self.buttonSpacing
-        row.setContentHuggingPriority(.required, for: .vertical)
-
-        let switchRoles = makeChoiceButton(title: "Switch Roles")
-        switchRoles.addAction(UIAction { [weak self] _ in
-            self?.onSwitchRoles?()
-        }, for: .touchUpInside)
-
-        let replay = makeChoiceButton(title: "Replay")
-        replay.addAction(UIAction { [weak self] _ in
-            guard let self, !self.hasCommittedAction else { return }
-            self.hasCommittedAction = true
-            self.onReplay?()
-        }, for: .touchUpInside)
-
-        row.addArrangedSubview(switchRoles)
-        row.addArrangedSubview(replay)
-        buttonsStack.addArrangedSubview(row)
-    }
-
     private func makeChoiceButton(title: String) -> KanaChoiceButton {
         KanaChoiceButton(
             value: title,
@@ -209,8 +199,12 @@ final class DialogueRolePlaySheetViewController: UIViewController, UISheetPresen
     }
 
     private func clearButtons() {
-        buttonsStack.arrangedSubviews.forEach {
-            buttonsStack.removeArrangedSubview($0)
+        clearArrangedSubviews(of: buttonsStack)
+    }
+
+    private func clearArrangedSubviews(of stack: UIStackView) {
+        stack.arrangedSubviews.forEach {
+            stack.removeArrangedSubview($0)
             $0.removeFromSuperview()
         }
     }
@@ -231,7 +225,7 @@ final class DialogueRolePlaySheetViewController: UIViewController, UISheetPresen
             $0.removeFromSuperview()
         }
 
-        guard case .complete(let usageText, let snapshots) = mode else { return }
+        guard case .recognizerDetails(_, let usageText, let snapshots) = mode else { return }
 
         if let usageText, !usageText.isEmpty {
             usageLabel.text = usageText
@@ -253,7 +247,7 @@ final class DialogueRolePlaySheetViewController: UIViewController, UISheetPresen
     }
 
     private var hasDebugContent: Bool {
-        guard case .complete(let usageText, let snapshots) = mode else { return false }
+        guard case .recognizerDetails(_, let usageText, let snapshots) = mode else { return false }
         let hasUsage = usageText?.isEmpty == false
         return hasUsage || !snapshots.isEmpty
     }
@@ -267,7 +261,7 @@ final class DialogueRolePlaySheetViewController: UIViewController, UISheetPresen
     }
 
     private func updateDebugVisibility(animated: Bool) {
-        let visible = hasDebugContent && isExpandedToLarge
+        let visible = hasDebugContent
         let changes = {
             self.debugStack.isHidden = !visible
             self.scrollView.alwaysBounceVertical = visible
@@ -296,17 +290,9 @@ final class DialogueRolePlaySheetViewController: UIViewController, UISheetPresen
             sheet.detents = [.medium()]
             sheet.selectedDetentIdentifier = .medium
             sheet.prefersScrollingExpandsWhenScrolledToEdge = false
-        case .complete:
-            if hasDebugContent {
-                sheet.detents = [.medium(), .large()]
-                sheet.prefersScrollingExpandsWhenScrolledToEdge = true
-            } else {
-                sheet.detents = [.medium()]
-                sheet.prefersScrollingExpandsWhenScrolledToEdge = false
-            }
-            if sheet.selectedDetentIdentifier != .large {
-                sheet.selectedDetentIdentifier = .medium
-            }
+        case .recognizerDetails:
+            sheet.detents = [.medium(), .large()]
+            sheet.prefersScrollingExpandsWhenScrolledToEdge = true
         }
     }
 

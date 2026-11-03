@@ -560,7 +560,7 @@ extension JapaneseTokenizer {
 
         let tokenAnnotations = engine.tokenize(text: text, transliteration: .hiragana)
         let annotations = engine.furiganaAnnotations(for: text, transliteration: .hiragana, options: [.kanjiOnly])
-        let compounds = kanjiCompounds(in: tokenAnnotations)
+        let compounds = kanjiCompounds(in: tokenAnnotations, text: text)
 
         var result: [FuriganaAnnotation] = []
         result.reserveCapacity(annotations.count)
@@ -627,11 +627,11 @@ extension JapaneseTokenizer {
     /// lookup; numeral-led runs merge only for the closed jukujikun class.
     private static let numeralJukujikunCompounds: Set<String> = ["一人", "二人", "二十歳"]
 
-    private static func kanjiCompounds(in tokens: [Annotation]) -> [KanjiCompound] {
+    private static func kanjiCompounds(in tokens: [Annotation], text: String) -> [KanjiCompound] {
         var out: [KanjiCompound] = []
         var i = 0
         while i < tokens.count {
-            guard isKanjiOnlySurface(tokens[i].base) else {
+            guard !leadingKanjiBlock(in: tokens[i].base).isEmpty else {
                 i += 1
                 continue
             }
@@ -639,14 +639,17 @@ extension JapaneseTokenizer {
             let upper = min(i + compoundMergeMaxRunLength, tokens.count)
             for j in stride(from: upper - 1, through: i + 1, by: -1) {
                 let run = Array(tokens[i...j])
-                guard isContiguousKanjiRun(run) else { continue }
-                let surface = run.map(\.base).joined()
+                guard isContiguousKanjiCompoundRun(run) else { continue }
+                let surface = run.map { leadingKanjiBlock(in: $0.base) }.joined()
+                guard surface.count >= 2 else { continue }
                 if startsWithNumeral(surface), !numeralJukujikunCompounds.contains(surface) { continue }
                 guard let reading = JMDictStore.shared.compoundMergedReading(
                     forSurface: surface,
                     mecabReading: run.map(\.reading).joined()
                 ) else { continue }
-                let range = run[0].range.lowerBound..<run[run.count - 1].range.upperBound
+                let kanjiEnd = kanjiBlockEnd(in: run[run.count - 1], text: text)
+                guard kanjiEnd > run[0].range.lowerBound else { continue }
+                let range = run[0].range.lowerBound..<kanjiEnd
                 merged = (j, KanjiCompound(range: range, reading: reading))
                 break
             }
@@ -660,8 +663,29 @@ extension JapaneseTokenizer {
         return out
     }
 
-    private static func isContiguousKanjiRun(_ run: [Annotation]) -> Bool {
-        guard run.allSatisfy({ isKanjiOnlySurface($0.base) }) else { return false }
+    /// Kanji at the start of a MeCab token (e.g. 食 in 食っ).
+    private static func leadingKanjiBlock(in base: String) -> String {
+        var out = ""
+        for ch in base {
+            guard isKanjiOnlySurface(String(ch)) else { break }
+            out.append(ch)
+        }
+        return out
+    }
+
+    private static func kanjiBlockEnd(in token: Annotation, text: String) -> String.Index {
+        var index = token.range.lowerBound
+        while index < token.range.upperBound {
+            let ch = String(text[index])
+            guard isKanjiOnlySurface(ch) else { break }
+            index = text.index(after: index)
+        }
+        return index
+    }
+
+    private static func isContiguousKanjiCompoundRun(_ run: [Annotation]) -> Bool {
+        guard run.count >= 2 else { return false }
+        guard run.allSatisfy({ !leadingKanjiBlock(in: $0.base).isEmpty }) else { return false }
         for k in 1..<run.count where run[k - 1].range.upperBound != run[k].range.lowerBound {
             return false
         }
@@ -679,8 +703,6 @@ extension JapaneseTokenizer {
     /// 疲れ様 → "つか　さま" (center kana replaced with U+3000) or 間に合 → "まにあ"
     /// (center kana kept in the reading). Either way Core Text piles the whole
     /// reading onto the first glyphs. Split onto each kanji run instead.
-    private static let ideographicSpace: Character = "\u{3000}"
-
     private enum RubySurfaceRun {
         case kanji(Range<String.Index>)
         case kana(String)
@@ -692,22 +714,46 @@ extension JapaneseTokenizer {
     ) -> [FuriganaAnnotation] {
         let runs = rubySurfaceRuns(in: annotation.range, text: text)
         guard !runs.isEmpty else { return [annotation] }
+        let kanjiCharRanges = individualKanjiRanges(in: annotation.range, text: text)
         let kanjiRuns = runs.compactMap { run -> Range<String.Index>? in
             if case .kanji(let range) = run { return range }
             return nil
         }
         let hasKana = runs.contains { if case .kana = $0 { return true } else { return false } }
 
-        if annotation.reading.contains(ideographicSpace) {
-            let parts = annotation.reading
-                .split(separator: ideographicSpace, omittingEmptySubsequences: true)
-                .map(String.init)
-            guard parts.count >= 2, parts.count == kanjiRuns.count else { return [annotation] }
-            return zip(parts, kanjiRuns).map { FuriganaAnnotation(reading: $0, range: $1) }
+        if let parts = RubyReadingSplit.ideographicSpaceParts(for: annotation.reading),
+           parts.count == kanjiCharRanges.count {
+            return zip(parts, kanjiCharRanges).map { FuriganaAnnotation(reading: $0, range: $1) }
+        }
+
+        if !hasKana, kanjiCharRanges.count >= 2 {
+            if let parts = RubyReadingSplit.confidentKanjiReadingPieces(
+                fullKanjiReading: annotation.reading,
+                kanjiCount: kanjiCharRanges.count
+            ), parts.count == kanjiCharRanges.count {
+                return zip(parts, kanjiCharRanges).map { FuriganaAnnotation(reading: $0, range: $1) }
+            }
+            return [annotation]
         }
 
         guard hasKana, kanjiRuns.count >= 1, runs.count >= 2 else { return [annotation] }
         return alignReadingToKanjiRuns(runs: runs, reading: annotation.reading) ?? [annotation]
+    }
+
+    private static func individualKanjiRanges(
+        in range: Range<String.Index>,
+        text: String
+    ) -> [Range<String.Index>] {
+        var out: [Range<String.Index>] = []
+        var index = range.lowerBound
+        while index < range.upperBound {
+            let ch = String(text[index])
+            guard isKanjiOnlySurface(ch) else { break }
+            let next = text.index(after: index)
+            out.append(index..<next)
+            index = next
+        }
+        return out
     }
 
     private static func rubySurfaceRuns(
@@ -720,9 +766,6 @@ extension JapaneseTokenizer {
             if isKanjiOnlySurface(String(text[index])) {
                 let start = index
                 index = text.index(after: index)
-                while index < range.upperBound, isKanjiOnlySurface(String(text[index])) {
-                    index = text.index(after: index)
-                }
                 runs.append(.kanji(start..<index))
             } else if isKanaSurface(String(text[index])) {
                 let start = index
@@ -743,31 +786,46 @@ extension JapaneseTokenizer {
         reading: String
     ) -> [FuriganaAnnotation]? {
         var remaining = Substring(reading)
-        var pendingKanji: Range<String.Index>?
+        var pendingKanji: [Range<String.Index>] = []
         var result: [FuriganaAnnotation] = []
+
+        func flushPending(with piece: String) -> Bool {
+            guard !piece.isEmpty, !pendingKanji.isEmpty else { return false }
+            if pendingKanji.count == 1 {
+                result.append(FuriganaAnnotation(reading: piece, range: pendingKanji[0]))
+            } else if let parts = RubyReadingSplit.confidentKanjiReadingPieces(
+                fullKanjiReading: piece,
+                kanjiCount: pendingKanji.count
+            ), parts.count == pendingKanji.count {
+                for (part, range) in zip(parts, pendingKanji) {
+                    result.append(FuriganaAnnotation(reading: part, range: range))
+                }
+            } else {
+                let merged = pendingKanji.first!.lowerBound..<pendingKanji.last!.upperBound
+                result.append(FuriganaAnnotation(reading: piece, range: merged))
+            }
+            pendingKanji.removeAll()
+            return true
+        }
 
         for run in runs {
             switch run {
             case .kanji(let range):
-                guard pendingKanji == nil else { return nil }
-                pendingKanji = range
+                pendingKanji.append(range)
             case .kana(let kana):
                 guard let match = remaining.range(of: kana) else { return nil }
-                if let kanjiRange = pendingKanji {
+                if !pendingKanji.isEmpty {
                     let piece = String(remaining[..<match.lowerBound])
-                    guard !piece.isEmpty else { return nil }
-                    result.append(FuriganaAnnotation(reading: piece, range: kanjiRange))
-                    pendingKanji = nil
+                    guard flushPending(with: piece) else { return nil }
                 } else if match.lowerBound != remaining.startIndex {
                     return nil
                 }
                 remaining = remaining[match.upperBound...]
             }
         }
-        if let kanjiRange = pendingKanji {
+        if !pendingKanji.isEmpty {
             let piece = String(remaining)
-            guard !piece.isEmpty else { return nil }
-            result.append(FuriganaAnnotation(reading: piece, range: kanjiRange))
+            guard flushPending(with: piece) else { return nil }
             remaining = Substring()
         }
         guard remaining.isEmpty, !result.isEmpty else { return nil }

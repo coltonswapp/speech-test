@@ -10,6 +10,8 @@ import {
   GEMINI_TTS_SAMPLE_RATE,
   GEMINI_TTS_DEFAULT_MODEL,
 } from "@/lib/tts/gemini-tts";
+import { getGeminiTtsModelSetting } from "@/lib/tts/tts-model-setting";
+import { geminiVoiceSupportsModel } from "@/lib/tts/gemini-voice-catalog";
 import { pcm16ToFloat32, pcm16ToWav } from "@/lib/tts/wav";
 import { align } from "@/lib/tts/alignment";
 import { putObject } from "@/lib/storage/r2";
@@ -75,6 +77,7 @@ async function generateNarration(
     contentHash: conversationContentHash([
       { speaker: "speaker1", text: trimmedText },
     ]),
+    notes: null as string | null,
   };
 }
 
@@ -94,15 +97,23 @@ async function generateConversation(
 
   // project.model is provider-specific and may still hold a narration-mode
   // (OpenAI) model string if the track was switched to conversation mode
-  // without regenerating a narration take first — always use the Gemini
-  // default here rather than trusting it.
+  // without regenerating a narration take first — use the Studio-wide
+  // Gemini TTS setting (Settings → Voices) rather than trusting it.
+  const model = await getGeminiTtsModelSetting();
+  for (const voice of [speaker1Voice, speaker2Voice]) {
+    if (!geminiVoiceSupportsModel(voice, model)) {
+      throw new UserFacingError(
+        `${voice} is a 3.8-only library voice; pick a 3.8 TTS model in Settings → Voices.`
+      );
+    }
+  }
   const pcm = await synthesizeGeminiConversation({
     lines,
     speaker1Voice,
     speaker2Voice,
     speaker1Name: project.speaker1Name,
     speaker2Name: project.speaker2Name,
-    model: GEMINI_TTS_DEFAULT_MODEL,
+    model,
   });
 
   return {
@@ -112,6 +123,8 @@ async function generateConversation(
     provider: "gemini",
     alignmentLines: lines.map((l) => l.text),
     contentHash: conversationContentHash(lines),
+    // Takes carry no model column; label A/B takes from the non-default model.
+    notes: model === GEMINI_TTS_DEFAULT_MODEL ? null : `TTS model: ${model}`,
   };
 }
 
@@ -163,7 +176,7 @@ export async function POST(
     );
   }
 
-  const { pcm, sampleRate, voice, provider, alignmentLines, contentHash } =
+  const { pcm, sampleRate, voice, provider, alignmentLines, contentHash, notes } =
     result;
   const wav = pcm16ToWav(pcm, sampleRate);
   const audioObjectKey = `tts/${id}/variants/${crypto.randomUUID()}.wav`;
@@ -179,6 +192,7 @@ export async function POST(
       voice,
       provider,
       contentHash,
+      notes,
     })
     .returning();
 

@@ -2,6 +2,7 @@ import "server-only";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -58,6 +59,19 @@ export async function getObject(key: string): Promise<Buffer> {
     throw new Error(`Object not found: ${key}`);
   }
   return Buffer.from(bytes);
+}
+
+/** True when the key exists; false on 404. Other errors propagate. */
+export async function objectExists(key: string): Promise<boolean> {
+  try {
+    await getClient().send(new HeadObjectCommand({ Bucket: getBucket(), Key: key }));
+    return true;
+  } catch (error) {
+    const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata
+      ?.httpStatusCode;
+    if (status === 404) return false;
+    throw error;
+  }
 }
 
 export async function deleteObject(key: string): Promise<void> {

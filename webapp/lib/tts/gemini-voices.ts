@@ -33,4 +33,10 @@ export const GEMINI_TTS_VOICES = [
   "Sulafat",
 ] as const;
 
-export const GEMINI_TTS_DEFAULT_MODEL = "gemini-3.1-flash-tts-preview";
+// The same 30 prebuilt voices are accepted by gemini-3.8-flash-tts and
+// gemini-3.8-flash-lite-tts (checked 2026-11-02 against the speech-generation docs).
+export {
+  GEMINI_TTS_DEFAULT_MODEL,
+  GEMINI_TTS_MODELS,
+  type GeminiTtsModel,
+} from "../gemini/models";

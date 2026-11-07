@@ -154,6 +154,15 @@ function claimSql(claim: GenerationClaim): SQL | undefined {
       return eq(ttsGeneration.status, "purging");
     case "not-purging":
       return ne(ttsGeneration.status, "purging");
+    case "flush-obsolete":
+      return and(
+        ne(ttsGeneration.status, "purging"),
+        sql`jsonb_array_length(coalesce(${ttsGeneration.obsoleteObjectKeys}, '[]'::jsonb)) > 0`,
+        or(
+          ne(ttsGeneration.status, "pending"),
+          lte(ttsGeneration.updatedAt, new Date(claim.staleBeforeIso)),
+        ),
+      );
   }
 }
 
@@ -206,7 +215,13 @@ export const drizzleGenerationStore: GenerationStore = {
       .where(
         or(
           eq(ttsGeneration.status, "purging"),
-          sql`jsonb_array_length(coalesce(${ttsGeneration.obsoleteObjectKeys}, '[]'::jsonb)) > 0`,
+          and(
+            sql`jsonb_array_length(coalesce(${ttsGeneration.obsoleteObjectKeys}, '[]'::jsonb)) > 0`,
+            or(
+              ne(ttsGeneration.status, "pending"),
+              lte(ttsGeneration.updatedAt, stale),
+            ),
+          ),
           and(
             isNull(ttsGeneration.savedAt),
             lte(ttsGeneration.expiresAt, now),

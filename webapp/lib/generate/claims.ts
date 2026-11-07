@@ -3,11 +3,21 @@ import type { GenerationRecord } from "./types";
 export type GenerationClaim =
   | { type: "reclaim"; nowIso: string; staleBeforeIso: string }
   | { type: "cleanup"; nowIso: string; staleBeforeIso: string }
+  | { type: "flush-obsolete"; staleBeforeIso: string }
   | { type: "pending" }
   | { type: "ready" }
   | { type: "ready-unsaved" }
   | { type: "purging" }
   | { type: "not-purging" };
+
+export function isActivePending(
+  row: Pick<GenerationRecord, "status" | "updatedAt">,
+  staleBeforeIso: string,
+): boolean {
+  return (
+    row.status === "pending" && Date.parse(row.updatedAt) > Date.parse(staleBeforeIso)
+  );
+}
 
 export function matchesGenerationClaim(
   row: GenerationRecord,
@@ -39,6 +49,10 @@ export function matchesGenerationClaim(
         row.status === "pending" &&
         Date.parse(row.updatedAt) <= Date.parse(claim.staleBeforeIso)
       );
+    case "flush-obsolete":
+      if (row.status === "purging") return false;
+      if (!hasObsoleteObjectKeys(row)) return false;
+      return !isActivePending(row, claim.staleBeforeIso);
     case "pending":
       return row.status === "pending";
     case "ready":
@@ -58,6 +72,7 @@ export function hasObsoleteObjectKeys(row: Pick<GenerationRecord, "obsoleteObjec
 
 export function isCleanupCandidate(row: GenerationRecord, nowIso: string, staleBeforeIso: string): boolean {
   if (row.status === "purging") return true;
+  if (isActivePending(row, staleBeforeIso)) return false;
   if (hasObsoleteObjectKeys(row)) return true;
   return matchesGenerationClaim(row, {
     type: "cleanup",

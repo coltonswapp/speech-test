@@ -18,7 +18,11 @@ import {
 } from "./keys";
 import { isMissingObjectError } from "./missing-object";
 import { DuplicateGenerationRequestError, type GenerationStore } from "./store";
-import { hasObsoleteObjectKeys, matchesGenerationClaim } from "./claims";
+import {
+  hasObsoleteObjectKeys,
+  isActivePending,
+  matchesGenerationClaim,
+} from "./claims";
 import { stampGenerateTokenSync } from "./timing";
 import {
   GENERATE_PENDING_STALE_MS,
@@ -345,6 +349,8 @@ async function flushObsoleteObjectKeys(
   svc: GenerateService,
   row: GenerationRecord,
 ): Promise<void> {
+  const staleIso = staleBeforeIso(svc.now?.() ?? new Date());
+  if (isActivePending(row, staleIso)) return;
   const current = new Set(currentObjectKeys(row));
   const keys = [...new Set(row.obsoleteObjectKeys ?? [])].filter(
     (key) => isGenerateObjectKey(key) && !current.has(key),
@@ -361,6 +367,7 @@ async function flushObsoleteObjectKeys(
     }
   }
   const latest = (await svc.store.get(row.id)) ?? row;
+  if (isActivePending(latest, staleIso)) return;
   const remaining = (latest.obsoleteObjectKeys ?? []).filter(
     (key) => !removed.includes(key),
   );
@@ -368,7 +375,7 @@ async function flushObsoleteObjectKeys(
     await svc.store.compareAndUpdate(
       latest.id,
       latest.revision,
-      { type: "not-purging" },
+      { type: "flush-obsolete", staleBeforeIso: staleIso },
       {
         obsoleteObjectKeys: remaining,
         updatedAt: iso(svc.now?.() ?? new Date()),

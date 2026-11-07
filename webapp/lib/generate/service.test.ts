@@ -924,6 +924,66 @@ describe("obsolete object ledger", () => {
     assert.equal(svc.objectsMap.has(row!.wavObjectKey!), true);
     assert.equal(svc.objectsMap.has(row!.mp3ObjectKey!), true);
   });
+
+  it("does not let cron ledger flush steal a pending reservation revision during synthesis", async () => {
+    let now = new Date("2026-11-07T00:00:00.000Z");
+    let blockSynth = false;
+    let releaseSynth!: () => void;
+    const synthBlocked = new Promise<void>((resolve) => {
+      releaseSynth = resolve;
+    });
+    let sawPendingSynth!: () => void;
+    const pendingSynth = new Promise<void>((resolve) => {
+      sawPendingSynth = resolve;
+    });
+    const svc = testService({
+      now: () => now,
+      tts: {
+        sampleRate: RATE,
+        async synthesizeLine() {
+          if (blockSynth) {
+            sawPendingSynth();
+            await synthBlocked;
+          }
+          return pcm(RATE);
+        },
+      },
+    });
+    const input = {
+      model: "gemini-3.8-flash-tts" as const,
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa18",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    };
+    const first = await createTtsGeneration(svc, input);
+    const oldWav = first.generation.wavObjectKey!;
+    now = new Date(now.getTime() + GENERATE_TEMPORARY_TTL_MS + 1000);
+    const restore = denyObjectDeletes(svc);
+    blockSynth = true;
+    const retry = createTtsGeneration(svc, input);
+    await pendingSynth;
+    const inflight = await svc.store.get(first.generation.id);
+    assert.equal(inflight?.status, "pending");
+    assert.equal(inflight?.obsoleteObjectKeys.includes(oldWav), true);
+    const revisionBeforeCron = inflight!.revision;
+    restore();
+    await cleanupExpiredGenerations(svc);
+    const duringSynth = await svc.store.get(first.generation.id);
+    assert.equal(duringSynth?.status, "pending");
+    assert.equal(duringSynth?.revision, revisionBeforeCron);
+    releaseSynth();
+    const result = await retry;
+    assert.equal(result.reused, false);
+    assert.equal(result.generation.status, "ready");
+    assert.equal(svc.objectsMap.has(result.generation.wavObjectKey!), true);
+    assert.equal(svc.objectsMap.has(result.generation.mp3ObjectKey!), true);
+    await cleanupExpiredGenerations(svc);
+    const ready = await svc.store.get(first.generation.id);
+    assert.equal(ready?.status, "ready");
+    assert.deepEqual(ready?.obsoleteObjectKeys, []);
+    assert.equal(svc.objectsMap.has(oldWav), false);
+    assert.equal(svc.objectsMap.has(ready!.wavObjectKey!), true);
+  });
 });
+
 
 

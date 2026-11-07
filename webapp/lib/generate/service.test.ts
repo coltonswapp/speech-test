@@ -13,7 +13,7 @@ import {
   type GenerateService,
 } from "./service";
 import { memoryGenerationStore, type GenerationStore } from "./store";
-import { GENERATE_R2_PREFIX } from "./keys";
+import { GENERATE_R2_PREFIX, generateMp3Key, generateWavKey } from "./keys";
 import { GENERATE_PENDING_STALE_MS, type GenerationRecord } from "./types";
 import { GenerateUserError } from "./validate";
 import { isMpegAudio, silencePcm16 } from "./compose";
@@ -664,6 +664,75 @@ describe("concurrent reclaim", () => {
       .generation;
     assert.equal(winner.status, "ready");
     assert.equal(svc.objectsMap.size, 2);
+  });
+
+  it("does not let a delayed failed-attempt R2 delete remove retry audio", async () => {
+    const input = {
+      model: "gemini-3.8-flash-tts" as const,
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa12",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    };
+    const svc = testService({
+      randomId: () => "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa13",
+    });
+    const innerCas = svc.store.compareAndUpdate.bind(svc.store);
+    let failReadyOnce = true;
+    svc.store.compareAndUpdate = async (id, revision, claim, patch) => {
+      if (failReadyOnce && claim.type === "pending" && patch.status === "ready") {
+        failReadyOnce = false;
+        throw new Error("finalize failed after upload");
+      }
+      return innerCas(id, revision, claim, patch);
+    };
+
+    let resumeDelete!: () => void;
+    const deleteBlocked = new Promise<void>((resolve) => {
+      resumeDelete = resolve;
+    });
+    let sawBlockedDelete!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      sawBlockedDelete = resolve;
+    });
+    let blockFirstDelete = true;
+    const delayedDeletes: string[] = [];
+    const innerDelete = svc.objects.delete.bind(svc.objects);
+    svc.objects.delete = async (key) => {
+      if (blockFirstDelete) {
+        blockFirstDelete = false;
+        sawBlockedDelete();
+        await deleteBlocked;
+        delayedDeletes.push(key);
+      }
+      await innerDelete(key);
+    };
+
+    const first = createTtsGeneration(svc, input);
+    await blocked;
+    const retry = await createTtsGeneration(svc, input);
+    assert.equal(retry.reused, false);
+    assert.equal(retry.generation.status, "ready");
+    const wavKey = retry.generation.wavObjectKey!;
+    const mp3Key = retry.generation.mp3ObjectKey!;
+    assert.match(wavKey, /\/[1-9]\d*\/audio\.wav$/);
+    assert.equal(mp3Key, wavKey.replace(/audio\.wav$/, "audio.mp3"));
+    assert.notEqual(wavKey, generateWavKey(retry.generation.id, 0));
+    assert.notEqual(mp3Key, generateMp3Key(retry.generation.id, 0));
+    assert.equal(svc.objectsMap.has(wavKey), true);
+    assert.equal(svc.objectsMap.has(mp3Key), true);
+
+    resumeDelete();
+    await assert.rejects(() => first, /finalize failed after upload/);
+    assert.equal(svc.objectsMap.has(wavKey), true);
+    assert.equal(svc.objectsMap.has(mp3Key), true);
+    assert.equal(delayedDeletes.includes(wavKey), false);
+    assert.equal(delayedDeletes.includes(mp3Key), false);
+    const { mp3 } = await getPlayableMp3(svc, retry.generation.id);
+    assert.equal(isMpegAudio(mp3), true);
+    const ready = await svc.store.get(retry.generation.id);
+    assert.equal(ready?.status, "ready");
+    assert.equal(ready?.wavObjectKey, wavKey);
+    assert.equal(svc.objectsMap.has(ready!.wavObjectKey!), true);
+    assert.equal(svc.objectsMap.has(ready!.mp3ObjectKey!), true);
   });
 });
 

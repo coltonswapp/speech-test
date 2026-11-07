@@ -152,14 +152,28 @@ function requireRequestId(requestId: string | undefined): string {
   return requestId;
 }
 
-function objectKeysFor(row: Pick<GenerationRecord, "id" | "wavObjectKey" | "mp3ObjectKey">): string[] {
-  return [
-    ...new Set(
-      [row.wavObjectKey, row.mp3ObjectKey, generateWavKey(row.id), generateMp3Key(row.id)].filter(
-        (key): key is string => Boolean(key),
-      ),
-    ),
-  ];
+function attemptKeys(id: string, attempt: number): { wavObjectKey: string; mp3ObjectKey: string } {
+  return {
+    wavObjectKey: generateWavKey(id, attempt),
+    mp3ObjectKey: generateMp3Key(id, attempt),
+  };
+}
+
+/**
+ * Deletes only this snapshot's objects. Tracked keys win; if they are missing
+ * (crash before they were stored), fall back to this revision's attempt prefix.
+ * Never deletes a shared unversioned key, so a delayed fail-cleanup cannot
+ * remove a later attempt's upload.
+ */
+function objectKeysFor(
+  row: Pick<GenerationRecord, "id" | "revision" | "wavObjectKey" | "mp3ObjectKey">,
+): string[] {
+  const tracked = [row.wavObjectKey, row.mp3ObjectKey].filter(
+    (key): key is string => Boolean(key),
+  );
+  if (tracked.length > 0) return [...new Set(tracked)];
+  const attempt = attemptKeys(row.id, row.revision);
+  return [attempt.wavObjectKey, attempt.mp3ObjectKey];
 }
 
 async function deleteGenerateObject(objects: GenerateObjectStore, key: string) {
@@ -180,7 +194,7 @@ async function deleteGenerateObject(objects: GenerateObjectStore, key: string) {
  */
 export async function deleteTrackedGenerateObjects(
   objects: GenerateObjectStore,
-  row: Pick<GenerationRecord, "id" | "wavObjectKey" | "mp3ObjectKey">,
+  row: Pick<GenerationRecord, "id" | "revision" | "wavObjectKey" | "mp3ObjectKey">,
 ): Promise<void> {
   for (const key of objectKeysFor(row)) {
     await deleteGenerateObject(objects, key);
@@ -199,22 +213,25 @@ async function putGenerateObject(
 
 async function putPlayableAudio(
   svc: GenerateService,
-  id: string,
+  row: Pick<GenerationRecord, "id" | "revision" | "wavObjectKey" | "mp3ObjectKey">,
   wav: Buffer,
   mp3: Buffer,
 ): Promise<{ wavObjectKey: string; mp3ObjectKey: string }> {
-  const wavObjectKey = generateWavKey(id);
-  const mp3ObjectKey = generateMp3Key(id);
+  const keys = {
+    wavObjectKey: row.wavObjectKey ?? generateWavKey(row.id, row.revision),
+    mp3ObjectKey: row.mp3ObjectKey ?? generateMp3Key(row.id, row.revision),
+  };
   try {
-    await putGenerateObject(svc.objects, wavObjectKey, wav, "audio/wav");
-    await putGenerateObject(svc.objects, mp3ObjectKey, mp3, "audio/mpeg");
-    return { wavObjectKey, mp3ObjectKey };
+    await putGenerateObject(svc.objects, keys.wavObjectKey, wav, "audio/wav");
+    await putGenerateObject(svc.objects, keys.mp3ObjectKey, mp3, "audio/mpeg");
+    return keys;
   } catch (error) {
     try {
       await deleteTrackedGenerateObjects(svc.objects, {
-        id,
-        wavObjectKey,
-        mp3ObjectKey,
+        id: row.id,
+        revision: row.revision,
+        wavObjectKey: keys.wavObjectKey,
+        mp3ObjectKey: keys.mp3ObjectKey,
       });
     } catch {
       // Keep the original put error; cleanup cron will retry leftover keys.
@@ -252,8 +269,7 @@ function pendingRow(params: {
     lineTimings: null,
     tokenSync: null,
     transcript: params.transcript,
-    wavObjectKey: null,
-    mp3ObjectKey: null,
+    ...attemptKeys(params.id, 0),
     sampleRate: params.sampleRate,
     durationSeconds: 0,
     byteCount: null,
@@ -271,8 +287,10 @@ async function markFailed(svc: GenerateService, row: GenerationRecord, error: un
     {
       status: "failed",
       error: message.slice(0, 1000),
-      wavObjectKey: null,
-      mp3ObjectKey: null,
+      // Keep this attempt's keys so crash recovery / reclaim can delete them.
+      // Object delete uses the pending snapshot, not the post-CAS revision.
+      wavObjectKey: row.wavObjectKey ?? generateWavKey(row.id, row.revision),
+      mp3ObjectKey: row.mp3ObjectKey ?? generateMp3Key(row.id, row.revision),
       expiresAt: iso(addMs(now, GENERATE_TEMPORARY_TTL_MS)),
       updatedAt: iso(now),
     },
@@ -301,8 +319,7 @@ async function reclaimReservation(
     {
       status: "pending",
       error: null,
-      wavObjectKey: null,
-      mp3ObjectKey: null,
+      ...attemptKeys(existing.id, existing.revision + 1),
       lineTimings: null,
       tokenSync: null,
       durationSeconds: 0,
@@ -429,7 +446,7 @@ export async function createTtsGeneration(
       );
     }
 
-    const keys = await putPlayableAudio(svc, row.id, wav, mp3);
+    const keys = await putPlayableAudio(svc, row, wav, mp3);
     const readyAt = svc.now?.() ?? new Date();
     const updated = await svc.store.compareAndUpdate(
       row.id,
@@ -516,7 +533,7 @@ export async function createUploadGeneration(
         500,
       );
     }
-    const keys = await putPlayableAudio(svc, row.id, wav, mp3);
+    const keys = await putPlayableAudio(svc, row, wav, mp3);
     const readyAt = svc.now?.() ?? new Date();
     const durationSeconds = Math.floor(pcm.length / 2) / sampleRate;
     const updated = await svc.store.compareAndUpdate(

@@ -4,19 +4,21 @@ import {
   deleteGeneration,
   publicGeneration,
   renameGeneration,
-  requireGeneration,
+  requireReadyGeneration,
   saveGeneration,
 } from "@/lib/generate/service";
 import { generatePatchSchema } from "@/lib/generate/types";
 import { studioGenerateService } from "@/lib/generate/runtime";
-import { forbidContentQaOnly, generateErrorResponse } from "@/lib/generate/http";
+import { generateErrorResponse, rejectLearnerQaAccess } from "@/lib/generate/http";
 
 type Ctx = RouteContext<"/api/generate/[id]">;
 
-export async function GET(_request: NextRequest, ctx: Ctx) {
+export async function GET(request: NextRequest, ctx: Ctx) {
+  const forbidden = rejectLearnerQaAccess(request);
+  if (forbidden) return forbidden;
   try {
     const { id } = await ctx.params;
-    const row = await requireGeneration(studioGenerateService(), id);
+    const row = await requireReadyGeneration(studioGenerateService(), id);
     return NextResponse.json({ generation: publicGeneration(row) });
   } catch (error) {
     return generateErrorResponse(error);
@@ -24,7 +26,7 @@ export async function GET(_request: NextRequest, ctx: Ctx) {
 }
 
 export async function PATCH(request: NextRequest, ctx: Ctx) {
-  const forbidden = forbidContentQaOnly(request);
+  const forbidden = rejectLearnerQaAccess(request);
   if (forbidden) return forbidden;
   const parsed = generatePatchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
@@ -33,7 +35,7 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
   try {
     const { id } = await ctx.params;
     const svc = studioGenerateService();
-    let row = await requireGeneration(svc, id);
+    let row = await requireReadyGeneration(svc, id);
     if (parsed.data.title) {
       row = await renameGeneration(svc, id, parsed.data.title);
     }
@@ -47,7 +49,7 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
 }
 
 export async function DELETE(request: NextRequest, ctx: Ctx) {
-  const forbidden = forbidContentQaOnly(request);
+  const forbidden = rejectLearnerQaAccess(request);
   if (forbidden) return forbidden;
   try {
     const { id } = await ctx.params;

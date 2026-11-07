@@ -21,8 +21,9 @@ export type ComposedAudio = {
 
 /**
  * Concatenate per-line PCM in order, inserting the requested pause after every
- * line except the last. Pause duration is exact (zeroed samples), so later
- * alignment is on the same timeline as the playable file.
+ * line except the last. Pause duration is exact (zeroed samples). Alignment
+ * runs on this WAV timeline (pauses included) before libmp3lame encoding.
+ * MP3 encoder delay versus playback has not been live-measured.
  */
 export function composeLinePcm(
   clips: LineClip[],

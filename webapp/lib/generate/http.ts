@@ -1,16 +1,8 @@
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { bearerMatches, contentQaClientTokenMatches } from "@/lib/studio-auth";
 import { GenerateUserError } from "./validate";
 import { GeminiTTSError } from "@/lib/tts/gemini-tts";
 
-export function forbidContentQaOnly(request: NextRequest): NextResponse | null {
-  const authorization = request.headers.get("authorization");
-  if (contentQaClientTokenMatches(authorization) && !bearerMatches(authorization)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-  return null;
-}
+export { forbidContentQaOnly, rejectLearnerQaAccess } from "./access";
 
 export function generateErrorResponse(error: unknown): NextResponse {
   if (error instanceof GenerateUserError) {
@@ -28,7 +20,7 @@ export function generateErrorResponse(error: unknown): NextResponse {
     return NextResponse.json(
       {
         error:
-          "Could not reach the Generate library. If this environment is new, apply drizzle/0020_tts_generation.sql.",
+          "Could not reach the Generate library. If this environment is new, apply drizzle/0020_tts_generation.sql then drizzle/0021_tts_generation_lifecycle.sql.",
       },
       { status: 503 },
     );

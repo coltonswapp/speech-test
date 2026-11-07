@@ -8,9 +8,18 @@ export const GENERATE_MAX_TITLE_CHARS = 200;
 export const GENERATE_MAX_DELIVERY_CHARS = 200;
 export const GENERATE_DUPLICATE_WINDOW_MS = 15_000;
 
-/** Unsaved rows live in Studio Postgres + private R2 until save or delete. */
-export const GENERATE_TEMPORARY_LIFETIME =
-  "Unsaved clips stay in this Studio until you save them to the library or delete them. They survive refresh because they are stored on the server, not as a browser blob. They are not published and are kept apart from TTS Studio takes and learner content.";
+/** Unsaved clips are deleted from Postgres + R2 after this TTL. Saved clips stay. */
+export const GENERATE_TEMPORARY_TTL_MS = 24 * 60 * 60 * 1000;
+export const GENERATE_TEMPORARY_TTL_HOURS = 24;
+/** Stale pending reservations can be reclaimed after the TTS maxDuration window. */
+export const GENERATE_PENDING_STALE_MS = 8 * 60 * 1000;
+
+export const GENERATE_TEMPORARY_LIFETIME = `Unsaved clips are kept privately for ${GENERATE_TEMPORARY_TTL_HOURS} hours, then deleted from Studio storage. Save to library keeps them. They are not published and are kept apart from TTS Studio takes and learner content.`;
+
+export const GENERATE_ALIGNMENT_NOTE =
+  "Timestamps are taken from the combined WAV (pauses included) that is then encoded to MP3. A small MP3 encoder delay versus playback is possible and has not been live-measured.";
+
+export type GenerationStatus = "pending" | "ready" | "failed";
 
 export const generateLineInputSchema = z.object({
   id: z.string().min(1).max(80),
@@ -35,7 +44,7 @@ export const generateRequestSchema = z.object({
     .array(generateLineInputSchema)
     .min(1, "Add at least one line.")
     .max(GENERATE_MAX_LINES, "Keep it to 20 lines."),
-  requestId: z.string().uuid().optional(),
+  requestId: z.string().uuid(),
 });
 export type GenerateRequest = z.infer<typeof generateRequestSchema>;
 
@@ -75,6 +84,9 @@ export type GenerationRecord = {
   createdAt: string;
   updatedAt: string;
   savedAt: string | null;
+  expiresAt: string | null;
+  status: GenerationStatus;
+  error: string | null;
   title: string;
   kind: GenerateKind;
   model: string | null;

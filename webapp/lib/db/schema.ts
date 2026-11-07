@@ -1,5 +1,6 @@
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -192,6 +193,9 @@ export const ttsGeneration = pgTable(
       .notNull()
       .defaultNow(),
     savedAt: timestamp("saved_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    status: text("status").notNull().default("ready"), // pending | ready | failed
+    error: text("error"),
     title: text("title").notNull().default(""),
     kind: text("kind").notNull().default("tts"), // tts | upload
     model: text("model"),
@@ -207,7 +211,10 @@ export const ttsGeneration = pgTable(
     durationSeconds: real("duration_seconds").notNull(),
     byteCount: integer("byte_count"),
   },
-  (t) => [uniqueIndex("tts_generation_request_id_idx").on(t.requestId)],
+  (t) => [
+    uniqueIndex("tts_generation_request_id_idx").on(t.requestId),
+    index("tts_generation_cleanup_idx").on(t.expiresAt),
+  ],
 );
 
 // Reusable loopable ambience beds. Published as their own CDN object;

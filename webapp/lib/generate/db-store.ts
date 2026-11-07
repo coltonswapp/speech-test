@@ -1,15 +1,20 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, lte } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { ttsGeneration } from "@/lib/db/schema";
 import { variantTokenSyncSchema } from "@/lib/dialogue/types";
 import { generateLineInputSchema, generateLineTimingSchema } from "./types";
-import type { GenerationRecord } from "./types";
+import type { GenerationRecord, GenerationStatus } from "./types";
 import type { GenerationStore } from "./store";
 
 function iso(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   return value instanceof Date ? value.toISOString() : value;
+}
+
+function parseStatus(value: string | null | undefined): GenerationStatus {
+  if (value === "pending" || value === "failed") return value;
+  return "ready";
 }
 
 function fromRow(row: typeof ttsGeneration.$inferSelect): GenerationRecord {
@@ -25,6 +30,9 @@ function fromRow(row: typeof ttsGeneration.$inferSelect): GenerationRecord {
     createdAt: iso(row.createdAt) ?? new Date().toISOString(),
     updatedAt: iso(row.updatedAt) ?? new Date().toISOString(),
     savedAt: iso(row.savedAt),
+    expiresAt: iso(row.expiresAt),
+    status: parseStatus(row.status),
+    error: row.error,
     title: row.title,
     kind: row.kind === "upload" ? "upload" : "tts",
     model: row.model,
@@ -59,6 +67,9 @@ function toColumns(row: Omit<GenerationRecord, "id"> & { id?: string }) {
     durationSeconds: row.durationSeconds,
     byteCount: row.byteCount,
     savedAt: row.savedAt ? new Date(row.savedAt) : null,
+    expiresAt: row.expiresAt ? new Date(row.expiresAt) : null,
+    status: row.status,
+    error: row.error,
     updatedAt: new Date(row.updatedAt),
   };
 }
@@ -112,6 +123,17 @@ export const drizzleGenerationStore: GenerationStore = {
     const rows = await db.query.ttsGeneration.findMany({
       orderBy: [desc(ttsGeneration.createdAt)],
     });
+    return rows.map(fromRow);
+  },
+  async listCleanupCandidates(nowIso, limit = 100) {
+    const rows = await db
+      .select()
+      .from(ttsGeneration)
+      .where(
+        and(isNull(ttsGeneration.savedAt), lte(ttsGeneration.expiresAt, new Date(nowIso))),
+      )
+      .orderBy(ttsGeneration.expiresAt)
+      .limit(limit);
     return rows.map(fromRow);
   },
   async delete(id) {

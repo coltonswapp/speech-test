@@ -1,6 +1,11 @@
 import { formatApiError } from "@/lib/api-error";
 import type { VariantTokenSync } from "@/lib/dialogue/types";
-import type { GenerateLineInput, GenerateLineTiming, GenerateKind } from "./types";
+import type {
+  GenerateLineInput,
+  GenerateLineTiming,
+  GenerateKind,
+  GenerationStatus,
+} from "./types";
 import { GENERATE_TEMPORARY_LIFETIME } from "./types";
 
 export type Generation = {
@@ -8,6 +13,8 @@ export type Generation = {
   createdAt: string;
   updatedAt: string;
   savedAt: string | null;
+  expiresAt: string | null;
+  status: GenerationStatus;
   title: string;
   kind: GenerateKind;
   model: string | null;
@@ -49,7 +56,7 @@ export const generateApi = {
   create: (body: {
     title?: string;
     lines: GenerateLineInput[];
-    requestId?: string;
+    requestId: string;
   }) =>
     request<{ generation: Generation; reused: boolean; model: string }>(
       "/api/generate",
@@ -73,13 +80,13 @@ export const generateApi = {
     file: File;
     transcript: string;
     title?: string;
-    requestId?: string;
+    requestId: string;
   }) => {
     const form = new FormData();
     form.set("file", params.file);
     form.set("transcript", params.transcript);
     if (params.title) form.set("title", params.title);
-    if (params.requestId) form.set("requestId", params.requestId);
+    form.set("requestId", params.requestId);
     return request<{ generation: Generation }>("/api/generate/upload", {
       method: "POST",
       body: form,

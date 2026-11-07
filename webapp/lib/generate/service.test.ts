@@ -4,9 +4,11 @@ import { pcm16ToWav, wavToPcm16 } from "@/lib/tts/wav";
 import { GEMINI_TTS_VOICES } from "@/lib/tts/gemini-voices";
 import {
   alignGeneration,
+  cleanupExpiredGenerations,
   createTtsGeneration,
   deleteGeneration,
   getPlayableMp3,
+  listGenerations,
   saveGeneration,
   type GenerateService,
 } from "./service";
@@ -113,6 +115,7 @@ describe("createTtsGeneration", () => {
     const svc = testService();
     const { generation, reused } = await createTtsGeneration(svc, {
       model: "gemini-3.8-flash-tts",
+      requestId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
       lines: [{ id: "1", text: "こんにちは", voice: VOICE }],
     });
     assert.equal(reused, false);
@@ -136,6 +139,7 @@ describe("createTtsGeneration", () => {
     });
     const { generation } = await createTtsGeneration(svc, {
       model: "gemini-3.8-flash-tts",
+      requestId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
       lines: [
         { id: "1", text: "いち", voice: VOICE, pauseAfterSeconds: 0.5 },
         { id: "2", text: "に", voice: second },
@@ -188,7 +192,7 @@ describe("createTtsGeneration", () => {
     assert.equal(svc.synthCalls, 2);
   });
 
-  it("surfaces a TTS failure without writing a row", async () => {
+  it("surfaces a TTS failure as a failed reservation without objects", async () => {
     const svc = testService({
       tts: {
         sampleRate: RATE,
@@ -201,11 +205,14 @@ describe("createTtsGeneration", () => {
       () =>
         createTtsGeneration(svc, {
           model: "gemini-3.8-flash-tts",
+          requestId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
           lines: [{ id: "1", text: "はい", voice: VOICE }],
         }),
       /502/,
     );
-    assert.deepEqual(await svc.store.list(), []);
+    const rows = await svc.store.list();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].status, "failed");
     assert.equal(svc.objectsMap.size, 0);
   });
 
@@ -215,11 +222,13 @@ describe("createTtsGeneration", () => {
       () =>
         createTtsGeneration(svc, {
           model: "gemini-3.8-flash-tts",
+          requestId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
           lines: [{ id: "1", text: "はい", voice: "Nope" }],
         }),
       GenerateUserError,
     );
     assert.equal(svc.synthCalls, 0);
+    assert.deepEqual(await svc.store.list(), []);
   });
 });
 
@@ -228,10 +237,12 @@ describe("save and delete", () => {
     const svc = testService();
     const { generation } = await createTtsGeneration(svc, {
       model: "gemini-3.8-flash-tts",
+      requestId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
       lines: [{ id: "1", text: "はい", voice: VOICE }],
     });
     const saved = await saveGeneration(svc, generation.id);
     assert.ok(saved.savedAt);
+    assert.equal(saved.expiresAt, null);
     const savedAgain = await saveGeneration(svc, generation.id);
     assert.equal(savedAgain.savedAt, saved.savedAt);
     const wavKey = generation.wavObjectKey!;
@@ -250,6 +261,9 @@ describe("save and delete", () => {
       createdAt: "2026-11-07T00:00:00.000Z",
       updatedAt: "2026-11-07T00:00:00.000Z",
       savedAt: null,
+      expiresAt: "2026-11-08T00:00:00.000Z",
+      status: "ready",
+      error: null,
       title: "unsafe",
       kind: "tts",
       model: "gemini-3.8-flash-tts",
@@ -277,6 +291,7 @@ describe("getPlayableMp3", () => {
     const svc = testService();
     const { generation } = await createTtsGeneration(svc, {
       model: "gemini-3.8-flash-tts",
+      requestId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
       lines: [{ id: "1", text: "はい", voice: VOICE }],
     });
     const { mp3 } = await getPlayableMp3(svc, generation.id);
@@ -302,6 +317,7 @@ describe("alignGeneration", () => {
     });
     const { generation } = await createTtsGeneration(svc, {
       model: "gemini-3.8-flash-tts",
+      requestId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
       lines: [{ id: "1", text: "あい", voice: VOICE }],
     });
     const aligned = await alignGeneration(svc, generation.id, "あい");
@@ -322,6 +338,7 @@ describe("alignGeneration", () => {
     });
     const { generation } = await createTtsGeneration(svc, {
       model: "gemini-3.8-flash-tts",
+      requestId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
       lines: [{ id: "1", text: "はい", voice: VOICE }],
     });
     await assert.rejects(
@@ -335,5 +352,173 @@ describe("silence helper", () => {
   it("does not treat WAV as MP3", () => {
     const wav = pcm16ToWav(silencePcm16(RATE, 0.2), RATE);
     assert.equal(isMpegAudio(wav), false);
+  });
+});
+
+describe("atomic reservation before TTS", () => {
+  it("retries a failed request id without leaving the first objects", async () => {
+    let n = 0;
+    const svc = testService({
+      tts: {
+        sampleRate: RATE,
+        async synthesizeLine() {
+          n += 1;
+          if (n === 1) throw new Error("Gemini request failed (HTTP 502): boom");
+          return pcm(RATE);
+        },
+      },
+    });
+    const input = {
+      model: "gemini-3.8-flash-tts" as const,
+      requestId: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    };
+    await assert.rejects(() => createTtsGeneration(svc, input), /502/);
+    const retry = await createTtsGeneration(svc, input);
+    assert.equal(retry.reused, false);
+    assert.equal(retry.generation.status, "ready");
+    assert.equal(n, 2);
+    assert.equal(svc.objectsMap.size, 2);
+  });
+
+  it("does not synthesize twice when a duplicate request arrives mid-flight", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    const svc = testService({
+      tts: {
+        sampleRate: RATE,
+        async synthesizeLine() {
+          calls += 1;
+          await gate;
+          return pcm(RATE);
+        },
+      },
+    });
+    const input = {
+      model: "gemini-3.8-flash-tts" as const,
+      requestId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    };
+    const first = createTtsGeneration(svc, input);
+    let pending = false;
+    for (let i = 0; i < 50; i++) {
+      const row = await svc.store.getByRequestId(input.requestId);
+      if (row?.status === "pending") {
+        pending = true;
+        break;
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.equal(pending, true);
+    await assert.rejects(() => createTtsGeneration(svc, input), /already generating/);
+    release();
+    const result = await first;
+    assert.equal(result.reused, false);
+    assert.equal(calls, 1);
+  });
+});
+
+describe("object cleanup", () => {
+  it("rolls back a partial R2 put and does not leave a ready clip", async () => {
+    const svc = testService();
+    svc.objects.put = async (key, body) => {
+      if (key.endsWith(".mp3")) throw new Error("R2 down");
+      svc.objectsMap.set(key, Buffer.from(body));
+    };
+    await assert.rejects(
+      () =>
+        createTtsGeneration(svc, {
+          model: "gemini-3.8-flash-tts",
+          requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
+          lines: [{ id: "1", text: "はい", voice: VOICE }],
+        }),
+      /R2 down/,
+    );
+    assert.equal(svc.objectsMap.size, 0);
+    const listed = await listGenerations(svc);
+    assert.equal(listed.generations.length, 0);
+    const rows = await svc.store.list();
+    assert.equal(rows[0]?.status, "failed");
+  });
+
+  it("treats a missing object as a successful delete", async () => {
+    const svc = testService();
+    const { generation } = await createTtsGeneration(svc, {
+      model: "gemini-3.8-flash-tts",
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    });
+    svc.objects.delete = async () => {
+      throw Object.assign(new Error("The specified key does not exist."), {
+        name: "NoSuchKey",
+        $metadata: { httpStatusCode: 404 },
+      });
+    };
+    await deleteGeneration(svc, generation.id);
+    assert.equal(await svc.store.get(generation.id), null);
+  });
+
+  it("does not delete metadata when R2 delete fails for a non-missing reason", async () => {
+    const svc = testService();
+    const { generation } = await createTtsGeneration(svc, {
+      model: "gemini-3.8-flash-tts",
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    });
+    svc.objects.delete = async () => {
+      throw Object.assign(new Error("AccessDenied"), { name: "AccessDenied" });
+    };
+    await assert.rejects(
+      () => deleteGeneration(svc, generation.id),
+      /clip was not removed/,
+    );
+    assert.ok(await svc.store.get(generation.id));
+    assert.equal(svc.objectsMap.size, 2);
+  });
+});
+
+describe("temporary lifetime cleanup", () => {
+  it("deletes expired unsaved rows and their objects", async () => {
+    let now = new Date("2026-11-07T00:00:00.000Z");
+    const svc = testService({ now: () => now });
+    const { generation } = await createTtsGeneration(svc, {
+      model: "gemini-3.8-flash-tts",
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    });
+    assert.ok(generation.expiresAt);
+    now = new Date("2026-11-08T00:00:01.000Z");
+    const result = await cleanupExpiredGenerations(svc);
+    assert.equal(result.deleted, 1);
+    assert.equal(result.failed, 0);
+    assert.equal(svc.objectsMap.size, 0);
+    assert.equal(await svc.store.get(generation.id), null);
+    assert.equal((await listGenerations(svc)).generations.length, 0);
+  });
+
+  it("does not expire a saved clip after the unsaved TTL", async () => {
+    let now = new Date("2026-11-07T00:00:00.000Z");
+    const svc = testService({ now: () => now });
+    const { generation } = await createTtsGeneration(svc, {
+      model: "gemini-3.8-flash-tts",
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    });
+    await saveGeneration(svc, generation.id);
+    now = new Date("2026-11-10T00:00:00.000Z");
+    const result = await cleanupExpiredGenerations(svc);
+    assert.equal(result.deleted, 0);
+    assert.ok(await svc.store.get(generation.id));
+    assert.equal(svc.objectsMap.size, 2);
+    assert.equal((await listGenerations(svc)).generations[0]?.saved, true);
+  });
+
+  it("does not call indefinite storage temporary in the lifetime copy", async () => {
+    const listed = await listGenerations(testService());
+    assert.match(listed.temporaryLifetime, /24 hours/);
+    assert.doesNotMatch(listed.temporaryLifetime, /until you save them to the library or delete them/);
   });
 });

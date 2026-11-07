@@ -13,13 +13,13 @@ import {
   GENERATE_UPLOAD_TYPES,
 } from "@/lib/generate/types";
 import { studioGenerateService } from "@/lib/generate/runtime";
-import { forbidContentQaOnly, generateErrorResponse } from "@/lib/generate/http";
+import { generateErrorResponse, rejectLearnerQaAccess } from "@/lib/generate/http";
 import { GenerateUserError } from "@/lib/generate/validate";
 
 export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
-  const forbidden = forbidContentQaOnly(request);
+  const forbidden = rejectLearnerQaAccess(request);
   if (forbidden) return forbidden;
 
   const declared = Number(request.headers.get("content-length") ?? 0);
@@ -51,8 +51,10 @@ export async function POST(request: NextRequest) {
   const transcript = String(formData.get("transcript") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
   const requestIdRaw = String(formData.get("requestId") ?? "").trim();
-  const requestId =
-    /^[0-9a-f-]{36}$/i.test(requestIdRaw) ? requestIdRaw : undefined;
+  if (!/^[0-9a-f-]{36}$/i.test(requestIdRaw)) {
+    return NextResponse.json({ error: "Missing request id." }, { status: 400 });
+  }
+  const requestId = requestIdRaw;
 
   if (!(file instanceof File)) {
     return NextResponse.json(

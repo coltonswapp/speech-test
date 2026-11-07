@@ -29,7 +29,11 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { GenerateLines, newDraftLine, type DraftLine } from "./generate-lines";
 import { generateApi, type Generation } from "@/lib/generate/client";
-import { GENERATE_TEMPORARY_LIFETIME } from "@/lib/generate/types";
+import {
+  GENERATE_ALIGNMENT_NOTE,
+  GENERATE_TEMPORARY_LIFETIME,
+} from "@/lib/generate/types";
+import { retainStableRequestId } from "@/lib/generate/request-id";
 import { geminiVoiceLabel } from "@/lib/tts/gemini-voice-catalog";
 import { ttsApi } from "@/lib/tts/client";
 import { GEMINI_TTS_MODELS } from "@/lib/gemini/models";
@@ -77,6 +81,12 @@ export function GenerateWorkspace() {
   const inFlight = useRef(false);
   const startedAt = useRef<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const generateRequest = useRef<{ payloadKey: string; requestId: string } | null>(
+    null,
+  );
+  const uploadRequest = useRef<{ payloadKey: string; requestId: string } | null>(
+    null,
+  );
 
   const listQuery = useQuery({
     queryKey: QUERY_KEY,
@@ -119,6 +129,7 @@ export function GenerateWorkspace() {
   const generateMutation = useMutation({
     mutationFn: generateApi.create,
     onSuccess: (result) => {
+      generateRequest.current = null;
       remember(result.generation, { syncTranscript: true });
       setError(null);
       if (result.reused) {
@@ -187,6 +198,7 @@ export function GenerateWorkspace() {
   const uploadMutation = useMutation({
     mutationFn: generateApi.upload,
     onSuccess: (result) => {
+      uploadRequest.current = null;
       remember(result.generation, { syncTranscript: true });
       setError(null);
     },
@@ -213,6 +225,14 @@ export function GenerateWorkspace() {
       setError("Type some text first.");
       return;
     }
+    const payloadKey = JSON.stringify({
+      title: title.trim() || "",
+      lines: prepared,
+    });
+    generateRequest.current = retainStableRequestId(
+      generateRequest.current,
+      payloadKey,
+    );
     inFlight.current = true;
     startedAt.current = Date.now();
     setElapsed(0);
@@ -220,7 +240,7 @@ export function GenerateWorkspace() {
     generateMutation.mutate({
       title: title.trim() || undefined,
       lines: prepared,
-      requestId: crypto.randomUUID(),
+      requestId: generateRequest.current.requestId,
     });
   };
 
@@ -309,8 +329,8 @@ export function GenerateWorkspace() {
                 </Button>
                 <p className="text-xs text-muted-foreground">
                   Uses the configured Gemini TTS model. The button stays locked
-                  while a request is in flight; retrying the same request id is
-                  idempotent.
+                  while a request is in flight. Retry keeps the same request id
+                  so a failed attempt is not billed twice.
                 </p>
               </div>
             </CardContent>
@@ -346,6 +366,15 @@ export function GenerateWorkspace() {
                 if (inFlight.current || current.kind !== "tts") return;
                 setLines(draftsFromGeneration(current));
                 setTitle(current.title);
+                const payloadKey = JSON.stringify({
+                  title: current.title,
+                  lines: current.lines,
+                  regenerate: current.id,
+                });
+                generateRequest.current = retainStableRequestId(
+                  generateRequest.current,
+                  payloadKey,
+                );
                 inFlight.current = true;
                 startedAt.current = Date.now();
                 setElapsed(0);
@@ -353,7 +382,7 @@ export function GenerateWorkspace() {
                 generateMutation.mutate({
                   title: current.title,
                   lines: current.lines,
-                  requestId: crypto.randomUUID(),
+                  requestId: generateRequest.current.requestId,
                 });
               }}
             />
@@ -385,11 +414,22 @@ export function GenerateWorkspace() {
                     toast.error("Paste a transcript before uploading.");
                     return;
                   }
+                  const payloadKey = JSON.stringify({
+                    name: file.name,
+                    size: file.size,
+                    lastModified: file.lastModified,
+                    transcript: text,
+                    title: title.trim() || "",
+                  });
+                  uploadRequest.current = retainStableRequestId(
+                    uploadRequest.current,
+                    payloadKey,
+                  );
                   uploadMutation.mutate({
                     file,
                     transcript: text,
                     title: title.trim() || undefined,
-                    requestId: crypto.randomUUID(),
+                    requestId: uploadRequest.current.requestId,
                   });
                 }}
               />
@@ -479,7 +519,11 @@ export function GenerateWorkspace() {
                       <div className="flex items-start justify-between gap-2">
                         <p className="font-medium leading-snug">{item.title}</p>
                         <Badge variant={item.saved ? "secondary" : "outline"}>
-                          {item.saved ? "Saved" : "Unsaved"}
+                          {item.saved
+                            ? "Saved"
+                            : item.expiresAt
+                              ? `Unsaved · until ${formatWhen(item.expiresAt)}`
+                              : "Unsaved"}
                         </Badge>
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">
@@ -626,7 +670,11 @@ function ResultCard({
             </CardDescription>
           </div>
           <Badge variant={generation.saved ? "secondary" : "outline"}>
-            {generation.saved ? "Saved to library" : "Unsaved"}
+            {generation.saved
+              ? "Saved to library"
+              : generation.expiresAt
+                ? `Unsaved · until ${formatWhen(generation.expiresAt)}`
+                : "Unsaved"}
           </Badge>
         </div>
       </CardHeader>
@@ -660,8 +708,7 @@ function ResultCard({
         <div className="space-y-2 border-t border-border/60 pt-4">
           <h2 className="text-sm font-medium">Timing</h2>
           <p className="text-xs text-muted-foreground">
-            Optional. Word times come from the existing aligner; line times for
-            generated clips include the pauses you set.
+            Optional. {GENERATE_ALIGNMENT_NOTE}
           </p>
           <Textarea
             value={transcript}

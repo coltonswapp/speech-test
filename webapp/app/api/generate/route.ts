@@ -9,11 +9,13 @@ import {
 } from "@/lib/generate/service";
 import { generateRequestSchema } from "@/lib/generate/types";
 import { studioGenerateService } from "@/lib/generate/runtime";
-import { forbidContentQaOnly, generateErrorResponse } from "@/lib/generate/http";
+import { generateErrorResponse, rejectLearnerQaAccess } from "@/lib/generate/http";
 
 export const maxDuration = 300;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const forbidden = rejectLearnerQaAccess(request);
+  if (forbidden) return forbidden;
   try {
     return NextResponse.json(await listGenerations(studioGenerateService()));
   } catch (error) {
@@ -22,7 +24,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const forbidden = forbidContentQaOnly(request);
+  const forbidden = rejectLearnerQaAccess(request);
   if (forbidden) return forbidden;
   if (!isProviderConfigured("gemini")) {
     return NextResponse.json({ error: "Missing Gemini API key." }, { status: 400 });

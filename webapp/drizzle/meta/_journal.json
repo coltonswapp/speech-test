@@ -148,6 +148,13 @@
       "when": 1790700000000,
       "tag": "0020_tts_generation",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0021_tts_generation_lifecycle",
+      "breakpoints": true
     }
   ]
 }

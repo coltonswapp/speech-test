@@ -99,6 +99,8 @@ export type GenerationRecord = {
   transcript: string | null;
   wavObjectKey: string | null;
   mp3ObjectKey: string | null;
+  /** Object keys that still exist after a later attempt took over current keys. */
+  obsoleteObjectKeys: string[];
   sampleRate: number | null;
   durationSeconds: number;
   byteCount: number | null;

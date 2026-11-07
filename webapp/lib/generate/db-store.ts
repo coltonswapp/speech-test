@@ -47,6 +47,9 @@ function fromRow(row: typeof ttsGeneration.$inferSelect): GenerationRecord {
     transcript: row.transcript,
     wavObjectKey: row.wavObjectKey,
     mp3ObjectKey: row.mp3ObjectKey,
+    obsoleteObjectKeys: Array.isArray(row.obsoleteObjectKeys)
+      ? row.obsoleteObjectKeys.filter((key): key is string => typeof key === "string")
+      : [],
     sampleRate: row.sampleRate,
     durationSeconds: row.durationSeconds,
     byteCount: row.byteCount,
@@ -66,6 +69,7 @@ function toInsertColumns(row: Omit<GenerationRecord, "id"> & { id?: string }) {
     transcript: row.transcript,
     wavObjectKey: row.wavObjectKey,
     mp3ObjectKey: row.mp3ObjectKey,
+    obsoleteObjectKeys: row.obsoleteObjectKeys ?? [],
     sampleRate: row.sampleRate,
     durationSeconds: row.durationSeconds,
     byteCount: row.byteCount,
@@ -95,6 +99,9 @@ function patchToSet(
   if (patch.transcript !== undefined) set.transcript = patch.transcript;
   if (patch.wavObjectKey !== undefined) set.wavObjectKey = patch.wavObjectKey;
   if (patch.mp3ObjectKey !== undefined) set.mp3ObjectKey = patch.mp3ObjectKey;
+  if (patch.obsoleteObjectKeys !== undefined) {
+    set.obsoleteObjectKeys = patch.obsoleteObjectKeys;
+  }
   if (patch.sampleRate !== undefined) set.sampleRate = patch.sampleRate;
   if (patch.durationSeconds !== undefined) set.durationSeconds = patch.durationSeconds;
   if (patch.byteCount !== undefined) set.byteCount = patch.byteCount;
@@ -199,6 +206,7 @@ export const drizzleGenerationStore: GenerationStore = {
       .where(
         or(
           eq(ttsGeneration.status, "purging"),
+          sql`jsonb_array_length(coalesce(${ttsGeneration.obsoleteObjectKeys}, '[]'::jsonb)) > 0`,
           and(
             isNull(ttsGeneration.savedAt),
             lte(ttsGeneration.expiresAt, now),

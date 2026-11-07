@@ -52,8 +52,13 @@ export function matchesGenerationClaim(
   }
 }
 
+export function hasObsoleteObjectKeys(row: Pick<GenerationRecord, "obsoleteObjectKeys">): boolean {
+  return (row.obsoleteObjectKeys?.length ?? 0) > 0;
+}
+
 export function isCleanupCandidate(row: GenerationRecord, nowIso: string, staleBeforeIso: string): boolean {
   if (row.status === "purging") return true;
+  if (hasObsoleteObjectKeys(row)) return true;
   return matchesGenerationClaim(row, {
     type: "cleanup",
     nowIso,

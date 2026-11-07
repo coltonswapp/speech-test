@@ -43,7 +43,11 @@ export function memoryGenerationStore(
       ) {
         throw new DuplicateGenerationRequestError();
       }
-      const stored = { ...row, revision: row.revision ?? 0 };
+      const stored = {
+        ...row,
+        revision: row.revision ?? 0,
+        obsoleteObjectKeys: row.obsoleteObjectKeys ?? [],
+      };
       rows.set(row.id, stored);
       return stored;
     },

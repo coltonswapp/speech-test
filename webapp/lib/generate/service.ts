@@ -18,6 +18,7 @@ import {
 } from "./keys";
 import { isMissingObjectError } from "./missing-object";
 import { DuplicateGenerationRequestError, type GenerationStore } from "./store";
+import { hasObsoleteObjectKeys, matchesGenerationClaim } from "./claims";
 import { stampGenerateTokenSync } from "./timing";
 import {
   GENERATE_PENDING_STALE_MS,
@@ -77,7 +78,7 @@ export type GenerateService = {
 
 export type GenerationPublic = Omit<
   GenerationRecord,
-  "wavObjectKey" | "mp3ObjectKey" | "error" | "revision"
+  "wavObjectKey" | "mp3ObjectKey" | "error" | "revision" | "obsoleteObjectKeys"
 > & {
   saved: boolean;
   audioUrl: string;
@@ -160,12 +161,15 @@ function attemptKeys(id: string, attempt: number): { wavObjectKey: string; mp3Ob
 }
 
 /**
- * Deletes only this snapshot's objects. Tracked keys win; if they are missing
- * (crash before they were stored), fall back to this revision's attempt prefix.
- * Never deletes a shared unversioned key, so a delayed fail-cleanup cannot
- * remove a later attempt's upload.
+ * Current playable keys for this snapshot. Tracked keys win; if they are
+ * missing, fall back to this revision's attempt prefix.
+ *
+ * Rejected premise: a single mutable row's current keys are enough to track
+ * every allocated object across retries/crashes. Reclaim writes a new prefix
+ * while old objects may still exist; those keys stay in obsoleteObjectKeys
+ * until deletion succeeds.
  */
-function objectKeysFor(
+function currentObjectKeys(
   row: Pick<GenerationRecord, "id" | "revision" | "wavObjectKey" | "mp3ObjectKey">,
 ): string[] {
   const tracked = [row.wavObjectKey, row.mp3ObjectKey].filter(
@@ -174,6 +178,35 @@ function objectKeysFor(
   if (tracked.length > 0) return [...new Set(tracked)];
   const attempt = attemptKeys(row.id, row.revision);
   return [attempt.wavObjectKey, attempt.mp3ObjectKey];
+}
+
+function allocatedObjectKeys(
+  row: Pick<
+    GenerationRecord,
+    "id" | "revision" | "wavObjectKey" | "mp3ObjectKey" | "obsoleteObjectKeys"
+  >,
+): string[] {
+  return [
+    ...new Set(
+      [...currentObjectKeys(row), ...(row.obsoleteObjectKeys ?? [])].filter(
+        (key): key is string => Boolean(key),
+      ),
+    ),
+  ];
+}
+
+function mergeObsoleteObjectKeys(
+  existing: string[] | undefined,
+  extra: string[],
+  keep: Set<string>,
+): string[] {
+  return [
+    ...new Set(
+      [...(existing ?? []), ...extra].filter(
+        (key) => isGenerateObjectKey(key) && !keep.has(key),
+      ),
+    ),
+  ];
 }
 
 async function deleteGenerateObject(objects: GenerateObjectStore, key: string) {
@@ -194,9 +227,12 @@ async function deleteGenerateObject(objects: GenerateObjectStore, key: string) {
  */
 export async function deleteTrackedGenerateObjects(
   objects: GenerateObjectStore,
-  row: Pick<GenerationRecord, "id" | "revision" | "wavObjectKey" | "mp3ObjectKey">,
+  row: Pick<
+    GenerationRecord,
+    "id" | "revision" | "wavObjectKey" | "mp3ObjectKey" | "obsoleteObjectKeys"
+  >,
 ): Promise<void> {
-  for (const key of objectKeysFor(row)) {
+  for (const key of allocatedObjectKeys(row)) {
     await deleteGenerateObject(objects, key);
   }
 }
@@ -232,6 +268,7 @@ async function putPlayableAudio(
         revision: row.revision,
         wavObjectKey: keys.wavObjectKey,
         mp3ObjectKey: keys.mp3ObjectKey,
+        obsoleteObjectKeys: [],
       });
     } catch {
       // Keep the original put error; cleanup cron will retry leftover keys.
@@ -270,6 +307,7 @@ function pendingRow(params: {
     tokenSync: null,
     transcript: params.transcript,
     ...attemptKeys(params.id, 0),
+    obsoleteObjectKeys: [],
     sampleRate: params.sampleRate,
     durationSeconds: 0,
     byteCount: null,
@@ -303,11 +341,54 @@ async function markFailed(svc: GenerateService, row: GenerationRecord, error: un
   }
 }
 
+async function flushObsoleteObjectKeys(
+  svc: GenerateService,
+  row: GenerationRecord,
+): Promise<void> {
+  const current = new Set(currentObjectKeys(row));
+  const keys = [...new Set(row.obsoleteObjectKeys ?? [])].filter(
+    (key) => isGenerateObjectKey(key) && !current.has(key),
+  );
+  if (keys.length === 0) return;
+  const removed: string[] = [];
+  const leftover: string[] = [];
+  for (const key of keys) {
+    try {
+      await deleteGenerateObject(svc.objects, key);
+      removed.push(key);
+    } catch {
+      leftover.push(key);
+    }
+  }
+  const latest = (await svc.store.get(row.id)) ?? row;
+  const remaining = (latest.obsoleteObjectKeys ?? []).filter(
+    (key) => !removed.includes(key),
+  );
+  if (remaining.join("\0") !== (latest.obsoleteObjectKeys ?? []).join("\0")) {
+    await svc.store.compareAndUpdate(
+      latest.id,
+      latest.revision,
+      { type: "not-purging" },
+      {
+        obsoleteObjectKeys: remaining,
+        updatedAt: iso(svc.now?.() ?? new Date()),
+      },
+    );
+  }
+  if (leftover.length > 0) {
+    throw new GenerateUserError(
+      "Could not delete superseded Generate audio. It remains queued for cleanup.",
+      502,
+    );
+  }
+}
+
 async function reclaimReservation(
   svc: GenerateService,
   existing: GenerationRecord,
   now: Date,
 ): Promise<GenerationRecord | null> {
+  const nextKeys = attemptKeys(existing.id, existing.revision + 1);
   const claimed = await svc.store.compareAndUpdate(
     existing.id,
     existing.revision,
@@ -319,7 +400,12 @@ async function reclaimReservation(
     {
       status: "pending",
       error: null,
-      ...attemptKeys(existing.id, existing.revision + 1),
+      ...nextKeys,
+      obsoleteObjectKeys: mergeObsoleteObjectKeys(
+        existing.obsoleteObjectKeys,
+        currentObjectKeys(existing),
+        new Set([nextKeys.wavObjectKey, nextKeys.mp3ObjectKey]),
+      ),
       lineTimings: null,
       tokenSync: null,
       durationSeconds: 0,
@@ -330,16 +416,11 @@ async function reclaimReservation(
   );
   if (!claimed) return null;
   try {
-    await deleteTrackedGenerateObjects(svc.objects, existing);
-  } catch (error) {
-    throw new GenerateUserError(
-      error instanceof Error
-        ? `Could not clear previous audio before retry: ${error.message}`
-        : "Could not clear previous audio before retry.",
-      502,
-    );
+    await flushObsoleteObjectKeys(svc, claimed);
+  } catch {
+    // Ledger is already durable. Cron or a later retry finishes the deletes.
   }
-  return claimed;
+  return (await svc.store.get(claimed.id)) ?? claimed;
 }
 
 /**
@@ -653,12 +734,28 @@ export async function cleanupExpiredGenerations(
   let deleted = 0;
   let failed = 0;
   for (const row of candidates) {
+    if (hasObsoleteObjectKeys(row) && row.status !== "purging") {
+      try {
+        await flushObsoleteObjectKeys(svc, row);
+      } catch {
+        failed += 1;
+      }
+    }
+    const latest = (await svc.store.get(row.id)) ?? row;
+    const shouldPurge =
+      latest.status === "purging" ||
+      matchesGenerationClaim(latest, {
+        type: "cleanup",
+        nowIso,
+        staleBeforeIso: staleIso,
+      });
+    if (!shouldPurge) continue;
     const claimed =
-      row.status === "purging"
-        ? row
+      latest.status === "purging"
+        ? latest
         : await svc.store.compareAndUpdate(
-            row.id,
-            row.revision,
+            latest.id,
+            latest.revision,
             { type: "cleanup", nowIso, staleBeforeIso: staleIso },
             { status: "purging", updatedAt: nowIso },
           );

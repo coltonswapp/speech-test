@@ -14,7 +14,11 @@ import {
 } from "./service";
 import { memoryGenerationStore, type GenerationStore } from "./store";
 import { GENERATE_R2_PREFIX, generateMp3Key, generateWavKey } from "./keys";
-import { GENERATE_PENDING_STALE_MS, type GenerationRecord } from "./types";
+import {
+  GENERATE_PENDING_STALE_MS,
+  GENERATE_TEMPORARY_TTL_MS,
+  type GenerationRecord,
+} from "./types";
 import { GenerateUserError } from "./validate";
 import { isMpegAudio, silencePcm16 } from "./compose";
 import type { GenerationClaim } from "./claims";
@@ -277,6 +281,7 @@ describe("save and delete", () => {
       transcript: "a",
       wavObjectKey: "tts/voice-takes/secret.wav",
       mp3ObjectKey: null,
+      obsoleteObjectKeys: [],
       sampleRate: RATE,
       durationSeconds: 1,
       byteCount: 10,
@@ -642,6 +647,7 @@ describe("concurrent reclaim", () => {
       transcript: "はい",
       wavObjectKey: null,
       mp3ObjectKey: null,
+      obsoleteObjectKeys: [],
       sampleRate: RATE,
       durationSeconds: 0,
       byteCount: null,
@@ -789,4 +795,135 @@ describe("cleanup races save and retry", () => {
     assert.equal(svc.objectsMap.has(winner!.mp3ObjectKey!), true);
   });
 });
+
+function denyObjectDeletes(svc: GenerateService & { objectsMap: Map<string, Buffer> }) {
+  const inner = svc.objects.delete.bind(svc.objects);
+  svc.objects.delete = async () => {
+    throw Object.assign(new Error("AccessDenied"), { name: "AccessDenied" });
+  };
+  return () => {
+    svc.objects.delete = inner;
+  };
+}
+
+describe("obsolete object ledger", () => {
+  /**
+   * Rejected premise: a single mutable row's current keys are enough to track
+   * every allocated object across retries/crashes.
+   */
+  it("keeps old attempt keys discoverable after reclaim CAS when old delete fails", async () => {
+    let now = new Date("2026-11-07T00:00:00.000Z");
+    const svc = testService({ now: () => now });
+    const input = {
+      model: "gemini-3.8-flash-tts" as const,
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa14",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    };
+    const first = await createTtsGeneration(svc, input);
+    const oldWav = first.generation.wavObjectKey!;
+    const oldMp3 = first.generation.mp3ObjectKey!;
+    now = new Date(now.getTime() + GENERATE_TEMPORARY_TTL_MS + 1000);
+    const restore = denyObjectDeletes(svc);
+    const retry = await createTtsGeneration(svc, input);
+    restore();
+    const row = await svc.store.get(first.generation.id);
+    assert.equal(retry.generation.status, "ready");
+    assert.notEqual(row?.wavObjectKey, oldWav);
+    assert.notEqual(row?.mp3ObjectKey, oldMp3);
+    assert.equal(row?.obsoleteObjectKeys.includes(oldWav), true);
+    assert.equal(row?.obsoleteObjectKeys.includes(oldMp3), true);
+    assert.equal(svc.objectsMap.has(oldWav), true);
+    assert.equal(svc.objectsMap.has(oldMp3), true);
+    assert.equal(svc.objectsMap.has(row!.wavObjectKey!), true);
+    assert.equal(svc.objectsMap.has(row!.mp3ObjectKey!), true);
+  });
+
+  it("lets cron delete obsolete prefixes after rollover while keeping the winner", async () => {
+    let now = new Date("2026-11-07T00:00:00.000Z");
+    const svc = testService({ now: () => now });
+    const input = {
+      model: "gemini-3.8-flash-tts" as const,
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa15",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    };
+    const first = await createTtsGeneration(svc, input);
+    const oldWav = first.generation.wavObjectKey!;
+    now = new Date(now.getTime() + GENERATE_TEMPORARY_TTL_MS + 1000);
+    const restore = denyObjectDeletes(svc);
+    const retry = await createTtsGeneration(svc, input);
+    restore();
+    assert.equal(svc.objectsMap.has(oldWav), true);
+    const flushed = await cleanupExpiredGenerations(svc);
+    assert.equal(flushed.deleted, 0);
+    const row = await svc.store.get(first.generation.id);
+    assert.equal(row?.status, "ready");
+    assert.deepEqual(row?.obsoleteObjectKeys, []);
+    assert.equal(svc.objectsMap.has(oldWav), false);
+    assert.equal(svc.objectsMap.has(retry.generation.wavObjectKey!), true);
+    assert.equal(svc.objectsMap.has(retry.generation.mp3ObjectKey!), true);
+  });
+
+  it("accumulates obsolete keys across repeated retries and then cron-cleans them", async () => {
+    let now = new Date("2026-11-07T00:00:00.000Z");
+    const svc = testService({ now: () => now });
+    const input = {
+      model: "gemini-3.8-flash-tts" as const,
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa16",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    };
+    const first = await createTtsGeneration(svc, input);
+    const attempt0 = [first.generation.wavObjectKey!, first.generation.mp3ObjectKey!];
+    now = new Date(now.getTime() + GENERATE_TEMPORARY_TTL_MS + 1000);
+    const restore = denyObjectDeletes(svc);
+    const second = await createTtsGeneration(svc, input);
+    const attempt1 = [second.generation.wavObjectKey!, second.generation.mp3ObjectKey!];
+    now = new Date(now.getTime() + GENERATE_TEMPORARY_TTL_MS + 1000);
+    const third = await createTtsGeneration(svc, input);
+    restore();
+    const row = await svc.store.get(first.generation.id);
+    for (const key of [...attempt0, ...attempt1]) {
+      assert.equal(row?.obsoleteObjectKeys.includes(key), true);
+      assert.equal(svc.objectsMap.has(key), true);
+    }
+    assert.equal(svc.objectsMap.has(third.generation.wavObjectKey!), true);
+    await cleanupExpiredGenerations(svc);
+    const cleaned = await svc.store.get(first.generation.id);
+    assert.deepEqual(cleaned?.obsoleteObjectKeys, []);
+    assert.equal(cleaned?.wavObjectKey, third.generation.wavObjectKey);
+    for (const key of [...attempt0, ...attempt1]) {
+      assert.equal(svc.objectsMap.has(key), false);
+    }
+    assert.equal(svc.objectsMap.has(third.generation.wavObjectKey!), true);
+    assert.equal(svc.objectsMap.has(third.generation.mp3ObjectKey!), true);
+  });
+
+  it("flushes obsolete keys of a saved clip without deleting the saved audio", async () => {
+    let now = new Date("2026-11-07T00:00:00.000Z");
+    const svc = testService({ now: () => now });
+    const input = {
+      model: "gemini-3.8-flash-tts" as const,
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa17",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    };
+    const first = await createTtsGeneration(svc, input);
+    const oldWav = first.generation.wavObjectKey!;
+    now = new Date(now.getTime() + GENERATE_TEMPORARY_TTL_MS + 1000);
+    const restore = denyObjectDeletes(svc);
+    const retry = await createTtsGeneration(svc, input);
+    restore();
+    const saved = await saveGeneration(svc, retry.generation.id);
+    assert.ok(saved.savedAt);
+    now = new Date(now.getTime() + GENERATE_TEMPORARY_TTL_MS * 3);
+    const result = await cleanupExpiredGenerations(svc);
+    assert.equal(result.deleted, 0);
+    const row = await svc.store.get(saved.id);
+    assert.ok(row?.savedAt);
+    assert.equal(row?.status, "ready");
+    assert.deepEqual(row?.obsoleteObjectKeys, []);
+    assert.equal(svc.objectsMap.has(oldWav), false);
+    assert.equal(svc.objectsMap.has(row!.wavObjectKey!), true);
+    assert.equal(svc.objectsMap.has(row!.mp3ObjectKey!), true);
+  });
+});
+
 

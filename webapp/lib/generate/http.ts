@@ -24,7 +24,7 @@ export function generateErrorResponse(error: unknown): NextResponse {
     return NextResponse.json(
       {
         error:
-          "Could not reach the Generate library. If this environment is new, apply drizzle/0020_tts_generation.sql, drizzle/0021_tts_generation_lifecycle.sql, then drizzle/0022_tts_generation_revision.sql.",
+          "Could not reach the Generate library. If this environment is new, apply drizzle/0020_tts_generation.sql through drizzle/0023_tts_generation_obsolete_keys.sql.",
       },
       { status: 503 },
     );

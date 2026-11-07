@@ -208,6 +208,7 @@ export const ttsGeneration = pgTable(
     transcript: text("transcript"),
     wavObjectKey: text("wav_object_key"),
     mp3ObjectKey: text("mp3_object_key"),
+    obsoleteObjectKeys: jsonb("obsolete_object_keys").$type<string[]>().notNull().default([]),
     sampleRate: real("sample_rate"),
     durationSeconds: real("duration_seconds").notNull(),
     byteCount: integer("byte_count"),

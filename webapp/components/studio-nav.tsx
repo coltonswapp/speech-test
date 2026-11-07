@@ -15,6 +15,7 @@ import {
   MessagesSquareIcon,
   PieChartIcon,
   SettingsIcon,
+  SparklesIcon,
   WindIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -23,93 +24,46 @@ import { useDesignMode } from "@/components/design-mode-provider";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  STUDIO_MORE_NAV,
+  STUDIO_PRIMARY_NAV,
+  activeNavItem,
+  computeVisiblePrimaryIndices,
+  type StudioNavItem,
+} from "@/lib/studio-nav";
 
-const CONTENT_SECTIONS = [
-  "/content/dialogues",
-  "/content/curriculum",
-  "/content/patterns",
-  "/content/coverage",
-] as const;
-
-type NavLink = {
-  href: string;
-  label: string;
-  icon: LucideIcon;
+const ICONS: Record<string, LucideIcon> = {
+  "/content/dialogues": MessagesSquareIcon,
+  "/content/curriculum": GraduationCapIcon,
+  "/slides": ImagesIcon,
+  "/content": BookOpenIcon,
+  "/generate": SparklesIcon,
+  "/tts/review": ListChecksIcon,
+  "/content/patterns": LayersIcon,
+  "/content/coverage": PieChartIcon,
+  "/tts": AudioLinesIcon,
+  "/tts/ambience": WindIcon,
+  "/usage": ChartNoAxesColumnIcon,
+  "/settings": SettingsIcon,
 };
-
-const links: NavLink[] = [
-  { href: "/content/dialogues", label: "Dialogues", icon: MessagesSquareIcon },
-  { href: "/content/curriculum", label: "Curriculum", icon: GraduationCapIcon },
-  { href: "/slides", label: "Slides", icon: ImagesIcon },
-  { href: "/content", label: "Grammar", icon: BookOpenIcon },
-  { href: "/content/patterns", label: "Patterns", icon: LayersIcon },
-  { href: "/content/coverage", label: "Coverage", icon: PieChartIcon },
-  { href: "/tts/review", label: "Review queue", icon: ListChecksIcon },
-  { href: "/tts/ambience", label: "Ambience", icon: WindIcon },
-  { href: "/tts", label: "TTS Studio", icon: AudioLinesIcon },
-  { href: "/usage", label: "Usage", icon: ChartNoAxesColumnIcon },
-  { href: "/settings", label: "Settings", icon: SettingsIcon },
-];
 
 const pillClassName =
   "flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors";
 
-function matchesPath(pathname: string, href: string): boolean {
-  if (href === "/content") {
-    if (pathname === "/content") return true;
-    if (!pathname.startsWith("/content/")) return false;
-    return !CONTENT_SECTIONS.some(
-      (section) => pathname === section || pathname.startsWith(`${section}/`),
-    );
-  }
-  return pathname === href || pathname.startsWith(`${href}/`);
+function NavIcon({ href, className }: { href: string; className?: string }) {
+  const Icon = ICONS[href];
+  if (!Icon) return null;
+  return <Icon data-slot="nav-icon" className={className} />;
 }
 
-function computeVisibleIndices(
-  itemWidths: number[],
-  moreWidth: number,
-  gap: number,
-  containerWidth: number,
-  activeIndex: number,
-): { visible: number[]; overflow: number[] } {
-  const n = itemWidths.length;
-  const all = Array.from({ length: n }, (_, i) => i);
-  const sum = (idxs: number[]) => {
-    if (idxs.length === 0) return 0;
-    return idxs.reduce((s, i) => s + itemWidths[i], 0) + gap * Math.max(0, idxs.length - 1);
-  };
-
-  if (sum(all) <= containerWidth + 0.5) {
-    return { visible: all, overflow: [] };
-  }
-
-  const moreSpace = gap + moreWidth;
-  const canFit = (idxs: number[]) => sum(idxs) + moreSpace <= containerWidth + 0.5;
-
-  const prefix: number[] = [];
-  for (let i = 0; i < n; i++) {
-    if (canFit([...prefix, i])) prefix.push(i);
-    else break;
-  }
-
-  let visible = prefix;
-  if (activeIndex >= 0 && !prefix.includes(activeIndex)) {
-    const next = [...prefix];
-    while (next.length > 0 && !canFit([...next, activeIndex])) {
-      next.pop();
-    }
-    next.push(activeIndex);
-    visible = next;
-  }
-
-  const visibleSet = new Set(visible);
-  return {
-    visible,
-    overflow: all.filter((i) => !visibleSet.has(i)),
-  };
+function itemIsActive(item: StudioNavItem, active: StudioNavItem | null) {
+  return active?.href === item.href;
 }
 
 export function StudioNav() {
@@ -118,12 +72,15 @@ export function StudioNav() {
   const { mode } = useDesignMode();
   const navRef = useRef<HTMLElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState<number[]>(() => links.map((_, i) => i));
-  const [overflow, setOverflow] = useState<number[]>([]);
+  const [visiblePrimary, setVisiblePrimary] = useState<number[]>(() =>
+    STUDIO_PRIMARY_NAV.map((_, i) => i),
+  );
+  const [overflowPrimary, setOverflowPrimary] = useState<number[]>([]);
 
-  const activeIndex = useMemo(
-    () => links.findIndex((link) => matchesPath(pathname, link.href)),
-    [pathname],
+  const active = useMemo(() => activeNavItem(pathname), [pathname]);
+  const activePrimaryIndex = useMemo(
+    () => STUDIO_PRIMARY_NAV.findIndex((item) => itemIsActive(item, active)),
+    [active],
   );
 
   useLayoutEffect(() => {
@@ -133,25 +90,25 @@ export function StudioNav() {
 
     const update = () => {
       const children = Array.from(measure.children) as HTMLElement[];
-      if (children.length < links.length + 1) return;
+      if (children.length < STUDIO_PRIMARY_NAV.length + 1) return;
       const containerWidth = nav.getBoundingClientRect().width;
-      // Hidden on small screens (the mobile dropdown takes over) — nothing to lay out.
       if (containerWidth <= 0) return;
       const itemWidths = children
-        .slice(0, links.length)
+        .slice(0, STUDIO_PRIMARY_NAV.length)
         .map((el) => el.getBoundingClientRect().width);
-      const moreWidth = children[links.length].getBoundingClientRect().width;
+      const moreWidth = children[STUDIO_PRIMARY_NAV.length].getBoundingClientRect()
+        .width;
       const styles = getComputedStyle(nav);
       const gap = Number.parseFloat(styles.columnGap || styles.gap) || 0;
-      const next = computeVisibleIndices(
+      const next = computeVisiblePrimaryIndices(
         itemWidths,
         moreWidth,
         gap,
         containerWidth,
-        activeIndex,
+        activePrimaryIndex,
       );
-      setVisible(next.visible);
-      setOverflow(next.overflow);
+      setVisiblePrimary(next.visible);
+      setOverflowPrimary(next.overflow);
     };
 
     const observer = new ResizeObserver(update);
@@ -159,15 +116,15 @@ export function StudioNav() {
     observer.observe(measure);
     update();
     return () => observer.disconnect();
-  }, [activeIndex, mode]);
+  }, [activePrimaryIndex, mode]);
 
-  const overflowActive = overflow.some((i) => i === activeIndex);
-  const activeLink = activeIndex >= 0 ? links[activeIndex] : null;
-  const ActiveIcon = activeLink?.icon;
+  const overflowPrimaryItems = overflowPrimary.map((i) => STUDIO_PRIMARY_NAV[i]);
+  const moreItems = [...overflowPrimaryItems, ...STUDIO_MORE_NAV];
+  const moreContainsActive = moreItems.some((item) => itemIsActive(item, active));
+  const ActiveIcon = active ? ICONS[active.href] : undefined;
 
   return (
     <>
-      {/* Mobile: one dropdown that names the current section and lists them all. */}
       <div className="flex min-w-0 flex-1 items-center md:hidden">
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -181,32 +138,39 @@ export function StudioNav() {
             {ActiveIcon ? (
               <ActiveIcon className="size-4 shrink-0 text-muted-foreground" />
             ) : null}
-            <span className="truncate">{activeLink?.label ?? "Sections"}</span>
+            <span className="truncate">{active?.label ?? "Sections"}</span>
             <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-52 w-auto">
-            {links.map((link, index) => {
-              const active = index === activeIndex;
-              const Icon = link.icon;
-              return (
-                <DropdownMenuItem
-                  key={link.href}
-                  className={cn(
-                    "min-h-10 touch-manipulation",
-                    active && "bg-accent text-accent-foreground",
-                  )}
-                  onClick={() => router.push(link.href)}
-                >
-                  <Icon className="size-4 text-muted-foreground" />
-                  {link.label}
-                </DropdownMenuItem>
-              );
-            })}
+          <DropdownMenuContent align="start" className="min-w-56 w-auto">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Workspace</DropdownMenuLabel>
+              {STUDIO_PRIMARY_NAV.map((item) => (
+                <NavMenuItem
+                  key={item.href}
+                  item={item}
+                  active={itemIsActive(item, active)}
+                  onSelect={() => router.push(item.href)}
+                  className="min-h-10 touch-manipulation"
+                />
+              ))}
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>More</DropdownMenuLabel>
+              {STUDIO_MORE_NAV.map((item) => (
+                <NavMenuItem
+                  key={item.href}
+                  item={item}
+                  active={itemIsActive(item, active)}
+                  onSelect={() => router.push(item.href)}
+                  className="min-h-10 touch-manipulation"
+                />
+              ))}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      {/* Desktop: inline pills, spilling into "More" only when they don't fit. */}
       <nav
         ref={navRef}
         data-slot="studio-nav"
@@ -218,76 +182,115 @@ export function StudioNav() {
           className="pointer-events-none absolute flex w-max items-center gap-1 whitespace-nowrap"
           style={{ visibility: "hidden", left: 0, top: 0 }}
         >
-          {links.map((link) => {
-            const Icon = link.icon;
-            return (
-              <span key={link.href} className={pillClassName}>
-                <Icon data-slot="nav-icon" />
-                {link.label}
-              </span>
-            );
-          })}
-          <button type="button" tabIndex={-1} className={cn(pillClassName, "appearance-none border-0 bg-transparent")}>
+          {STUDIO_PRIMARY_NAV.map((item) => (
+            <span key={item.href} className={pillClassName}>
+              <NavIcon href={item.href} />
+              {item.label}
+            </span>
+          ))}
+          <button
+            type="button"
+            tabIndex={-1}
+            className={cn(pillClassName, "appearance-none border-0 bg-transparent")}
+          >
             More
             <ChevronDownIcon className="size-3.5" />
           </button>
         </div>
 
-        {visible.map((index) => {
-          const link = links[index];
-          const active = index === activeIndex;
-          const Icon = link.icon;
+        {visiblePrimary.map((index) => {
+          const item = STUDIO_PRIMARY_NAV[index];
+          const isActive = itemIsActive(item, active);
           return (
             <Link
-              key={link.href}
-              href={link.href}
+              key={item.href}
+              href={item.href}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
                 pillClassName,
-                active
+                isActive
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              <Icon data-slot="nav-icon" />
-              {link.label}
+              <NavIcon href={item.href} />
+              {item.label}
             </Link>
           );
         })}
 
-        {overflow.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className={cn(
-                pillClassName,
-                "cursor-pointer appearance-none border-0 bg-transparent",
-                overflowActive
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              More
-              <ChevronDownIcon className="size-3.5" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-40 w-auto">
-              {overflow.map((index) => {
-                const link = links[index];
-                const active = index === activeIndex;
-                const Icon = link.icon;
-                return (
-                  <DropdownMenuItem
-                    key={link.href}
-                    className={cn(active && "bg-accent text-accent-foreground")}
-                    onClick={() => router.push(link.href)}
-                  >
-                    <Icon data-slot="nav-icon" />
-                    {link.label}
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="More tools"
+            aria-haspopup="menu"
+            data-active={moreContainsActive ? "true" : undefined}
+            className={cn(
+              pillClassName,
+              "cursor-pointer appearance-none border-0 bg-transparent",
+              moreContainsActive
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            More
+            <ChevronDownIcon className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-48 w-auto">
+            {overflowPrimaryItems.length > 0 ? (
+              <>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Workspace</DropdownMenuLabel>
+                  {overflowPrimaryItems.map((item) => (
+                    <NavMenuItem
+                      key={item.href}
+                      item={item}
+                      active={itemIsActive(item, active)}
+                      onSelect={() => router.push(item.href)}
+                    />
+                  ))}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
+            <DropdownMenuGroup>
+              {overflowPrimaryItems.length > 0 ? (
+                <DropdownMenuLabel>More</DropdownMenuLabel>
+              ) : null}
+              {STUDIO_MORE_NAV.map((item) => (
+                <NavMenuItem
+                  key={item.href}
+                  item={item}
+                  active={itemIsActive(item, active)}
+                  onSelect={() => router.push(item.href)}
+                />
+              ))}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </nav>
     </>
+  );
+}
+
+function NavMenuItem({
+  item,
+  active,
+  onSelect,
+  className,
+}: {
+  item: StudioNavItem;
+  active: boolean;
+  onSelect: () => void;
+  className?: string;
+}) {
+  return (
+    <DropdownMenuItem
+      className={cn(active && "bg-accent text-accent-foreground", className)}
+      aria-current={active ? "page" : undefined}
+      onClick={onSelect}
+    >
+      <NavIcon href={item.href} className="size-4 text-muted-foreground" />
+      {item.label}
+    </DropdownMenuItem>
   );
 }

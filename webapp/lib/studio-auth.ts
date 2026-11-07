@@ -71,6 +71,21 @@ export function authIsEnforced(): boolean {
   );
 }
 
+function bearerEquals(header: string | null, expected: string | undefined): boolean {
+  if (!expected || !header) return false;
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  if (!token) return false;
+  const a = Buffer.from(token);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+/** Studio MCP / agent token. Does not accept cron or learner QA tokens. */
+export function studioAgentBearerMatches(header: string | null): boolean {
+  return bearerEquals(header, process.env.STUDIO_AGENT_TOKEN?.trim());
+}
+
 export function bearerMatches(header: string | null): boolean {
   const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token) return false;
@@ -84,16 +99,6 @@ export function bearerMatches(header: string | null): boolean {
     if (a.length !== b.length) return false;
     return timingSafeEqual(a, b);
   });
-}
-
-function bearerEquals(header: string | null, expected: string | undefined): boolean {
-  if (!expected || !header) return false;
-  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!token) return false;
-  const a = Buffer.from(token);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
 }
 
 /** Learner-client write token for content QA (parallel to Studio agent bearer). */

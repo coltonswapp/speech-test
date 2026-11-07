@@ -1,4 +1,9 @@
 import type { GenerationRecord } from "./types";
+import {
+  isCleanupCandidate,
+  matchesGenerationClaim,
+  type GenerationClaim,
+} from "./claims";
 
 export class DuplicateGenerationRequestError extends Error {
   readonly code = "23505";
@@ -11,16 +16,18 @@ export class DuplicateGenerationRequestError extends Error {
 
 export type GenerationStore = {
   insert(row: GenerationRecord): Promise<GenerationRecord>;
-  update(
-    id: string,
-    patch: Partial<Omit<GenerationRecord, "id" | "createdAt">>,
-  ): Promise<GenerationRecord | null>;
   get(id: string): Promise<GenerationRecord | null>;
   getByRequestId(requestId: string): Promise<GenerationRecord | null>;
   findRecentByHash(hash: string, sinceIso: string): Promise<GenerationRecord | null>;
   list(): Promise<GenerationRecord[]>;
-  listCleanupCandidates(nowIso: string, limit?: number): Promise<GenerationRecord[]>;
-  delete(id: string): Promise<GenerationRecord | null>;
+  listCleanupCandidates(nowIso: string, staleBeforeIso: string, limit?: number): Promise<GenerationRecord[]>;
+  compareAndUpdate(
+    id: string,
+    expectedRevision: number,
+    claim: GenerationClaim,
+    patch: Partial<Omit<GenerationRecord, "id" | "createdAt" | "revision">>,
+  ): Promise<GenerationRecord | null>;
+  deleteIfRevision(id: string, expectedRevision: number): Promise<GenerationRecord | null>;
 };
 
 export function memoryGenerationStore(
@@ -36,15 +43,9 @@ export function memoryGenerationStore(
       ) {
         throw new DuplicateGenerationRequestError();
       }
-      rows.set(row.id, row);
-      return row;
-    },
-    async update(id, patch) {
-      const current = rows.get(id);
-      if (!current) return null;
-      const next = { ...current, ...patch, id, createdAt: current.createdAt };
-      rows.set(id, next);
-      return next;
+      const stored = { ...row, revision: row.revision ?? 0 };
+      rows.set(row.id, stored);
+      return stored;
     },
     async get(id) {
       return rows.get(id) ?? null;
@@ -69,21 +70,30 @@ export function memoryGenerationStore(
         (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
       );
     },
-    async listCleanupCandidates(nowIso, limit = 100) {
-      const now = Date.parse(nowIso);
+    async listCleanupCandidates(nowIso, staleBeforeIso, limit = 100) {
       return [...rows.values()]
-        .filter(
-          (row) =>
-            row.savedAt == null &&
-            row.expiresAt != null &&
-            Date.parse(row.expiresAt) <= now,
-        )
+        .filter((row) => isCleanupCandidate(row, nowIso, staleBeforeIso))
         .sort((a, b) => Date.parse(a.expiresAt ?? "") - Date.parse(b.expiresAt ?? ""))
         .slice(0, limit);
     },
-    async delete(id) {
+    async compareAndUpdate(id, expectedRevision, claim, patch) {
       const current = rows.get(id);
       if (!current) return null;
+      if (current.revision !== expectedRevision) return null;
+      if (!matchesGenerationClaim(current, claim)) return null;
+      const next = {
+        ...current,
+        ...patch,
+        id,
+        createdAt: current.createdAt,
+        revision: current.revision + 1,
+      };
+      rows.set(id, next);
+      return next;
+    },
+    async deleteIfRevision(id, expectedRevision) {
+      const current = rows.get(id);
+      if (!current || current.revision !== expectedRevision) return null;
       rows.delete(id);
       return current;
     },

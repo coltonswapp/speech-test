@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { GenerateUserError } from "./validate";
 import { GeminiTTSError } from "@/lib/tts/gemini-tts";
 
-export { forbidContentQaOnly, rejectLearnerQaAccess } from "./access";
+export {
+  forbidContentQaOnly,
+  rejectLearnerQaAccess,
+  requireGenerateAccess,
+} from "./access";
 
 export function generateErrorResponse(error: unknown): NextResponse {
   if (error instanceof GenerateUserError) {
@@ -20,7 +24,7 @@ export function generateErrorResponse(error: unknown): NextResponse {
     return NextResponse.json(
       {
         error:
-          "Could not reach the Generate library. If this environment is new, apply drizzle/0020_tts_generation.sql then drizzle/0021_tts_generation_lifecycle.sql.",
+          "Could not reach the Generate library. If this environment is new, apply drizzle/0020_tts_generation.sql, drizzle/0021_tts_generation_lifecycle.sql, then drizzle/0022_tts_generation_revision.sql.",
       },
       { status: 503 },
     );

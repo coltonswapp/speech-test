@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { alignGeneration, publicGeneration } from "@/lib/generate/service";
 import { generateAlignRequestSchema } from "@/lib/generate/types";
 import { studioGenerateService } from "@/lib/generate/runtime";
-import { generateErrorResponse, rejectLearnerQaAccess } from "@/lib/generate/http";
+import { generateErrorResponse, requireGenerateAccess } from "@/lib/generate/http";
 
 export const maxDuration = 300;
 
@@ -11,8 +11,8 @@ export async function POST(
   request: NextRequest,
   ctx: RouteContext<"/api/generate/[id]/align">,
 ) {
-  const forbidden = rejectLearnerQaAccess(request);
-  if (forbidden) return forbidden;
+  const denied = await requireGenerateAccess(request);
+  if (denied) return denied;
   const body = await request.json().catch(() => ({}));
   const parsed = generateAlignRequestSchema.safeParse(body);
   if (!parsed.success) {

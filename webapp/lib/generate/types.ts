@@ -19,7 +19,7 @@ export const GENERATE_TEMPORARY_LIFETIME = `Unsaved clips are kept privately for
 export const GENERATE_ALIGNMENT_NOTE =
   "Timestamps are taken from the combined WAV (pauses included) that is then encoded to MP3. A small MP3 encoder delay versus playback is possible and has not been live-measured.";
 
-export type GenerationStatus = "pending" | "ready" | "failed";
+export type GenerationStatus = "pending" | "ready" | "failed" | "purging";
 
 export const generateLineInputSchema = z.object({
   id: z.string().min(1).max(80),
@@ -86,6 +86,7 @@ export type GenerationRecord = {
   savedAt: string | null;
   expiresAt: string | null;
   status: GenerationStatus;
+  revision: number;
   error: string | null;
   title: string;
   kind: GenerateKind;

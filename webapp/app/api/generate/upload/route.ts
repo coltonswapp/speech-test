@@ -13,14 +13,14 @@ import {
   GENERATE_UPLOAD_TYPES,
 } from "@/lib/generate/types";
 import { studioGenerateService } from "@/lib/generate/runtime";
-import { generateErrorResponse, rejectLearnerQaAccess } from "@/lib/generate/http";
+import { generateErrorResponse, requireGenerateAccess } from "@/lib/generate/http";
 import { GenerateUserError } from "@/lib/generate/validate";
 
 export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
-  const forbidden = rejectLearnerQaAccess(request);
-  if (forbidden) return forbidden;
+  const denied = await requireGenerateAccess(request);
+  if (denied) return denied;
 
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared > GENERATE_UPLOAD_MAX_BYTES) {

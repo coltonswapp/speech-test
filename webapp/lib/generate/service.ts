@@ -77,7 +77,7 @@ export type GenerateService = {
 
 export type GenerationPublic = Omit<
   GenerationRecord,
-  "wavObjectKey" | "mp3ObjectKey" | "error"
+  "wavObjectKey" | "mp3ObjectKey" | "error" | "revision"
 > & {
   saved: boolean;
   audioUrl: string;
@@ -121,6 +121,10 @@ function iso(date: Date): string {
 
 function addMs(date: Date, ms: number): Date {
   return new Date(date.getTime() + ms);
+}
+
+function staleBeforeIso(now: Date): string {
+  return iso(new Date(now.getTime() - GENERATE_PENDING_STALE_MS));
 }
 
 function isDuplicateRequestId(error: unknown): boolean {
@@ -253,32 +257,61 @@ function pendingRow(params: {
     sampleRate: params.sampleRate,
     durationSeconds: 0,
     byteCount: null,
+    revision: 0,
   };
 }
 
 async function markFailed(svc: GenerateService, row: GenerationRecord, error: unknown) {
   const now = svc.now?.() ?? new Date();
   const message = error instanceof Error ? error.message : "Generation failed.";
+  const failed = await svc.store.compareAndUpdate(
+    row.id,
+    row.revision,
+    { type: "pending" },
+    {
+      status: "failed",
+      error: message.slice(0, 1000),
+      wavObjectKey: null,
+      mp3ObjectKey: null,
+      expiresAt: iso(addMs(now, GENERATE_TEMPORARY_TTL_MS)),
+      updatedAt: iso(now),
+    },
+  );
+  if (!failed) return;
   try {
     await deleteTrackedGenerateObjects(svc.objects, row);
   } catch {
     // Keep the failed row so cleanup can retry object deletion.
   }
-  await svc.store.update(row.id, {
-    status: "failed",
-    error: message.slice(0, 1000),
-    wavObjectKey: null,
-    mp3ObjectKey: null,
-    expiresAt: iso(addMs(now, GENERATE_TEMPORARY_TTL_MS)),
-    updatedAt: iso(now),
-  });
 }
 
 async function reclaimReservation(
   svc: GenerateService,
   existing: GenerationRecord,
   now: Date,
-): Promise<GenerationRecord> {
+): Promise<GenerationRecord | null> {
+  const claimed = await svc.store.compareAndUpdate(
+    existing.id,
+    existing.revision,
+    {
+      type: "reclaim",
+      nowIso: iso(now),
+      staleBeforeIso: staleBeforeIso(now),
+    },
+    {
+      status: "pending",
+      error: null,
+      wavObjectKey: null,
+      mp3ObjectKey: null,
+      lineTimings: null,
+      tokenSync: null,
+      durationSeconds: 0,
+      byteCount: null,
+      expiresAt: iso(addMs(now, GENERATE_PENDING_STALE_MS)),
+      updatedAt: iso(now),
+    },
+  );
+  if (!claimed) return null;
   try {
     await deleteTrackedGenerateObjects(svc.objects, existing);
   } catch (error) {
@@ -289,26 +322,13 @@ async function reclaimReservation(
       502,
     );
   }
-  const updated = await svc.store.update(existing.id, {
-    status: "pending",
-    error: null,
-    wavObjectKey: null,
-    mp3ObjectKey: null,
-    lineTimings: null,
-    tokenSync: null,
-    durationSeconds: 0,
-    byteCount: null,
-    expiresAt: iso(addMs(now, GENERATE_PENDING_STALE_MS)),
-    updatedAt: iso(now),
-  });
-  if (!updated) throw new GenerateUserError("Not found.", 404);
-  return updated;
+  return claimed;
 }
 
 /**
  * If this request id already has a ready clip, reuse it (no TTS).
  * In-flight pending reservations 409 so a second caller cannot charge twice.
- * Failed or stale pending rows are reclaimed for a genuine retry.
+ * Failed or stale pending rows are reclaimed for a genuine retry via CAS.
  */
 async function resolveReservation(
   svc: GenerateService,
@@ -321,7 +341,15 @@ async function resolveReservation(
   if (existing.status === "pending" && !isStalePending(existing, now)) {
     throw new GenerateUserError("This request is already generating.", 409);
   }
-  return { reservation: await reclaimReservation(svc, existing, now) };
+  const claimed = await reclaimReservation(svc, existing, now);
+  if (claimed) return { reservation: claimed };
+  const latest = existing.requestId
+    ? await svc.store.getByRequestId(existing.requestId)
+    : await svc.store.get(existing.id);
+  if (latest?.status === "ready" && !isExpiredUnsaved(latest, now)) {
+    return { generation: latest, reused: true };
+  }
+  throw new GenerateUserError("This request is already generating.", 409);
 }
 
 async function reserveRequest(
@@ -403,23 +431,30 @@ export async function createTtsGeneration(
 
     const keys = await putPlayableAudio(svc, row.id, wav, mp3);
     const readyAt = svc.now?.() ?? new Date();
-    const updated = await svc.store.update(row.id, {
-      status: "ready",
-      error: null,
-      title: draft.title,
-      lines,
-      contentHash,
-      transcript: draft.transcript,
-      lineTimings: composed.lineTimings,
-      wavObjectKey: keys.wavObjectKey,
-      mp3ObjectKey: keys.mp3ObjectKey,
-      sampleRate: svc.tts.sampleRate,
-      durationSeconds: composed.durationSeconds,
-      byteCount: mp3.length,
-      expiresAt: iso(addMs(readyAt, GENERATE_TEMPORARY_TTL_MS)),
-      updatedAt: iso(readyAt),
-    });
-    if (!updated) throw new GenerateUserError("Not found.", 404);
+    const updated = await svc.store.compareAndUpdate(
+      row.id,
+      row.revision,
+      { type: "pending" },
+      {
+        status: "ready",
+        error: null,
+        title: draft.title,
+        lines,
+        contentHash,
+        transcript: draft.transcript,
+        lineTimings: composed.lineTimings,
+        wavObjectKey: keys.wavObjectKey,
+        mp3ObjectKey: keys.mp3ObjectKey,
+        sampleRate: svc.tts.sampleRate,
+        durationSeconds: composed.durationSeconds,
+        byteCount: mp3.length,
+        expiresAt: iso(addMs(readyAt, GENERATE_TEMPORARY_TTL_MS)),
+        updatedAt: iso(readyAt),
+      },
+    );
+    if (!updated) {
+      throw new GenerateUserError("This request is already generating.", 409);
+    }
     return { generation: updated, reused: false };
   } catch (error) {
     await markFailed(svc, row, error);
@@ -484,18 +519,25 @@ export async function createUploadGeneration(
     const keys = await putPlayableAudio(svc, row.id, wav, mp3);
     const readyAt = svc.now?.() ?? new Date();
     const durationSeconds = Math.floor(pcm.length / 2) / sampleRate;
-    const updated = await svc.store.update(row.id, {
-      status: "ready",
-      error: null,
-      wavObjectKey: keys.wavObjectKey,
-      mp3ObjectKey: keys.mp3ObjectKey,
-      sampleRate,
-      durationSeconds,
-      byteCount: mp3.length,
-      expiresAt: iso(addMs(readyAt, GENERATE_TEMPORARY_TTL_MS)),
-      updatedAt: iso(readyAt),
-    });
-    if (!updated) throw new GenerateUserError("Not found.", 404);
+    const updated = await svc.store.compareAndUpdate(
+      row.id,
+      row.revision,
+      { type: "pending" },
+      {
+        status: "ready",
+        error: null,
+        wavObjectKey: keys.wavObjectKey,
+        mp3ObjectKey: keys.mp3ObjectKey,
+        sampleRate,
+        durationSeconds,
+        byteCount: mp3.length,
+        expiresAt: iso(addMs(readyAt, GENERATE_TEMPORARY_TTL_MS)),
+        updatedAt: iso(readyAt),
+      },
+    );
+    if (!updated) {
+      throw new GenerateUserError("This request is already generating.", 409);
+    }
     return updated;
   } catch (error) {
     await markFailed(svc, row, error);
@@ -507,15 +549,24 @@ export async function saveGeneration(
   svc: GenerateService,
   id: string,
 ): Promise<GenerationRecord> {
-  const row = await requireReadyGeneration(svc, id);
+  const row = await requireGeneration(svc, id);
+  if (row.status === "purging") {
+    throw new GenerateUserError("Could not save; this clip changed or expired.", 409);
+  }
+  if (row.status !== "ready") {
+    throw new GenerateUserError("This clip is not ready yet.", 409);
+  }
   if (row.savedAt) return row;
   const now = iso(svc.now?.() ?? new Date());
-  const updated = await svc.store.update(id, {
-    savedAt: now,
-    expiresAt: null,
-    updatedAt: now,
-  });
-  if (!updated) throw new GenerateUserError("Not found.", 404);
+  const updated = await svc.store.compareAndUpdate(
+    id,
+    row.revision,
+    { type: "ready-unsaved" },
+    { savedAt: now, expiresAt: null, updatedAt: now },
+  );
+  if (!updated) {
+    throw new GenerateUserError("Could not save; this clip changed or expired.", 409);
+  }
   return updated;
 }
 
@@ -524,9 +575,14 @@ export async function renameGeneration(
   id: string,
   title: string,
 ): Promise<GenerationRecord> {
-  await requireReadyGeneration(svc, id);
+  const row = await requireReadyGeneration(svc, id);
   const now = iso(svc.now?.() ?? new Date());
-  const updated = await svc.store.update(id, { title: title.trim(), updatedAt: now });
+  const updated = await svc.store.compareAndUpdate(
+    id,
+    row.revision,
+    { type: "ready" },
+    { title: title.trim(), updatedAt: now },
+  );
   if (!updated) throw new GenerateUserError("Not found.", 404);
   return updated;
 }
@@ -536,8 +592,21 @@ export async function deleteGeneration(
   id: string,
 ): Promise<void> {
   const row = await requireGeneration(svc, id);
+  const claimed =
+    row.status === "purging"
+      ? row
+      : await svc.store.compareAndUpdate(
+          id,
+          row.revision,
+          { type: "not-purging" },
+          {
+            status: "purging",
+            updatedAt: iso(svc.now?.() ?? new Date()),
+          },
+        );
+  if (!claimed) throw new GenerateUserError("Not found.", 404);
   try {
-    await deleteTrackedGenerateObjects(svc.objects, row);
+    await deleteTrackedGenerateObjects(svc.objects, claimed);
   } catch (error) {
     throw new GenerateUserError(
       error instanceof Error
@@ -546,7 +615,10 @@ export async function deleteGeneration(
       502,
     );
   }
-  await svc.store.delete(id);
+  const deleted = await svc.store.deleteIfRevision(claimed.id, claimed.revision);
+  if (!deleted) {
+    throw new GenerateUserError("Could not delete stored audio. The clip was not removed.", 409);
+  }
 }
 
 export async function cleanupExpiredGenerations(
@@ -554,14 +626,33 @@ export async function cleanupExpiredGenerations(
   options: { limit?: number } = {},
 ): Promise<{ deleted: number; failed: number }> {
   const now = svc.now?.() ?? new Date();
-  const candidates = await svc.store.listCleanupCandidates(iso(now), options.limit ?? 100);
+  const nowIso = iso(now);
+  const staleIso = staleBeforeIso(now);
+  const candidates = await svc.store.listCleanupCandidates(
+    nowIso,
+    staleIso,
+    options.limit ?? 100,
+  );
   let deleted = 0;
   let failed = 0;
   for (const row of candidates) {
-    if (row.savedAt) continue;
+    const claimed =
+      row.status === "purging"
+        ? row
+        : await svc.store.compareAndUpdate(
+            row.id,
+            row.revision,
+            { type: "cleanup", nowIso, staleBeforeIso: staleIso },
+            { status: "purging", updatedAt: nowIso },
+          );
+    if (!claimed) continue;
     try {
-      await deleteTrackedGenerateObjects(svc.objects, row);
-      await svc.store.delete(row.id);
+      await deleteTrackedGenerateObjects(svc.objects, claimed);
+      const removed = await svc.store.deleteIfRevision(claimed.id, claimed.revision);
+      if (!removed) {
+        failed += 1;
+        continue;
+      }
       deleted += 1;
     } catch {
       failed += 1;
@@ -669,12 +760,17 @@ export async function alignGeneration(
       ? row.lineTimings
       : stamped.lineTimings;
 
-  const updated = await svc.store.update(id, {
-    tokenSync: stamped.tokenSync,
-    lineTimings,
-    transcript: lineTexts.join("\n"),
-    updatedAt: now,
-  });
+  const updated = await svc.store.compareAndUpdate(
+    id,
+    row.revision,
+    { type: "ready" },
+    {
+      tokenSync: stamped.tokenSync,
+      lineTimings,
+      transcript: lineTexts.join("\n"),
+      updatedAt: now,
+    },
+  );
   if (!updated) throw new GenerateUserError("Not found.", 404);
   return updated;
 }

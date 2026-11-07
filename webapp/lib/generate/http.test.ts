@@ -3,55 +3,126 @@ import { after, before, describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
-import { rejectLearnerQaAccess } from "./access";
+import { encode } from "next-auth/jwt";
+import { requireGenerateAccess } from "./access";
 
 const QA = "qa-learner-token-aaaaaaaa";
 const STUDIO = "studio-agent-token-bbbbbbbb";
+const CRON = "cron-secret-token-cccccccc";
+const SECRET = "test-auth-secret-at-least-32-chars!!";
+const EMAIL = "studio@example.com";
 
-function bearerRequest(token?: string, path = "http://localhost/api/generate") {
+function request(path = "http://localhost/api/generate", init?: { token?: string; cookie?: string }) {
   const headers = new Headers();
-  if (token) headers.set("authorization", `Bearer ${token}`);
+  if (init?.token) headers.set("authorization", `Bearer ${init.token}`);
+  if (init?.cookie) headers.set("cookie", init.cookie);
   return new NextRequest(path, { headers });
 }
 
-describe("rejectLearnerQaAccess", () => {
+async function sessionCookie(email: string, maxAge: number) {
+  const token = await encode({
+    token: { email, sub: "user-1" },
+    secret: SECRET,
+    maxAge,
+  });
+  return `next-auth.session-token=${token}`;
+}
+
+describe("requireGenerateAccess", () => {
   const previous = {
     qa: process.env.CONTENT_QA_CLIENT_TOKEN,
     studio: process.env.STUDIO_AGENT_TOKEN,
+    cron: process.env.CRON_SECRET,
+    authSecret: process.env.AUTH_SECRET,
+    nextAuthSecret: process.env.NEXTAUTH_SECRET,
+    googleId: process.env.AUTH_GOOGLE_ID,
+    googleSecret: process.env.AUTH_GOOGLE_SECRET,
+    emails: process.env.STUDIO_ALLOWED_EMAILS,
+    bypass: process.env.STUDIO_AUTH_BYPASS,
+    passphrase: process.env.APP_PASSPHRASE,
+    nextAuthUrl: process.env.NEXTAUTH_URL,
   };
 
   before(() => {
     process.env.CONTENT_QA_CLIENT_TOKEN = QA;
     process.env.STUDIO_AGENT_TOKEN = STUDIO;
+    process.env.CRON_SECRET = CRON;
+    process.env.AUTH_SECRET = SECRET;
+    process.env.NEXTAUTH_SECRET = SECRET;
+    process.env.AUTH_GOOGLE_ID = "test-google-id";
+    process.env.AUTH_GOOGLE_SECRET = "test-google-secret";
+    process.env.STUDIO_ALLOWED_EMAILS = EMAIL;
+    process.env.NEXTAUTH_URL = "http://localhost:3000";
+    delete process.env.STUDIO_AUTH_BYPASS;
+    delete process.env.APP_PASSPHRASE;
   });
 
   after(() => {
-    if (previous.qa === undefined) delete process.env.CONTENT_QA_CLIENT_TOKEN;
-    else process.env.CONTENT_QA_CLIENT_TOKEN = previous.qa;
-    if (previous.studio === undefined) delete process.env.STUDIO_AGENT_TOKEN;
-    else process.env.STUDIO_AGENT_TOKEN = previous.studio;
+    const restore = (key: string, value: string | undefined) => {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    };
+    restore("CONTENT_QA_CLIENT_TOKEN", previous.qa);
+    restore("STUDIO_AGENT_TOKEN", previous.studio);
+    restore("CRON_SECRET", previous.cron);
+    restore("AUTH_SECRET", previous.authSecret);
+    restore("NEXTAUTH_SECRET", previous.nextAuthSecret);
+    restore("AUTH_GOOGLE_ID", previous.googleId);
+    restore("AUTH_GOOGLE_SECRET", previous.googleSecret);
+    restore("STUDIO_ALLOWED_EMAILS", previous.emails);
+    restore("STUDIO_AUTH_BYPASS", previous.bypass);
+    restore("APP_PASSPHRASE", previous.passphrase);
+    restore("NEXTAUTH_URL", previous.nextAuthUrl);
   });
 
-  it("forbids the learner QA token on generate reads", async () => {
-    const denied = rejectLearnerQaAccess(bearerRequest(QA, "http://localhost/api/generate"));
+  it("denies a forged next-auth.session-token cookie", async () => {
+    const denied = await requireGenerateAccess(
+      request("http://localhost/api/generate", {
+        cookie: "next-auth.session-token=fake",
+      }),
+    );
     assert.ok(denied);
-    assert.equal(denied.status, 403);
-    const detail = rejectLearnerQaAccess(
-      bearerRequest(QA, "http://localhost/api/generate/abc/audio"),
+    assert.equal(denied.status, 401);
+    const audio = await requireGenerateAccess(
+      request("http://localhost/api/generate/abc/audio", {
+        cookie: "next-auth.session-token=fake",
+      }),
     );
-    assert.equal(detail?.status, 403);
-    const timing = rejectLearnerQaAccess(
-      bearerRequest(QA, "http://localhost/api/generate/abc/timing"),
-    );
-    assert.equal(timing?.status, 403);
+    assert.equal(audio?.status, 401);
   });
 
-  it("allows the Studio agent bearer", () => {
-    assert.equal(rejectLearnerQaAccess(bearerRequest(STUDIO)), null);
+  it("denies an expired next-auth session JWT", async () => {
+    const cookie = await sessionCookie(EMAIL, -60);
+    const denied = await requireGenerateAccess(request("http://localhost/api/generate", { cookie }));
+    assert.ok(denied);
+    assert.equal(denied.status, 401);
   });
 
-  it("does not invent a cookie check; sessioned Studio traffic is left to proxy", () => {
-    assert.equal(rejectLearnerQaAccess(bearerRequest(undefined)), null);
+  it("allows a verified next-auth session for an allowed email", async () => {
+    const cookie = await sessionCookie(EMAIL, 60 * 60);
+    const allowed = await requireGenerateAccess(request("http://localhost/api/generate", { cookie }));
+    assert.equal(allowed, null);
+    const audio = await requireGenerateAccess(
+      request("http://localhost/api/generate/abc/audio", { cookie }),
+    );
+    assert.equal(audio, null);
+  });
+
+  it("denies a verified session whose email is not allowlisted", async () => {
+    const cookie = await sessionCookie("other@example.com", 60 * 60);
+    const denied = await requireGenerateAccess(request("http://localhost/api/generate", { cookie }));
+    assert.ok(denied);
+    assert.equal(denied.status, 401);
+  });
+
+  it("allows the Studio agent bearer and forbids learner QA and cron tokens", async () => {
+    assert.equal(await requireGenerateAccess(request("http://localhost/api/generate", { token: STUDIO })), null);
+    const qa = await requireGenerateAccess(request("http://localhost/api/generate", { token: QA }));
+    assert.equal(qa?.status, 403);
+    const cron = await requireGenerateAccess(request("http://localhost/api/generate", { token: CRON }));
+    assert.equal(cron?.status, 401);
+    const missing = await requireGenerateAccess(request());
+    assert.equal(missing?.status, 401);
   });
 });
 
@@ -65,13 +136,13 @@ describe("generate route files", () => {
     "app/api/generate/[id]/align/route.ts",
   ];
 
-  it("call rejectLearnerQaAccess on every HTTP handler", () => {
+  it("await requireGenerateAccess on every HTTP handler", () => {
     const cwd = process.cwd();
     const root = cwd.endsWith("webapp") ? cwd : join(cwd, "webapp");
     for (const file of files) {
       const src = readFileSync(join(root, file), "utf8");
       const methods = [...src.matchAll(/export async function (GET|POST|PATCH|DELETE)/g)];
-      const guards = [...src.matchAll(/rejectLearnerQaAccess\(request\)/g)];
+      const guards = [...src.matchAll(/await requireGenerateAccess\(request\)/g)];
       assert.ok(methods.length > 0, `${file} exports handlers`);
       assert.equal(
         guards.length,

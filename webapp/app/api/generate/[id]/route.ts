@@ -9,13 +9,13 @@ import {
 } from "@/lib/generate/service";
 import { generatePatchSchema } from "@/lib/generate/types";
 import { studioGenerateService } from "@/lib/generate/runtime";
-import { generateErrorResponse, rejectLearnerQaAccess } from "@/lib/generate/http";
+import { generateErrorResponse, requireGenerateAccess } from "@/lib/generate/http";
 
 type Ctx = RouteContext<"/api/generate/[id]">;
 
 export async function GET(request: NextRequest, ctx: Ctx) {
-  const forbidden = rejectLearnerQaAccess(request);
-  if (forbidden) return forbidden;
+  const denied = await requireGenerateAccess(request);
+  if (denied) return denied;
   try {
     const { id } = await ctx.params;
     const row = await requireReadyGeneration(studioGenerateService(), id);
@@ -26,8 +26,8 @@ export async function GET(request: NextRequest, ctx: Ctx) {
 }
 
 export async function PATCH(request: NextRequest, ctx: Ctx) {
-  const forbidden = rejectLearnerQaAccess(request);
-  if (forbidden) return forbidden;
+  const denied = await requireGenerateAccess(request);
+  if (denied) return denied;
   const parsed = generatePatchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -35,12 +35,16 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
   try {
     const { id } = await ctx.params;
     const svc = studioGenerateService();
-    let row = await requireReadyGeneration(svc, id);
-    if (parsed.data.title) {
-      row = await renameGeneration(svc, id, parsed.data.title);
-    }
+    let row;
     if (parsed.data.saved === true) {
       row = await saveGeneration(svc, id);
+      if (parsed.data.title) {
+        row = await renameGeneration(svc, id, parsed.data.title);
+      }
+    } else {
+      row = parsed.data.title
+        ? await renameGeneration(svc, id, parsed.data.title)
+        : await requireReadyGeneration(svc, id);
     }
     return NextResponse.json({ generation: publicGeneration(row) });
   } catch (error) {
@@ -49,8 +53,8 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
 }
 
 export async function DELETE(request: NextRequest, ctx: Ctx) {
-  const forbidden = rejectLearnerQaAccess(request);
-  if (forbidden) return forbidden;
+  const denied = await requireGenerateAccess(request);
+  if (denied) return denied;
   try {
     const { id } = await ctx.params;
     await deleteGeneration(studioGenerateService(), id);

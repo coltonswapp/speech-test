@@ -12,10 +12,12 @@ import {
   saveGeneration,
   type GenerateService,
 } from "./service";
-import { memoryGenerationStore } from "./store";
+import { memoryGenerationStore, type GenerationStore } from "./store";
 import { GENERATE_R2_PREFIX } from "./keys";
+import { GENERATE_PENDING_STALE_MS, type GenerationRecord } from "./types";
 import { GenerateUserError } from "./validate";
 import { isMpegAudio, silencePcm16 } from "./compose";
+import type { GenerationClaim } from "./claims";
 
 const RATE = 24_000;
 const VOICE = GEMINI_TTS_VOICES[0];
@@ -278,6 +280,7 @@ describe("save and delete", () => {
       sampleRate: RATE,
       durationSeconds: 1,
       byteCount: 10,
+      revision: 0,
     });
     await assert.rejects(
       () => deleteGeneration(svc, "dddddddd-dddd-dddd-dddd-dddddddddddd"),
@@ -521,4 +524,200 @@ describe("temporary lifetime cleanup", () => {
     assert.match(listed.temporaryLifetime, /24 hours/);
     assert.doesNotMatch(listed.temporaryLifetime, /until you save them to the library or delete them/);
   });
+
+  it("claims purging before deleting objects", async () => {
+    let now = new Date("2026-11-07T00:00:00.000Z");
+    const svc = testService({ now: () => now });
+    const { generation } = await createTtsGeneration(svc, {
+      model: "gemini-3.8-flash-tts",
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    });
+    now = new Date("2026-11-08T00:00:01.000Z");
+    const innerDelete = svc.objects.delete.bind(svc.objects);
+    svc.objects.delete = async (key) => {
+      const row = await svc.store.get(generation.id);
+      assert.equal(row?.status, "purging");
+      await innerDelete(key);
+    };
+    const result = await cleanupExpiredGenerations(svc);
+    assert.equal(result.deleted, 1);
+    assert.equal(await svc.store.get(generation.id), null);
+  });
 });
+
+function gateClaims(
+  store: GenerationStore,
+  type: GenerationClaim["type"],
+): { ready: Promise<void> } {
+  const inner = store.compareAndUpdate.bind(store);
+  let waiters = 0;
+  let release!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  store.compareAndUpdate = async (id, revision, claim, patch) => {
+    if (claim.type === type) {
+      waiters += 1;
+      if (waiters >= 2) release();
+      await ready;
+    }
+    return inner(id, revision, claim, patch);
+  };
+  return { ready };
+}
+
+describe("concurrent reclaim", () => {
+  it("lets only one failed retry synthesize, and the loser cannot delete the winner output", async () => {
+    let n = 0;
+    const svc = testService({
+      tts: {
+        sampleRate: RATE,
+        async synthesizeLine() {
+          n += 1;
+          if (n === 1) throw new Error("Gemini request failed (HTTP 502): boom");
+          return pcm(RATE);
+        },
+      },
+    });
+    const input = {
+      model: "gemini-3.8-flash-tts" as const,
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa7",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    };
+    await assert.rejects(() => createTtsGeneration(svc, input), /502/);
+    gateClaims(svc.store, "reclaim");
+    const deleted: string[] = [];
+    const innerDelete = svc.objects.delete.bind(svc.objects);
+    svc.objects.delete = async (key) => {
+      deleted.push(key);
+      await innerDelete(key);
+    };
+    const results = await Promise.allSettled([
+      createTtsGeneration(svc, input),
+      createTtsGeneration(svc, input),
+    ]);
+    const fulfilled = results.filter(
+      (result): result is PromiseFulfilledResult<{ generation: GenerationRecord; reused: boolean }> =>
+        result.status === "fulfilled",
+    );
+    const rejected = results.filter((result) => result.status === "rejected");
+    assert.equal(fulfilled.length, 1);
+    assert.equal(rejected.length, 1);
+    assert.match(String((rejected[0] as PromiseRejectedResult).reason), /already generating/);
+    assert.equal(n, 2);
+    const winner = fulfilled[0].value.generation;
+    assert.equal(winner.status, "ready");
+    assert.equal(svc.objectsMap.has(winner.wavObjectKey!), true);
+    assert.equal(svc.objectsMap.has(winner.mp3ObjectKey!), true);
+    const winnerKeys = new Set([winner.wavObjectKey!, winner.mp3ObjectKey!]);
+    assert.equal(
+      deleted.filter((key) => winnerKeys.has(key) && !svc.objectsMap.has(key)).length,
+      0,
+    );
+  });
+
+  it("lets only one stale pending retry synthesize", async () => {
+    const requestId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa8";
+    const started = new Date("2026-11-07T00:00:00.000Z");
+    const later = new Date(started.getTime() + GENERATE_PENDING_STALE_MS + 1000);
+    const store = memoryGenerationStore();
+    await store.insert({
+      id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa9",
+      createdAt: started.toISOString(),
+      updatedAt: started.toISOString(),
+      savedAt: null,
+      expiresAt: later.toISOString(),
+      status: "pending",
+      revision: 0,
+      error: null,
+      title: "stale",
+      kind: "tts",
+      model: "gemini-3.8-flash-tts",
+      requestId,
+      contentHash: "stale",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+      lineTimings: null,
+      tokenSync: null,
+      transcript: "はい",
+      wavObjectKey: null,
+      mp3ObjectKey: null,
+      sampleRate: RATE,
+      durationSeconds: 0,
+      byteCount: null,
+    });
+    const svc = testService({ store, now: () => later });
+    const input = {
+      model: "gemini-3.8-flash-tts" as const,
+      requestId,
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    };
+    gateClaims(svc.store, "reclaim");
+    const results = await Promise.allSettled([
+      createTtsGeneration(svc, input),
+      createTtsGeneration(svc, input),
+    ]);
+    const fulfilled = results.filter((result) => result.status === "fulfilled");
+    assert.equal(fulfilled.length, 1);
+    assert.equal(svc.synthCalls, 1);
+    const winner = (fulfilled[0] as PromiseFulfilledResult<{ generation: GenerationRecord }>).value
+      .generation;
+    assert.equal(winner.status, "ready");
+    assert.equal(svc.objectsMap.size, 2);
+  });
+});
+
+describe("cleanup races save and retry", () => {
+  it("keeps assets when a listed expiration candidate is saved before the purge claim", async () => {
+    let now = new Date("2026-11-07T00:00:00.000Z");
+    const svc = testService({ now: () => now });
+    const { generation } = await createTtsGeneration(svc, {
+      model: "gemini-3.8-flash-tts",
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa10",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    });
+    now = new Date("2026-11-08T00:00:01.000Z");
+    const innerList = svc.store.listCleanupCandidates.bind(svc.store);
+    svc.store.listCleanupCandidates = async (nowIso, staleBeforeIso, limit) => {
+      const candidates = await innerList(nowIso, staleBeforeIso, limit);
+      assert.equal(candidates.some((row) => row.id === generation.id), true);
+      await saveGeneration(svc, generation.id);
+      return candidates;
+    };
+    const result = await cleanupExpiredGenerations(svc);
+    assert.equal(result.deleted, 0);
+    const saved = await svc.store.get(generation.id);
+    assert.ok(saved?.savedAt);
+    assert.equal(saved?.status, "ready");
+    assert.equal(svc.objectsMap.size, 2);
+  });
+
+  it("keeps winner assets when a listed expiration candidate is retried before the purge claim", async () => {
+    let now = new Date("2026-11-07T00:00:00.000Z");
+    const svc = testService({ now: () => now });
+    const input = {
+      model: "gemini-3.8-flash-tts" as const,
+      requestId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa11",
+      lines: [{ id: "1", text: "はい", voice: VOICE }],
+    };
+    const first = await createTtsGeneration(svc, input);
+    now = new Date("2026-11-08T00:00:01.000Z");
+    const innerList = svc.store.listCleanupCandidates.bind(svc.store);
+    svc.store.listCleanupCandidates = async (nowIso, staleBeforeIso, limit) => {
+      const candidates = await innerList(nowIso, staleBeforeIso, limit);
+      assert.equal(candidates.some((row) => row.id === first.generation.id), true);
+      const retry = await createTtsGeneration(svc, input);
+      assert.equal(retry.reused, false);
+      assert.equal(retry.generation.status, "ready");
+      return candidates;
+    };
+    const result = await cleanupExpiredGenerations(svc);
+    assert.equal(result.deleted, 0);
+    const winner = await svc.store.get(first.generation.id);
+    assert.equal(winner?.status, "ready");
+    assert.ok(winner?.wavObjectKey);
+    assert.equal(svc.objectsMap.has(winner!.wavObjectKey!), true);
+    assert.equal(svc.objectsMap.has(winner!.mp3ObjectKey!), true);
+  });
+});
+

@@ -194,7 +194,8 @@ export const ttsGeneration = pgTable(
       .defaultNow(),
     savedAt: timestamp("saved_at", { withTimezone: true }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
-    status: text("status").notNull().default("ready"), // pending | ready | failed
+    status: text("status").notNull().default("ready"), // pending | ready | failed | purging
+    revision: integer("revision").notNull().default(0),
     error: text("error"),
     title: text("title").notNull().default(""),
     kind: text("kind").notNull().default("tts"), // tts | upload

@@ -6,14 +6,14 @@ import {
   contentDispositionAttachment,
   downloadFilename,
 } from "@/lib/generate/download";
-import { generateErrorResponse, rejectLearnerQaAccess } from "@/lib/generate/http";
+import { generateErrorResponse, requireGenerateAccess } from "@/lib/generate/http";
 
 export async function GET(
   request: NextRequest,
   ctx: RouteContext<"/api/generate/[id]/timing">,
 ) {
-  const forbidden = rejectLearnerQaAccess(request);
-  if (forbidden) return forbidden;
+  const denied = await requireGenerateAccess(request);
+  if (denied) return denied;
   try {
     const { id } = await ctx.params;
     const row = await requireReadyGeneration(studioGenerateService(), id);

@@ -8,13 +8,14 @@ export const GENERATE_MAX_TITLE_CHARS = 200;
 export const GENERATE_MAX_DELIVERY_CHARS = 200;
 export const GENERATE_DUPLICATE_WINDOW_MS = 15_000;
 
-/** Unsaved clips are deleted from Postgres + R2 after this TTL. Saved clips stay. */
+/** Unsaved clips expire after this TTL and become eligible for deletion. Physical delete is the next daily cleanup (or a listing sweep), so objects can remain up to about 48 hours after creation. Saved clips stay. */
 export const GENERATE_TEMPORARY_TTL_MS = 24 * 60 * 60 * 1000;
 export const GENERATE_TEMPORARY_TTL_HOURS = 24;
+export const GENERATE_CLEANUP_MAX_RETENTION_HOURS = 48;
 /** Stale pending reservations can be reclaimed after the TTS maxDuration window. */
 export const GENERATE_PENDING_STALE_MS = 8 * 60 * 1000;
 
-export const GENERATE_TEMPORARY_LIFETIME = `Unsaved clips are kept privately for ${GENERATE_TEMPORARY_TTL_HOURS} hours, then deleted from Studio storage. Save to library keeps them. They are not published and are kept apart from TTS Studio takes and learner content.`;
+export const GENERATE_TEMPORARY_LIFETIME = `Unsaved clips expire after ${GENERATE_TEMPORARY_TTL_HOURS} hours. Studio deletes expired clips on the next daily cleanup, so they can remain for up to about ${GENERATE_CLEANUP_MAX_RETENTION_HOURS} hours after creation. Save to library keeps them. They are not published and are kept apart from TTS Studio takes and learner content.`;
 
 export const GENERATE_ALIGNMENT_NOTE =
   "Timestamps are taken from the combined WAV (pauses included) that is then encoded to MP3. A small MP3 encoder delay versus playback is possible and has not been live-measured.";

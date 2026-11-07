@@ -522,7 +522,7 @@ export function GenerateWorkspace() {
                           {item.saved
                             ? "Saved"
                             : item.expiresAt
-                              ? `Unsaved · until ${formatWhen(item.expiresAt)}`
+                              ? `Unsaved · expires ${formatWhen(item.expiresAt)}`
                               : "Unsaved"}
                         </Badge>
                       </div>
@@ -673,7 +673,7 @@ function ResultCard({
             {generation.saved
               ? "Saved to library"
               : generation.expiresAt
-                ? `Unsaved · until ${formatWhen(generation.expiresAt)}`
+                ? `Unsaved · expires ${formatWhen(generation.expiresAt)}`
                 : "Unsaved"}
           </Badge>
         </div>

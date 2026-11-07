@@ -526,7 +526,10 @@ describe("temporary lifetime cleanup", () => {
 
   it("does not call indefinite storage temporary in the lifetime copy", async () => {
     const listed = await listGenerations(testService());
-    assert.match(listed.temporaryLifetime, /24 hours/);
+    assert.match(listed.temporaryLifetime, /expire after 24 hours/);
+    assert.match(listed.temporaryLifetime, /next daily cleanup/);
+    assert.match(listed.temporaryLifetime, /48 hours after creation/);
+    assert.doesNotMatch(listed.temporaryLifetime, /then deleted from Studio storage/);
     assert.doesNotMatch(listed.temporaryLifetime, /until you save them to the library or delete them/);
   });
 

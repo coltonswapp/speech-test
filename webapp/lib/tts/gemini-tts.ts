@@ -3,6 +3,7 @@ import { getProviderKey } from "@/lib/secrets";
 import { GEMINI_TTS_DEFAULT_MODEL } from "@/lib/tts/gemini-voices";
 import {
   buildGeminiConversationPayload,
+  buildGeminiSinglePayload,
   resolveSpeakerLabels,
   type ConversationDialogueLine,
 } from "@/lib/tts/gemini-tts-request";
@@ -92,3 +93,65 @@ export async function synthesizeGeminiConversation(params: {
 }
 
 export const GEMINI_TTS_SAMPLE_RATE = 24_000;
+
+function pcmFromGeminiResponse(json: unknown): Buffer {
+  const responseParts = (json as {
+    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string } }> } }>;
+  })?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(responseParts)) {
+    throw new GeminiTTSError("Gemini returned no audio data.");
+  }
+  for (const part of responseParts) {
+    const base64 = part?.inlineData?.data;
+    if (typeof base64 === "string" && base64.length > 0) {
+      return geminiAudioToPcm16(Buffer.from(base64, "base64"));
+    }
+  }
+  throw new GeminiTTSError("Gemini returned no audio data.");
+}
+
+/** One-line synthesis for Generate and similar single-voice clips. */
+export async function synthesizeGeminiLine(params: {
+  text: string;
+  voice: string;
+  delivery?: string;
+  model?: string;
+}): Promise<Buffer> {
+  const apiKey = getProviderKey("gemini");
+  if (!apiKey) {
+    throw new GeminiTTSError("Missing Gemini API key.");
+  }
+  const text = params.text.trim();
+  if (!text) {
+    throw new GeminiTTSError("Add at least one dialogue line.");
+  }
+  const model = params.model ?? GEMINI_TTS_DEFAULT_MODEL;
+  const payload = buildGeminiSinglePayload({
+    text,
+    voice: params.voice,
+    delivery: params.delivery,
+    model,
+  });
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (response.status === 429) {
+    const body = await response.text().catch(() => "");
+    throw new GeminiTTSError(`Gemini TTS quota reached. ${body.slice(0, 240)}`);
+  }
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new GeminiTTSError(
+      `Gemini request failed (HTTP ${response.status}): ${body}`,
+    );
+  }
+  return pcmFromGeminiResponse(await response.json());
+}

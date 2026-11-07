@@ -179,6 +179,37 @@ export const ttsExport = pgTable("tts_export", {
   sourceByteCount: integer("source_byte_count").notNull(),
 });
 
+// One-off Generate workspace clips. Keys stay under tts/generate/ so save/delete
+// cannot touch TTS Studio takes, voice takes, or published learner audio.
+export const ttsGeneration = pgTable(
+  "tts_generation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    savedAt: timestamp("saved_at", { withTimezone: true }),
+    title: text("title").notNull().default(""),
+    kind: text("kind").notNull().default("tts"), // tts | upload
+    model: text("model"),
+    requestId: text("request_id"),
+    contentHash: text("content_hash"),
+    lines: jsonb("lines").notNull(),
+    lineTimings: jsonb("line_timings"),
+    tokenSync: jsonb("token_sync"),
+    transcript: text("transcript"),
+    wavObjectKey: text("wav_object_key"),
+    mp3ObjectKey: text("mp3_object_key"),
+    sampleRate: real("sample_rate"),
+    durationSeconds: real("duration_seconds").notNull(),
+    byteCount: integer("byte_count"),
+  },
+  (t) => [uniqueIndex("tts_generation_request_id_idx").on(t.requestId)],
+);
+
 // Reusable loopable ambience beds. Published as their own CDN object;
 // the learner app plays them as a second looping track under dry dialogue.
 export const ambienceAsset = pgTable("ambience_asset", {

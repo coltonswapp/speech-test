@@ -174,11 +174,29 @@ export function buildGeminiConversationPayload(params: {
   };
 }
 
-/** Single-speaker payload (voice previews); text is verbatim on every model. */
-export function buildGeminiSinglePayload(params: { text: string; voice: string }) {
+/** Single-speaker payload (voice previews / Generate); text is verbatim on every model. */
+export function buildGeminiSinglePayload(params: {
+  text: string;
+  voice: string;
+  delivery?: string;
+  model?: string;
+}) {
+  const structured = params.model ? usesSpeechMetadata(params.model) : true;
+  const { style, events } = deliveryForSpeech(params.delivery);
+  const body = params.text.trim();
+  const text = events.length > 0 ? `${events.join(" ")} ${body}` : body;
+  const part: { text: string; speechMetadata?: { style: string } } = { text };
+  // 3.8 conversation uses speechMetadata.style with a speaker; single-speaker
+  // has no speaker slot, so only send style when the model reads metadata.
+  if (structured && style) {
+    part.speechMetadata = { style };
+  } else if (!structured && params.delivery?.trim()) {
+    part.text = `${params.delivery.trim()} ${body}`;
+  }
   return {
-    contents: [{ role: "user", parts: [{ text: params.text }] }],
+    contents: [{ role: "user", parts: [part] }],
     generationConfig: {
+      ...(structured ? {} : { temperature: 1 }),
       responseModalities: ["AUDIO"],
       speechConfig: {
         voiceConfig: { prebuiltVoiceConfig: { voiceName: params.voice } },

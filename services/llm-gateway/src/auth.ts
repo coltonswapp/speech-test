@@ -3,7 +3,12 @@ import { createMiddleware } from "hono/factory";
 
 import { log } from "./log.js";
 
-export type AuthVariables = { uid: string };
+/**
+ * `isStaff` comes from the `staff: true` custom claim, set with
+ * `scripts/set-staff-claim.ts`. Clients cannot forge it: the ID token is
+ * signed by Firebase.
+ */
+export type AuthVariables = { uid: string; isStaff: boolean };
 
 export const requireFirebaseUser = createMiddleware<{ Variables: AuthVariables }>(
   async (c, next) => {
@@ -19,6 +24,7 @@ export const requireFirebaseUser = createMiddleware<{ Variables: AuthVariables }
         return c.json({ error: "unauthorized" }, 401);
       }
       c.set("uid", decoded.uid);
+      c.set("isStaff", decoded.staff === true);
     } catch (err) {
       log("WARNING", "verifyIdToken failed", { code: (err as { code?: string }).code ?? String(err) });
       return c.json({ error: "unauthorized" }, 401);
@@ -27,3 +33,11 @@ export const requireFirebaseUser = createMiddleware<{ Variables: AuthVariables }
     await next();
   },
 );
+
+/** Use after requireFirebaseUser. Internal dashboards (cost, model mix). */
+export const requireStaff = createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
+  if (!c.get("isStaff")) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+  await next();
+});

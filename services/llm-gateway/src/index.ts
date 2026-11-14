@@ -3,7 +3,7 @@ import { initializeApp } from "firebase-admin/app";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 
-import { requireFirebaseUser, type AuthVariables } from "./auth.js";
+import { requireFirebaseUser, requireStaff, type AuthVariables } from "./auth.js";
 import { FEATURE_NAMES, featureNamed, modelFor } from "./features/index.js";
 import { FeedbackError, newRequestId, recordFeedback } from "./feedback.js";
 import { feedbackExpiry, requireFeedbackHmacKey, retentionDays, signFeedbackToken } from "./feedback-token.js";
@@ -116,7 +116,10 @@ async function generate(c: Context<Env>) {
     result,
   });
   recordUsage(uid, featureName, model, usage);
-  return c.json({ feature: featureName, requestId, feedbackToken, result, model, usage });
+  // Model and token usage are staff-only: learners don't need them, and they
+  // tell anyone watching traffic which provider and model we use.
+  const staffOnly = c.get("isStaff") ? { model, usage } : {};
+  return c.json({ feature: featureName, requestId, feedbackToken, result, ...staffOnly });
 }
 
 const generateMiddleware = [
@@ -196,7 +199,7 @@ app.post("/v1/lesson-report", ...feedbackMiddleware, async (c) => {
 });
 
 /** Signed-in user's rollup for the current UTC day / ISO week / month. */
-app.get("/v1/usage", requireFirebaseUser, async (c) => {
+app.get("/v1/usage", requireFirebaseUser, requireStaff, async (c) => {
   const period = c.req.query("period") ?? "week";
   if (!isUsagePeriod(period)) {
     return c.json({ error: "invalid_request", detail: "period must be day, week, or month" }, 400);
@@ -208,7 +211,7 @@ app.get("/v1/usage", requireFirebaseUser, async (c) => {
  * Product-wide rollup. Feature mix answers "what people find valuable";
  * estimatedCostUSD is the Gemini estimate for that window.
  */
-app.get("/v1/usage/features", requireFirebaseUser, async (c) => {
+app.get("/v1/usage/features", requireFirebaseUser, requireStaff, async (c) => {
   const period = c.req.query("period") ?? "week";
   if (!isUsagePeriod(period)) {
     return c.json({ error: "invalid_request", detail: "period must be day, week, or month" }, 400);

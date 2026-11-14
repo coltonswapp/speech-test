@@ -145,7 +145,7 @@ export async function mixDialogueWithAmbienceBed(
   });
 }
 
-export async function probeAudioMetadata(audio: Buffer): Promise<{
+export async function probeAudioFile(audio: Buffer): Promise<{
   durationSeconds: number;
   sampleRate: number | null;
 }> {
@@ -155,20 +155,56 @@ export async function probeAudioMetadata(audio: Buffer): Promise<{
     const stderr = await ffmpegInfo(inPath);
     const durationMatch = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(stderr);
     if (!durationMatch) {
-      throw new Error("Could not read audio duration. Use a WAV, MP3, or M4A loop.");
+      throw new Error("Could not read audio duration. Use a WAV, MP3, or M4A file.");
     }
     const durationSeconds =
       Number(durationMatch[1]) * 3600 +
       Number(durationMatch[2]) * 60 +
       Number(durationMatch[3]);
-    if (!Number.isFinite(durationSeconds) || durationSeconds < 0.5) {
-      throw new Error("Ambience bed must be at least 0.5 seconds long.");
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+      throw new Error("Could not read a valid audio duration.");
     }
     const rateMatch = /(\d+)\s*Hz/.exec(stderr);
     return {
       durationSeconds,
       sampleRate: rateMatch ? Number(rateMatch[1]) : null,
     };
+  });
+}
+
+export async function probeAudioMetadata(audio: Buffer): Promise<{
+  durationSeconds: number;
+  sampleRate: number | null;
+}> {
+  const meta = await probeAudioFile(audio);
+  if (meta.durationSeconds < 0.5) {
+    throw new Error("Ambience bed must be at least 0.5 seconds long.");
+  }
+  return meta;
+}
+
+/** Decode any ffmpeg-readable clip to 16-bit mono WAV at `sampleRate`. */
+export async function transcodeToWavMono(
+  audio: Buffer,
+  sampleRate = 24_000,
+): Promise<Buffer> {
+  return withTempDir(async (dir) => {
+    const inPath = path.join(dir, "in.bin");
+    const outPath = path.join(dir, "out.wav");
+    await writeFile(inPath, audio);
+    await runFfmpeg([
+      "-i",
+      inPath,
+      "-ac",
+      "1",
+      "-ar",
+      String(sampleRate),
+      "-c:a",
+      "pcm_s16le",
+      "-y",
+      outPath,
+    ]);
+    return readFile(outPath);
   });
 }
 

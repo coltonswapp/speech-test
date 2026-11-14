@@ -24,7 +24,3 @@ export function getProviderStatus(): Record<ProviderKey, boolean> {
     gemini: isProviderConfigured("gemini"),
   };
 }
-
-export function getAppPassphrase(): string {
-  return process.env.APP_PASSPHRASE?.trim() ?? "";
-}

@@ -2,6 +2,9 @@
 // Extended Voice Library (GET /v1beta/voices). Keeps Studio's 30 prebuilt
 // voices plus every ja-JP Tokyo-accent library voice.
 // Run with: pnpm tts:voice-catalog   (needs GEMINI_API_KEY)
+// Casting names live in lib/tts/gemini-voice-names.ts (hand-maintained) and are
+// merged in lib/tts/gemini-voice-catalog.ts, so regenerating keeps them; add
+// names there for any new library voice (the catalog test fails until you do).
 
 import { writeFileSync } from "node:fs";
 import { GEMINI_TTS_VOICES } from "../lib/tts/gemini-voices";

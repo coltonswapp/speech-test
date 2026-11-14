@@ -4,7 +4,7 @@ import { listContentQa } from "@/lib/dialogue/content-qa-store";
 
 /**
  * Studio list of learner-client content QA records.
- * Auth: Studio Google / agent / passphrase (same as other /api/content/*).
+ * Auth: Studio Google / agent (same as other /api/content/*).
  *
  * Query: ?collectionId=train-station
  */

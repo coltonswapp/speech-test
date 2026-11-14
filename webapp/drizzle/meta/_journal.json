@@ -141,6 +141,34 @@
       "when": 1790600000000,
       "tag": "0019_teaching_pattern_description",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790700000000,
+      "tag": "0020_tts_generation",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0021_tts_generation_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790900000000,
+      "tag": "0022_tts_generation_revision",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0023_tts_generation_obsolete_keys",
+      "breakpoints": true
     }
   ]
 }

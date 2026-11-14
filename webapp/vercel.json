@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/slides",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/generate-cleanup",
+      "schedule": "0 15 * * *"
     }
   ]
 }

@@ -29,7 +29,9 @@ The body is `{ "feature": "<name>", ...feature fields }`. Every success response
 }
 ```
 
-`result` comes from Gemini structured output, and the iOS clients still apply their own cleanup to it. They record `usage` in the app's local Gemini usage history. `requestId` is also on the `llm ok` log line. `feedbackToken` is not logged. It expires 24 hours after the response and is bound to this user, this input, and this result.
+`model` and `usage` are included **only for staff** (Firebase custom claim `staff: true`); everyone else gets `{ feature, requestId, feedbackToken, result }`. Grant the claim with `npx tsx scripts/set-staff-claim.ts you@example.com` (`--remove` to revoke, `--list` to see staff); the app sees it on its next ID-token refresh.
+
+`result` comes from Gemini structured output, and the iOS clients still apply their own cleanup to it. Staff builds record `usage` in the app's local Gemini usage history. `requestId` is also on the `llm ok` log line. `feedbackToken` is not logged. It expires 24 hours after the response and is bound to this user, this input, and this result.
 
 ### Features
 
@@ -55,6 +57,7 @@ To add a feature, create `src/features/<name>.ts` with `defineFeature({ defaultM
 | 400 | `{ "error": "invalid_request", "detail": "..." }` | A feature field is missing, the wrong type, or too long |
 | 400 | `{ "error": "unknown_feature" }` | `feature` isn't one of the names above |
 | 401 | `{ "error": "unauthorized" }` | Missing, malformed, expired, wrong-project, or anonymous token |
+| 403 | `{ "error": "forbidden" }` | `/v1/usage*` without the staff claim |
 | 413 | `{ "error": "invalid_request", "detail": "body too large" }` | Body over 32 KB |
 | 502 | `{ "error": "upstream_error" }` | Gemini failed, timed out (20 s), or returned output that doesn't match the schema, such as an out-of-range `index` (details in server logs) |
 
@@ -65,6 +68,8 @@ The iOS app reads the base URL from `SHIZEN_LLM_GATEWAY_URL` in `shizen/Info.pli
 Each successful generate increments **day, week, and month** rollups in Firestore (`shizen-b453f`, collection `llmUsage`). Prompt text is not stored. Cost uses the same published Gemini rates as the iOS `GeminiPricing` helper (micros in the docs, dollars in the API).
 
 Periods are UTC: `day` is `YYYY-MM-DD`, `week` is ISO `YYYY-Www`, `month` is `YYYY-MM`. Query `?period=day|week|month` (default `week`).
+
+Both endpoints require the staff claim (403 otherwise).
 
 | Endpoint | Who | Body |
 | --- | --- | --- |

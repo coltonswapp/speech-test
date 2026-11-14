@@ -146,7 +146,7 @@ private enum GeminiVocabSenseRanker {
         struct IndexResult: Decodable { let index: Int }
 
         let result: IndexResult
-        let model: String
+        let model: String?
         let usage: GeminiUsageMetadata?
     }
 
@@ -156,8 +156,8 @@ private enum GeminiVocabSenseRanker {
             body: GatewayRequest(sentence: sentence, surface: surface, senses: senses.map(\.text)),
             as: GatewayResponse.self
         )
-        if let usage = response.usage {
-            GeminiUsageTracker.shared.record(feature: .senseFit, model: response.model, usage: usage)
+        if let usage = response.usage, let model = response.model {
+            GeminiUsageTracker.shared.record(feature: .senseFit, model: model, usage: usage)
         }
         return response.result.index
     }

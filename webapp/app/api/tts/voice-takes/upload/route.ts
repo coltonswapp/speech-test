@@ -5,10 +5,10 @@ import { GEMINI_VOICE_CATALOG } from "@/lib/tts/gemini-voice-catalog";
 import { uploadVoiceTake, VoiceTakeUploadError } from "@/lib/tts/voice-takes-batch";
 import { r2VoiceTakeStore } from "@/lib/tts/voice-takes-gemini";
 
-// Auth: proxy.ts gates every non-public /api route (passphrase, Google
-// session, or API bearer), same as generate. Scripts send
+// Auth: proxy.ts gates every non-public /api route (verified Google
+// session or Studio agent bearer), same as generate. Scripts send
 // `Authorization: Bearer $STUDIO_AGENT_TOKEN`. The learner-app content-QA
-// token also passes proxy.ts, so it is refused here: it must not write takes.
+// token is limited to /api/client/* by proxy.ts; refused here as well.
 
 // A take is ~300 KB; well under Vercel's request body limit.
 const MAX_BYTES = 4_000_000;

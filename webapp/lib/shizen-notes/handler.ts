@@ -17,9 +17,9 @@ function plainText(body: string, status: number) {
  */
 export async function handleNotePost(
   request: NextRequest,
-  tokenMatches: (header: string | null) => boolean,
+  authorized: (request: NextRequest) => boolean | Promise<boolean>,
 ) {
-  if (!tokenMatches(request.headers.get("authorization"))) {
+  if (!(await authorized(request))) {
     return plainText("missing or invalid bearer token", 401);
   }
 

@@ -1,6 +1,18 @@
 # Studio auth
 
-Published iOS JSON (`/api/public/*`) stays open. Everything else is gated when any of Google, `STUDIO_AGENT_TOKEN`, `CONTENT_QA_CLIENT_TOKEN`, or `APP_PASSPHRASE` is set.
+Published iOS JSON (`/api/public/*`) stays open. Everything else goes through one gate, `isStudioRequestAllowed` in `lib/generate/access.ts`, run by `proxy.ts`. Production always enforces it, even if no credentials are configured.
+
+| Credential | Where it works |
+|---|---|
+| Google session (next-auth JWT, decrypted with `NEXTAUTH_SECRET`, email on `STUDIO_ALLOWED_EMAILS`) | Everywhere |
+| `STUDIO_AGENT_TOKEN` bearer | Everywhere |
+| `CRON_SECRET` bearer | `/api/cron/*` only |
+| `CONTENT_QA_CLIENT_TOKEN` bearer (DEBUG iOS builds only) | `/api/client/*` only |
+| Firebase ID token with the `staff: true` claim (Release iOS) | `/api/client/*` only |
+
+`/api/client/*` skips the proxy; each of those routes calls `requireClientQaAccess` (`lib/client-auth.ts`), which verifies Firebase ID tokens with firebase-admin. Grant the claim with `services/llm-gateway/scripts/set-staff-claim.ts`.
+
+A cookie named `next-auth.session-token` is not trusted until it decrypts: before 2026-11-13 the proxy only checked that it existed, so `next-auth.session-token=x` got in.
 
 ## Humans (Google)
 
@@ -46,7 +58,7 @@ Auth is checked before the body is read. Errors are plain text (`401` bad token,
 
 ## Local
 
-Leave those unset (or `STUDIO_AUTH_BYPASS=1` in non-production) so localhost MCP keeps working. `APP_PASSPHRASE` remains a fallback login if you still have it on production.
+Leave those unset (or `STUDIO_AUTH_BYPASS=1` in non-production) so localhost MCP keeps working. The `APP_PASSPHRASE` login was removed on 2026-11-13.
 
 ## Deploy notes
 

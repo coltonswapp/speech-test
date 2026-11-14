@@ -583,7 +583,7 @@ enum LessonHighlightSupportMenu {
     static let barButtonAccessibilityID = "lessonHighlightSupportMenu"
 
     static var canSendQANotes: Bool {
-        ContentCMSClient.isConfigured && !ContentQAClientToken.resolved.isEmpty
+        ContentCMSClient.isConfigured && StaffAccess.canUseStudioClientAPI
     }
 
     static var hasAnyAction: Bool {

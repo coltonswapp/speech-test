@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildGeminiConversationPayload,
+  buildGeminiSinglePayload,
   deliveryForSpeech,
 } from "./gemini-tts-request";
 import { geminiAudioToPcm16, pcm16ToWav, wavToPcm16 } from "./wav";
@@ -78,5 +79,32 @@ describe("geminiAudioToPcm16", () => {
   it("passes raw PCM (3.1) through", () => {
     const pcm = Buffer.from([9, 0, 8, 0]);
     assert.deepEqual(geminiAudioToPcm16(pcm), pcm);
+  });
+});
+
+describe("buildGeminiSinglePayload", () => {
+  it("3.8: prefixes vocal events and puts style in speechMetadata", () => {
+    const payload = buildGeminiSinglePayload({
+      text: "こんにちは",
+      voice: "Kore",
+      delivery: "[softly] [laughs]",
+      model: "gemini-3.8-flash-tts",
+    });
+    assert.deepEqual(payload.contents[0].parts, [
+      {
+        text: "<laugh> こんにちは",
+        speechMetadata: { style: "softly" },
+      },
+    ]);
+    assert.equal("temperature" in payload.generationConfig, false);
+    assert.equal(
+      payload.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName,
+      "Kore",
+    );
+  });
+
+  it("keeps voice-take callers working without delivery", () => {
+    const payload = buildGeminiSinglePayload({ text: "sample", voice: "Puck" });
+    assert.deepEqual(payload.contents[0].parts, [{ text: "sample" }]);
   });
 });

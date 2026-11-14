@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { encode } from "next-auth/jwt";
-import { requireGenerateAccess } from "./access";
+import { isStudioRequestAllowed, requireGenerateAccess } from "./access";
 
 const QA = "qa-learner-token-aaaaaaaa";
 const STUDIO = "studio-agent-token-bbbbbbbb";
@@ -39,7 +39,6 @@ describe("requireGenerateAccess", () => {
     googleSecret: process.env.AUTH_GOOGLE_SECRET,
     emails: process.env.STUDIO_ALLOWED_EMAILS,
     bypass: process.env.STUDIO_AUTH_BYPASS,
-    passphrase: process.env.APP_PASSPHRASE,
     nextAuthUrl: process.env.NEXTAUTH_URL,
   };
 
@@ -54,7 +53,6 @@ describe("requireGenerateAccess", () => {
     process.env.STUDIO_ALLOWED_EMAILS = EMAIL;
     process.env.NEXTAUTH_URL = "http://localhost:3000";
     delete process.env.STUDIO_AUTH_BYPASS;
-    delete process.env.APP_PASSPHRASE;
   });
 
   after(() => {
@@ -71,7 +69,6 @@ describe("requireGenerateAccess", () => {
     restore("AUTH_GOOGLE_SECRET", previous.googleSecret);
     restore("STUDIO_ALLOWED_EMAILS", previous.emails);
     restore("STUDIO_AUTH_BYPASS", previous.bypass);
-    restore("APP_PASSPHRASE", previous.passphrase);
     restore("NEXTAUTH_URL", previous.nextAuthUrl);
   });
 
@@ -123,6 +120,41 @@ describe("requireGenerateAccess", () => {
     assert.equal(cron?.status, 401);
     const missing = await requireGenerateAccess(request());
     assert.equal(missing?.status, 401);
+  });
+
+  it("proxy gate rejects a forged session cookie on any Studio route", async () => {
+    for (const path of ["/api/content/units", "/api/tts/projects", "/", "/api/client/content-qa/x"]) {
+      const allowed = await isStudioRequestAllowed(
+        request(`http://localhost${path}`, { cookie: "__Secure-next-auth.session-token=x" }),
+      );
+      assert.equal(allowed, false, path);
+    }
+  });
+
+  it("proxy gate accepts a verified allowlisted session and the agent bearer", async () => {
+    const cookie = await sessionCookie(EMAIL, 60 * 60);
+    assert.equal(await isStudioRequestAllowed(request("http://localhost/api/content/units", { cookie })), true);
+    assert.equal(
+      await isStudioRequestAllowed(request("http://localhost/api/content/units", { token: STUDIO })),
+      true,
+    );
+  });
+
+  it("proxy gate limits the learner QA token to /api/client/*", async () => {
+    assert.equal(
+      await isStudioRequestAllowed(
+        request("http://localhost/api/client/content-qa/dialogues/c/scenarios/s/check-off", { token: QA }),
+      ),
+      true,
+    );
+    for (const path of ["/api/content/units", "/api/tts/projects", "/api/content/dialogues/c/publish"]) {
+      assert.equal(await isStudioRequestAllowed(request(`http://localhost${path}`, { token: QA })), false, path);
+    }
+  });
+
+  it("proxy gate limits the cron secret to /api/cron/*", async () => {
+    assert.equal(await isStudioRequestAllowed(request("http://localhost/api/cron/slides", { token: CRON })), true);
+    assert.equal(await isStudioRequestAllowed(request("http://localhost/api/content/units", { token: CRON })), false);
   });
 });
 

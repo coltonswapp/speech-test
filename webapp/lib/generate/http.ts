@@ -2,11 +2,7 @@ import { NextResponse } from "next/server";
 import { GenerateUserError } from "./validate";
 import { GeminiTTSError } from "@/lib/tts/gemini-tts";
 
-export {
-  forbidContentQaOnly,
-  rejectLearnerQaAccess,
-  requireGenerateAccess,
-} from "./access";
+export { requireGenerateAccess } from "./access";
 
 export function generateErrorResponse(error: unknown): NextResponse {
   if (error instanceof GenerateUserError) {

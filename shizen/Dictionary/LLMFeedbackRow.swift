@@ -34,7 +34,7 @@ struct LLMFeedbackReceipt {
     let requestId: String
     let feedbackToken: String
     let feature: String
-    let model: String
+    let model: String?
     let inputObject: Any
     let resultObject: Any
 }

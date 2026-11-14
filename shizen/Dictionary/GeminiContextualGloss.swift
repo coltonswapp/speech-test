@@ -79,8 +79,8 @@ enum GeminiContextualGloss {
             ),
             as: GatewayResponse.self
         )
-        if let usage = response.usage {
-            GeminiUsageTracker.shared.record(feature: .contextualGloss, model: response.model, usage: usage)
+        if let usage = response.usage, let model = response.model {
+            GeminiUsageTracker.shared.record(feature: .contextualGloss, model: model, usage: usage)
         }
 
         let payload = response.result
@@ -112,7 +112,7 @@ enum GeminiContextualGloss {
 
     private struct GatewayResponse: Decodable {
         let result: GlossPayload
-        let model: String
+        let model: String?
         let usage: GeminiUsageMetadata?
     }
 

@@ -2,8 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { FieldValue, Timestamp, getFirestore, type Transaction } from "firebase-admin/firestore";
 
 import { jsonReady } from "./canonical.js";
-import { featureNamed } from "./features/index.js";
-import { storesFeedbackPayload, verifyFeedbackToken } from "./feedback-token.js";
+import { featureNamed, modelFor } from "./features/index.js";
+import { storesFeedbackPayload, verifyFeedbackToken, type TokenCheck } from "./feedback-token.js";
 import { log, userHash } from "./log.js";
 import { periodKeys, USAGE_PERIODS, type UsagePeriod } from "./usage.js";
 import { InputError, isObject, type Body } from "./validate.js";
@@ -36,7 +36,8 @@ type ParsedVote = {
   requestId: string;
   feedbackToken: string;
   feature: string;
-  model: string;
+  /** Optional: only staff clients receive and echo it. */
+  model?: string;
   rating: Rating;
   reason?: FeedbackReason;
   input: unknown;
@@ -50,14 +51,25 @@ type ParsedVote = {
  */
 export async function recordFeedback(uid: string, body: unknown, secret: string, retentionDays: number): Promise<void> {
   const vote = parseVote(body);
-  const check = verifyFeedbackToken(secret, vote.feedbackToken, {
-    uid,
-    requestId: vote.requestId,
-    feature: vote.feature,
-    model: vote.model,
-    input: vote.input,
-    result: vote.result,
-  });
+  // Learners no longer receive `model`, so the server supplies it. A staff
+  // client may still echo it back; either value must match the signed token.
+  const candidates = [...new Set([vote.model, modelFor(vote.feature)].filter((m): m is string => Boolean(m)))];
+  let check: TokenCheck = { ok: false, reason: "rejected" };
+  let model = "";
+  for (const candidate of candidates) {
+    check = verifyFeedbackToken(secret, vote.feedbackToken, {
+      uid,
+      requestId: vote.requestId,
+      feature: vote.feature,
+      model: candidate,
+      input: vote.input,
+      result: vote.result,
+    });
+    if (check.ok || check.reason === "expired") {
+      model = candidate;
+      break;
+    }
+  }
   if (!check.ok) {
     const detail = check.reason === "expired" ? "feedback token expired" : "feedback token rejected";
     throw new FeedbackError(400, "invalid_request", detail);
@@ -98,7 +110,7 @@ export async function recordFeedback(uid: string, body: unknown, secret: string,
     const payload: Record<string, unknown> = {
       rating: vote.rating,
       feature: vote.feature,
-      model: vote.model,
+      model,
       requestId: vote.requestId,
       uid,
       createdAt,
@@ -145,7 +157,7 @@ function parseVote(body: unknown): ParsedVote {
   const featureName = requiredString(body, "feature", 64);
   const feature = featureNamed(featureName);
   if (!feature) throw new FeedbackError(400, "invalid_request", "unknown feature");
-  const model = requiredString(body, "model", 80);
+  const model = body.model === undefined || body.model === null ? undefined : requiredString(body, "model", 80);
   const rating = body.rating;
   if (rating !== "up" && rating !== "down") {
     throw new FeedbackError(400, "invalid_request", "rating must be up or down");

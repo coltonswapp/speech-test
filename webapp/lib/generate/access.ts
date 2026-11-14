@@ -40,7 +40,9 @@ export async function hasVerifiedStudioSession(request: NextRequest): Promise<bo
  *
  * - Studio agent bearer: any route.
  * - Cron secret: `/api/cron/*` only.
- * - Learner QA token (ships in the iOS app): `/api/client/*` only.
+ * - `/api/client/*` is not gated here: those routes call
+ *   requireClientQaAccess (lib/client-auth.ts), which also accepts the
+ *   learner QA token and Firebase staff ID tokens.
  * - Verified Google session for an allowlisted email: any route.
  */
 export async function isStudioRequestAllowed(request: NextRequest): Promise<boolean> {
@@ -51,9 +53,6 @@ export async function isStudioRequestAllowed(request: NextRequest): Promise<bool
 
   if (studioAgentBearerMatches(authorization)) return true;
   if (pathname.startsWith("/api/cron/") && cronSecretMatches(authorization)) return true;
-  if (pathname.startsWith("/api/client/") && contentQaClientTokenMatches(authorization)) {
-    return true;
-  }
   return hasVerifiedStudioSession(request);
 }
 

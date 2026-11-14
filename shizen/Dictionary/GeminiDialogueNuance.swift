@@ -126,8 +126,8 @@ enum GeminiDialogueNuance {
             ),
             as: NuancePayload.self
         )
-        if let usage = response.usage {
-            GeminiUsageTracker.shared.record(feature: .dialogueNuance, model: response.model, usage: usage)
+        if let usage = response.usage, let model = response.model {
+            GeminiUsageTracker.shared.record(feature: .dialogueNuance, model: model, usage: usage)
         }
 
         let payload = response.result

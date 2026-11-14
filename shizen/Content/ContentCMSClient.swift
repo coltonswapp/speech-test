@@ -127,11 +127,21 @@ enum ContentCMSClient {
             completion(.failure(CMSClientError.notConfigured))
             return
         }
-        let token = ContentQAClientToken.resolved
-        guard !token.isEmpty else {
-            completion(.failure(CMSClientError.missingContentQAToken))
-            return
+        StaffAccess.studioClientBearer { token in
+            guard let token, !token.isEmpty else {
+                completion(.failure(CMSClientError.missingContentQAToken))
+                return
+            }
+            postQANote(note, baseURL: baseURL, token: token, completion: completion)
         }
+    }
+
+    private static func postQANote(
+        _ note: QANote,
+        baseURL: URL,
+        token: String,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
         let url = baseURL
             .appendingPathComponent("api")
             .appendingPathComponent("client")
@@ -275,11 +285,32 @@ enum ContentCMSClient {
             completion(.failure(CMSClientError.notConfigured))
             return
         }
-        let token = ContentQAClientToken.resolved
-        guard !token.isEmpty else {
-            completion(.failure(CMSClientError.missingContentQAToken))
-            return
+        StaffAccess.studioClientBearer { token in
+            guard let token, !token.isEmpty else {
+                completion(.failure(CMSClientError.missingContentQAToken))
+                return
+            }
+            postCheckOff(
+                collectionId: collectionId,
+                slug: slug,
+                reviewNote: reviewNote,
+                reviewedBy: reviewedBy,
+                baseURL: baseURL,
+                token: token,
+                completion: completion
+            )
         }
+    }
+
+    private static func postCheckOff(
+        collectionId: String,
+        slug: String,
+        reviewNote: String?,
+        reviewedBy: String?,
+        baseURL: URL,
+        token: String,
+        completion: @escaping (Result<Data, Error>) -> Void
+    ) {
         let url = baseURL
             .appendingPathComponent("api")
             .appendingPathComponent("client")
@@ -458,7 +489,7 @@ enum ContentCMSClient {
             case .notConfigured:
                 return "SHIZEN_CMS_BASE_URL is not configured."
             case .missingContentQAToken:
-                return "CONTENT_QA_CLIENT_TOKEN is missing."
+                return "Sign in with a staff account to send QA notes."
             case .invalidResponse:
                 return "Invalid CMS response."
             case .httpStatus(let code):

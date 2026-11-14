@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { requireClientQaAccess } from "@/lib/client-auth";
 import {
   contentQaReadinessSlice,
   upsertContentQaRequestSchema,
@@ -43,7 +44,9 @@ function pendingReview(collectionId: string, slug: string) {
  * Auth (when Studio auth is enforced): Google session, `STUDIO_AGENT_TOKEN`,
  * or `CONTENT_QA_CLIENT_TOKEN` Bearer. Not a public unauthenticated write.
  */
-export async function GET(_request: NextRequest, ctx: RouteCtx) {
+export async function GET(request: NextRequest, ctx: RouteCtx) {
+  const denied = await requireClientQaAccess(request);
+  if (denied) return denied;
   const { collectionId, slug } = await ctx.params;
   const scenarioId = scenarioIdFromParams(collectionId, slug);
 
@@ -67,10 +70,14 @@ export async function GET(_request: NextRequest, ctx: RouteCtx) {
 
 /** Idempotent upsert (prefer PUT). Same body as PATCH. */
 export async function PUT(request: NextRequest, ctx: RouteCtx) {
+  const denied = await requireClientQaAccess(request);
+  if (denied) return denied;
   return upsert(request, ctx);
 }
 
 export async function PATCH(request: NextRequest, ctx: RouteCtx) {
+  const denied = await requireClientQaAccess(request);
+  if (denied) return denied;
   return upsert(request, ctx);
 }
 

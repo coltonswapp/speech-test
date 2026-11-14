@@ -8,5 +8,5 @@ import { shizenNoteWebhookTokenMatches } from "@/lib/studio-auth";
  * Accepted notes return 202 `{ job_id }` and are delivered to Shohei.
  */
 export async function POST(request: NextRequest) {
-  return handleNotePost(request, shizenNoteWebhookTokenMatches);
+  return handleNotePost(request, (r) => shizenNoteWebhookTokenMatches(r.headers.get("authorization")));
 }

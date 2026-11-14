@@ -140,13 +140,7 @@ describe("requireGenerateAccess", () => {
     );
   });
 
-  it("proxy gate limits the learner QA token to /api/client/*", async () => {
-    assert.equal(
-      await isStudioRequestAllowed(
-        request("http://localhost/api/client/content-qa/dialogues/c/scenarios/s/check-off", { token: QA }),
-      ),
-      true,
-    );
+  it("proxy gate refuses the learner QA token on Studio routes", async () => {
     for (const path of ["/api/content/units", "/api/tts/projects", "/api/content/dialogues/c/publish"]) {
       assert.equal(await isStudioRequestAllowed(request(`http://localhost${path}`, { token: QA })), false, path);
     }

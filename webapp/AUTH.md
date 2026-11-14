@@ -7,7 +7,10 @@ Published iOS JSON (`/api/public/*`) stays open. Everything else goes through on
 | Google session (next-auth JWT, decrypted with `NEXTAUTH_SECRET`, email on `STUDIO_ALLOWED_EMAILS`) | Everywhere |
 | `STUDIO_AGENT_TOKEN` bearer | Everywhere |
 | `CRON_SECRET` bearer | `/api/cron/*` only |
-| `CONTENT_QA_CLIENT_TOKEN` bearer (ships in the iOS app) | `/api/client/*` only |
+| `CONTENT_QA_CLIENT_TOKEN` bearer (DEBUG iOS builds only) | `/api/client/*` only |
+| Firebase ID token with the `staff: true` claim (Release iOS) | `/api/client/*` only |
+
+`/api/client/*` skips the proxy; each of those routes calls `requireClientQaAccess` (`lib/client-auth.ts`), which verifies Firebase ID tokens with firebase-admin. Grant the claim with `services/llm-gateway/scripts/set-staff-claim.ts`.
 
 A cookie named `next-auth.session-token` is not trusted until it decrypts: before 2026-11-13 the proxy only checked that it existed, so `next-auth.session-token=x` got in.
 

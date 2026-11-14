@@ -184,8 +184,8 @@ enum GeminiGrammarUsage {
             ),
             as: Payload.self
         )
-        if let usage = response.usage {
-            GeminiUsageTracker.shared.record(feature: .grammarUsage, model: response.model, usage: usage)
+        if let usage = response.usage, let model = response.model {
+            GeminiUsageTracker.shared.record(feature: .grammarUsage, model: model, usage: usage)
         }
 
         let result = sanitized(response.result)

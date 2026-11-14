@@ -7,7 +7,8 @@ export function isPublicPath(pathname: string): boolean {
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/public/") ||
     pathname.startsWith("/hooks/") ||
-    pathname === "/api/client/content-qa/notes" ||
+    // Each /api/client route calls requireClientQaAccess (lib/client-auth.ts).
+    pathname.startsWith("/api/client/") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico"
   );

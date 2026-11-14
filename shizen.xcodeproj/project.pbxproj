@@ -265,7 +265,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Secrets.plist is excluded from the synchronized group and copied here so\n# non-Debug builds (TestFlight, App Store) never ship provider API keys.\nSRC=\"${SCRIPT_INPUT_FILE_0}\"\nDST=\"${SCRIPT_OUTPUT_FILE_0}\"\ncp \"$SRC\" \"$DST\"\nif [ \"$CONFIGURATION\" != \"Debug\" ]; then\n  for key in GEMINI_API_KEY OPENAI_API_KEY; do\n    /usr/libexec/PlistBuddy -c \"Delete :$key\" \"$DST\" >/dev/null 2>&1 || true\n  done\n  if plutil -convert xml1 -o - \"$DST\" | grep -qE 'AIza[0-9A-Za-z_-]{20,}|sk-[A-Za-z0-9_-]{20,}'; then\n    echo \"error: Secrets.plist still contains a provider API key in a $CONFIGURATION build.\"\n    exit 1\n  fi\nfi\n";
+			shellScript = "# Secrets.plist is excluded from the synchronized group and copied here so\n# non-Debug builds (TestFlight, App Store) never ship provider API keys.\nSRC=\"${SCRIPT_INPUT_FILE_0}\"\nDST=\"${SCRIPT_OUTPUT_FILE_0}\"\ncp \"$SRC\" \"$DST\"\nif [ \"$CONFIGURATION\" != \"Debug\" ]; then\n  for key in GEMINI_API_KEY OPENAI_API_KEY CONTENT_QA_CLIENT_TOKEN; do\n    /usr/libexec/PlistBuddy -c \"Delete :$key\" \"$DST\" >/dev/null 2>&1 || true\n  done\n  if plutil -convert xml1 -o - \"$DST\" | grep -qE 'AIza[0-9A-Za-z_-]{20,}|sk-[A-Za-z0-9_-]{20,}'; then\n    echo \"error: Secrets.plist still contains a provider API key in a $CONFIGURATION build.\"\n    exit 1\n  fi\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

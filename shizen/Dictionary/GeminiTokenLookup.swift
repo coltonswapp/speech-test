@@ -76,8 +76,8 @@ enum GeminiCommonUses {
             ),
             as: Payload.self
         )
-        if let usage = response.usage {
-            GeminiUsageTracker.shared.record(feature: .commonUses, model: response.model, usage: usage)
+        if let usage = response.usage, let model = response.model {
+            GeminiUsageTracker.shared.record(feature: .commonUses, model: model, usage: usage)
         }
 
         let result = sanitized(response.result, surface: surface)
@@ -219,8 +219,8 @@ enum GeminiSpanBreakdown {
             body: SpanGatewayRequest(feature: "span_breakdown", sentence: sentence, surface: surface),
             as: Payload.self
         )
-        if let usage = response.usage {
-            GeminiUsageTracker.shared.record(feature: .spanBreakdown, model: response.model, usage: usage)
+        if let usage = response.usage, let model = response.model {
+            GeminiUsageTracker.shared.record(feature: .spanBreakdown, model: model, usage: usage)
         }
 
         let result = sanitized(response.result, surface: surface)
@@ -399,8 +399,8 @@ enum GeminiSpanGloss {
             body: SpanGatewayRequest(feature: "span_gloss", sentence: sentence, surface: surface),
             as: Payload.self
         )
-        if let usage = response.usage {
-            GeminiUsageTracker.shared.record(feature: .spanGloss, model: response.model, usage: usage)
+        if let usage = response.usage, let model = response.model {
+            GeminiUsageTracker.shared.record(feature: .spanGloss, model: model, usage: usage)
         }
 
         let meaning = response.result.meaning.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { requireClientQaAccess } from "@/lib/client-auth";
 import {
   checkOffContentQaRequestSchema,
   contentQaReadinessSlice,
@@ -17,10 +18,13 @@ type RouteCtx = {
  * Scene check-off for the learner client.
  *
  * Marks the scene as fully reviewed (dialogue + quiz). Idempotent.
- * Auth: Bearer CONTENT_QA_CLIENT_TOKEN (or STUDIO_AGENT_TOKEN / Studio session).
+ * Auth: requireClientQaAccess (Firebase staff token, CONTENT_QA_CLIENT_TOKEN,
+ * STUDIO_AGENT_TOKEN, or Studio session).
  * Contract: docs/studio-content-qa-review.md §3.0
  */
 export async function POST(request: NextRequest, ctx: RouteCtx) {
+  const denied = await requireClientQaAccess(request);
+  if (denied) return denied;
   const { collectionId, slug } = await ctx.params;
   const scenarioId = `${collectionId}/${slug}`;
 

@@ -40,7 +40,8 @@ enum LLMGatewayError: LocalizedError {
 
 struct LLMGeneratePayload<Result: Decodable> {
     let result: Result
-    let model: String
+    /// Staff accounts only; the gateway omits it for everyone else.
+    let model: String?
     let usage: GeminiUsageMetadata?
     let feedback: LLMFeedbackReceipt?
 }
@@ -125,7 +126,6 @@ enum LLMGatewayClient {
             "requestId": receipt.requestId,
             "feedbackToken": receipt.feedbackToken,
             "feature": receipt.feature,
-            "model": receipt.model,
             "rating": rating.rawValue,
             "input": receipt.inputObject,
             "result": receipt.resultObject,
@@ -133,6 +133,9 @@ enum LLMGatewayClient {
         ]
         if let reason {
             body["reason"] = reason.rawValue
+        }
+        if let model = receipt.model {
+            body["model"] = model
         }
         guard JSONSerialization.isValidJSONObject(body),
               let data = try? JSONSerialization.data(withJSONObject: body) else {
@@ -235,11 +238,10 @@ enum LLMGatewayClient {
 
     private static func decodeGeneratePayload<Result: Decodable>(_ data: Data, requestBody: Data) throws -> LLMGeneratePayload<Result> {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let resultObject = root["result"],
-              let model = root["model"] as? String,
-              !model.isEmpty else {
+              let resultObject = root["result"] else {
             throw LLMGatewayError.invalidResponse
         }
+        let model = (root["model"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let resultData = try JSONSerialization.data(withJSONObject: resultObject)
         let result = try JSONDecoder().decode(Result.self, from: resultData)
 

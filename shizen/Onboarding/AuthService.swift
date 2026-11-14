@@ -216,6 +216,7 @@ final class AuthService: NSObject {
             return
         }
         assignUserId(user?.uid)
+        StaffAccess.refresh()
     }
 
     private func assignUserId(_ next: String?) {

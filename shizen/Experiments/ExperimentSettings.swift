@@ -31,7 +31,6 @@ enum RepeatAfterMeReplyLimit: String, CaseIterable {
 
 enum RolePlaySpeechRecognizerBackend: String, CaseIterable {
     /// No mic: the learner says the line aloud and taps the checkmark.
-    /// The only mode outside DEBUG builds.
     case off
     case onDevice
     case gptRealtimeWhisper
@@ -272,7 +271,8 @@ enum ExperimentSettings {
     }
 
     /// Role Play speech recognition: Apple on-device ASR or OpenAI gpt-realtime-whisper.
-    /// Speech recognition in Role Play is DEBUG-only; release always taps through.
+    /// Release always uses on-device ASR: the Whisper backends need an OpenAI key,
+    /// which only DEBUG builds carry. The skip checkmark covers denied permissions.
     static var rolePlaySpeechRecognizerBackend: RolePlaySpeechRecognizerBackend {
         get {
             #if DEBUG
@@ -281,7 +281,7 @@ enum ExperimentSettings {
             else { return .onDevice }
             return value
             #else
-            return .off
+            return .onDevice
             #endif
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: rolePlaySpeechRecognizerBackendKey) }

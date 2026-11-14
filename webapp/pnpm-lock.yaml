@@ -44,6 +44,9 @@ importers:
       firebase-admin:
         specifier: ^14.5.0
         version: 14.5.0
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
       jszip:
         specifier: ^3.10.1
         version: 3.10.1

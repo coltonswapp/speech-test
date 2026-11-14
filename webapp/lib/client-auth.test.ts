@@ -3,7 +3,8 @@ import { after, before, describe, it } from "node:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
-import { isClientQaAuthorized } from "./client-auth";
+import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from "jose";
+import { firebaseStaffTokenMatches, isClientQaAuthorized } from "./client-auth";
 import { isPublicPath } from "./studio-auth";
 
 const QA = "qa-learner-token-aaaaaaaa";
@@ -71,5 +72,55 @@ describe("/api/client route files", () => {
       assert.ok(handlers > 0, file);
       assert.equal(guards, handlers, file);
     }
+  });
+});
+
+describe("firebaseStaffTokenMatches", () => {
+  const PROJECT = "shizen-b453f";
+  let sign: (claims: Record<string, unknown>, opts?: { aud?: string; iss?: string; exp?: number }) => Promise<string>;
+  let keys: ReturnType<typeof createLocalJWKSet>;
+
+  before(async () => {
+    const { publicKey, privateKey } = await generateKeyPair("RS256");
+    const jwk = { ...(await exportJWK(publicKey)), kid: "k1", alg: "RS256" };
+    keys = createLocalJWKSet({ keys: [jwk] });
+    sign = (claims, opts = {}) =>
+      new SignJWT(claims)
+        .setProtectedHeader({ alg: "RS256", kid: "k1" })
+        .setIssuer(opts.iss ?? `https://securetoken.google.com/${PROJECT}`)
+        .setAudience(opts.aud ?? PROJECT)
+        .setSubject("uid-1")
+        .setIssuedAt()
+        .setExpirationTime(opts.exp ?? Math.floor(Date.now() / 1000) + 3600)
+        .sign(privateKey);
+  });
+
+  const check = async (token: string) => firebaseStaffTokenMatches(`Bearer ${token}`, keys);
+
+  it("accepts a valid token with staff: true", async () => {
+    assert.equal(await check(await sign({ staff: true, firebase: { sign_in_provider: "google.com" } })), true);
+  });
+
+  it("rejects no claim, wrong project, expired, and anonymous", async () => {
+    assert.equal(await check(await sign({})), false);
+    assert.equal(await check(await sign({ staff: "true" })), false);
+    assert.equal(await check(await sign({ staff: true }, { aud: "other-project" })), false);
+    assert.equal(await check(await sign({ staff: true }, { iss: "https://securetoken.google.com/other" })), false);
+    assert.equal(await check(await sign({ staff: true }, { exp: Math.floor(Date.now() / 1000) - 600 })), false);
+    assert.equal(await check(await sign({ staff: true, firebase: { sign_in_provider: "anonymous" } })), false);
+  });
+
+  it("rejects a token signed by a key Google didn't publish", async () => {
+    const other = await generateKeyPair("RS256");
+    const forged = await new SignJWT({ staff: true })
+      .setProtectedHeader({ alg: "RS256", kid: "k1" })
+      .setIssuer(`https://securetoken.google.com/${PROJECT}`)
+      .setAudience(PROJECT)
+      .setSubject("uid-1")
+      .setExpirationTime("1h")
+      .sign(other.privateKey);
+    assert.equal(await check(forged), false);
+    // And against Google's real keys.
+    assert.equal(await firebaseStaffTokenMatches(`Bearer ${forged}`), false);
   });
 });

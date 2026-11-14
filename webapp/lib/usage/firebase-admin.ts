@@ -110,7 +110,7 @@ export function getFirebaseAdminStatus(): FirebaseAdminStatus {
   };
 }
 
-export function getAdminApp(): App {
+function getAdminApp(): App {
   const existing = getApps()[0];
   if (existing) return existing;
 

@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import {
-  AUTH_COOKIE,
-  authIsEnforced,
-  apiBearerMatches,
-  isPublicPath,
-  passphraseCookieMatches,
-} from "@/lib/studio-auth";
+import { isPublicPath } from "@/lib/studio-auth";
+import { isStudioRequestAllowed } from "@/lib/generate/access";
 
-// Do not import next-auth/jwt here. Next 16 compiles proxy.ts for the edge
-// runtime, and that package has no edge export (dev Unhandled Rejection).
+// Next 16 runs proxy.ts on the Node.js runtime, so next-auth/jwt can verify
+// the session cookie here. Checking only that the cookie exists let anyone in
+// with `next-auth.session-token=x`.
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -18,30 +14,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!authIsEnforced()) {
-    return NextResponse.next();
-  }
-
-  if (apiBearerMatches(request.headers.get("authorization"))) {
-    return NextResponse.next();
-  }
-
-  const passphrase = process.env.APP_PASSPHRASE?.trim() ?? "";
-  if (
-    passphrase &&
-    passphraseCookieMatches(request.cookies.get(AUTH_COOKIE)?.value, passphrase)
-  ) {
-    return NextResponse.next();
-  }
-
-  // Google sessions are issued at /api/auth/* (Node). Cookie presence is a
-  // gate for the allowlisted login we already ran; unsigned fakes are not a
-  // concern until this ships with Google env on Vercel (follow-up: verify JWT
-  // in Node, not edge).
-  const googleCookie =
-    request.cookies.get("__Secure-next-auth.session-token")?.value ||
-    request.cookies.get("next-auth.session-token")?.value;
-  if (googleCookie) {
+  if (await isStudioRequestAllowed(request)) {
     return NextResponse.next();
   }
 

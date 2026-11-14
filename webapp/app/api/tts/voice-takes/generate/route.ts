@@ -6,8 +6,8 @@ import { GEMINI_VOICE_CATALOG, geminiVoiceEntry } from "@/lib/tts/gemini-voice-c
 import { runVoiceTakesBatch } from "@/lib/tts/voice-takes-batch";
 import { r2VoiceTakeStore, synthesizeVoiceTake } from "@/lib/tts/voice-takes-gemini";
 
-// Auth: proxy.ts gates every non-public /api route (passphrase, Google
-// session, or API bearer), same as the other Studio TTS routes.
+// Auth: proxy.ts gates every non-public /api route (verified Google
+// session or Studio agent bearer), same as the other Studio TTS routes.
 
 // Each voice is VOICE_TAKES_PER_VOICE sequential TTS calls (~3–8 s each).
 // A batch stops starting new voices after BATCH_BUDGET_MS so it finishes well

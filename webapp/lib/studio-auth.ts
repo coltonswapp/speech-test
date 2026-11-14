@@ -1,11 +1,8 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-
-export const AUTH_COOKIE = "studio_auth";
+import { timingSafeEqual } from "node:crypto";
 
 export function isPublicPath(pathname: string): boolean {
   return (
     pathname === "/login" ||
-    pathname.startsWith("/api/login") ||
     pathname.startsWith("/api/logout") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/public/") ||
@@ -61,13 +58,17 @@ export function isAuthBypassed(): boolean {
   return process.env.STUDIO_AUTH_BYPASS === "1";
 }
 
+/**
+ * Production always enforces auth, even with no credentials configured (fail
+ * closed). Locally, auth turns on once any credential is set.
+ */
 export function authIsEnforced(): boolean {
   if (isAuthBypassed()) return false;
+  if (process.env.NODE_ENV === "production") return true;
   return Boolean(
     isGoogleAuthConfigured() ||
       process.env.STUDIO_AGENT_TOKEN?.trim() ||
-      process.env.CONTENT_QA_CLIENT_TOKEN?.trim() ||
-      process.env.APP_PASSPHRASE?.trim()
+      process.env.CONTENT_QA_CLIENT_TOKEN?.trim()
   );
 }
 
@@ -86,19 +87,14 @@ export function studioAgentBearerMatches(header: string | null): boolean {
   return bearerEquals(header, process.env.STUDIO_AGENT_TOKEN?.trim());
 }
 
+/** Vercel Cron secret. Only valid on `/api/cron/*` (see proxy). */
+export function cronSecretMatches(header: string | null): boolean {
+  return bearerEquals(header, process.env.CRON_SECRET?.trim());
+}
+
+/** Studio agent token or cron secret. */
 export function bearerMatches(header: string | null): boolean {
-  const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!token) return false;
-  const secrets = [
-    process.env.STUDIO_AGENT_TOKEN?.trim(),
-    process.env.CRON_SECRET?.trim(),
-  ].filter((value): value is string => Boolean(value));
-  return secrets.some((expected) => {
-    const a = Buffer.from(token);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length) return false;
-    return timingSafeEqual(a, b);
-  });
+  return studioAgentBearerMatches(header) || cronSecretMatches(header);
 }
 
 /** Learner-client write token for content QA (parallel to Studio agent bearer). */
@@ -109,28 +105,4 @@ export function contentQaClientTokenMatches(header: string | null): boolean {
 /** Static token for `POST /hooks/shizen-note`. Never shipped in the app. */
 export function shizenNoteWebhookTokenMatches(header: string | null): boolean {
   return bearerEquals(header, process.env.SHIZEN_NOTE_WEBHOOK_TOKEN?.trim());
-}
-
-/** Studio agent token or dedicated content-QA client token. */
-export function apiBearerMatches(header: string | null): boolean {
-  return bearerMatches(header) || contentQaClientTokenMatches(header);
-}
-
-export function passphraseCookieValue(passphrase: string): string {
-  const secret = authSecret();
-  if (!secret) return passphrase;
-  return createHmac("sha256", secret).update(passphrase).digest("hex");
-}
-
-export function passphraseCookieMatches(
-  cookie: string | undefined,
-  passphrase: string
-): boolean {
-  if (!cookie || !passphrase) return false;
-  if (cookie === passphrase) return true;
-  const expected = passphraseCookieValue(passphrase);
-  const a = Buffer.from(cookie);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
 }

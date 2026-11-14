@@ -2,13 +2,12 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import {
-  AUTH_COOKIE,
   authIsEnforced,
   authSecret,
   contentQaClientTokenMatches,
+  cronSecretMatches,
   isEmailAllowed,
   isGoogleAuthConfigured,
-  passphraseCookieMatches,
   studioAgentBearerMatches,
 } from "@/lib/studio-auth";
 
@@ -21,11 +20,47 @@ function forbidden(): NextResponse {
 }
 
 /**
- * Generate APIs verify credentials themselves. Proxy cookie presence is not
- * enough: a forged `next-auth.session-token` must not read audio or history.
+ * True only for a next-auth session JWT that decrypts with our secret, has not
+ * expired, and names an allowlisted email. Cookie presence alone proves
+ * nothing: anyone can send a cookie named `next-auth.session-token`.
+ */
+export async function hasVerifiedStudioSession(request: NextRequest): Promise<boolean> {
+  if (!isGoogleAuthConfigured()) return false;
+  try {
+    const token = await getToken({ req: request, secret: authSecret() });
+    const email = typeof token?.email === "string" ? token.email : null;
+    return Boolean(token && isEmailAllowed(email));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The single Studio gate, run by proxy.ts for every non-public path.
  *
- * Allowed: Studio agent bearer, verified passphrase cookie, or a next-auth JWT
- * whose email is on STUDIO_ALLOWED_EMAILS. Learner QA bearer is forbidden.
+ * - Studio agent bearer: any route.
+ * - Cron secret: `/api/cron/*` only.
+ * - Learner QA token (ships in the iOS app): `/api/client/*` only.
+ * - Verified Google session for an allowlisted email: any route.
+ */
+export async function isStudioRequestAllowed(request: NextRequest): Promise<boolean> {
+  if (!authIsEnforced()) return true;
+
+  const { pathname } = request.nextUrl;
+  const authorization = request.headers.get("authorization");
+
+  if (studioAgentBearerMatches(authorization)) return true;
+  if (pathname.startsWith("/api/cron/") && cronSecretMatches(authorization)) return true;
+  if (pathname.startsWith("/api/client/") && contentQaClientTokenMatches(authorization)) {
+    return true;
+  }
+  return hasVerifiedStudioSession(request);
+}
+
+/**
+ * Generate APIs verify credentials themselves, on top of the proxy.
+ * Allowed: Studio agent bearer, or a verified allowlisted Google session.
+ * Learner QA bearer is forbidden.
  */
 export async function requireGenerateAccess(
   request: NextRequest,
@@ -35,37 +70,6 @@ export async function requireGenerateAccess(
   const authorization = request.headers.get("authorization");
   if (studioAgentBearerMatches(authorization)) return null;
   if (contentQaClientTokenMatches(authorization)) return forbidden();
-
-  const passphrase = process.env.APP_PASSPHRASE?.trim() ?? "";
-  if (
-    passphrase &&
-    passphraseCookieMatches(request.cookies.get(AUTH_COOKIE)?.value, passphrase)
-  ) {
-    return null;
-  }
-
-  if (isGoogleAuthConfigured()) {
-    const token = await getToken({
-      req: request,
-      secret: authSecret(),
-    });
-    const email = typeof token?.email === "string" ? token.email : null;
-    if (token && isEmailAllowed(email)) return null;
-  }
-
+  if (await hasVerifiedStudioSession(request)) return null;
   return unauthorized();
-}
-
-/** @deprecated Use requireGenerateAccess */
-export function rejectLearnerQaAccess(request: NextRequest): NextResponse | null {
-  const authorization = request.headers.get("authorization");
-  if (contentQaClientTokenMatches(authorization) && !studioAgentBearerMatches(authorization)) {
-    return forbidden();
-  }
-  return null;
-}
-
-/** @deprecated Use requireGenerateAccess */
-export function forbidContentQaOnly(request: NextRequest): NextResponse | null {
-  return rejectLearnerQaAccess(request);
 }

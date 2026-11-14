@@ -51,6 +51,50 @@ final class FuriganaTranscriptLabel: UILabel {
         }
     }
 
+    /// Auto Layout reads `intrinsicContentSize` as the alignment rect, which
+    /// already excludes the vertical insets, so counting them there too leaves
+    /// a ruby-sized void under the glyphs. Set this so the alignment rect hugs
+    /// the base text and neighbors can sit against the characters.
+    var alignmentRectHugsBaseText = false {
+        didSet {
+            guard alignmentRectHugsBaseText != oldValue else { return }
+            invalidateIntrinsicContentSize()
+            setNeedsLayout()
+        }
+    }
+
+    private var intrinsicVerticalInsetCorrection: CGFloat {
+        guard alignmentRectHugsBaseText, verticalTextInsetsAffectAlignmentRect else { return 0 }
+        return textInsets.top + textInsets.bottom
+    }
+
+    /// Distance from the top of the base text (the alignment rect top when
+    /// vertical insets sit outside it) to the optical middle of the first
+    /// line's characters, ignoring ruby.
+    var firstLineCharacterCenterOffset: CGFloat? {
+        guard let attributedText, attributedText.length > 0 else { return nil }
+        let base = Self.attributedStringByRemovingRuby(attributedText)
+        let storage = NSTextStorage(attributedString: base)
+        let manager = NSLayoutManager()
+        manager.usesFontLeading = true
+        let container = NSTextContainer(size: CGSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: .greatestFiniteMagnitude
+        ))
+        container.lineFragmentPadding = 0
+        manager.addTextContainer(container)
+        storage.addLayoutManager(manager)
+        guard manager.numberOfGlyphs > 0 else { return nil }
+        let fragment = manager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+        let baseline = fragment.minY + manager.location(forGlyphAt: 0).y
+        let baseFont = base.attribute(.font, at: 0, effectiveRange: nil) as? UIFont
+            ?? font
+            ?? .systemFont(ofSize: 17)
+        // Kana and kanji fill the ideographic em box: 0.88 em above the
+        // baseline, 0.12 em below. Its middle is 0.38 em above the baseline.
+        return baseline - baseFont.pointSize * 0.38
+    }
+
     /// When true, color-only attributed updates skip intrinsic-size invalidation
     /// so dialogue emphasis can recolor without re-wrapping the line.
     private var ignoreIntrinsicInvalidation = false
@@ -74,8 +118,16 @@ final class FuriganaTranscriptLabel: UILabel {
         get { super.attributedText }
         set {
             tokenHighlightRange = nil
+            let previousOverflow = horizontalRubyOverflow
             super.attributedText = newValue
             invalidateIntrinsicContentSize()
+            // The ruby overhang lives in `alignmentRectInsets`. A stack that
+            // pins this label's width will not re-apply the frame on its own,
+            // so 静か → な kept the old overhang and drew な past the margin.
+            if horizontalRubyOverflow != previousOverflow {
+                superview?.setNeedsLayout()
+                setNeedsDisplay()
+            }
         }
     }
 
@@ -199,7 +251,7 @@ final class FuriganaTranscriptLabel: UILabel {
         }
         let fitted = fittedBaseTextSize(limitingWidth: limit)
         size.width = fitted.width
-        size.height = fitted.height
+        size.height = max(1, fitted.height - intrinsicVerticalInsetCorrection)
         return size
     }
 
@@ -614,6 +666,20 @@ enum JapaneseFuriganaBuilder {
 
     private static func paragraphStyleForFurigana(font: UIFont) -> NSParagraphStyle {
         wrappingFuriganaParagraphStyle(font: font)
+    }
+
+    /// Dictionary headword: the first line stays at the font's own height so
+    /// romaji sits against the characters, and the ruby reserve goes between
+    /// wrapped lines only, where line 2+ readings need it.
+    static func headwordParagraphStyle(font: UIFont) -> NSParagraphStyle {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.minimumLineHeight = font.lineHeight
+        paragraphStyle.lineSpacing = ceil(font.pointSize * rubySizeFactor) + 4
+        paragraphStyle.lineBreakMode = .byWordWrapping
+        if #available(iOS 14.0, *) {
+            paragraphStyle.lineBreakStrategy = []
+        }
+        return paragraphStyle
     }
 
     /// Line height and spacing that leave room for ruby when Japanese wraps.

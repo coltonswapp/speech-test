@@ -2,11 +2,26 @@
 //  DefinitionCalloutPresenter.swift
 //  InteractionKit
 //
-//  Shows the compact definition callout on the hosting view controller's root view.
+//  Shows the compact or rich definition callout on the hosting view controller's root view.
 //  Placement uses the scrubber's bounds (converted into host coordinates) to pick above vs below.
 //
 
 import UIKit
+
+/// What the presenter needs from a callout bubble (compact or rich).
+@MainActor
+protocol DefinitionCalloutBubble: UIView {
+    var onDetailTapped: (() -> Void)? { get set }
+    func setPlacement(_ placement: CompactDefinitionCalloutView.Placement)
+    func prepareLayout(width: CGFloat)
+    func fittingSize(maxWidth: CGFloat) -> CGSize
+    func updateArrowPosition(toward pointX: CGFloat)
+    func showWithAnimation()
+    func dismissWithAnimation(completion: (() -> Void)?)
+}
+
+extension CompactDefinitionCalloutView: DefinitionCalloutBubble {}
+extension RichDefinitionCalloutView: DefinitionCalloutBubble {}
 
 @MainActor
 public final class DefinitionCalloutPresenter {
@@ -14,8 +29,9 @@ public final class DefinitionCalloutPresenter {
     public static let shared = DefinitionCalloutPresenter()
     private static let horizontalMargin: CGFloat = 8
     private static let maxWidthFraction: CGFloat = 0.70
+    private static let richMaxWidthFraction: CGFloat = 0.88
 
-    private var calloutView: CompactDefinitionCalloutView?
+    private var calloutView: (any DefinitionCalloutBubble)?
     private weak var hostView: UIView?
     private weak var anchorView: UIView?
     private weak var hostingViewController: UIViewController?
@@ -29,6 +45,7 @@ public final class DefinitionCalloutPresenter {
         return callout.frame.contains(pointInHost)
     }
 
+    /// Single-line gloss bubble.
     public func presentOrUpdate(
         text: String,
         surface: String,
@@ -36,6 +53,67 @@ public final class DefinitionCalloutPresenter {
         in anchorView: UIView,
         gap: CGFloat = 4,
         onDetailTapped: @escaping (String) -> Void
+    ) {
+        present(
+            surface: surface,
+            lineFragments: lineFragments,
+            in: anchorView,
+            gap: gap,
+            maxWidthFraction: Self.maxWidthFraction,
+            onDetailTapped: onDetailTapped
+        ) { existing in
+            if let compact = existing as? CompactDefinitionCalloutView {
+                compact.setText(text)
+                return compact
+            }
+            return CompactDefinitionCalloutView(text: text)
+        }
+    }
+
+    /// Larger bubble: headword, reading, dictionary form, part of speech, and a few senses.
+    /// `onLongPress` (press and hold on the bubble) gets the surface; nil leaves no gesture.
+    public func presentOrUpdate(
+        content: DefinitionCalloutContent,
+        surface: String,
+        lineFragments: [CGRect],
+        in anchorView: UIView,
+        gap: CGFloat = 4,
+        onLongPress: ((String) -> Void)? = nil,
+        onDetailTapped: @escaping (String) -> Void
+    ) {
+        var longPress: (() -> Void)?
+        if let onLongPress {
+            longPress = { onLongPress(surface) }
+        }
+        present(
+            surface: surface,
+            lineFragments: lineFragments,
+            in: anchorView,
+            gap: gap,
+            maxWidthFraction: Self.richMaxWidthFraction,
+            onDetailTapped: onDetailTapped
+        ) { existing in
+            if let rich = existing as? RichDefinitionCalloutView {
+                rich.setContent(content)
+                rich.onLongPress = longPress
+                return rich
+            }
+            let rich = RichDefinitionCalloutView(content: content)
+            rich.onLongPress = longPress
+            return rich
+        }
+    }
+
+    /// `makeOrReuse` gets the bubble already on screen and returns it updated, or a new one
+    /// (when the kind changed). A replaced bubble is removed without animation.
+    private func present(
+        surface: String,
+        lineFragments: [CGRect],
+        in anchorView: UIView,
+        gap: CGFloat,
+        maxWidthFraction: CGFloat,
+        onDetailTapped: @escaping (String) -> Void,
+        makeOrReuse: ((any DefinitionCalloutBubble)?) -> any DefinitionCalloutBubble
     ) {
         guard let firstFragment = lineFragments.first, let lastFragment = lineFragments.last else { return }
         guard let hostView = resolveHostView(from: anchorView),
@@ -45,21 +123,17 @@ public final class DefinitionCalloutPresenter {
         self.hostView = hostView
         self.anchorView = anchorView
 
-        let callout: CompactDefinitionCalloutView
-        let isNew: Bool
-        if let existing = calloutView {
-            callout = existing
-            isNew = false
-            callout.setText(text)
-            if callout.superview !== hostView {
-                callout.removeFromSuperview()
-                hostView.addSubview(callout)
-            }
-        } else {
-            callout = CompactDefinitionCalloutView(text: text)
+        let previous = calloutView
+        let callout = makeOrReuse(previous)
+        let isNew = callout !== previous
+        if isNew {
+            previous?.layer.removeAllAnimations()
+            previous?.removeFromSuperview()
             calloutView = callout
             hostView.addSubview(callout)
-            isNew = true
+        } else if callout.superview !== hostView {
+            callout.removeFromSuperview()
+            hostView.addSubview(callout)
         }
 
         callout.onDetailTapped = { onDetailTapped(surface) }
@@ -72,7 +146,7 @@ public final class DefinitionCalloutPresenter {
         let scrubFrameInHost = anchorView.convert(anchorView.bounds, to: hostView)
         let hostWidth = hostView.bounds.width
         let anchorMidX = anchorBoundsInHost.midX
-        let maxCalloutWidth = maxCalloutWidth(hostWidth: hostWidth)
+        let maxCalloutWidth = maxCalloutWidth(hostWidth: hostWidth, fraction: maxWidthFraction)
         let size = callout.fittingSize(maxWidth: maxCalloutWidth)
         let width = min(ceil(size.width), maxCalloutWidth)
         let height = ceil(size.height)
@@ -88,6 +162,11 @@ public final class DefinitionCalloutPresenter {
             gap: gap
         )
 
+        let rich = callout as? RichDefinitionCalloutView
+        if !isNew {
+            // Setting `frame` mid-scale would distort it; finish any running animation first.
+            rich?.settleForLayout()
+        }
         callout.setPlacement(layout.placement)
         callout.prepareLayout(width: width)
         callout.frame = layout.frame
@@ -97,6 +176,8 @@ public final class DefinitionCalloutPresenter {
 
         if isNew {
             callout.showWithAnimation()
+        } else if let rich {
+            rich.pulse()
         } else {
             UIView.animate(withDuration: 0.15) {
                 callout.alpha = 1
@@ -135,9 +216,9 @@ public final class DefinitionCalloutPresenter {
         let arrowAnchorX: CGFloat
     }
 
-    private func maxCalloutWidth(hostWidth: CGFloat) -> CGFloat {
+    private func maxCalloutWidth(hostWidth: CGFloat, fraction: CGFloat) -> CGFloat {
         let margin = Self.horizontalMargin
-        let cap = min(hostWidth * Self.maxWidthFraction, hostWidth - margin * 2)
+        let cap = min(hostWidth * fraction, hostWidth - margin * 2)
         return max(120, cap)
     }
 

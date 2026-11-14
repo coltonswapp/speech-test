@@ -4,9 +4,10 @@
 //
 //  Variant: Bold hero, glass edition. The huge, tightly leaded headline and faint grid over
 //  the drifting brand-yellow blobs, the swipeable glass feature cards, and the feature
-//  carousel's pinned footer with shorter plan tiles ("$59.99/yr") above the brand yellow CTA.
+//  carousel's pinned footer with shorter plan tiles ("$34.99/yr") above the brand yellow CTA.
 //  `.compact` swaps the three-line headline for a smaller one-sentence title and subhead.
 //  `showsColorBlobs: false` keeps the grid on a plain page, with no colored backdrop.
+//  `showsClose: false` is the onboarding gate; Restore stays in the legal row either way.
 //
 
 import UIKit
@@ -29,9 +30,15 @@ final class PaywallBoldHeroGlassViewController: PaywallBaseViewController {
     private var tiles: [PaywallPlanTile] = []
     private let finePrint = UILabel()
     private let headlineStyle: Headline
+    private let showsClose: Bool
 
-    init(provider: PaywallProviding, headline: Headline = .hero, showsColorBlobs: Bool = true) {
+    override var analyticsVariant: String? {
+        headlineStyle == .compact ? "bold_hero_glass_compact" : nil
+    }
+
+    init(provider: PaywallProviding, headline: Headline = .hero, showsColorBlobs: Bool = true, showsClose: Bool = true) {
         headlineStyle = headline
+        self.showsClose = showsClose
         backdrop = showsColorBlobs ? BrandBlobBackdrop() : nil
         super.init(provider: provider)
     }
@@ -109,7 +116,7 @@ final class PaywallBoldHeroGlassViewController: PaywallBaseViewController {
         footer.setCustomSpacing(14, after: plans)
 
         installScrollLayout(content: content, footer: footer, horizontalInset: 20, topInset: 64)
-        installTopBar(tint: .label, showsRestore: false)
+        installTopBar(tint: .label, showsClose: showsClose, showsRestore: false)
     }
 
     override func selectedPackageDidChange(animated: Bool) {

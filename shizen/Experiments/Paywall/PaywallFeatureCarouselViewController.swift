@@ -6,7 +6,7 @@
 //  small preview of the feature (lesson thumbnails, a casual line in the lesson glass bubble, a
 //  word insight, a quiz, a saved flashcard), all from one train-station scene so they
 //  read as one story. Cards auto-advance until the user swipes; Hana reacts to each page.
-//  Short side-by-side glass plan tiles ("$59.99/yr") sit in the pinned footer above the brand yellow CTA.
+//  Short side-by-side glass plan tiles ("$34.99/yr") sit in the pinned footer above the brand yellow CTA.
 //
 
 import UIKit

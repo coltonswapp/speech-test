@@ -56,41 +56,14 @@ enum HiraganaRomaji {
         return glyphs
     }
 
-    /// Romanizes hiragana or katakana strings for detail list lines (e.g. あさ / アサ → asa).
+    /// Romanizes hiragana, katakana, or mixed kana (e.g. あさ / アサ → asa, ウォーター → wootaa).
     static func romanize(_ text: String) -> String {
-        let normalized = KanaScript.detecting(in: text) == .katakana
-            ? KanaCurriculum.katakanaToHiragana(text)
-            : text
-        var result = ""
-        let chars = Array(normalized)
-        var index = 0
-        while index < chars.count {
-            let ch = chars[index]
-            if ch == "っ" {
-                if let next = peekSyllable(chars, from: index + 1)?.consonant {
-                    result += next
-                }
-                index += 1
-                continue
-            }
-            if let syllable = readSyllable(chars, from: index) {
-                result += syllable.romaji
-                index += syllable.length
-                continue
-            }
-            result += String(ch)
-            index += 1
-        }
-        return result
+        KanaRomanizer.romanize(text)
     }
 
     private struct Syllable {
         let romaji: String
         let length: Int
-        var consonant: String? {
-            guard let first = romaji.first else { return nil }
-            return String(first)
-        }
     }
 
     private static let yoon: [String: String] = [
@@ -139,10 +112,6 @@ enum HiraganaRomaji {
             return Syllable(romaji: romaji, length: 1)
         }
         return nil
-    }
-
-    private static func peekSyllable(_ chars: [Character], from index: Int) -> Syllable? {
-        readSyllable(chars, from: index)
     }
 }
 

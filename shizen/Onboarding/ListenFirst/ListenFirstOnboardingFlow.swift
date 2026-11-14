@@ -3,16 +3,18 @@
 //  shizen
 //
 //  Listening-first v2: payoff first, setup second. One shared conversation
-//  (Mika and Kaito, still at the office) built around the three phrases from
+//  (Mika talking Kaito into tomorrow's drinks) built around the three phrases from
 //  "Textbooks vs. real life", so the first blind listen lands on screen 3.
 //
-//  Reuses the Natural flow's welcome, level, commitment, and send-off steps.
+//  Level is asked in the welcome chat. Commitment and send-off are the shared Natural steps.
 //  Resume is switched off for now (`resumesProgress`): every visit starts at screen 1.
 //  With it on, answers are saved on-device as each screen is finished; relaunching resumes
-//  at the next unfinished screen. Nothing is sent anywhere and no sign-in runs.
+//  at the next unfinished screen. Sign-in already happened on the splash, so the flow doesn't ask.
+//  After the ready step: Hana's team note, then the compact paywall, with no way back from either.
 //
 //  Audio (11 clips; any missing one falls back to on-device TTS):
-//    listenfirst-conversation           the whole conversation as one aligned clip
+//    listenfirst-conversation           the whole conversation as one M4A with line switch times
+//                                       embedded (`DialogueAlignmentMetadata`), or no line plays
 //    listenfirst-gap-{1,2,3}-textbook   分かりません。 / 何をしているのですか？ / 行かなければなりません。
 //    listenfirst-gap-{1,2,3}-real       わかんない。 / 何してんの？ / 行かなきゃ。
 //    listenfirst-unsquash-1-step-{1,2}  何してるの？ / 何をしているの？
@@ -24,26 +26,84 @@ import UIKit
 
 enum ListenFirstOnboardingFlow {
     static func makeSteps(session: ListenFirstSession = ListenFirstSession()) -> [OnboardingViewController] {
+        NaturalVoicePlayer.prewarm(ListenFirstContent.lineClip(at: 0))
         // Step ids are the analytics `step_name`s; keep them stable once shipped.
-        [
+        return [
             NaturalIntroStepViewController(session: session).withStepId("intro"),
             ListenFirstGapStepViewController(session: session).withStepId("gap"),
             ListenFirstListenStepViewController(session: session).withStepId("listen"),
-            ListenFirstTakeApartStepViewController(session: session).withStepId("take_apart"),
             ListenFirstBreakdownStepViewController(session: session).withStepId("breakdown"),
-            ListenFirstStyleStepViewController(session: session).withStepId("style"),
-            NaturalLevelStepViewController(session: session).withStepId("level"),
+            ListenFirstPracticeStepViewController(session: session).withStepId("practice"),
             ListenFirstPlanStepViewController(session: session).withStepId("plan"),
             NaturalCommitStepViewController(session: session).withStepId("commit"),
             NaturalReadyStepViewController(session: session).withStepId("ready"),
-            // TODO(SHZ-40): team-note screen goes here, before the paywall, as
-            // `.withStepId(NaturalOnboardingFlow.teamNoteStepId)`.
+            NaturalTeamNoteHanaStepViewController(session: session).withStepId(NaturalOnboardingFlow.teamNoteStepId),
+            makePaywallStep(),
         ]
+    }
+
+    static func makePaywallStep() -> OnboardingViewController {
+        ListenFirstPaywallStepViewController().withStepId("paywall")
+    }
+}
+
+/// The compact glass paywall as an onboarding step. The only way past it is access: a trial,
+/// purchase, or restore writes the entitlement, then finishes setup into the app.
+final class ListenFirstPaywallStepViewController: OnboardingViewController {
+
+    override var hidesOnboardingBackButton: Bool { true }
+    override var locksOnboardingBack: Bool { true }
+    override var hidesOnboardingProgress: Bool { true }
+
+    private let paywall = PaywallBoldHeroGlassViewController(
+        provider: MockPaywallProvider(),
+        headline: .compact,
+        showsClose: false
+    )
+
+    override func setupContent() {
+        paywall.onAccessGranted = { [weak self] package in
+            guard let coordinator = self?.coordinator else { return }
+            if !coordinator.isPreviewMode {
+                ProMembership.recordAccess(for: package)
+            }
+            coordinator.finishSetup()
+        }
+        addChild(paywall)
+        paywall.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(paywall.view)
+        NSLayoutConstraint.activate([
+            paywall.view.topAnchor.constraint(equalTo: view.topAnchor),
+            paywall.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            paywall.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            paywall.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+        paywall.didMove(toParent: self)
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if coordinator?.isPreviewMode == false {
+            OnboardingStore.markLessonStepsFinishedForCurrentUser()
+        }
+    }
+
+    func trackAbandoned() {
+        paywall.trackAbandoned()
     }
 }
 
 /// Full-screen modal that owns the coordinator, restores saved answers, and resumes mid-flow.
 final class ListenFirstOnboardingHostController: UINavigationController, AuthenticationDelegate {
+
+    enum Mode {
+        /// Playground: writes nothing and isn't the gate.
+        case preview
+        /// The production gate, from the intro.
+        case fullFlow
+        /// The production gate once the lesson steps are done.
+        case paywallOnly
+    }
 
     /// Off while the flow is being tuned: every visit restarts at screen 1. Flip on to save
     /// answers per screen and resume at the next unfinished one.
@@ -52,16 +112,20 @@ final class ListenFirstOnboardingHostController: UINavigationController, Authent
     private let session = ListenFirstSession()
     private let coordinator = OnboardingCoordinator(flow: .listenFirst)
 
-    init() {
+    init(mode: Mode = .preview) {
         super.init(nibName: nil, bundle: nil)
         if !Self.resumesProgress {
             // Every visit starts from the top; drop anything an older build saved.
             ListenFirstSession.clearSaved()
         }
         let resumeIndex = Self.resumesProgress ? session.restore() : 0
-        coordinator.enablePreviewMode()
+        if mode == .preview {
+            coordinator.enablePreviewMode()
+        }
         coordinator.authenticationDelegate = self
-        coordinator.injectedSteps = ListenFirstOnboardingFlow.makeSteps(session: session)
+        coordinator.injectedSteps = mode == .paywallOnly
+            ? [ListenFirstOnboardingFlow.makePaywallStep()]
+            : ListenFirstOnboardingFlow.makeSteps(session: session)
         coordinator.initialStepIndex = resumeIndex
         if Self.resumesProgress {
             coordinator.stepCompletionHandler = { [session] index in
@@ -88,7 +152,6 @@ final class ListenFirstOnboardingHostController: UINavigationController, Authent
     }
 
     func signUpComplete() {
-        // In the real app this hands the answers to the account on first sign-in; either way, local state clears.
         ListenFirstSession.clearSaved()
         dismiss(animated: true)
     }
@@ -102,7 +165,6 @@ final class ListenFirstSession: NaturalOnboardingSession {
     private struct Snapshot: Codable {
         var completedStep: Int
         var name: String
-        var register: String
         var level: Int
         var minutesPerDay: Int
         var caughtGist: Bool?
@@ -141,7 +203,7 @@ final class ListenFirstSession: NaturalOnboardingSession {
 
     override var dissectsEveryLine: Bool { true }
 
-    /// Screens 2–4 run before the level pick, so they always show kanji with furigana.
+    /// Lines always show kanji with furigana; the level doesn't change them yet.
     func defaultText(_ line: ListenFirstLine) -> String {
         line.japanese
     }
@@ -150,7 +212,6 @@ final class ListenFirstSession: NaturalOnboardingSession {
         let snapshot = Snapshot(
             completedStep: completedStep,
             name: name,
-            register: register.rawValue,
             level: level.rawValue,
             minutesPerDay: minutesPerDay,
             caughtGist: caughtGist,
@@ -165,7 +226,6 @@ final class ListenFirstSession: NaturalOnboardingSession {
         guard let data = UserDefaults.standard.data(forKey: Self.storageKey),
               let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data) else { return 0 }
         name = snapshot.name
-        register = NaturalRegister(rawValue: snapshot.register) ?? .everything
         level = TutorLevel(rawValue: snapshot.level) ?? .brandNew
         minutesPerDay = snapshot.minutesPerDay
         caughtGist = snapshot.caughtGist
@@ -247,34 +307,20 @@ struct ListenFirstCallout {
 enum ListenFirstContent {
 
     static let speakers = ["Kaito", "Mika"]
-    static let sceneTitle = "🌙 Still at the office"
+    static let sceneTitle = "🍻 Drinks tomorrow"
 
     // Needs native-speaker review before it ships, like all content.
     static let conversation = [
-        ListenFirstLine(speaker: 1, japanese: "あれ、まだいたの？何してんの？", english: "Huh, you're still here? What are you up to?"),
-        ListenFirstLine(speaker: 0, japanese: "明日の資料。でも、ぜんぜんわかんない。", english: "The materials for tomorrow. But I don't get any of it."),
-        ListenFirstLine(speaker: 1, japanese: "ごめん、私、行かなきゃ。終電、なくなっちゃう。", english: "Sorry, I've gotta go. I'm going to miss the last train."),
-        ListenFirstLine(speaker: 0, japanese: "マジか。じゃあ、また明日。", english: "Seriously? Okay. See you tomorrow."),
+        ListenFirstLine(speaker: 1, japanese: "何してんの？", english: "What are you doing?"),
+        ListenFirstLine(speaker: 0, japanese: "明日の飲み会、行くか迷ってる。", english: "Trying to decide whether to go to drinks tomorrow."),
+        ListenFirstLine(speaker: 1, japanese: "え、行かなきゃ！サキちゃん来るよ。", english: "You have to go! Saki's coming."),
+        ListenFirstLine(speaker: 0, japanese: "…マジで？何着ればいいかわかんない。", english: "...Seriously? I don't know what to wear."),
     ]
 
     static func lineClip(at index: Int) -> NaturalClip {
         let line = conversation[index]
         return NaturalClip(text: line.japanese, voice: line.speaker, audioName: "listenfirst-conversation", segment: index)
     }
-
-    /// "Now take it apart": which conversation line, and the words it splits into, in order.
-    /// Punctuation is skipped. Glosses need native review like all content.
-    static let takeApartLine = 0
-    static let takeApartTokens = [
-        NaturalPiece(japanese: "あれ", gloss: "huh?"),
-        NaturalPiece(japanese: "まだ", gloss: "still"),
-        NaturalPiece(japanese: "いた", gloss: "were (here)"),
-        NaturalPiece(japanese: "の", gloss: "softens it into a question"),
-        NaturalPiece(japanese: "何", gloss: "what"),
-        NaturalPiece(japanese: "して", gloss: "doing"),
-        NaturalPiece(japanese: "ん", gloss: "る (from している), squashed"),
-        NaturalPiece(japanese: "の", gloss: "softens it into a question"),
-    ]
 
     /// "Textbooks vs. real life", one squash per `NaturalContrast` pair: the textbook line cut
     /// into pieces, and what each piece becomes when spoken. An empty `real` drops out; a
@@ -345,7 +391,7 @@ enum ListenFirstContent {
     static let gist = NaturalGist(
         question: "What's going on?",
         options: [
-            "A friend finds someone working late, then has to leave to catch the last train",
+            "Someone's unsure about going out, until they hear who'll be there",
             "Two friends are deciding where to eat dinner",
             "Someone is asking for directions",
         ],
@@ -389,7 +435,7 @@ enum ListenFirstContent {
         ),
         ListenFirstChunk(
             line: 2,
-            meaning: "I've gotta go.",
+            meaning: "You have to go.",
             tiles: [
                 NaturalPiece(japanese: "行か", gloss: "go"),
                 NaturalPiece(japanese: "なきゃ", gloss: "must"),
@@ -426,48 +472,6 @@ enum ListenFirstContent {
         to: ListenFirstForm(text: "わかんない", changed: ["ん"], change: nil, note: nil, clip: gapClip(at: 0, textbook: false)),
         caption: "Same trick. A sudden ん where you expected る or ら is usually this."
     )
-
-    /// Three example lines per style (first is the spec's draft; all need native review).
-    static func phrases(for register: NaturalRegister) -> [TutorLine] {
-        switch register {
-        case .everything:
-            return [
-                TutorLine("混んでるね。", "It's packed, huh · textbook: 混んでいますね"),
-                TutorLine("いつものでいい？", "The usual?"),
-                TutorLine("ちょっと待ってて。", "Hang on a sec · textbook: ちょっと待っていてください"),
-            ]
-        case .casual:
-            return [
-                TutorLine("今日、暇？", "Free today? · textbook: 今日は暇ですか？"),
-                TutorLine("それ、マジ？", "Seriously?"),
-                TutorLine("行こ行こ！", "Let's go! · textbook: 行きましょう"),
-            ]
-        case .college:
-            return [
-                TutorLine("やばっ、寝坊した！", "Crap, I overslept! · textbook: 寝坊してしまいました"),
-                TutorLine("終電行っちゃった。", "Missed the last train · textbook: 行ってしまった"),
-                TutorLine("テスト、ガチで無理。", "This test is seriously impossible."),
-            ]
-        case .polite:
-            return [
-                TutorLine("ご確認いただけますでしょうか。", "Could you please take a look?"),
-                TutorLine("恐れ入りますが…", "I'm sorry to trouble you, but…"),
-                TutorLine("承知いたしました。", "Understood · textbook: わかりました"),
-            ]
-        case .travel:
-            return [
-                TutorLine("お待たせいたしました。", "Thanks for waiting."),
-                TutorLine("こちらでお召し上がりですか？", "For here?"),
-                TutorLine("少々お待ちください。", "One moment, please."),
-            ]
-        case .anime:
-            return [
-                TutorLine("絶対、負けないからな！", "I'm not going to lose, got it?"),
-                TutorLine("なんでだよ！", "Why, though?!"),
-                TutorLine("任せとけ！", "Leave it to me! · textbook: 任せておけ"),
-            ]
-        }
-    }
 
     /// Lesson thumbnails in the asset catalog (`lesson-thumbnails`). Scenes don't have
     /// their own art yet, so the path carousel picks from these at random.

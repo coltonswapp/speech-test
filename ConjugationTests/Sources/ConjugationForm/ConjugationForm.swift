@@ -1,0 +1,1 @@
+../../../shizen/Dictionary/ConjugationForm.swift

@@ -66,12 +66,18 @@ struct PaywallPackage: Equatable {
     var hasTrial: Bool { trialDays != nil }
     var localizedPrice: String { PaywallPriceFormatter.string(price, currencyCode: currencyCode) }
     var pricePerWeek: String { PaywallPriceFormatter.string(price / period.weeks, currencyCode: currencyCode) }
-    var pricePerMonth: String { PaywallPriceFormatter.string(price / period.months, currencyCode: currencyCode) }
+    /// Per-month equivalent, rounded down to the currency's minor unit so a yearly plan never advertises a higher monthly price than it charges.
+    var pricePerMonth: String {
+        PaywallPriceFormatter.string(price / period.months, currencyCode: currencyCode, roundingMode: .down)
+    }
 
-    /// Whole-percent saving per week against `other`, or nil when there is none.
+    /// Whole-percent saving against paying `other` over the same span, or nil when there is none.
+    /// Yearly against monthly is `monthly × 12` compared with the yearly price.
     func savingsPercent(comparedTo other: PaywallPackage) -> Int? {
-        let mine = NSDecimalNumber(decimal: price / period.weeks).doubleValue
-        let theirs = NSDecimalNumber(decimal: other.price / other.period.weeks).doubleValue
+        guard period.months > 0, other.period.months > 0 else { return nil }
+        let span = max(period.months, other.period.months)
+        let mine = NSDecimalNumber(decimal: price * (span / period.months)).doubleValue
+        let theirs = NSDecimalNumber(decimal: other.price * (span / other.period.months)).doubleValue
         guard theirs > 0, mine < theirs else { return nil }
         return Int(((1 - mine / theirs) * 100).rounded())
     }
@@ -95,12 +101,18 @@ struct PaywallOffering {
 enum PaywallPriceFormatter {
     private static var cache: [String: NumberFormatter] = [:]
 
-    static func string(_ value: Decimal, currencyCode: String) -> String {
-        let formatter = cache[currencyCode] ?? {
+    static func string(
+        _ value: Decimal,
+        currencyCode: String,
+        roundingMode: NumberFormatter.RoundingMode = .halfEven
+    ) -> String {
+        let key = "\(currencyCode)#\(roundingMode.rawValue)"
+        let formatter = cache[key] ?? {
             let formatter = NumberFormatter()
             formatter.numberStyle = .currency
             formatter.currencyCode = currencyCode
-            cache[currencyCode] = formatter
+            formatter.roundingMode = roundingMode
+            cache[key] = formatter
             return formatter
         }()
         return formatter.string(from: NSDecimalNumber(decimal: value)) ?? "\(value)"
@@ -134,9 +146,10 @@ final class MockPaywallProvider: PaywallProviding {
 
     func fetchOffering(placement: String?) async throws -> PaywallOffering {
         let (annual, monthly): (Decimal, Decimal) = switch currency {
-        case .usd: (Decimal(string: "59.99")!, Decimal(string: "12.99")!)
+        case .usd: (Decimal(string: "34.99")!, Decimal(string: "5.99")!)
         case .jpy: (8800, 1800)
         }
+        let trialDays = isTrialEligible ? 3 : nil
         return PaywallOffering(
             identifier: "mock_default",
             packages: [
@@ -146,7 +159,7 @@ final class MockPaywallProvider: PaywallProviding {
                     period: .annual,
                     price: annual,
                     currencyCode: currency.rawValue,
-                    trialDays: isTrialEligible ? 7 : nil
+                    trialDays: trialDays
                 ),
                 PaywallPackage(
                     identifier: "$rc_monthly",
@@ -154,7 +167,7 @@ final class MockPaywallProvider: PaywallProviding {
                     period: .monthly,
                     price: monthly,
                     currencyCode: currency.rawValue,
-                    trialDays: nil
+                    trialDays: trialDays
                 ),
             ],
             metadata: [:]

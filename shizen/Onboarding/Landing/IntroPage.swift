@@ -22,19 +22,23 @@ struct IntroPage: View {
     var onLogin: () -> Void
     var onSignUp: () -> Void
     var revealsAuthOnGetStarted: Bool
+    /// The production splash: Continue with Apple is the only way in.
+    var appleSignInOnly: Bool
 
     init(
         onGetStarted: @escaping () -> Void,
         onAppleSignIn: @escaping () -> Void = {},
         onLogin: @escaping () -> Void = {},
         onSignUp: @escaping () -> Void = {},
-        revealsAuthOnGetStarted: Bool = true
+        revealsAuthOnGetStarted: Bool = true,
+        appleSignInOnly: Bool = false
     ) {
         self.onGetStarted = onGetStarted
         self.onAppleSignIn = onAppleSignIn
         self.onLogin = onLogin
         self.onSignUp = onSignUp
         self.revealsAuthOnGetStarted = revealsAuthOnGetStarted
+        self.appleSignInOnly = appleSignInOnly
     }
 
     var body: some View {
@@ -146,31 +150,33 @@ struct IntroPage: View {
                                 .background(.black, in: .capsule)
                             }
 
-                            Button {
-                                onLogin()
-                            } label: {
-                                Text("Continue with Google")
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.black)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 14)
-                                    .frame(height: 55)
-                                    .background(.white, in: .capsule)
-                            }
+                            if !appleSignInOnly {
+                                Button {
+                                    onLogin()
+                                } label: {
+                                    Text("Continue with Google")
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(.black)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 14)
+                                        .frame(height: 55)
+                                        .background(.white, in: .capsule)
+                                }
 
-                            Button {
-                                onSignUp()
-                            } label: {
-                                Text("Sign up")
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 14)
-                                    .frame(height: 55)
-                                    .overlay(
-                                        Capsule()
-                                            .stroke(.white.opacity(0.4), lineWidth: 1.5)
-                                    )
+                                Button {
+                                    onSignUp()
+                                } label: {
+                                    Text("Sign up")
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 14)
+                                        .frame(height: 55)
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(.white.opacity(0.4), lineWidth: 1.5)
+                                        )
+                                }
                             }
                         }
                         .padding(.horizontal, 24)

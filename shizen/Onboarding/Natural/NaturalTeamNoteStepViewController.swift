@@ -6,8 +6,8 @@
 //  is a subscription, in a letter's voice rather than a sales pitch. No prices,
 //  no feature list, no skip; Continue hands off to the paywall.
 //
-//  Not in `NaturalOnboardingFlow` yet (SHZ-40). Review it from
-//  Settings → Playground → Team note.
+//  The Hana variant is in `ListenFirstOnboardingFlow`; `NaturalOnboardingFlow` doesn't have
+//  it yet (SHZ-40). Review either from Settings → Playground → Team note.
 //
 
 import NNKit
@@ -32,6 +32,8 @@ struct NaturalTeamNoteCopy {
     var teamName: String
     var teamLines: [String]
     var signature: String
+    /// A quiet line under the sign-off in the Hana variant.
+    var supportNote: String
     var cta: String
 
     static let current = NaturalTeamNoteCopy(
@@ -52,6 +54,7 @@ struct NaturalTeamNoteCopy {
             "If Shizen helps you, we'd be so grateful for your support.",
         ],
         signature: "— Colton & the Shizen team",
+        supportNote: "Questions or ideas? Reach out to support any time. We read every message.",
         cta: "Continue"
     )
 }
@@ -144,10 +147,12 @@ final class NaturalTeamNoteStepViewController: NaturalStepViewController {
 // MARK: - Team note, introduced by Hana
 
 /// The same note as a chat: Hana, on the left, says the team has something to share. Then the
-/// team speaks from the right, as their own bubbles, and signs off. Then Continue.
+/// team speaks from the right, as their own bubbles, signs off, and says support is always open.
+/// No title: the chat is the whole screen.
 final class NaturalTeamNoteHanaStepViewController: NaturalStepViewController {
 
     override var hidesOnboardingBackButton: Bool { true }
+    override var locksOnboardingBack: Bool { true }
 
     /// Replaces the hand-off to the coordinator; the playground uses it to open the paywalls.
     var continueHandler: (() -> Void)?
@@ -165,7 +170,8 @@ final class NaturalTeamNoteHanaStepViewController: NaturalStepViewController {
     }
 
     override func buildStage() {
-        setupOnboarding(title: note.title)
+        setupOnboarding(title: "")
+        titleLabel.isHidden = true
 
         // Always the moving mascot, whatever the session's default avatar is.
         let chat = TutorChatView(timeline: timeline, avatars: .mascot)
@@ -224,7 +230,18 @@ final class NaturalTeamNoteHanaStepViewController: NaturalStepViewController {
         signature.textAlignment = .right
         signature.numberOfLines = 0
         chat.appendCustom(signature)
-        timeline.after(0.6) { [weak self] in
+
+        let support = UILabel()
+        support.text = note.supportNote
+        support.font = .preferredFont(forTextStyle: .footnote)
+        support.adjustsFontForContentSizeCategory = true
+        support.textColor = .secondaryLabel
+        support.textAlignment = .right
+        support.numberOfLines = 0
+        timeline.after(0.4) {
+            chat.appendCustom(support)
+        }
+        timeline.after(1.0) { [weak self] in
             guard let self else { return }
             self.revealCTA(self.note.cta)
         }

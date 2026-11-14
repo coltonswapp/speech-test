@@ -173,27 +173,36 @@ async function writeCachedLine(text: string, tokens: TokenizedToken[]): Promise<
 }
 
 export async function tokenizeJapaneseLine(
-  text: string
+  text: string,
+  options: {
+    /** Called once per Gemini request (not for cache hits). */
+    onUsage?: (usage: TokenizeUsage) => void;
+    /** Called when the line came from the cache (no request made). */
+    onCacheHit?: () => void;
+  } = {}
 ): Promise<TokenizedToken[]> {
   const trimmed = text.trim();
   if (!trimmed) return [];
 
   const cached = await readCachedLine(trimmed);
-  if (cached) return cached;
+  if (cached) {
+    options.onCacheHit?.();
+    return cached;
+  }
 
   const apiKey = getProviderKey("gemini");
   if (!apiKey) {
     throw new DialogueGenerationError("Missing Gemini API key.");
   }
 
-  const first = await requestTokenSurfaces(apiKey, trimmed, false);
+  const first = await requestTokenSurfaces(apiKey, trimmed, false, { onUsage: options.onUsage });
   const firstTokens = tokensWithReadings(first, trimmed);
   if (firstTokens) {
     await writeCachedLine(trimmed, firstTokens);
     return firstTokens;
   }
 
-  const retry = await requestTokenSurfaces(apiKey, trimmed, true);
+  const retry = await requestTokenSurfaces(apiKey, trimmed, true, { onUsage: options.onUsage });
   const retryTokens = tokensWithReadings(retry, trimmed);
   if (retryTokens) {
     await writeCachedLine(trimmed, retryTokens);

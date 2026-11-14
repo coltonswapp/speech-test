@@ -20,7 +20,15 @@ final class WordDictionaryDetailView: UIView {
     private let wordContentStack = UIStackView()
     private let selectedWordLabel = FuriganaTranscriptLabel()
     private let romajiLabel = UILabel()
+    /// Buttons' vertical center, measured down from the top of the headword's characters.
+    private lazy var wordActionsCenterConstraint = wordActionsStack.centerYAnchor.constraint(
+        equalTo: selectedWordLabel.topAnchor
+    )
     private let dictionaryFormLabel = UILabel()
+    /// Why a kana word got this entry (usually written in kana, pinned) or none (depends on context).
+    private let lookupNoteLabel = UILabel()
+    /// Names the tapped form (Polite past, Te-form, …) when the headword stays as tapped.
+    private let conjugationFormLabel = UILabel()
     private let wordActionsStack = UIStackView()
     /// Full height of the header row; the actions center on the headword inside it.
     private let wordActionsColumn = UIView()
@@ -57,8 +65,16 @@ final class WordDictionaryDetailView: UIView {
     private let contextualLoadingSpinner = NNLoadingSpinner(frame: CGRect(x: 0, y: 0, width: 24, height: 24))
     private let contextualLoadingLabel = UILabel()
     private let contextualMeaningLabel = UILabel()
-    private let contextualContextHeading = UILabel()
     private let contextualLineLabel = FuriganaTranscriptLabel()
+    /// Glass bubble around the saved line, same chrome as quiz evidence.
+    private lazy var contextualLineBubble = DialogueJapaneseBubbleView(label: contextualLineLabel)
+    /// Leading-aligned row so the bubble hugs short lines instead of filling the column.
+    private let contextualLineRow = UIView()
+    /// "Featured in" lesson label over the bubble and English under it, both lined up with the bubble's text.
+    private let contextualLineSourceRow = UIStackView()
+    private let contextualLineEnglishRow = UIStackView()
+    /// Saved line under the gloss card, where the Common Uses examples sit.
+    private let contextualLineColumn = UIStackView()
     private let contextualLineEnglishLabel = UILabel()
     private let contextualSourceLabel = UILabel()
     private let contextualGrammarLabel = UILabel()
@@ -66,7 +82,6 @@ final class WordDictionaryDetailView: UIView {
     private let relatedWordTagsView = RelatedWordTagsView()
     /// Heading plus body blocks inside the gloss card. Each hides itself when its rows do.
     private let meaningSection = GlossCardSection()
-    private let contextSection = GlossCardSection()
     private let bonusSection = GlossCardSection()
     private let commonUsesButton = UIButton(type: .system)
     private let commonUsesTitle = UILabel()
@@ -130,6 +145,18 @@ final class WordDictionaryDetailView: UIView {
     /// Invoked when the user taps a related-word tag on the contextual gloss card.
     var onSelectRelatedWord: ((String) -> Void)?
 
+    /// Invoked when the user taps a Common Uses example chip.
+    var onSelectCommonUsesExample: ((GeminiGrammarUsage.Example) -> Void)?
+
+    /// False inside a Common Uses example, so its words don't offer Common Uses
+    /// (or Explain) again. Set before `configure`.
+    var allowsCommonUses = true
+
+    /// Keeps the tapped word (聞きました) as the headword, explains its form, and lists the
+    /// dictionary form (聞く) under it. Off: the headword becomes the dictionary form.
+    /// Saving still stores the dictionary form. Set before `configure`.
+    var keepsTappedFormAsHeadword = false
+
 #if DEBUG
     /// Invoked when the user taps the kanji decomposition shortcut beside Speak.
     var onRequestKanjiDecomposition: (() -> Void)?
@@ -175,6 +202,11 @@ final class WordDictionaryDetailView: UIView {
 
     private static let contextualCardContentInsets = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
     private static let contextualCardShadowBleed: CGFloat = 12
+    /// Matches the quiz evidence bubbles.
+    private static let contextualLineFont: UIFont = {
+        let base = UIFont.preferredFont(forTextStyle: .title2)
+        return .systemFont(ofSize: base.pointSize, weight: .medium)
+    }()
     /// How far the bonus button sits inside the card when its center is on the bottom edge.
     private static let glossBonusButtonOverlap: CGFloat = 18
     /// Shifts the edge controls up so they rest mostly on the card, with a small hang.
@@ -243,6 +275,8 @@ final class WordDictionaryDetailView: UIView {
             rankedFlashcardDefinition = nil
             dictionaryFlashcardDefinition = nil
             dictionaryFormLabel.isHidden = true
+            setLookupNote(nil)
+            hideConjugationForm()
             contextualCardContainer.isHidden = true
             contextualMessageLabel.isHidden = true
             updateCommonUsesButton()
@@ -255,7 +289,10 @@ final class WordDictionaryDetailView: UIView {
 
         isHidden = false
         let lookup = JMDictStore.shared.lookup(forSurface: surface, inSentence: sentence)
-        let entries = lookup.entries
+        // ここ: 此処 (the kana pick) before 個々.
+        let entries = lookup.rankedEntries
+        // Senses and the flashcard line come from the picked entry only, never from 個々.
+        let senseSource = lookup.preferredKanaSequence == nil ? entries : lookup.primaryEntryRows
         let trimmedSentence = sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let contextSensitive = !trimmedSentence.isEmpty
             && JMDictStore.shared.isContextSensitiveKanaLookup(lookup, inSentence: sentence)
@@ -264,9 +301,12 @@ final class WordDictionaryDetailView: UIView {
             && trimmedSentence != surface.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedSurface = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasSentenceContext = !trimmedSentence.isEmpty && trimmedSentence != trimmedSurface
-        let displayHeadword = contextSensitive ? surface : (lookup.dictionaryForm ?? surface)
+        let keepsTappedForm = keepsTappedFormAsHeadword && !contextSensitive
+        let displayHeadword = (contextSensitive || keepsTappedForm) ? surface : (lookup.dictionaryForm ?? surface)
+        // The word a flashcard stores: the dictionary form, even when the tapped form is shown.
+        let savedHeadword = keepsTappedForm ? (lookup.dictionaryForm ?? surface) : displayHeadword
         let savedItem = allowsSavedEntryContext
-            ? (Self.savedWord(matching: displayHeadword) ?? Self.savedWord(matching: trimmedSurface))
+            ? (Self.savedWord(matching: savedHeadword) ?? Self.savedWord(matching: trimmedSurface))
             : nil
         let resolvedStored = storedContext ?? savedItem?.storedContext
         let entryContext = allowsSavedEntryContext ? resolvedStored : nil
@@ -295,7 +335,7 @@ final class WordDictionaryDetailView: UIView {
                 font: wordFont,
                 textColor: .label
             ),
-            maxLines: 1
+            maxLines: 3
         )
 
         let primary = contextSensitive ? nil : lookup.primaryEntry
@@ -322,33 +362,49 @@ final class WordDictionaryDetailView: UIView {
             let reading = lookup.dictionaryFormReading ?? dictionaryForm
             let lemmaRomaji = HiraganaRomaji.romanize(reading)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            if lemmaRomaji.isEmpty {
-                dictionaryFormLabel.text = "Dictionary form: \(dictionaryForm)"
-            } else {
-                dictionaryFormLabel.text = "Dictionary form: \(dictionaryForm) · \(lemmaRomaji)"
-            }
+            dictionaryFormLabel.attributedText = Self.prominentDictionaryFormText(
+                dictionaryForm,
+                romaji: lemmaRomaji,
+                baseFont: dictionaryFormLabel.font ?? .preferredFont(forTextStyle: .subheadline)
+            )
             dictionaryFormLabel.isHidden = false
         } else {
             dictionaryFormLabel.text = nil
             dictionaryFormLabel.isHidden = true
         }
 
+        if keepsTappedForm, let primary,
+           let form = ConjugationForm.identify(
+            surface: trimmedSurface,
+            lemma: lookup.resolvedLemma ?? trimmedSurface,
+            lemmaReading: primary.displayReading,
+            tags: primary.tags
+           ) {
+            showConjugationForm(form)
+        } else {
+            hideConjugationForm()
+        }
+
         speechText = readingForRomaji.isEmpty ? surface.trimmingCharacters(in: .whitespacesAndNewlines) : readingForRomaji
 
-        let senses = contextSensitive ? [] : VocabSenseList.collect(from: entries)
+        let senses = contextSensitive ? [] : VocabSenseList.collect(from: senseSource)
         let gloss = senses.first?.text
             ?? primary.map { Self.primaryGloss(from: $0) }.flatMap { $0.isEmpty ? nil : $0 }
         lastDictionaryGloss = contextSensitive ? nil : gloss
-        dictionaryFlashcardDefinition = contextSensitive ? nil : VocabSenseList.flashcardLine(from: entries)
+        dictionaryFlashcardDefinition = contextSensitive ? nil : VocabSenseList.flashcardLine(from: senseSource)
         breakDownEnabled = showsBreakDown && !trimmedSentence.isEmpty
-        commonUsesEnabled = showsCommonUses && !breakDownEnabled && hasSentenceContext
-        let savedSurface = displayHeadword.trimmingCharacters(in: .whitespacesAndNewlines)
+        commonUsesEnabled = allowsCommonUses && showsCommonUses && !breakDownEnabled && hasSentenceContext
+        let savedSurface = savedHeadword.trimmingCharacters(in: .whitespacesAndNewlines)
         let lemma = contextSensitive ? nil : lookup.dictionaryForm
+        // `readingForRomaji` is the tapped form's reading (ききました); a card needs the lemma's (きく).
+        let savedReading = savedSurface == displayHeadword.trimmingCharacters(in: .whitespacesAndNewlines)
+            ? readingForRomaji
+            : JMDictStore.shared.kanaReadingForDisplay(surface: savedSurface, matching: primary)
         saveDraft = SavedVocabularyItem(
             id: UUID().uuidString,
             surface: savedSurface,
             dictionaryForm: (lemma != savedSurface) ? lemma : nil,
-            reading: readingForRomaji.isEmpty ? nil : readingForRomaji,
+            reading: savedReading.isEmpty ? nil : savedReading,
             gloss: dictionaryFlashcardDefinition,
             senses: dictionaryFlashcardDefinition.map { [VocabSense(text: $0)] } ?? [],
             sentence: trimmedSentence.isEmpty ? nil : trimmedSentence,
@@ -364,7 +420,15 @@ final class WordDictionaryDetailView: UIView {
 
         let displayedEntries = awaitingContextualHeadword ? [] : entries
         let hideDictionarySection = displayedEntries.isEmpty && shouldLoadContextualGloss
-        rebuildDefinitionContent(entries: displayedEntries, suppressEmptyState: hideDictionarySection)
+        let lookupNote = KanaLookupNote.make(surface: trimmedSurface, lookup: lookup, contextSensitive: contextSensitive)
+        // Candidates go in the note only when the definitions list below is not showing them.
+        setLookupNote(lookupNote?.text(listsCandidates: displayedEntries.isEmpty))
+        let otherEntriesTitle = lookup.preferredKanaSequence == nil ? nil : "Other words read \(trimmedSurface)"
+        rebuildDefinitionContent(
+            entries: displayedEntries,
+            suppressEmptyState: hideDictionarySection,
+            otherEntriesTitle: otherEntriesTitle
+        )
 
         dividerAfterWord.isHidden = false
         definitionsSectionTitle.isHidden = hideDictionarySection
@@ -617,6 +681,7 @@ final class WordDictionaryDetailView: UIView {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         guard pieces.count > 1 else { return }
+        hideConjugationForm()
         let wordFont = selectedWordLabel.font ?? UIFont.preferredFont(forTextStyle: .largeTitle)
         applySelectedWordHeadline(
             JapaneseFuriganaBuilder.attributedString(
@@ -655,16 +720,35 @@ final class WordDictionaryDetailView: UIView {
         }
         JapaneseFuriganaBuilder.applyScrubDisplay(
             to: selectedWordLabel,
-            attributed: attributed,
+            attributed: Self.headwordWithTightLineHeight(attributed),
             contentInsets: UIEdgeInsets(
                 top: JapaneseFuriganaBuilder.wordDetailRubyTopInset(
                     for: selectedWordLabel.font ?? UIFont.preferredFont(forTextStyle: .largeTitle)
                 ),
                 left: 0,
-                bottom: 2,
+                bottom: 0,
                 right: 0
             )
         )
+        // Middle of the first line of characters, not of the label: ruby and
+        // any wrapped lines below must not move the buttons.
+        wordActionsCenterConstraint.constant = selectedWordLabel.firstLineCharacterCenterOffset
+            ?? (selectedWordLabel.font?.lineHeight ?? 0) / 2
+    }
+
+    /// Drops the wrapping paragraph's extra first-line height so romaji is
+    /// not stranded below empty space; wrapped lines keep room for ruby.
+    private static func headwordWithTightLineHeight(_ attributed: NSAttributedString) -> NSAttributedString {
+        guard attributed.length > 0 else { return attributed }
+        let font = (attributed.attribute(.font, at: 0, effectiveRange: nil) as? UIFont)
+            ?? UIFont.preferredFont(forTextStyle: .largeTitle)
+        let tight = NSMutableAttributedString(attributedString: attributed)
+        tight.addAttribute(
+            .paragraphStyle,
+            value: JapaneseFuriganaBuilder.headwordParagraphStyle(font: font),
+            range: NSRange(location: 0, length: tight.length)
+        )
+        return tight
     }
 
     private func updateSelectedWordWrapWidth() {
@@ -711,7 +795,7 @@ final class WordDictionaryDetailView: UIView {
                 font: wordFont,
                 textColor: .label
             ),
-            maxLines: 1
+            maxLines: 3
         )
 
         let reading = JMDictStore.shared.kanaReadingForDisplay(surface: surface, matching: nil)
@@ -720,6 +804,8 @@ final class WordDictionaryDetailView: UIView {
         romajiLabel.text = romaji.isEmpty ? nil : romaji
         dictionaryFormLabel.text = nil
         dictionaryFormLabel.isHidden = true
+        setLookupNote(nil)
+        hideConjugationForm()
         speechText = reading.isEmpty ? surface : reading
 
         let pieces = tokens
@@ -1084,7 +1170,9 @@ final class WordDictionaryDetailView: UIView {
             commonUsesSectionTitle,
             attributedCommonUses(result),
             feedback: feedback,
-            examples: result.otherUses
+            examples: result.examples.isEmpty
+                ? result.otherUses.compactMap { GeminiGrammarUsage.Example.parse($0) }
+                : result.examples
         )
     }
 
@@ -1095,7 +1183,7 @@ final class WordDictionaryDetailView: UIView {
             attributedBreakDown(result, includePartsNote: components.isEmpty),
             feedback: feedback,
             components: components,
-            examples: result.otherUses
+            examples: result.otherUses.compactMap { GeminiGrammarUsage.Example.parse($0) }
         )
     }
 
@@ -1104,7 +1192,7 @@ final class WordDictionaryDetailView: UIView {
         _ body: NSAttributedString,
         feedback: LLMFeedbackReceipt?,
         components: [GeminiSpanBreakdown.Component] = [],
-        examples: [String] = []
+        examples: [GeminiGrammarUsage.Example] = []
     ) {
         GlossMotion.crossfade(contextualSectionStack, animated: isGlossCardOnScreen) {
             commonUsesLoadingRow.isHidden = true
@@ -1197,8 +1285,7 @@ final class WordDictionaryDetailView: UIView {
     }
 
     /// Example phrases sit under the card, the same chips as a grammar gloss.
-    private func showBonusExamples(_ uses: [String]) {
-        let items = uses.compactMap { GeminiGrammarUsage.Example.parse($0) }
+    private func showBonusExamples(_ items: [GeminiGrammarUsage.Example]) {
         guard !items.isEmpty else {
             bonusExamplesRow.isHidden = true
             return
@@ -1432,7 +1519,8 @@ final class WordDictionaryDetailView: UIView {
             applyContextualSectionTitle()
         }
         syncContextualHeader()
-        contextualCardContainer.isHidden = gloss.isEmpty && !context.hasLineContext
+        // The line sits under the card, so a card with no gloss would be empty.
+        contextualCardContainer.isHidden = gloss.isEmpty
         contextualCardContainer.setNeedsLayout()
         contextualCardContainer.layoutIfNeeded()
         setNeedsLayout()
@@ -1458,7 +1546,7 @@ final class WordDictionaryDetailView: UIView {
 
     private func toggleWordContext() {
         let show = !bonusEngaged
-        GlossMotion.crossfade(contextualSectionStack, animated: isGlossCardOnScreen) {
+        GlossMotion.crossfade(glossColumn, animated: isGlossCardOnScreen) {
             self.setWordContextVisible(show)
         }
         setBonusEngaged(show)
@@ -1472,52 +1560,56 @@ final class WordDictionaryDetailView: UIView {
         }
         let hasLine = !(context.line?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
         if hasLine, let line = context.line {
-            contextualLineLabel.isHidden = false
+            contextualLineRow.isHidden = false
             applyRubyLine(line, surface: lastConfiguredSurface)
         } else {
-            contextualLineLabel.isHidden = true
+            contextualLineRow.isHidden = true
             contextualLineLabel.attributedText = nil
         }
         let english = context.lineEnglish?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        contextualLineEnglishLabel.isHidden = english.isEmpty
+        contextualLineEnglishRow.isHidden = english.isEmpty
         contextualLineEnglishLabel.text = english.isEmpty ? nil : english
         let source = context.source?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        contextualSourceLabel.isHidden = source.isEmpty
-        contextualSourceLabel.text = source.isEmpty ? nil : source
-        let showsExample = hasLine || !english.isEmpty || !source.isEmpty
-        contextualContextHeading.isHidden = !showsExample
-        contextualCardContainer.isHidden = false
+        contextualLineSourceRow.isHidden = source.isEmpty
+        contextualSourceLabel.attributedText = source.isEmpty ? nil : Self.featuredInText(source)
+        contextualLineColumn.isHidden = !hasLine && english.isEmpty && source.isEmpty
     }
 
-    /// Furigana for the saved line, with the vocabulary word marked.
-    private func applyRubyLine(_ line: String, surface: String) {
-        let font = UIFont.preferredFont(forTextStyle: .body).semibold()
-        contextualLineLabel.font = font
-        contextualLineLabel.verticalTextInsetsAffectAlignmentRect = false
-        // Only the ruby glyph height, and none when there is no kanji to read,
-        // so the line sits right under its CONTEXT heading.
-        let hasKanji = line.unicodeScalars.contains { scalar in
-            (0x3400...0x4DBF).contains(scalar.value)
-                || (0x4E00...0x9FFF).contains(scalar.value)
-                || scalar.value == 0x3005
-        }
-        contextualLineLabel.textInsets = UIEdgeInsets(
-            top: hasKanji ? JapaneseFuriganaBuilder.rubyGlyphTopInset(for: font) : 0,
-            left: 0,
-            bottom: 0,
-            right: 0
+    /// "Featured in N3 • Lesson • Scene", with the lesson path a step stronger than the lead-in.
+    private static func featuredInText(_ source: String) -> NSAttributedString {
+        let font = UIFont.preferredFont(forTextStyle: .caption1)
+        let text = NSMutableAttributedString(
+            string: "Featured in ",
+            attributes: [.font: font, .foregroundColor: UIColor.tertiaryLabel]
         )
-        contextualLineLabel.attributedText = JapaneseFuriganaBuilder.attributedString(
-            for: line,
-            font: font,
+        text.append(NSAttributedString(
+            string: source,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: font.pointSize, weight: .medium),
+                .foregroundColor: UIColor.secondaryLabel,
+            ]
+        ))
+        return text
+    }
+
+    /// Furigana for the saved line in its glass bubble, with the vocabulary word marked.
+    private func applyRubyLine(_ line: String, surface: String) {
+        JapaneseFuriganaBuilder.applyDialogueBubbleDisplay(
+            to: contextualLineLabel,
+            text: line,
+            font: Self.contextualLineFont,
             textColor: .label
         )
+        let display = contextualLineLabel.attributedText?.string ?? ""
         let needle = surface.trimmingCharacters(in: .whitespacesAndNewlines)
-        let highlight = needle.isEmpty ? nil : line.range(of: needle).map { NSRange($0, in: line) }
+        let highlight = needle.isEmpty ? nil : line.range(of: needle).flatMap {
+            DialogueContentLineWrap.mapOriginalUTF16Range(NSRange($0, in: line), onto: display)
+        }
         contextualLineLabel.setTokenHighlightPreservingLayout(
             foregroundColor: .label,
             highlightedRange: highlight,
-            fullHeight: false
+            fullHeight: false,
+            highlightColor: contextualLineBubble.tokenHighlightColor
         )
     }
 
@@ -1530,13 +1622,13 @@ final class WordDictionaryDetailView: UIView {
     }
 
     private func hideStoredContextDetails() {
-        contextualContextHeading.isHidden = true
-        contextualLineLabel.isHidden = true
+        contextualLineColumn.isHidden = true
+        contextualLineSourceRow.isHidden = true
+        contextualLineRow.isHidden = true
+        contextualLineEnglishRow.isHidden = true
         contextualLineLabel.attributedText = nil
-        contextualLineEnglishLabel.isHidden = true
         contextualLineEnglishLabel.text = nil
-        contextualSourceLabel.isHidden = true
-        contextualSourceLabel.text = nil
+        contextualSourceLabel.attributedText = nil
     }
 
     private func applyContextualGloss(_ gloss: ContextualGlossResult) {
@@ -1591,6 +1683,10 @@ final class WordDictionaryDetailView: UIView {
         definitionStack.isHidden = false
         dividerBeforeDefinitions.isHidden = kanjiSectionStack.isHidden
         rebuildDefinitionContent(entries: entries)
+        if !lookupNoteLabel.isHidden {
+            // Was "Depends on context · could be: …"; the model has now picked one.
+            setLookupNote("Depends on context · in this sentence: \(trimmed)")
+        }
 
         dictionaryFlashcardDefinition = VocabSenseList.flashcardLine(from: entries)
         if var draft = saveDraft {
@@ -1615,6 +1711,48 @@ final class WordDictionaryDetailView: UIView {
             }
             dictionaryFormLabel.isHidden = false
         }
+    }
+
+    /// "Dictionary form  来る · kuru" with the word itself in a larger semibold label color,
+    /// so the lemma reads as the second anchor under the tapped headword.
+    private static func prominentDictionaryFormText(
+        _ dictionaryForm: String,
+        romaji: String,
+        baseFont: UIFont
+    ) -> NSAttributedString {
+        let secondary: [NSAttributedString.Key: Any] = [
+            .font: baseFont,
+            .foregroundColor: UIColor.secondaryLabel,
+        ]
+        let text = NSMutableAttributedString(string: "Dictionary form  ", attributes: secondary)
+        text.append(NSAttributedString(string: dictionaryForm, attributes: [
+            .font: UIFont.preferredFont(forTextStyle: .title3).semibold(),
+            .foregroundColor: UIColor.label,
+        ]))
+        if !romaji.isEmpty {
+            text.append(NSAttributedString(string: "  \(romaji)", attributes: secondary))
+        }
+        return text
+    }
+
+    /// "Polite past — Past tense, said politely (〜ました)." The name is set in the label color.
+    private func showConjugationForm(_ form: ConjugationForm.Match) {
+        let font = conjugationFormLabel.font ?? .preferredFont(forTextStyle: .subheadline)
+        let text = NSMutableAttributedString(
+            string: form.name,
+            attributes: [.font: font.semibold(), .foregroundColor: UIColor.label]
+        )
+        text.append(NSAttributedString(
+            string: " — \(form.detail)",
+            attributes: [.font: font, .foregroundColor: UIColor.secondaryLabel]
+        ))
+        conjugationFormLabel.attributedText = text
+        conjugationFormLabel.isHidden = false
+    }
+
+    private func hideConjugationForm() {
+        conjugationFormLabel.attributedText = nil
+        conjugationFormLabel.isHidden = true
     }
 
     private static func primaryGloss(from entry: JMDictEntry) -> String {
@@ -1645,6 +1783,15 @@ final class WordDictionaryDetailView: UIView {
         contentStack.alignment = .fill
         contentStack.spacing = 16
         contentStack.translatesAutoresizingMaskIntoConstraints = false
+        // Ruby paints above the headword alignment rect, so this pad keeps the
+        // title from sitting on the content above (sheet or inline).
+        contentStack.isLayoutMarginsRelativeArrangement = true
+        contentStack.directionalLayoutMargins = NSDirectionalEdgeInsets(
+            top: 16,
+            leading: 0,
+            bottom: 0,
+            trailing: 0
+        )
         addSubview(contentStack)
 
         NSLayoutConstraint.activate([
@@ -1722,14 +1869,17 @@ final class WordDictionaryDetailView: UIView {
         wordActionsColumn.setContentCompressionResistancePriority(.required, for: .horizontal)
         wordActionsColumn.addSubview(wordActionsStack)
         wordContentStack.addArrangedSubview(selectedWordLabel)
+        // A little air between the headword, romaji, and the form lines.
+        wordContentStack.setCustomSpacing(6, after: selectedWordLabel)
         wordHeaderStack.addArrangedSubview(wordContentStack)
         wordHeaderStack.addArrangedSubview(wordActionsColumn)
         NSLayoutConstraint.activate([
             wordActionsStack.leadingAnchor.constraint(equalTo: wordActionsColumn.leadingAnchor),
             wordActionsStack.trailingAnchor.constraint(equalTo: wordActionsColumn.trailingAnchor),
-            wordActionsStack.topAnchor.constraint(greaterThanOrEqualTo: wordActionsColumn.topAnchor),
+            // No top pin: the buttons are taller than one line of characters,
+            // so they rise into the ruby pad above the headword.
             wordActionsStack.bottomAnchor.constraint(lessThanOrEqualTo: wordActionsColumn.bottomAnchor),
-            wordActionsStack.centerYAnchor.constraint(equalTo: selectedWordLabel.centerYAnchor),
+            wordActionsCenterConstraint,
         ])
 
         let wordFont: UIFont = {
@@ -1745,8 +1895,10 @@ final class WordDictionaryDetailView: UIView {
         selectedWordLabel.textAlignment = .natural
         selectedWordLabel.font = wordFont
         selectedWordLabel.textColor = .label
-        // Ruby padding stays in the frame; the header centers the buttons on the glyphs.
+        // Ruby paints above the alignment rect, which hugs the characters so
+        // romaji sits against them and the buttons center on the first line.
         selectedWordLabel.verticalTextInsetsAffectAlignmentRect = true
+        selectedWordLabel.alignmentRectHugsBaseText = true
         selectedWordLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         selectedWordLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
@@ -1761,8 +1913,26 @@ final class WordDictionaryDetailView: UIView {
         dictionaryFormLabel.numberOfLines = 0
         dictionaryFormLabel.isHidden = true
 
+        conjugationFormLabel.font = .preferredFont(forTextStyle: .subheadline)
+        conjugationFormLabel.adjustsFontForContentSizeCategory = true
+        conjugationFormLabel.textColor = .secondaryLabel
+        conjugationFormLabel.textAlignment = .natural
+        conjugationFormLabel.numberOfLines = 0
+        conjugationFormLabel.isHidden = true
+
         wordContentStack.addArrangedSubview(romajiLabel)
+        wordContentStack.addArrangedSubview(conjugationFormLabel)
+        wordContentStack.setCustomSpacing(10, after: romajiLabel)
         wordContentStack.addArrangedSubview(dictionaryFormLabel)
+
+        lookupNoteLabel.font = .preferredFont(forTextStyle: .footnote)
+        lookupNoteLabel.adjustsFontForContentSizeCategory = true
+        lookupNoteLabel.textColor = .secondaryLabel
+        lookupNoteLabel.textAlignment = .natural
+        lookupNoteLabel.numberOfLines = 0
+        lookupNoteLabel.isHidden = true
+        wordContentStack.addArrangedSubview(lookupNoteLabel)
+        wordContentStack.setCustomSpacing(12, after: conjugationFormLabel)
 
         let sectionHeaderFont = UIFont.preferredFont(forTextStyle: .subheadline)
 
@@ -1776,30 +1946,41 @@ final class WordDictionaryDetailView: UIView {
         contextualMeaningLabel.textAlignment = .natural
         contextualMeaningLabel.numberOfLines = 0
 
-        contextualContextHeading.text = "CONTEXT"
-        contextualContextHeading.font = sectionHeaderFont
-        contextualContextHeading.textColor = .secondaryLabel
-        contextualContextHeading.isHidden = true
-
-        contextualLineLabel.font = .preferredFont(forTextStyle: .body).semibold()
+        contextualLineLabel.translatesAutoresizingMaskIntoConstraints = false
+        contextualLineLabel.font = Self.contextualLineFont
         contextualLineLabel.textColor = .label
         contextualLineLabel.textAlignment = .natural
         contextualLineLabel.numberOfLines = 0
+        contextualLineLabel.lineBreakMode = .byWordWrapping
         contextualLineLabel.clipsToBounds = false
         contextualLineLabel.verticalTextInsetsAffectAlignmentRect = false
-        contextualLineLabel.isHidden = true
+        contextualLineLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        contextualLineLabel.setContentCompressionResistancePriority(.required, for: .vertical)
+        contextualLineLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        contextualLineBubble.setBackgroundStyle(.glass)
+        contextualLineBubble.setUnderglowConfiguration(.forSpeaker(.leading))
+        contextualLineBubble.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        contextualLineBubble.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        contextualLineRow.clipsToBounds = false
+        contextualLineRow.addSubview(contextualLineBubble)
+        NSLayoutConstraint.activate([
+            contextualLineBubble.topAnchor.constraint(equalTo: contextualLineRow.topAnchor, constant: 4),
+            contextualLineBubble.leadingAnchor.constraint(equalTo: contextualLineRow.leadingAnchor),
+            contextualLineBubble.trailingAnchor.constraint(lessThanOrEqualTo: contextualLineRow.trailingAnchor),
+            contextualLineBubble.bottomAnchor.constraint(equalTo: contextualLineRow.bottomAnchor),
+        ])
+        contextualLineRow.isHidden = true
 
         contextualLineEnglishLabel.font = .preferredFont(forTextStyle: .subheadline)
         contextualLineEnglishLabel.textColor = .secondaryLabel
         contextualLineEnglishLabel.textAlignment = .natural
         contextualLineEnglishLabel.numberOfLines = 0
-        contextualLineEnglishLabel.isHidden = true
 
         contextualSourceLabel.font = .preferredFont(forTextStyle: .caption1)
         contextualSourceLabel.textColor = .tertiaryLabel
         contextualSourceLabel.textAlignment = .natural
         contextualSourceLabel.numberOfLines = 0
-        contextualSourceLabel.isHidden = true
 
         contextualGrammarLabel.font = .preferredFont(forTextStyle: .subheadline)
         contextualGrammarLabel.textColor = .secondaryLabel
@@ -1919,10 +2100,34 @@ final class WordDictionaryDetailView: UIView {
             ]
         )
         meaningSection.setCustomSpacing(12, after: contextualGrammarLabel)
-        contextSection.setRows(
-            heading: contextualContextHeading,
-            body: [contextualLineLabel, contextualLineEnglishLabel, contextualSourceLabel]
-        )
+        let bubbleTextInset = contextualLineBubble.labelHorizontalInsets.leading
+        for (row, label) in [
+            (contextualLineSourceRow, contextualSourceLabel),
+            (contextualLineEnglishRow, contextualLineEnglishLabel),
+        ] {
+            row.axis = .vertical
+            row.alignment = .fill
+            row.isLayoutMarginsRelativeArrangement = true
+            row.directionalLayoutMargins = NSDirectionalEdgeInsets(
+                top: 0,
+                leading: bubbleTextInset,
+                bottom: 0,
+                trailing: bubbleTextInset
+            )
+            row.addArrangedSubview(label)
+            row.isHidden = true
+        }
+
+        contextualLineColumn.axis = .vertical
+        contextualLineColumn.alignment = .fill
+        contextualLineColumn.spacing = 6
+        contextualLineColumn.clipsToBounds = false
+        contextualLineColumn.addArrangedSubview(contextualLineSourceRow)
+        contextualLineColumn.addArrangedSubview(contextualLineRow)
+        contextualLineColumn.addArrangedSubview(contextualLineEnglishRow)
+        contextualLineColumn.setCustomSpacing(8, after: contextualLineRow)
+        contextualLineColumn.isHidden = true
+
         bonusSection.setRows(
             heading: commonUsesTitle,
             body: [commonUsesLoadingRow, commonUsesBodyLabel, componentTilesView, commonUsesMessageLabel]
@@ -1933,7 +2138,6 @@ final class WordDictionaryDetailView: UIView {
         contextualSectionStack.alignment = .fill
         contextualSectionStack.spacing = GlossCardSection.sectionSpacing
         contextualSectionStack.addArrangedSubview(meaningSection)
-        contextualSectionStack.addArrangedSubview(contextSection)
         contextualSectionStack.addArrangedSubview(bonusSection)
 
         contextualCardSurface.backgroundColor = .secondarySystemGroupedBackground
@@ -2063,9 +2267,15 @@ final class WordDictionaryDetailView: UIView {
         glossColumn.clipsToBounds = false
         bonusExamplesRow.isHidden = true
         bonusExamplesRow.onChipTap = { [weak self] example in
-            self?.onSelectRelatedWord?(example.japanese)
+            guard let self else { return }
+            if self.glossBonusAction == .commonUses {
+                self.onSelectCommonUsesExample?(example)
+            } else {
+                self.onSelectRelatedWord?(example.japanese)
+            }
         }
         glossColumn.addArrangedSubview(contextualCardContainer)
+        glossColumn.addArrangedSubview(contextualLineColumn)
         glossColumn.addArrangedSubview(bonusExamplesRow)
 
         contentStack.addArrangedSubview(glossColumn)
@@ -2349,9 +2559,18 @@ final class WordDictionaryDetailView: UIView {
         }
     }
 
+    private func setLookupNote(_ text: String?) {
+        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        lookupNoteLabel.text = trimmed.isEmpty ? nil : trimmed
+        lookupNoteLabel.isHidden = trimmed.isEmpty
+    }
+
+    /// `otherEntriesTitle` is a caption before the second entry group, for when the first
+    /// group is the lookup's pick and the rest only share the reading ("Other words read ここ").
     private func rebuildDefinitionContent(
         entries: [JMDictEntry],
-        suppressEmptyState: Bool = false
+        suppressEmptyState: Bool = false,
+        otherEntriesTitle: String? = nil
     ) {
         cancelSenseFit()
         definitionStack.arrangedSubviews.forEach {
@@ -2426,6 +2645,14 @@ final class WordDictionaryDetailView: UIView {
                 sep.heightAnchor.constraint(equalToConstant: 1).isActive = true
                 definitionStack.addArrangedSubview(sep)
                 definitionStack.setCustomSpacing(20, after: sep)
+                if groupIdx == 1, let otherEntriesTitle {
+                    let caption = UILabel()
+                    caption.text = otherEntriesTitle
+                    caption.font = .preferredFont(forTextStyle: .footnote)
+                    caption.textColor = .secondaryLabel
+                    caption.numberOfLines = 0
+                    definitionStack.addArrangedSubview(caption)
+                }
             }
 
             guard let groupRows = groups[sequence] else { continue }

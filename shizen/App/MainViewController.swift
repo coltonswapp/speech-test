@@ -149,8 +149,34 @@ final class MainViewController: UIViewController {
 
     private func presentAuthGateIfNeeded() {
         guard view.window != nil else { return }
-        guard AuthService.shared.userId == nil else { return }
+        guard AuthService.shared.userId == nil else {
+            presentAccessGateIfNeeded()
+            return
+        }
         presentLoginSheet()
+    }
+
+    /// Signed in without a trial or subscription: listen-first until its lesson steps are done
+    /// for this uid, then just the paywall. Nothing leads into the app without access.
+    private func presentAccessGateIfNeeded() {
+        guard !ProMembership.hasAccess, !isPresentingAuthGate else { return }
+        let presenter = navigationController ?? self
+        if let presented = presenter.presentedViewController {
+            // The login sheet calls back here once it's gone.
+            if presented is ListenFirstOnboardingHostController
+                || presented.restorationIdentifier == AuthLandingViewController.presentationIdentifier {
+                return
+            }
+            isPresentingAuthGate = true
+            presenter.dismiss(animated: false) { [weak self] in
+                self?.isPresentingAuthGate = false
+                self?.presentAuthGateIfNeeded()
+            }
+            return
+        }
+        let mode: ListenFirstOnboardingHostController.Mode =
+            OnboardingStore.hasFinishedLessonStepsForCurrentUser ? .paywallOnly : .fullFlow
+        presenter.present(ListenFirstOnboardingHostController(mode: mode), animated: false)
     }
 
     private func presentLoginSheet() {
@@ -186,7 +212,11 @@ final class MainViewController: UIViewController {
             return
         }
 
-        presenter.present(AuthLandingViewController.makeLoginSheet(), animated: true)
+        // Closing a page sheet doesn't run this screen's `viewDidAppear`, so route from its callback.
+        let sheet = AuthLandingViewController.makeLoginSheet { [weak self] in
+            self?.presentAuthGateIfNeeded()
+        }
+        presenter.present(sheet, animated: true)
     }
 
     // MARK: - Layout

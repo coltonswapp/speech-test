@@ -6,18 +6,12 @@ final class OnboardingCoordinator: NSObject {
 
     enum Flow: String {
         case original = "onboarding_config"
-        case journey = "onboarding_journey_config"
-        case tutor = "onboarding_tutor"
-        case natural = "onboarding_natural"
         case listenFirst = "onboarding_listen_first"
 
         /// The `flow` property on onboarding analytics events.
         var analyticsName: String {
             switch self {
             case .original: return "original"
-            case .journey: return "journey"
-            case .tutor: return "tutor"
-            case .natural: return "natural"
             case .listenFirst: return "listen_first"
             }
         }
@@ -32,7 +26,7 @@ final class OnboardingCoordinator: NSObject {
 
     private(set) var userInfo = UserOnboardingInfo()
     private let flow: Flow
-    private var isPreviewMode = false
+    private(set) var isPreviewMode = false
     private var currentStepIndex = 0
     /// Last step reported as viewed, so a cancelled swipe-back doesn't count as a new appearance.
     private weak var lastViewedStep: OnboardingViewController?
@@ -54,12 +48,6 @@ final class OnboardingCoordinator: NSObject {
         if let injectedSteps {
             return injectedSteps
         }
-        if flow == .tutor {
-            return TutorOnboardingFlow.makeSteps()
-        }
-        if flow == .natural {
-            return NaturalOnboardingFlow.makeSteps()
-        }
         if flow == .listenFirst {
             return ListenFirstOnboardingFlow.makeSteps()
         }
@@ -72,6 +60,12 @@ final class OnboardingCoordinator: NSObject {
     func start() -> UIViewController {
         configureInitialStep()
         navigationController.delegate = self
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
         return containerViewController
     }
 
@@ -104,7 +98,7 @@ final class OnboardingCoordinator: NSObject {
         }
         if let host = containerViewController.navigationController, host.viewControllers.count > 1 {
             host.popViewController(animated: true)
-        } else {
+        } else if isPreviewMode {
             containerViewController.dismiss(animated: true)
         }
     }
@@ -170,6 +164,9 @@ final class OnboardingCoordinator: NSObject {
             return
         }
 
+        // Listen-first completes only with access, so the debug skip can't walk past the paywall.
+        guard flow != .listenFirst || ProMembership.hasAccess else { return }
+
         OnboardingStore.save(userInfo)
         guard AuthService.shared.hasSignedInUserId else {
             requestSignInThenFinish()
@@ -216,7 +213,6 @@ final class OnboardingCoordinator: NSObject {
             properties["level"] = level
             properties["daily_goal_minutes"] = session.minutesPerDay
             if let natural = session as? NaturalOnboardingSession {
-                properties["register"] = natural.register.rawValue
                 properties["track"] = natural.track
             }
         } else {
@@ -232,6 +228,18 @@ final class OnboardingCoordinator: NSObject {
         lastViewedStep = step
         let name = step.onboardingStepId ?? String(describing: type(of: step))
         Analytics.onboardingStepViewed(index: index, name: name, flow: flow.analyticsName)
+    }
+
+    /// A real leave only: Sign in with Apple and the store sheet just resign active.
+    @objc private func appDidEnterBackground() {
+        guard !isPreviewMode, !didReportCompletion, steps.indices.contains(currentStepIndex) else { return }
+        let step = steps[currentStepIndex]
+        if let paywall = step as? ListenFirstPaywallStepViewController {
+            paywall.trackAbandoned()
+            return
+        }
+        let name = step.onboardingStepId ?? String(describing: type(of: step))
+        Analytics.onboardingAbandoned(index: currentStepIndex, name: name, flow: flow.analyticsName)
     }
 
     private func requestSignInThenFinish() {
@@ -292,8 +300,18 @@ final class OnboardingCoordinator: NSObject {
 
     private func configureStep(_ viewController: OnboardingViewController) {
         viewController.coordinator = self
-        containerViewController.setBackButtonHidden(viewController.hidesOnboardingBackButton)
+        applyChrome(for: viewController)
         refreshProgress()
+    }
+
+    /// Outside preview the first step has nothing behind it: backing out would land in the app.
+    private func applyChrome(for step: OnboardingViewController) {
+        containerViewController.setBackButtonHidden(
+            step.hidesOnboardingBackButton || (currentStepIndex == 0 && !isPreviewMode)
+        )
+        containerViewController.setProgressHidden(step.hidesOnboardingProgress)
+        navigationController.interactivePopGestureRecognizer?.isEnabled = !step.locksOnboardingBack
+        navigationController.interactiveContentPopGestureRecognizer?.isEnabled = !step.locksOnboardingBack
     }
 
     private func refreshProgress() {
@@ -428,7 +446,7 @@ extension OnboardingCoordinator: UINavigationControllerDelegate {
     ) {
         if let index = steps.firstIndex(where: { $0 === viewController }) {
             currentStepIndex = index
-            containerViewController.setBackButtonHidden(steps[index].hidesOnboardingBackButton)
+            applyChrome(for: steps[index])
             refreshProgress()
             reportStepViewed(steps[index], at: index)
         }

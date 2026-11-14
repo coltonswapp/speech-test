@@ -80,7 +80,6 @@ final class SavedGenerationsViewController: UIViewController {
 
     private nonisolated enum DebugSettingsRow: Int, CaseIterable, Hashable, Sendable {
         case onboarding
-        case journeyOnboarding
         case textToSpeech
         case kanaLearningFlow
         case kanaProgressPath
@@ -118,7 +117,6 @@ final class SavedGenerationsViewController: UIViewController {
         var title: String {
             switch self {
             case .onboarding: return "Auth + onboarding"
-            case .journeyOnboarding: return "Journey onboarding"
             case .textToSpeech: return "Text to Speech"
             case .kanaLearningFlow: return "Kana learning flow"
             case .kanaProgressPath: return "Kana progress path"
@@ -158,7 +156,6 @@ final class SavedGenerationsViewController: UIViewController {
         var subtitle: String {
             switch self {
             case .onboarding: return "Landing stubs · survey / slider / listening quiz · placeholder demos"
-            case .journeyOnboarding: return "Same landing · questions first · ear test · trial · auth at the end"
             case .textToSpeech: return "Stream OpenAI TTS · sentence chunks · lyrics"
             case .kanaLearningFlow: return "Progress tiles · hiragana & katakana lessons · SRS"
             case .kanaProgressPath: return "Row-by-row hiragana lessons · SRS · chart"
@@ -169,7 +166,7 @@ final class SavedGenerationsViewController: UIViewController {
             case .hiraganaChart: return "Manual-layout gojūon reference"
             case .katakanaChart: return "Manual-layout gojūon reference"
             case .flashcards: return "Swipe right · know it / left · review"
-            case .savedVocabulary: return "Words saved from sentence scrub and the dictionary"
+            case .savedVocabulary: return "Words saved from Breakdown and the dictionary"
             case .lemmaResolution: return "Verb forms → dictionary headword · romaji · regression check"
             case .kanaSpelling: return "Tap tiles to spell the target word"
             case .kanaListenSpelling: return "Hear the word, then spell it in kana"
@@ -198,7 +195,6 @@ final class SavedGenerationsViewController: UIViewController {
         var symbolName: String {
             switch self {
             case .onboarding: return "person.crop.circle.badge.checkmark"
-            case .journeyOnboarding: return "door.left.hand.open"
             case .textToSpeech: return "waveform"
             case .kanaLearningFlow: return "square.grid.2x2"
             case .kanaProgressPath: return "point.topleft.down.curvedto.point.bottomright.up"
@@ -465,7 +461,7 @@ final class SavedGenerationsViewController: UIViewController {
         if currentBackend.geminiModel != nil, !GeminiJapaneseTokenizer.isConfigured {
             return "\(currentBackend.displayName) · no API key, falls back to MeCab"
         }
-        return "Sentence scrub · \(currentBackend.displayName)"
+        return "Breakdown · \(currentBackend.displayName)"
     }
 
     private func contextualGlossBackendSubtitle() -> String {
@@ -616,8 +612,6 @@ final class SavedGenerationsViewController: UIViewController {
         switch row {
         case .onboarding:
             presentOnboardingPlayground()
-        case .journeyOnboarding:
-            presentOnboardingPlayground(entry: .journey)
         case .textToSpeech:
             navigationController?.pushViewController(
                 TextToSpeechExperimentViewController(),
@@ -752,9 +746,8 @@ final class SavedGenerationsViewController: UIViewController {
         }
     }
 
-    private func presentOnboardingPlayground(entry: AuthLandingViewController.Entry = .original) {
+    private func presentOnboardingPlayground() {
         let landing = AuthLandingViewController()
-        landing.entry = entry
         landing.isPreviewMode = true
         let nav = UINavigationController(rootViewController: landing)
         nav.setNavigationBarHidden(true, animated: false)
@@ -807,7 +800,7 @@ final class SavedGenerationsViewController: UIViewController {
     private func presentAppTokenizerPicker() {
         let sheet = UIAlertController(
             title: "App tokenizer",
-            message: "Used for sentence scrub and other tokenized Japanese UI.",
+            message: "Used for Breakdown and other tokenized Japanese UI.",
             preferredStyle: .actionSheet
         )
         let current = JapaneseTokenizerBackend.preferred

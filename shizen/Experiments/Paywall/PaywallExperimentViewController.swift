@@ -10,12 +10,14 @@ import UIKit
 
 final class PaywallExperimentViewController: UITableViewController {
     enum Variant: CaseIterable {
-        case hana, hanaGlass, glowGlass, featureCarousel, timeline, compare, boldHero, boldHeroGlass, boldHeroGlassCompact, boldHeroGlassCompactPlain, nightGlow
+        case hana, hanaGlass, hanaNote, hanaNoteCompactPlain, glowGlass, featureCarousel, timeline, compare, boldHero, boldHeroGlass, boldHeroGlassCompact, boldHeroGlassCompactPlain, nightGlow
 
         var title: String {
             switch self {
             case .hana: return "Hana pitch"
             case .hanaGlass: return "Hana pitch · glass"
+            case .hanaNote: return "Hana note · one scroll"
+            case .hanaNoteCompactPlain: return "Hana note · glass compact · plain"
             case .glowGlass: return "Glow · glass"
             case .featureCarousel: return "Feature carousel · glass"
             case .timeline: return "Trial timeline"
@@ -32,6 +34,8 @@ final class PaywallExperimentViewController: UITableViewController {
             switch self {
             case .hana: return "Mascot speech bubble · tiled features · short plan tiles"
             case .hanaGlass: return "Brand blobs · glass bubble, feature grid, plans · Hana reacts"
+            case .hanaNote: return "Hana introduces the team · paywall fades in below · nothing pinned"
+            case .hanaNoteCompactPlain: return "Hana's note on a plain grid · compact headline · feature carousel · nothing pinned"
             case .glowGlass: return "Night glow's short pitch on brand blobs · glass features & plans"
             case .featureCarousel: return "Swipe feature cards with lesson art & previews · side-by-side plans"
             case .timeline: return "Today → reminder → billing day · Yearly/Monthly switch"
@@ -48,6 +52,8 @@ final class PaywallExperimentViewController: UITableViewController {
             switch self {
             case .hana: return "camera.macro"
             case .hanaGlass: return "drop.halffull"
+            case .hanaNote: return "text.bubble"
+            case .hanaNoteCompactPlain: return "text.bubble.fill"
             case .glowGlass: return "sparkles"
             case .featureCarousel: return "rectangle.stack"
             case .timeline: return "calendar.badge.clock"
@@ -64,6 +70,8 @@ final class PaywallExperimentViewController: UITableViewController {
             switch self {
             case .hana: return PaywallHanaViewController(provider: provider)
             case .hanaGlass: return PaywallHanaGlassViewController(provider: provider)
+            case .hanaNote: return PaywallHanaNoteViewController(provider: provider)
+            case .hanaNoteCompactPlain: return PaywallHanaNoteViewController(provider: provider, style: .compactPlain)
             case .glowGlass: return PaywallGlowGlassViewController(provider: provider)
             case .featureCarousel: return PaywallFeatureCarouselViewController(provider: provider)
             case .timeline: return PaywallTimelineViewController(provider: provider)

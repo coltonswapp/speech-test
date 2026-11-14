@@ -17,6 +17,8 @@ enum GeminiCommonUses {
         let otherUses: [String]
         /// Short kanji composition, or empty when the pieces don't add anything.
         let kanjiNote: String
+        /// Structured examples, including tokens when the gateway mapped them.
+        let examples: [GeminiGrammarUsage.Example]
     }
 
     struct Explanation {
@@ -100,16 +102,14 @@ enum GeminiCommonUses {
         let inThisSentence: String
         let otherUses: [String]
         let kanjiNote: String
-
-        enum CodingKeys: String, CodingKey {
-            case inThisSentence, otherUses, kanjiNote
-        }
+        let examples: [CommonUsesGatewayPayload.Example]
 
         init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            inThisSentence = try container.decode(String.self, forKey: .inThisSentence)
-            otherUses = try container.decodeIfPresent([String].self, forKey: .otherUses) ?? []
-            kanjiNote = try container.decodeIfPresent(String.self, forKey: .kanjiNote) ?? ""
+            let decoded = try CommonUsesGatewayPayload.Result(from: decoder)
+            inThisSentence = decoded.inThisSentence
+            otherUses = decoded.otherUses
+            kanjiNote = decoded.kanjiNote
+            examples = decoded.examples
         }
     }
 
@@ -124,8 +124,45 @@ enum GeminiCommonUses {
             others.append(phrase)
             if others.count == 4 { break }
         }
+        let structured = payload.examples.compactMap { example -> GeminiGrammarUsage.Example? in
+            let japanese = example.japanese.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !japanese.isEmpty, japanese.count <= 80 else { return nil }
+            let english = glossWithoutVerbLabel(example.english.trimmingCharacters(in: .whitespacesAndNewlines))
+            let reading = example.reading.trimmingCharacters(in: .whitespacesAndNewlines)
+            let tokens = example.tokens.compactMap { token -> GeminiGrammarUsage.Example.Token? in
+                let surface = token.surface.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !surface.isEmpty else { return nil }
+                let lemma = token.lemma.trimmingCharacters(in: .whitespacesAndNewlines)
+                return GeminiGrammarUsage.Example.Token(
+                    surface: surface,
+                    lemma: lemma.isEmpty ? surface : lemma,
+                    reading: token.reading.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }
+            return GeminiGrammarUsage.Example(
+                japanese: japanese,
+                reading: reading.isEmpty ? nil : reading,
+                english: english.isEmpty ? nil : english,
+                tokens: tokens
+            )
+        }
+        var examples: [GeminiGrammarUsage.Example] = []
+        var seenJapanese = Set<String>()
+        for example in structured {
+            guard seenJapanese.insert(example.japanese).inserted else { continue }
+            examples.append(example)
+            if examples.count == 4 { break }
+        }
+        if examples.isEmpty {
+            examples = others.compactMap(GeminiGrammarUsage.Example.parse)
+        }
         let kanjiNote = sanitizedKanjiNote(payload.kanjiNote, surface: surface, inThisSentence: here)
-        return Result(inThisSentence: here, otherUses: others, kanjiNote: kanjiNote)
+        return Result(
+            inThisSentence: here,
+            otherUses: others,
+            kanjiNote: kanjiNote,
+            examples: examples
+        )
     }
 
     /// Keeps a short composition line that actually names kanji. Drops essays and notes with no kanji.
@@ -141,7 +178,7 @@ enum GeminiCommonUses {
 
     private static func cacheKey(for request: Request) -> String {
         [
-            "gemini-common-uses-v8-gateway",
+            "gemini-common-uses-v9-gateway",
             request.sentence,
             request.surface,
             request.dictionaryGloss ?? "",

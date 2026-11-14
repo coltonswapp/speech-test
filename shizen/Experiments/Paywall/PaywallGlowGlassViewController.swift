@@ -4,7 +4,7 @@
 //
 //  Variant: Night glow's short pitch, glass edition. Hana centered over the drifting
 //  brand-yellow blobs, a title-only feature list in one glass card, and short side-by-side
-//  glass plan tiles with per-week pricing pinned above the brand yellow CTA. No free-trial switch.
+//  glass plan tiles pinned above the brand yellow CTA. Yearly shows its per-month price. No free-trial switch.
 //
 
 import UIKit

@@ -1,0 +1,8 @@
+# Shizen additions to the bundled dictionary, merged by scripts/build_jmdict.py after JMdict.
+# Tab-separated. Lines starting with # are comments. Rows with an empty glossary are skipped
+# (leave them as a to-do list). Rows with the same expression + reading become senses of one entry.
+#   glossary: senses separated by "; " like JMdict (first chunk is what the callout shows)
+#   tags:     space-separated POS codes as in JMdict rows (n, v5r, adj-i, adj-na, exp, prt, ...)
+#   score:    optional; default 1000. Higher wins when several entries share a reading.
+# Generate starter rows from Settings → Dictionary coverage → Copy supplement rows.
+expression	reading	glossary	tags	info	score

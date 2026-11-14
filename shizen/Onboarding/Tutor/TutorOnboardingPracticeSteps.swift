@@ -9,259 +9,6 @@
 import NNKit
 import UIKit
 
-// MARK: - Roleplay
-
-final class TutorRoleplayStepViewController: TutorStepViewController {
-
-    override var progressBeatCount: Int { session.goal.rounds.count + 1 }
-
-    private var chat: TutorChatView?
-    private let dock = UIStackView()
-    private var rounds: [TutorRound] = []
-    private var isAwaitingReply = false
-
-    override func buildStage() {
-        let goal = session.goal
-        setupOnboarding(
-            title: "Your first scene",
-            subtitle: "\(goal.emoji) \(goal.sceneTitle) · Hana plays the \(goal.partnerRole)"
-        )
-        rounds = goal.rounds
-        isAwaitingReply = false
-
-        let chat = TutorChatView(timeline: timeline)
-        self.chat = chat
-
-        dock.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        dock.axis = .vertical
-        dock.spacing = 10
-        dock.translatesAutoresizingMaskIntoConstraints = false
-
-        stage.addSubview(chat)
-        stage.addSubview(dock)
-        NSLayoutConstraint.activate([
-            chat.topAnchor.constraint(equalTo: stage.topAnchor),
-            chat.leadingAnchor.constraint(equalTo: stage.leadingAnchor),
-            chat.trailingAnchor.constraint(equalTo: stage.trailingAnchor),
-            chat.bottomAnchor.constraint(equalTo: dock.topAnchor, constant: -8),
-
-            dock.leadingAnchor.constraint(equalTo: stage.leadingAnchor, constant: 20),
-            dock.trailingAnchor.constraint(equalTo: stage.trailingAnchor, constant: -20),
-            dock.bottomAnchor.constraint(equalTo: stage.bottomAnchor),
-        ])
-        scrollUnderHeader(chat, scrollView: chat.scrollContainer)
-    }
-
-    override func play() {
-        let role = session.goal.partnerRole
-        timeline.after(0.35) { [weak self] in
-            self?.chat?.play([
-                .tutorText("I'll play the \(role). Pick a reply, then say it out loud. I'm listening."),
-            ]) { [weak self] in
-                self?.playRound(0)
-            }
-        }
-    }
-
-    private func playRound(_ index: Int) {
-        guard rounds.indices.contains(index) else {
-            finishScene()
-            return
-        }
-        let round = rounds[index]
-        chat?.play([.tutorJapanese(round.prompt)]) { [weak self] in
-            self?.offerReplies(for: round, index: index)
-        }
-    }
-
-    private func offerReplies(for round: TutorRound, index: Int) {
-        let chips = round.replies.map { reply in
-            let chip = TutorReplyChip(line: TutorLine(
-                session.personalize(reply.japanese),
-                session.personalize(reply.english)
-            ))
-            chip.tag = index
-            chip.addTarget(self, action: #selector(replyTapped(_:)), for: .touchUpInside)
-            return chip
-        }
-        setDock(chips)
-        slideIn(chips, stagger: 0.07)
-        isAwaitingReply = true
-    }
-
-    @objc private func replyTapped(_ chip: TutorReplyChip) {
-        guard isAwaitingReply, rounds.indices.contains(chip.tag) else { return }
-        isAwaitingReply = false
-        chip.isChosen = true
-        playSelectionHaptic()
-
-        let others = dock.arrangedSubviews.filter { $0 !== chip }
-        UIView.animate(withDuration: AnimationDefaults.fastDuration) {
-            others.forEach { $0.alpha = 0 }
-        }
-
-        let round = rounds[chip.tag]
-        let index = chip.tag
-        let line = chip.line
-        timeline.after(0.3) { [weak self] in
-            self?.listen(to: line, round: round, index: index)
-        }
-    }
-
-    private func listen(to line: TutorLine, round: TutorRound, index: Int) {
-        let listening = TutorListeningView(prompt: line.japanese)
-        setDock([listening])
-        slideIn([listening])
-        HapticsHelper.lightHaptic()
-
-        timeline.after(1.8) { [weak self] in
-            guard let self else { return }
-            self.setDock([])
-            self.chat?.append(.userJapanese(line))
-            self.celebrate(round.praise)
-            self.advanceProgressBeat(to: index + 1)
-            self.timeline.after(1.1) { [weak self] in
-                self?.playRound(index + 1)
-            }
-        }
-    }
-
-    private func setDock(_ views: [UIView]) {
-        dock.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        views.forEach { dock.addArrangedSubview($0) }
-        stage.layoutIfNeeded()
-        chat?.scrollToBottom(animated: true)
-    }
-
-    private func celebrate(_ praise: String) {
-        let badge = EncouragementBadgeView(text: praise, fillColor: TutorPalette.sakura, textColor: .white)
-        stage.addSubview(badge)
-        NSLayoutConstraint.activate([
-            badge.centerXAnchor.constraint(equalTo: stage.centerXAnchor),
-            badge.bottomAnchor.constraint(equalTo: dock.topAnchor, constant: -28),
-        ])
-        stage.layoutIfNeeded()
-        badge.prepareForCascadeEntry()
-
-        let pop = UIViewPropertyAnimator(
-            duration: 0.5,
-            controlPoint1: AnimationDefaults.overshootControlPoint1,
-            controlPoint2: AnimationDefaults.overshootControlPoint2
-        ) {
-            badge.alpha = 1
-            badge.transform = .identity
-        }
-        pop.addCompletion { _ in badge.playEntryShimmer() }
-        pop.startAnimation()
-        HapticsHelper.successHaptic()
-        explodeEmoji(from: badge)
-
-        timeline.after(1.0) {
-            UIView.animate(withDuration: 0.25, animations: {
-                badge.alpha = 0
-                badge.transform = CGAffineTransform(translationX: 0, y: -16)
-            }, completion: { _ in
-                badge.removeFromSuperview()
-            })
-        }
-    }
-
-    private func finishScene() {
-        let goal = session.goal
-        chat?.play([.tutorJapanese(goal.closing)]) { [weak self] in
-            guard let self, let chat = self.chat else { return }
-            let notes = TutorNotesCard()
-            chat.appendCustom(notes)
-            self.timeline.after(0.5) { [weak self] in
-                self?.stream(goal.tip, into: notes.tipLabel, onTick: {
-                    chat.scrollToBottom(animated: false)
-                }) { [weak self] in
-                    self?.revealCTA("Next")
-                }
-            }
-        }
-    }
-}
-
-/// End-of-scene feedback card; the tip streams in like a model response.
-final class TutorNotesCard: UIView {
-
-    let tipLabel = UILabel()
-
-    init(
-        title: String = "Hana's notes",
-        checks checkTexts: [String] = ["Understood on the first try", "Natural word order", "Clear pronunciation"]
-    ) {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        backgroundColor = ExperimentPalette.cardSurface
-        layer.cornerRadius = 20
-        layer.cornerCurve = .continuous
-        layer.borderWidth = ExperimentCardStroke.normalWidth
-        layer.borderColor = ExperimentPalette.cardBorder.cgColor
-
-        let sparkle = UIImageView(image: UIImage(systemName: "sparkles"))
-        sparkle.tintColor = .systemYellow
-        let header = UILabel()
-        header.text = title
-        header.font = .systemFont(ofSize: 15, weight: .bold)
-        let headerRow = UIStackView(arrangedSubviews: [sparkle, header])
-        headerRow.spacing = 6
-        headerRow.alignment = .center
-
-        let checks = checkTexts.map(Self.checkRow)
-
-        let tipTitle = UILabel()
-        tipTitle.text = "TRY NEXT"
-        tipTitle.font = .systemFont(ofSize: 12, weight: .bold)
-        tipTitle.textColor = .secondaryLabel
-
-        tipLabel.font = .preferredFont(forTextStyle: .subheadline)
-        tipLabel.textColor = .label
-        tipLabel.numberOfLines = 0
-
-        var arranged: [UIView] = [headerRow]
-        arranged += checks
-        arranged += [tipTitle, tipLabel]
-        let stack = UIStackView(arrangedSubviews: arranged)
-        stack.axis = .vertical
-        stack.spacing = 8
-        stack.setCustomSpacing(12, after: headerRow)
-        if let lastCheck = checks.last {
-            stack.setCustomSpacing(16, after: lastCheck)
-        }
-        stack.setCustomSpacing(4, after: tipTitle)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-        ])
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    private static func checkRow(_ text: String) -> UIView {
-        let icon = UIImageView(image: UIImage(systemName: "checkmark.circle.fill"))
-        icon.tintColor = .systemGreen
-        icon.setContentHuggingPriority(.required, for: .horizontal)
-        let label = UILabel()
-        label.text = text
-        label.font = .preferredFont(forTextStyle: .subheadline)
-        label.textColor = .secondaryLabel
-        label.numberOfLines = 0
-        let row = UIStackView(arrangedSubviews: [icon, label])
-        row.spacing = 8
-        row.alignment = .center
-        return row
-    }
-}
-
 // MARK: - Plan
 
 class TutorPlanStepViewController: TutorStepViewController {
@@ -290,33 +37,17 @@ class TutorPlanStepViewController: TutorStepViewController {
         "Hana is building week one from your answers."
     }
 
-    var planChecklist: [String] {
-        [
-            "Reading your answers",
-            "Writing scenes for \(session.goal.title.lowercased())",
-            "Tuning every line to “\(session.level.title)”",
-            "Pacing it for \(session.minutesPerDay) minutes a day",
-        ]
-    }
+    var planChecklist: [String] { [] }
 
     var planReadyHeader: (title: String, subtitle: String) {
         ("Week one is ready.", "Written for \(session.displayName) · \(session.minutesPerDay) min a day")
     }
 
     var planCard: TutorPlanCard.Content {
-        TutorPlanCard.Content(
-            eyebrow: "WEEK 1",
-            title: "\(session.goal.emoji) \(session.goal.title)",
-            rows: session.goal.weekPlan.enumerated().map { index, scene in
-                TutorPlanCard.Row(label: "Day \(index + 1)", title: scene, detail: "\(session.minutesPerDay) min")
-            }
-        )
+        TutorPlanCard.Content(eyebrow: "", title: "", rows: [])
     }
 
-    var planSummary: String {
-        "Your first scene, \(session.goal.sceneTitle.lowercased()), uses lines you'll actually need, "
-            + "shown \(session.level.planPhrase). Every session ends with you saying it out loud to Hana."
-    }
+    var planSummary: String { "" }
 
     /// Runs after the time pick, before the fake generation; call `proceed` to continue.
     /// `options` is the picked card stack, for subclasses that want to clear it first.
@@ -491,17 +222,6 @@ class TutorPlanStepViewController: TutorStepViewController {
                     self?.playAfterPlan(below: card, done: done)
                 }
             }
-        }
-    }
-}
-
-extension TutorLevel {
-    var planPhrase: String {
-        switch self {
-        case .brandNew: return "in romaji with English underneath"
-        case .kana: return "in kana with English underneath"
-        case .someKanji: return "in real Japanese with furigana"
-        case .conversational: return "in Japanese only"
         }
     }
 }
@@ -695,10 +415,8 @@ class TutorReadyStepViewController: TutorStepViewController {
     var readySubtitle: String { "Your first scene is written and waiting." }
     var readyBadge: String { "はじめよう！" }
     var readyBadgeEnglish: String { "Let's begin!" }
-    var readyCapsules: [String] {
-        ["\(session.goal.emoji)  \(session.goal.title)", "📖  \(session.level.title)", "⏱  \(session.minutesPerDay) min a day"]
-    }
-    var readyFarewell: TutorLine { session.goal.farewell }
+    var readyCapsules: [String] { [] }
+    var readyFarewell: TutorLine { TutorLine("またね！", "See you soon!") }
     var readyCTA: String { "Start speaking" }
 
     private var badge: EncouragementBadgeView?
@@ -770,7 +488,7 @@ class TutorReadyStepViewController: TutorStepViewController {
     }
 
     override func ctaTapped() {
-        coordinator?.finishSetup()
+        coordinator?.next()
     }
 
     private func popBadge() {

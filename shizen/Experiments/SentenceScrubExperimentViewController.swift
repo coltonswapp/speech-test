@@ -58,6 +58,8 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
     private var appliedKaraokeTokenKey = -1
     /// Hand-written words, glosses, and nuance. When set, nothing here calls the gateway.
     private let script: SentenceScrubScript?
+    /// False for a Common Uses example, which caps Common Uses at one level.
+    private let allowsCommonUses: Bool
     private var analyticsVisit = SentenceBreakdownVisit()
 
     init(
@@ -70,10 +72,12 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
         tokens: [JapaneseToken]? = nil,
         tokenSync: DialogueTokenSync? = nil,
         showsListenControl: Bool = true,
-        script: SentenceScrubScript? = nil
+        script: SentenceScrubScript? = nil,
+        allowsCommonUses: Bool = true
     ) {
         currentSentence = sentence
         self.script = script
+        self.allowsCommonUses = allowsCommonUses
         let tokens = tokens ?? script?.tokens(in: sentence)
         let trimmedEnglish = englishTranslation?.trimmingCharacters(in: .whitespacesAndNewlines)
         providedEnglish = (trimmedEnglish?.isEmpty ?? true) ? nil : trimmedEnglish
@@ -101,6 +105,7 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
         tokenSync = nil
         showsListenControl = true
         script = nil
+        allowsCommonUses = true
         super.init(coder: coder)
     }
 
@@ -161,6 +166,8 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
         return v
     }()
     private let selectionStartDivider = SentenceScrubExperimentViewController.makeHairlineDivider()
+    /// Fills the space under the divider until a word is picked.
+    private let selectionEmptyStateView = SentenceScrubEmptyStateView()
 
     private static func makeHairlineDivider() -> UIView {
         let v = UIView()
@@ -281,9 +288,9 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
         }
         let title: String
         if let lineIndex = dialogueLineAudio?.lineIndex {
-            title = "Sentence scrub · line \(lineIndex + 1)"
+            title = "Breakdown · line \(lineIndex + 1)"
         } else {
-            title = "Sentence scrub"
+            title = "Breakdown"
         }
         host.presentContentQANote(
             focusTitle: title,
@@ -363,7 +370,7 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
         view.backgroundColor = .systemBackground
         navigationItem.largeTitleDisplayMode = .never
         if script == nil {
-            title = "Sentence scrub"
+            title = "Breakdown"
             navigationItem.rightBarButtonItem = UIBarButtonItem(
                 title: "Options",
                 image: nil,
@@ -395,6 +402,7 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
                 sentence: sentence,
                 sourceTitle: self.vocabularySourceTitle(),
                 lineEnglish: self.vocabularyLineEnglish(),
+                allowsCommonUses: self.allowsCommonUses,
                 from: self
             )
         }
@@ -403,8 +411,16 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
             WordDictionaryDetailSheetPresenter.push(
                 surface: word,
                 glossFraming: .word,
+                allowsCommonUses: self.allowsCommonUses,
                 from: self
             )
+        }
+        wordDictionaryDetailView.allowsCommonUses = allowsCommonUses
+        if allowsCommonUses {
+            wordDictionaryDetailView.onSelectCommonUsesExample = { [weak self] example in
+                guard let self else { return }
+                WordDictionaryDetailSheetPresenter.pushExample(example, from: self)
+            }
         }
         wordDictionaryDetailView.onSelectKanji = { [weak self] character in
             guard let self else { return }
@@ -421,6 +437,7 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
             scrubbableSentenceView.showCalloutOnScrub = false
             scrubbableSentenceView.onRequestDictionaryDetail = nil
             wordDictionaryDetailView.onSelectRelatedWord = nil
+            wordDictionaryDetailView.onSelectCommonUsesExample = nil
             wordDictionaryDetailView.onSelectKanji = nil
             wordDictionaryDetailView.showsSenseSuggestion = false
             wordDictionaryDetailView.contextualGlossProvider = ScriptedContextualGlossProvider(script: script)
@@ -502,9 +519,8 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
         contentStack.setCustomSpacing(20, after: nuanceCardView)
         contentStack.addArrangedSubview(selectionStartDivider)
         contentStack.setCustomSpacing(16, after: selectionStartDivider)
+        contentStack.addArrangedSubview(selectionEmptyStateView)
         contentStack.addArrangedSubview(wordDictionaryDetailView)
-
-        selectionStartDivider.isHidden = true
 
         scrollView.addSubview(contentStack)
         view.addSubview(scrollView)
@@ -1061,7 +1077,7 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
         guard let surface, !surface.isEmpty else {
             qaSelectionSummary = nil
             wordDictionaryDetailView.configure(surface: "")
-            selectionStartDivider.isHidden = true
+            selectionEmptyStateView.isHidden = false
             return
         }
         analyticsVisit.tokensViewed.insert(surface)
@@ -1099,7 +1115,7 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
                 allowsSavedEntryContext: false
             )
         }
-        selectionStartDivider.isHidden = false
+        selectionEmptyStateView.isHidden = true
     }
 
     private func handleSpanSelected(range: ClosedRange<Int>, surface: String) {
@@ -1114,7 +1130,7 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
                 lineEnglish: vocabularyLineEnglish(),
                 allowsSavedEntryContext: false
             )
-            selectionStartDivider.isHidden = false
+            selectionEmptyStateView.isHidden = true
             return
         }
         qaSelectionSummary = "Span: \(surface)"
@@ -1126,7 +1142,7 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
             lineEnglish: vocabularyLineEnglish(),
             allowsSavedEntryContext: false
         )
-        selectionStartDivider.isHidden = false
+        selectionEmptyStateView.isHidden = true
     }
 
     @objc private func speakFullSentenceTapped() {
@@ -1256,5 +1272,152 @@ private struct SentenceBreakdownVisit {
             "opened_repeat_after_me": openedRepeatAfterMe,
             "seconds": Int(Date().timeIntervalSince(openedAt).rounded()),
         ]
+    }
+}
+
+/// Centered "pick a word" hint: a hand drifts over the line, then taps.
+private final class SentenceScrubEmptyStateView: UIView {
+    private static let pointImage = UIImage(systemName: "hand.point.up.left.fill")
+    private static let tapImage = UIImage(systemName: "hand.tap.fill")
+    private static let driftDistance: CGFloat = 14
+    /// Both hands render in this box so a symbol swap never resizes the stack.
+    private static let handBoxSize: CGFloat = 48
+
+    private let handView = UIImageView(image: SentenceScrubEmptyStateView.pointImage)
+    private let messageLabel = UILabel()
+    private var animationTask: Task<Void, Never>?
+
+    override var isHidden: Bool {
+        didSet { updateAnimation() }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isAccessibilityElement = true
+        accessibilityLabel = "Tap or drag across a word to look it up."
+
+        handView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 34, weight: .regular)
+        handView.tintColor = .tertiaryLabel
+        handView.contentMode = .center
+        handView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            handView.widthAnchor.constraint(equalToConstant: Self.handBoxSize),
+            handView.heightAnchor.constraint(equalToConstant: Self.handBoxSize),
+        ])
+
+        messageLabel.text = "Tap or drag across a word to look it up."
+        messageLabel.font = .preferredFont(forTextStyle: .subheadline)
+        messageLabel.adjustsFontForContentSizeCategory = true
+        messageLabel.textColor = .secondaryLabel
+        messageLabel.textAlignment = .center
+        messageLabel.numberOfLines = 0
+
+        let stack = UIStackView(arrangedSubviews: [handView, messageLabel])
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 24),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -24),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(reduceMotionChanged),
+            name: UIAccessibility.reduceMotionStatusDidChangeNotification,
+            object: nil
+        )
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        updateAnimation()
+    }
+
+    @objc private func reduceMotionChanged() {
+        updateAnimation()
+    }
+
+    /// Loops only while on screen; Reduce Motion leaves the pointing hand still.
+    private func updateAnimation() {
+        let shouldRun = window != nil && !isHidden && !UIAccessibility.isReduceMotionEnabled
+        if shouldRun {
+            guard animationTask == nil else { return }
+            animationTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    guard let self else { return }
+                    await self.playCycle()
+                }
+            }
+        } else {
+            animationTask?.cancel()
+            animationTask = nil
+            handView.layer.removeAllAnimations()
+            handView.transform = .identity
+            handView.image = Self.pointImage
+        }
+    }
+
+    /// One continuous sway, a beat to settle, then the tap and release.
+    private func playCycle() async {
+        let d = Self.driftDistance
+        await sway(duration: 1.8) {
+            UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 0.3) {
+                self.handView.transform = CGAffineTransform(translationX: d, y: 0)
+            }
+            UIView.addKeyframe(withRelativeStartTime: 0.3, relativeDuration: 0.45) {
+                self.handView.transform = CGAffineTransform(translationX: -d, y: 0)
+            }
+            UIView.addKeyframe(withRelativeStartTime: 0.75, relativeDuration: 0.25) {
+                self.handView.transform = .identity
+            }
+        }
+        try? await Task.sleep(for: .milliseconds(250))
+        guard !Task.isCancelled else { return }
+
+        // Let the symbol replace finish before pressing so the two don't fight.
+        handView.setSymbolImage(Self.tapImage!, contentTransition: .replace)
+        try? await Task.sleep(for: .milliseconds(250))
+        await animate(0.1) { self.handView.transform = CGAffineTransform(scaleX: 0.9, y: 0.9) }
+        await animate(0.2) { self.handView.transform = .identity }
+        try? await Task.sleep(for: .milliseconds(450))
+        guard !Task.isCancelled else { return }
+
+        handView.setSymbolImage(Self.pointImage!, contentTransition: .replace)
+        try? await Task.sleep(for: .milliseconds(900))
+    }
+
+    private func sway(duration: TimeInterval, _ keyframes: @escaping () -> Void) async {
+        guard !Task.isCancelled else { return }
+        await withCheckedContinuation { continuation in
+            UIView.animateKeyframes(
+                withDuration: duration,
+                delay: 0,
+                options: [.calculationModeCubic, .allowUserInteraction],
+                animations: keyframes,
+                completion: { _ in continuation.resume() }
+            )
+        }
+    }
+
+    private func animate(_ duration: TimeInterval, _ changes: @escaping () -> Void) async {
+        guard !Task.isCancelled else { return }
+        await withCheckedContinuation { continuation in
+            UIView.animate(
+                withDuration: duration,
+                delay: 0,
+                options: [.curveEaseInOut, .allowUserInteraction],
+                animations: changes,
+                completion: { _ in continuation.resume() }
+            )
+        }
     }
 }

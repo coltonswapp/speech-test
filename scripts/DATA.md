@@ -12,6 +12,14 @@ python3 scripts/build_jmdict.py
 
 This downloads `JMdict_e.xml` (if missing) and writes `shizen/jmdict.sqlite`. Re-run after updating the source XML.
 
+### Adding words JMdict lacks
+
+`scripts/jmdict_supplement.tsv` (tracked) holds Shizen's own rows; the build merges them after JMdict. To find what's missing:
+
+1. In a debug build, open **Settings → Dictionary coverage**. It runs every lesson line through the same tokens and lookup a token tap uses and lists words with no callout (no entry, or a kana hit the app rejects) and weak matches (tail-trim / prefix guesses).
+2. **Share review CSV** for the full list, or **Copy supplement rows** to get paste-ready TSV rows with the reading filled in.
+3. Paste into `jmdict_supplement.tsv`, fill in `glossary` (and `tags`), and re-run `python3 scripts/build_jmdict.py`. Rows left without a glossary are skipped.
+
 ## Kanjidic (`shizen/kanjidic.sqlite`)
 
 Kanjidic (~1 MB) is tracked in git and ships with the app as-is.

@@ -9,6 +9,7 @@ import {
   ListChecksIcon,
   BookOpenIcon,
   ChevronDownIcon,
+  FlaskConicalIcon,
   GraduationCapIcon,
   ImagesIcon,
   LayersIcon,
@@ -51,6 +52,7 @@ const links: NavLink[] = [
   { href: "/tts/ambience", label: "Ambience", icon: WindIcon },
   { href: "/tts", label: "TTS Studio", icon: AudioLinesIcon },
   { href: "/usage", label: "Usage", icon: ChartNoAxesColumnIcon },
+  { href: "/experiments", label: "Experiments", icon: FlaskConicalIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 

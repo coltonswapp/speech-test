@@ -14,6 +14,25 @@ export const GEMINI_TEXT_MODEL_DEFAULT = "gemini-3.5-flash-lite";
  */
 export const GEMINI_TOKENIZE_MODEL_DEFAULT = "gemini-3.8-flash";
 
+/** Speech-to-text for Studio experiments (clip POC). */
+export const GEMINI_ASR_MODEL_DEFAULT = "gemini-3.8-flash";
+
+/**
+ * Models the clip editor lets you pick per run (Transcribe, Translate) to
+ * compare output. All take audio and text in.
+ */
+export const CLIP_STEP_MODELS = [
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash" },
+  { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite" },
+  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+] as const;
+
+export type ClipStepModel = (typeof CLIP_STEP_MODELS)[number]["id"];
+
+export function isClipStepModel(value: unknown): value is ClipStepModel {
+  return CLIP_STEP_MODELS.some((model) => model.id === value);
+}
+
 export const GEMINI_TTS_MODELS = [
   { id: "gemini-3.8-flash-tts", label: "3.8 Flash TTS" },
   { id: "gemini-3.8-flash-lite-tts", label: "3.8 Flash-Lite TTS" },

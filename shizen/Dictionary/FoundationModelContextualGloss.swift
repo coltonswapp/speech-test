@@ -10,7 +10,7 @@ import FoundationModels
 
 @Generable
 struct FoundationModelRelatedWord {
-    @Guide(description: "Japanese dictionary headword the learner can look up, in Japanese script only. Example: 引っ越す when the selected word is 引っ越し. Never the selected word itself, and never a conjugation's dictionary form when that form is already given as a hint.")
+    @Guide(description: "Japanese dictionary headword the learner can look up, in Japanese script only. For a transparent compound, a real component word (人口減少 → 人口, then 減少). Otherwise a shared-root or other-form word (引っ越し → 引っ越す). Never the selected word itself, a single kanji, or a conjugation's dictionary form when that form is already given as a hint.")
     var word: String
 
     @Guide(description: "Short gloss, 1-4 words. Gloss a verb as \"to X\" (to move). Never \"the verb\" or \"the verb to X\".")
@@ -19,13 +19,13 @@ struct FoundationModelRelatedWord {
 
 @Generable
 struct FoundationModelContextualWordGloss {
-    @Guide(description: "Plain English meaning. 2-10 words. In a sentence, the meaning here (何時 → what time; 行きましょう → let's go). On its own, the word's natural meaning, with no \"in this sentence\" framing. For a katakana borrowing, add the source in plain English (デジタル → digital, from English). Never use a linguistics label as the whole meaning.")
+    @Guide(description: "Plain English meaning. 2-10 words. In a sentence, the meaning here (何時 → what time; 行きましょう → let's go). A fused ending is the whole chunk, with no dangling connector (なのかなって → wondering whether it's really OK). On its own, the word's natural meaning, with no \"in this sentence\" framing. For a katakana borrowing, add the source in plain English (デジタル → digital, from English). Never use a linguistics label as the whole meaning.")
     var meaning: String
 
-    @Guide(description: "Optional note on non-obvious grammar of the token itself (inflection, fused particle, politeness). For a verb plus auxiliary chain, one short parts breakdown (作ってあげよう → 作る \"make\" + てあげる \"do for someone\" + よう \"I'll\"). Empty string for ordinary compounds (大学生, 何時, スマホ) and when meaning alone is enough. Never name word types, describe neighboring words, or mention related words — those belong in relatedWords.")
+    @Guide(description: "Optional note on non-obvious grammar of the token itself (inflection, fused particle, politeness). For a verb plus auxiliary chain, one short parts breakdown (作ってあげよう → 作る \"make\" + てあげる \"do for someone\" + よう \"I'll\"). For a fused particle chain, plain glosses: なのかなって → な \"is\" + の \"it's that\" + かな \"I wonder\" + って \"quoting that thought\". な before の is the attributive form of だ. の in のだ/んだ/のか is explanatory (\"it's that…\"), not a nominalizer. Empty string when meaning alone is enough. Never name word types, describe neighboring words, or mention related words — those belong in relatedWords.")
     var grammarNote: String
 
-    @Guide(description: "Up to 2 related Japanese words worth looking up, such as 引っ越す for 引っ越し. Empty when nothing useful is related.", .maximumCount(2))
+    @Guide(description: "Up to 2 related Japanese words, in display order. For a transparent compound, the real component words first (人口減少 → 人口, then 減少; a looser word such as 減る only if a slot remains). Do not split words that do not come apart (今日, スマホ, 働く) and do not repeat a single kanji. Empty when nothing useful is related.", .maximumCount(2))
     var relatedWords: [FoundationModelRelatedWord]
 
     @Guide(description: "Empty string unless the user message asks for a dictionary headword. When asked, the usual dictionary form for this use, in Japanese script (みたい, 見る, わ). Empty when slang or dialect has no standard dictionary form.")
@@ -68,6 +68,12 @@ enum FoundationModelContextualGloss {
     - For conjugated forms, reflect the inflection when it changes the sense (行きましょう → let's go).
     - For a verb built with auxiliaries, give the natural meaning of the whole token \
     (作ってあげよう → I'll make it for you).
+    - For a sentence-ending chain or fused particle/auxiliary token, gloss only that chunk. \
+    雨なのかもしれない → it might be, not "it might rain". \
+    大変だろうなって思った → probably, I'd guess, not "it's tough and I thought". \
+    No dangling "and so", "because", or "and then".
+    - When って or と quotes a thought, meaning is that thought \
+    (なのかなって → wondering whether it's really OK).
     - For a katakana borrowing, fold the source into this field in plain English \
     (デジタル → digital, from English; ナイター → night game, from English). \
     If the Japanese sense is not the English word's sense, give the Japanese meaning \
@@ -87,6 +93,16 @@ enum FoundationModelContextualGloss {
     - OK: inflection, a particle fused to the token, politeness encoded in the form.
     - For a verb plus auxiliary chain, add one short note on how the parts add up \
     (作ってあげよう → 作る "make" + てあげる "do for someone" + よう "I'll").
+    - For a fused particle/auxiliary chain, one short parts line. Every piece gets a short English gloss. \
+    Never part-of-speech names (not copula, nominalizer, question particle, quotation particle).
+    - な right before の is the attributive form of だ ("is"). \
+    A な that is not before の is the soft sentence-ending particle \
+    (だろうなって → だろう "probably" + な "you know" + って "quoting that thought").
+    - の in のだ, んだ, or のか is explanatory ("it's that…"), not a nominalizer. \
+    かな is "I wonder". って or と quotes a thought.
+    - なのかなって → な "is" + の "it's that" + かな "I wonder" + って "quoting that thought"
+    - んじゃないかな → ん "it's that" + じゃない "isn't" + かな "I wonder"
+    - ないかなと → ない "not" + かな "I wonder" + と "quoting that thought"
     - Use an empty string when the meaning alone is enough (most nouns, abbreviations, and ordinary \
     compounds such as 大学生, 何時, スマホ).
     - Do NOT describe neighboring tokens (に, は, を, か, etc.).
@@ -96,15 +112,26 @@ enum FoundationModelContextualGloss {
     - Do NOT put a source language here. That belongs in meaning.
 
     relatedWords:
-    - Up to 2 other Japanese words a learner would look up because they share a root \
-    or are the other form of this word.
-    - 引っ越し → word 引っ越す, note "to move".
+    - Up to 2 other Japanese words a learner would look up. Order is the display order.
+    - When the selected word is a transparent compound of real words, those component words \
+    come first, in the order they are written. A component has to be a word or an established \
+    meaningful unit in this context. 人口減少 → 人口 "population", then 減少 "decrease". \
+    高速道路 → 高速 "high speed", then 道路 "road".
+    - A looser relative may use a slot only after those components. \
+    減る "to decrease" must not take the place of 減少.
+    - Do not split a word that does not come apart. 今日, スマホ, and 働く have no component words. \
+    Do not invent pieces or arbitrary character chunks (not 口減 from 人口減少, not 今 and 日 from 今日).
+    - Do not suggest a single kanji. Each character is already shown on its own. \
+    大学生 → 大学 "university", not 大, 学, or 生.
+    - When there is no such compound, suggest a word that shares a root or is the other form \
+    of this word. 引っ越し → 引っ越す "to move".
     - Each word is a dictionary headword in Japanese script only.
-    - note is a short gloss, 1-4 words (to move, a move). Never a part-of-speech label.
+    - note is a short gloss, 1-4 words (population, to move). Never a part-of-speech label.
     - Leave the list empty for particles, names, and words with no useful relative.
-    - Do not include the selected token.
+    - Do not include the selected token. Do not repeat a word.
     - Do not include a conjugation's dictionary form when that form is already given as a hint. \
-    A noun and its verb are different words and should be included.
+    A noun and its verb are different words; include that verb only when a slot remains after \
+    the real components.
 
     headword:
     - Empty string unless the user message asks for a dictionary headword.
@@ -242,7 +269,7 @@ enum FoundationModelContextualGloss {
 
     private static func cacheKey(for request: Request) -> String {
         var parts = [
-            request.requestsHeadword ? "gloss-v7" : "gloss-v6",
+            request.requestsHeadword ? "gloss-v9" : "gloss-v8",
             request.framing.rawValue,
             request.sentence,
             request.surface,
@@ -284,7 +311,7 @@ enum FoundationModelContextualGloss {
             "Return:",
             "• meaning — plain English gloss for this token only (no linguistics labels as the whole answer)",
             "• grammarNote — short grammar note, or empty string if none",
-            "• relatedWords — up to 2 lookup-worthy Japanese relatives, or an empty list",
+            "• relatedWords — up to 2 Japanese words. Transparent compounds: real component words first, in written order. Otherwise one close relative. Empty list if none",
         ])
         if request.requestsHeadword {
             lines.append("• headword — the usual dictionary headword for this use, in Japanese script (みたい, 見る, わ), or an empty string when slang or dialect has no standard dictionary form")

@@ -1,5 +1,6 @@
 import "server-only";
 import {
+  GEMINI_ASR_MODEL_DEFAULT,
   GEMINI_TEXT_MODEL_DEFAULT,
   GEMINI_TOKENIZE_MODEL_DEFAULT,
 } from "@/lib/gemini/models";
@@ -15,6 +16,11 @@ export function geminiTextModel(): string {
 /** Gemini model for tokenize + readings. Override with GEMINI_TOKENIZE_MODEL. */
 export function geminiTokenizeModel(): string {
   return process.env.GEMINI_TOKENIZE_MODEL?.trim() || GEMINI_TOKENIZE_MODEL_DEFAULT;
+}
+
+/** Gemini model for speech-to-text (clip POC). Override with GEMINI_ASR_MODEL. */
+export function geminiAsrModel(): string {
+  return process.env.GEMINI_ASR_MODEL?.trim() || GEMINI_ASR_MODEL_DEFAULT;
 }
 
 export type GeminiThinkingLevel = "minimal" | "low" | "medium" | "high";

@@ -31,6 +31,7 @@ export const STUDIO_NAV_ITEMS: readonly StudioNavItem[] = [
   { href: "/tts/ambience", label: "Ambience", group: "more" },
   { href: "/tts", label: "TTS Studio", group: "more" },
   { href: "/usage", label: "Usage", group: "more" },
+  { href: "/experiments", label: "Experiments", group: "more" },
   { href: "/settings", label: "Settings", group: "more" },
 ] as const;
 

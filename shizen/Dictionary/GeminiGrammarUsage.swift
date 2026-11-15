@@ -42,6 +42,27 @@ enum GeminiGrammarUsage {
         let japanese: String
         let reading: String?
         let english: String?
+        /// Learner lookup units when the gateway sent them. Empty for grammar
+        /// examples and older Common Uses strings.
+        let tokens: [Token]
+
+        struct Token: Equatable {
+            let surface: String
+            let lemma: String
+            let reading: String
+        }
+
+        init(
+            japanese: String,
+            reading: String? = nil,
+            english: String? = nil,
+            tokens: [Token] = []
+        ) {
+            self.japanese = japanese
+            self.reading = reading
+            self.english = english
+            self.tokens = tokens
+        }
 
         static func parse(_ raw: String) -> Example? {
             var remainder = glossWithoutVerbLabel(raw.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -75,8 +96,22 @@ enum GeminiGrammarUsage {
             return Example(
                 japanese: remainder,
                 reading: reading,
-                english: english?.isEmpty == false ? english : nil
+                english: english?.isEmpty == false ? english : nil,
+                tokens: []
             )
+        }
+
+        /// Maps gateway surfaces onto `japanese` with the app tokenizer contract.
+        /// Nil when metadata is missing or does not cover the phrase — the
+        /// sentence-scrub engine then tokenizes locally (MeCab by default).
+        func scrubTokens() -> [JapaneseToken]? {
+            let surfaces = tokens.map(\.surface).filter { !$0.isEmpty }
+            guard !surfaces.isEmpty else { return nil }
+            guard let mapped = JapaneseSegmentationMapping.validatedTokens(from: surfaces, in: japanese) else {
+                return nil
+            }
+            let merged = JapaneseSegmentationMapping.mergeColloquialExplanatorySuffixes(mapped, in: japanese)
+            return merged.isEmpty ? nil : merged
         }
 
         private static func isKanaReading(_ text: String) -> Bool {

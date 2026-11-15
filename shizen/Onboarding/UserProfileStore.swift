@@ -113,24 +113,6 @@ final class UserProfileStore {
         OnboardingStore.clearAnswers()
     }
 
-    /// Whether `users/{uid}` already exists. `.unavailable` means the read did not settle.
-    func accountPresence() async -> AccountPresence {
-        guard let uid = AuthService.shared.userId else { return .missing }
-        let ref = Firestore.firestore().collection("users").document(uid)
-        do {
-            let snapshot = try await ref.getDocument()
-            guard snapshot.exists else { return .missing }
-            if let decoded = try? snapshot.data(as: UserProfile.self) {
-                profile = decoded
-            }
-            OnboardingStore.clearAnswers()
-            return .exists
-        } catch {
-            logger.error("Account lookup failed: \(error.localizedDescription, privacy: .public)")
-            return .unavailable
-        }
-    }
-
     private func readIfPresent(_ ref: DocumentReference) async {
         do {
             let snapshot = try await ref.getDocument()
@@ -160,12 +142,6 @@ final class UserProfileStore {
         return nsError.domain == FirestoreErrorDomain
             && nsError.code == FirestoreErrorCode.alreadyExists.rawValue
     }
-}
-
-enum AccountPresence {
-    case exists
-    case missing
-    case unavailable
 }
 
 private enum UserProfileStoreError: Error {

@@ -37,7 +37,7 @@ The body is `{ "feature": "<name>", ...feature fields }`. Every success response
 
 | `feature` | Request fields | `result` | Default model | iOS client |
 | --- | --- | --- | --- | --- |
-| `common_uses` | `surface` (≤64), `sentence` (≤500), `dictionaryGloss?` | `inThisSentence`, `otherUses[]`, `kanjiNote` | `gemini-3.5-flash-lite` | `GeminiCommonUses` (`GeminiTokenLookup.swift`) |
+| `common_uses` | `surface` (≤64), `sentence` (≤500), `dictionaryGloss?` | `inThisSentence`, `otherUses[]` (display strings), `examples[]` (`japanese`, `reading`, `english`, `tokens[]` with `surface`, `lemma`, `reading`, `start`, `end`; tokens omitted when they don't map onto `japanese`), `kanjiNote` | `gemini-3.5-flash-lite` | `GeminiCommonUses` (`GeminiTokenLookup.swift`) |
 | `contextual_gloss` | `surface`, `sentence`, `framing` (`inSentence` or `word`), `dictionaryForm?`, `dictionaryGloss?`, `requestsHeadword?` | `meaning`, `grammarNote`, `relatedWords[{word, note}]`, `headword` | `gemini-2.5-flash-lite` | `GeminiContextualGloss` |
 | `sense_fit` | `surface`, `sentence`, `senses[]` (2–30, ≤300 chars each) | `index` (always in range) | `gemini-2.5-flash-lite` | `GeminiVocabSenseRanker` (`VocabSenseRanker.swift`) |
 | `dialogue_nuance` | `focused {speaker?, japanese, english?}`, `preceding[]` and `following[]` (≤2 lines each) | `naturalMeaning`, `impliedMeaning`, `notes` | `gemini-3.5-flash-lite` | `GeminiDialogueNuance` |

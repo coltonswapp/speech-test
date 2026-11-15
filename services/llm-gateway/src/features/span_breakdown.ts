@@ -14,11 +14,14 @@ inThisSentence:
 - 転入したばかり → "verb た-form (転入した) + ばかり — just transferred"
 - してから → "verb て-form (して) + から — after doing"
 - 飲んじゃいけない → "verb て-form (飲んで) + じゃいけない (て→じゃ) — must not drink"
+- 話していて → "verb て-form (話して) + いて — was talking, and…" (ている / ていて / てる for an ongoing action is a join too)
 - The parenthetical is the span's own word, in the form written there. The slot name is the pattern they can reuse.
 - The right side is the meaning of the combination. Not a translation of the sentence, and not the Japanese word again.
 - Slot labels, and no others: verb, noun, い-adjective, な-adjective, dictionary form, ます-form, て-form, ない-form, た-form. Write "verb", never "the verb".
 - One line, under 120 characters. If the span is only the grammar piece, you may include the word attached to it in this sentence.
-- When there is no such join — a compound, a name, a fixed phrase, or words that are only neighbors — one short plain-English sentence of what the span is doing here. Do not start with the Japanese. Do not translate the rest of the sentence.
+- When there is no such join — a compound, a name, a fixed phrase, or words that are only neighbors — one short plain-English line of what the span says here. Do not start with the Japanese. Do not translate the rest of the sentence.
+- For words that are only neighbors, say what they mean together: 妻と少し → "a little, with (my) wife". 昨日の夜 → "last night".
+- Say what the words mean, never what kind of span it is. Never write "these words are just neighbors", "not a set phrase", "words that appear together", or similar.
 - Gloss a verb as "to X" (働く → to work). Never write "the verb", "the verb to X", or "the verb, to X".
 - For a katakana borrowing, one short mention of the source in that plain sentence or in partsNote, not both (デジタル → digital, from English). If the Japanese sense is not the English word's sense, give the Japanese meaning and name the English source (テンション → excitement, from English "tension"). Write "from English", not "loanword".
 - If the span is not a borrowing (onomatopoeia, a name, native slang), or you are not sure, omit the source. Do not invent an etymology.

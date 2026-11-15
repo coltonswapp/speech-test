@@ -49,6 +49,13 @@ class OnboardingViewController: UIViewController {
     private(set) var progressBeat = 0
 
     var hidesOnboardingBackButton: Bool { false }
+    /// No way back at all: swipe back and the VoiceOver escape are off too, not just the button.
+    var locksOnboardingBack: Bool { false }
+    var hidesOnboardingProgress: Bool { false }
+
+    override func accessibilityPerformEscape() -> Bool {
+        locksOnboardingBack || super.accessibilityPerformEscape()
+    }
 
     func advanceProgressBeat(to beat: Int) {
         progressBeat = min(max(0, beat), progressBeatCount - 1)

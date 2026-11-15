@@ -27,6 +27,8 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 - **Tokenize + readings**: `GEMINI_TOKENIZE_MODEL`, default `gemini-3.8-flash`
   (provisional), thinking level `low`. The prompt and thinking level live in
   `lib/dialogue/tokenize-prompt.ts`; results are cached per line text.
+- **ASR** (Experiments → Clip transcripts): `GEMINI_ASR_MODEL`, default
+  `gemini-3.8-flash`, thinking level `low`, audio sent inline.
 - **TTS**: chosen in Settings → Voices (3.8 Flash TTS by default, or 3.8
   Flash-Lite TTS).
 - **Voice takes**: Settings → Voices → Voice takes plays two takes of one

@@ -31,28 +31,24 @@ public struct LyricsSpanHighlightStyle {
   public var textColor: UIColor
   /// Fraction of the pill height covered by `bandColor`, measured from the bottom.
   public var bandHeightFraction: CGFloat
-  public var cornerRadius: CGFloat
 
   public init(
     fillColor: UIColor,
     bandColor: UIColor,
     textColor: UIColor,
-    bandHeightFraction: CGFloat,
-    cornerRadius: CGFloat
+    bandHeightFraction: CGFloat
   ) {
     self.fillColor = fillColor
     self.bandColor = bandColor
     self.textColor = textColor
     self.bandHeightFraction = bandHeightFraction
-    self.cornerRadius = cornerRadius
   }
 
   public static let standard = LyricsSpanHighlightStyle(
     fillColor: .systemBlue,
     bandColor: .systemYellow,
     textColor: .white,
-    bandHeightFraction: 0.15,
-    cornerRadius: 2
+    bandHeightFraction: 0.15
   )
 
   public static var current = standard {
@@ -89,6 +85,17 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   public var scrubActiveUnderlineColor: UIColor = UIColor.systemBlue
 
   public var tokenSelectionAppearance: LyricsTokenSelectionAppearance = .definitionTip
+
+  /// Extra points after each token that directly abuts the next one, for easier
+  /// tapping. Applied as kern on the token's last character; highlight, underline
+  /// and selection rects are trimmed so they do not extend into the gap. Set before
+  /// `configure`.
+  public var tokenSpacing: CGFloat = 0
+
+  /// Extra points between wrapped lines when furigana is off (furigana reserves
+  /// its own room above each line). Highlight and underline rects stay one line
+  /// tall. Set before `configure`.
+  public var plainLineSpacing: CGFloat = 0
 
   public private(set) var selectedTokenIndex: Int?
 
@@ -150,7 +157,9 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   private var visibleAttributedText: NSAttributedString?
 
   private struct FuriganaTextLayout {
-    let frame: CTFrame
+    let lines: [CTLine]
+    /// Core Text coordinates (y up from the bottom of `textSize`), like `CTFrameGetLineOrigins`.
+    let lineOrigins: [CGPoint]
     let textOrigin: CGPoint
     let textSize: CGSize
   }
@@ -253,17 +262,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     guard let visible = visibleAttributedText, visible.length > 0 else { return 0 }
     let width = furiganaTextWidth(forViewWidth: viewWidth)
     guard width > 0 else { return 0 }
-    let measured = Self.attributedStringByRemovingRuby(visible)
-    let framesetter = CTFramesetterCreateWithAttributedString(measured)
-    var fitRange = CFRange()
-    let size = CTFramesetterSuggestFrameSizeWithConstraints(
-      framesetter,
-      CFRange(location: 0, length: measured.length),
-      nil,
-      CGSize(width: width, height: .greatestFiniteMagnitude),
-      &fitRange
-    )
-    return max(size.height, 1)
+    return Self.wrappedFuriganaLines(for: visible, width: width).height
   }
 
   @discardableResult
@@ -276,36 +275,127 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     let textWidth = furiganaTextWidth(forViewWidth: width)
     guard textWidth > 0 else { return furiganaLayout }
 
-    // Layout without ruby so Core Text does not stretch 少々 to しょうしょう
-    // or slide ま off 待. Readings are painted as an overlay.
-    let measured = Self.attributedStringByRemovingRuby(visible)
-    let framesetter = CTFramesetterCreateWithAttributedString(measured)
-    var fitRange = CFRange()
-    let textSize = CTFramesetterSuggestFrameSizeWithConstraints(
-      framesetter,
-      CFRange(location: 0, length: measured.length),
-      nil,
-      CGSize(width: textWidth, height: .greatestFiniteMagnitude),
-      &fitRange
-    )
-    let frameHeight = max(textSize.height, 1)
-    let path = CGPath(
-      rect: CGRect(x: 0, y: 0, width: textWidth, height: frameHeight),
-      transform: nil
-    )
-    let frame = CTFramesetterCreateFrame(
-      framesetter,
-      CFRange(location: 0, length: measured.length),
-      path,
-      nil
-    )
+    let wrapped = Self.wrappedFuriganaLines(for: visible, width: textWidth)
+    let flush = Self.flushFactor(for: visible)
+    let origins = zip(wrapped.lines, wrapped.baselines).map { line, baseline in
+      CGPoint(
+        x: CGFloat(CTLineGetPenOffsetForFlush(line, flush, Double(textWidth))),
+        y: wrapped.height - baseline
+      )
+    }
     let layout = FuriganaTextLayout(
-      frame: frame,
+      lines: wrapped.lines,
+      lineOrigins: origins,
       textOrigin: CGPoint(x: textContainerInset.left, y: textContainerInset.top),
-      textSize: CGSize(width: textWidth, height: frameHeight)
+      textSize: CGSize(width: textWidth, height: wrapped.height)
     )
     furiganaLayout = layout
     return layout
+  }
+
+  /// Lays out base text (ruby stripped, so Core Text does not stretch 少々 to
+  /// しょうしょう or slide ま off 待; readings are painted as an overlay).
+  /// Lines only break between tokens, so 人口減少 and its reading move to the
+  /// next line together. A token wider than the line falls back to Core Text's break.
+  private static func wrappedFuriganaLines(
+    for visible: NSAttributedString,
+    width: CGFloat
+  ) -> (lines: [CTLine], baselines: [CGFloat], height: CGFloat) {
+    let measured = attributedStringByRemovingRuby(visible)
+    let ranges = furiganaLineRanges(
+      in: measured,
+      width: width,
+      keepsTogether: { keepsTogether(visible, at: $0) }
+    )
+    let framesetter = CTFramesetterCreateWithAttributedString(measured)
+    var lines: [CTLine] = []
+    var baselines: [CGFloat] = []
+    var top: CGFloat = 0
+    var bottom: CGFloat = 0
+    let lineSpacing = (measured.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?
+      .lineSpacing ?? 0
+    for range in ranges {
+      guard let line = singleLine(in: framesetter, range: range) else { continue }
+      var ascent: CGFloat = 0
+      var descent: CGFloat = 0
+      var leading: CGFloat = 0
+      CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
+      let baseline = top + ascent
+      lines.append(line)
+      baselines.append(baseline)
+      bottom = baseline + descent
+      top = bottom + max(0, leading) + lineSpacing
+    }
+    return (lines, baselines, max(ceil(bottom), 1))
+  }
+
+  /// One line for `range`, laid out by a frame so paragraph metrics
+  /// (minimum line height) match what `CTFrame` stacking produced.
+  private static func singleLine(in framesetter: CTFramesetter, range: CFRange) -> CTLine? {
+    let path = CGPath(rect: CGRect(x: 0, y: 0, width: 100_000, height: 100_000), transform: nil)
+    let frame = CTFramesetterCreateFrame(framesetter, range, path, nil)
+    let lines = CTFrameGetLines(frame)
+    guard CFArrayGetCount(lines) > 0 else { return nil }
+    return unsafeBitCast(CFArrayGetValueAtIndex(lines, 0), to: CTLine.self)
+  }
+
+  /// Core Text's own breaks (kinsoku included), pulled back to the start of
+  /// a token Core Text would split.
+  private static func furiganaLineRanges(
+    in measured: NSAttributedString,
+    width: CGFloat,
+    keepsTogether: (Int) -> Bool
+  ) -> [CFRange] {
+    let typesetter = CTTypesetterCreateWithAttributedString(measured)
+    var ranges: [CFRange] = []
+    var start = 0
+    while start < measured.length {
+      var count = CTTypesetterSuggestLineBreak(typesetter, start, Double(width))
+      if count <= 0 {
+        count = max(1, CTTypesetterSuggestClusterBreak(typesetter, start, Double(width)))
+      }
+      var end = start + count
+      if end < measured.length, keepsTogether(end) {
+        let probe = CTTypesetterCreateLine(typesetter, CFRange(location: start, length: count))
+        var candidate = end - 1
+        while candidate > start {
+          // Only take a token boundary Core Text also accepts, so 、 never starts a line.
+          if !keepsTogether(candidate) {
+            let x = CTLineGetOffsetForStringIndex(probe, candidate, nil)
+            if CTTypesetterSuggestLineBreak(typesetter, start, Double(x) + 0.5) >= candidate - start { break }
+          }
+          candidate -= 1
+        }
+        if candidate > start { end = candidate }
+      }
+      ranges.append(CFRange(location: start, length: end - start))
+      start = end
+    }
+    return ranges
+  }
+
+  /// True when `location` sits inside one token or one ruby group.
+  private static func keepsTogether(_ visible: NSAttributedString, at location: Int) -> Bool {
+    guard location > 0, location < visible.length else { return false }
+    if let previous = visible.attribute(.scrubTokenIndex, at: location - 1, effectiveRange: nil) as? Int,
+       let next = visible.attribute(.scrubTokenIndex, at: location, effectiveRange: nil) as? Int,
+       previous == next {
+      return true
+    }
+    let rubyKey = NSAttributedString.Key(kCTRubyAnnotationAttributeName as String)
+    guard let previous = visible.attribute(rubyKey, at: location - 1, effectiveRange: nil),
+          let next = visible.attribute(rubyKey, at: location, effectiveRange: nil)
+    else { return false }
+    return (previous as AnyObject) === (next as AnyObject)
+  }
+
+  private static func flushFactor(for attributed: NSAttributedString) -> CGFloat {
+    let style = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+    switch style?.alignment {
+    case .center: return 0.5
+    case .right: return 1
+    default: return 0
+    }
   }
 
   /// Visible string karaoke ranges should be mapped onto (ruby is attributes only).
@@ -340,6 +430,13 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     if rangeChanged || styleChanged || fillChanged {
       setNeedsDisplay()
     }
+  }
+
+  /// Line fragments (text view coordinates, top to bottom) under the karaoke marker;
+  /// empty when none is set. Hosts use it to keep a wrapped line in view.
+  public func karaokeLineFragmentRectsInTextView() -> [CGRect] {
+    guard let range = karaokeRange, range.length > 0 else { return [] }
+    return lineFragmentViewRectsForCharacterRange(range)
   }
 
   /// Rounded blue fill + light text; only used while a definition tip is active (parent drives this).
@@ -388,6 +485,8 @@ public final class LyricsInsetUnderlineTextView: UITextView {
           ? LyricsSpanHighlightStyle.current.textColor
           : .white),
       showsFurigana: showsFurigana,
+      tokenSpacing: tokenSpacing,
+      plainLineSpacing: plainLineSpacing,
       applyRuby: applyRuby
     )
     let styled = NSMutableAttributedString(attributedString: built)
@@ -470,6 +569,8 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       selectedIndices: nil,
       selectionAppearance: tokenSelectionAppearance,
       showsFurigana: showsFurigana,
+      tokenSpacing: tokenSpacing,
+      plainLineSpacing: plainLineSpacing,
       applyRuby: applyRuby
     )
     let styled = NSMutableAttributedString(attributedString: built)
@@ -742,6 +843,15 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   /// Tight per–line-fragment rects in view coordinates. Using the full `boundingRect(forGlyphRange:)`
   /// for a range that spans line fragments can expand to the text view width on each line; drawing
   /// per line fragment matches glyphs only.
+  /// `tokenSpacing` kern on the character before `end` (exclusive), or 0.
+  private func trailingTokenKern(endingAt end: Int) -> CGFloat {
+    guard tokenSpacing > 0, end > 0 else { return 0 }
+    let source = visibleAttributedText ?? attributedText
+    guard let source, end <= source.length else { return 0 }
+    let value = source.attribute(.kern, at: end - 1, effectiveRange: nil)
+    return (value as? NSNumber).map { CGFloat($0.doubleValue) } ?? 0
+  }
+
   private func lineFragmentViewRectsForCharacterRange(
     _ r: NSRange,
     baseTextOnly: Bool = false
@@ -763,6 +873,12 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       guard sub.length > 0 else { return }
       var br = lm.boundingRect(forGlyphRange: sub, in: c)
       guard !br.isNull, !br.isEmpty else { return }
+      let lastChar = lm.characterIndexForGlyph(at: NSMaxRange(sub) - 1)
+      br.size.width = max(1, br.width - self.trailingTokenKern(endingAt: lastChar + 1))
+      // Line fragments include `plainLineSpacing` below the glyphs; keep marks one line tall.
+      if self.plainLineSpacing > 0, let text = self.attributedText, text.length > 0 {
+        br.size.height = min(br.height, Self.fontForAttributes(from: text).lineHeight)
+      }
       br.origin.x += self.textContainerInset.left
       br.origin.y += self.textContainerInset.top
       br.origin.x -= self.contentOffset.x
@@ -800,12 +916,12 @@ public final class LyricsInsetUnderlineTextView: UITextView {
             b = b.insetBy(dx: -selectionHPad, dy: -selectionVPad)
           }
           guard b.width > 1, b.height > 0.5, b.intersects(rect) else { continue }
-          let style = LyricsSpanHighlightStyle.current
-          let radiusSource = selectionUsesSpanAccent ? style.cornerRadius : selectionCornerRadius
-          let r = min(radiusSource, b.height * 0.45)
+          // Single-token and multi-word selections share one corner radius.
+          let r = min(selectionCornerRadius, b.height * 0.45)
           let p = UIBezierPath(roundedRect: b, cornerRadius: r)
           if selectionUsesSpanAccent {
-            drawSpanVerticalGradient(in: p, bounds: b, topColor: style.fillColor)
+            drawSpanVerticalGradient(
+              in: p, bounds: b, topColor: LyricsSpanHighlightStyle.current.fillColor)
           } else {
             selectionFillColor(selectionColor).setFill()
             p.fill()
@@ -836,23 +952,11 @@ public final class LyricsInsetUnderlineTextView: UITextView {
         underlineHighlight: underlineHighlight
       )
     } else {
-      let lm = layoutManager
-      let c = textContainer
-      Self.drawInsetUnderlines(
+      drawPlainInsetUnderlines(
         segments: underlineSegments,
-        layoutManager: lm,
-        textContainer: c,
-        textContainerInset: textContainerInset,
-        contentOffset: contentOffset,
         pad: pad,
         rect: rect,
-        underlineVerticalGap: underlineVerticalGap,
-        tokenSelectionAppearance: tokenSelectionAppearance,
-        selectedTokenIndices: underlineHighlight,
-        inactiveLineWidth: max(1.5, tokenUnderlineWidth),
-        inactiveColor: tokenUnderlineColor,
-        activeLineWidth: max(1.5, scrubActiveUnderlineWidth),
-        activeColor: scrubActiveUnderlineColor
+        selectedTokenIndices: underlineHighlight
       )
     }
   }
@@ -931,7 +1035,10 @@ public final class LyricsInsetUnderlineTextView: UITextView {
 
   private func drawKaraokeHighlight(in rect: CGRect) {
     guard let range = karaokeRange, range.length > 0 else { return }
-    let fragments = lineFragmentViewRectsForCharacterRange(range, baseTextOnly: showsFurigana)
+    // Furigana path: ink-centered like the underlines, so the wash sits on the glyph.
+    let fragments = showsFurigana
+      ? inkCenteredFuriganaFragments(for: range, baseTextOnly: true).map(\.rect)
+      : lineFragmentViewRectsForCharacterRange(range)
     guard !fragments.isEmpty else { return }
 
     let source: NSAttributedString? = visibleAttributedText ?? attributedText
@@ -977,7 +1084,10 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     ctx.translateBy(x: layout.textOrigin.x, y: layout.textOrigin.y + layout.textSize.height)
     ctx.scaleBy(x: 1, y: -1)
     ctx.textMatrix = .identity
-    CTFrameDraw(layout.frame, ctx)
+    for (line, origin) in zip(layout.lines, layout.lineOrigins) {
+      ctx.textPosition = origin
+      CTLineDraw(line, ctx)
+    }
     ctx.restoreGState()
     drawFuriganaReadings(layout: layout)
   }
@@ -987,9 +1097,9 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   private func drawFuriganaReadings(layout: FuriganaTextLayout) {
     guard let visible = visibleAttributedText, visible.length > 0 else { return }
     let rubyKey = NSAttributedString.Key(kCTRubyAnnotationAttributeName as String)
-    let lines = coreTextLines(in: layout.frame)
+    let lines = layout.lines
     guard !lines.isEmpty else { return }
-    let lineOrigins = coreTextLineOrigins(in: layout.frame, lineCount: lines.count)
+    let lineOrigins = layout.lineOrigins
 
     visible.enumerateAttribute(rubyKey, in: NSRange(location: 0, length: visible.length)) { value, range, _ in
       guard let value,
@@ -1005,7 +1115,10 @@ public final class LyricsInsetUnderlineTextView: UITextView {
         guard sub.length > 0 else { continue }
 
         let startX = CTLineGetOffsetForStringIndex(line, sub.location, nil)
-        let endX = CTLineGetOffsetForStringIndex(line, sub.location + sub.length, nil)
+        // The caret after a token's last character includes the `tokenSpacing`
+        // kern; without trimming it the reading drifts right into the gap.
+        let endX = CTLineGetOffsetForStringIndex(line, NSMaxRange(sub), nil)
+          - self.trailingTokenKern(endingAt: NSMaxRange(sub))
         let origin = lineOrigins[index]
         let baseFont = visible.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont
           ?? Self.fontForAttributes(from: visible)
@@ -1052,34 +1165,23 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       highlight: highlight,
       textColor: selectionUsesSpanAccent ? LyricsSpanHighlightStyle.current.textColor : .white
     )
-    let originalLines = coreTextLines(in: layout.frame)
-    let lineOrigins = coreTextLineOrigins(in: layout.frame, lineCount: originalLines.count)
-
+    // Same line ranges as the base layout so the overlay stays on the same glyphs.
     let framesetter = CTFramesetterCreateWithAttributedString(overlay)
-    let path = CGPath(
-      rect: CGRect(origin: .zero, size: layout.textSize),
-      transform: nil
-    )
-    let overlayFrame = CTFramesetterCreateFrame(
-      framesetter,
-      CFRange(location: 0, length: overlay.length),
-      path,
-      nil
-    )
-    let overlayLines = coreTextLines(in: overlayFrame)
 
     ctx.saveGState()
     ctx.translateBy(x: layout.textOrigin.x, y: layout.textOrigin.y + layout.textSize.height)
     ctx.scaleBy(x: 1, y: -1)
     ctx.textMatrix = .identity
 
-    for index in 0..<min(originalLines.count, overlayLines.count) {
-      let lineRange = CTLineGetStringRange(originalLines[index])
+    for (line, origin) in zip(layout.lines, layout.lineOrigins) {
+      let lineRange = CTLineGetStringRange(line)
       guard lineRange.length > 0 else { continue }
       let nsRange = NSRange(location: lineRange.location, length: lineRange.length)
-      guard Self.lineIntersectsHighlight(in: visible, range: nsRange, highlight: highlight) else { continue }
-      ctx.textPosition = lineOrigins[index]
-      CTLineDraw(overlayLines[index], ctx)
+      guard Self.lineIntersectsHighlight(in: visible, range: nsRange, highlight: highlight),
+            let overlayLine = Self.singleLine(in: framesetter, range: lineRange)
+      else { continue }
+      ctx.textPosition = origin
+      CTLineDraw(overlayLine, ctx)
     }
 
     ctx.restoreGState()
@@ -1148,23 +1250,6 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     return CTRubyAnnotationGetSizeFactor(annotation)
   }
 
-  private func coreTextLines(in frame: CTFrame) -> [CTLine] {
-    let linesArray = CTFrameGetLines(frame)
-    let lineCount = CFArrayGetCount(linesArray)
-    guard lineCount > 0 else { return [] }
-    return (0..<lineCount).map { index in
-      let rawLine = CFArrayGetValueAtIndex(linesArray, index)
-      return unsafeBitCast(rawLine, to: CTLine.self)
-    }
-  }
-
-  private func coreTextLineOrigins(in frame: CTFrame, lineCount: Int) -> [CGPoint] {
-    var origins = [CGPoint](repeating: .zero, count: lineCount)
-    guard lineCount > 0 else { return origins }
-    CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
-    return origins
-  }
-
   private func coreTextLineFragmentViewRects(
     forCharacterRange range: NSRange,
     layout: FuriganaTextLayout,
@@ -1184,9 +1269,9 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     layout: FuriganaTextLayout,
     baseTextOnly: Bool = false
   ) -> [(rect: CGRect, baselineY: CGFloat)] {
-    let lines = coreTextLines(in: layout.frame)
+    let lines = layout.lines
     guard !lines.isEmpty else { return [] }
-    let lineOrigins = coreTextLineOrigins(in: layout.frame, lineCount: lines.count)
+    let lineOrigins = layout.lineOrigins
     let baseFont = baseTextOnly ? Self.fontForAttributes(from: visibleAttributedText ?? NSAttributedString()) : nil
     var out: [(rect: CGRect, baselineY: CGFloat)] = []
     for (index, line) in lines.enumerated() {
@@ -1218,7 +1303,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
         glyphDescent = descent
       }
       let origin = lineOrigins[index]
-      let width = maxX - minX
+      let width = max(1, maxX - minX - trailingTokenKern(endingAt: NSMaxRange(sub)))
       let baselineY = layout.textOrigin.y + (layout.textSize.height - origin.y)
       let y = baselineY - glyphAscent
       out.append((
@@ -1243,9 +1328,9 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     let localY = point.y - layout.textOrigin.y
     guard localX >= 0, localY >= 0 else { return nil }
 
-    let lines = coreTextLines(in: layout.frame)
+    let lines = layout.lines
     guard !lines.isEmpty else { return nil }
-    let lineOrigins = coreTextLineOrigins(in: layout.frame, lineCount: lines.count)
+    let lineOrigins = layout.lineOrigins
 
     for (index, line) in lines.enumerated() {
       let origin = lineOrigins[index]
@@ -1256,8 +1341,20 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       let lineTop = layout.textOrigin.y + (layout.textSize.height - origin.y - ascent)
       let lineBottom = lineTop + ascent + descent + leading
       guard point.y >= lineTop - 4, point.y <= lineBottom + underlineVerticalGap + 8 else { continue }
-      let idx = CTLineGetStringIndexForPosition(line, CGPoint(x: localX - origin.x, y: 0))
+      let lineX = localX - origin.x
+      var idx = CTLineGetStringIndexForPosition(line, CGPoint(x: lineX, y: 0))
       guard idx != kCFNotFound else { continue }
+      // That call returns the nearest caret boundary, so a tap on the right
+      // half of a character lands on the next one (the next token for は, を…).
+      // Step back to the character actually under the finger.
+      let lineRange = CTLineGetStringRange(line)
+      if idx > lineRange.location, CTLineGetOffsetForStringIndex(line, idx, nil) > lineX {
+        idx -= 1
+      }
+      let lineEnd = lineRange.location + lineRange.length
+      if lineRange.length > 0, idx >= lineEnd {
+        idx = lineEnd - 1
+      }
       let clamped = max(0, min(idx, attributed.length - 1))
       return tokenIndexResolving(near: clamped, in: attributed)
     }
@@ -1275,11 +1372,80 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     return baselineY + belowBaseline
   }
 
-  private func furiganaUnderlineFragments(
-    for range: NSRange
+  /// Per-line advance boxes (kern trimmed), slid horizontally so they center on the
+  /// glyph ink. Kana and some kanji sit unevenly inside their em box (に leans left),
+  /// so box-centered marks look shifted. The shift is capped so a token ending in
+  /// punctuation (ink hugging one side) cannot drag its mark off the word.
+  /// Underlines and the karaoke wash both use this so they stay aligned.
+  private func inkCenteredFuriganaFragments(
+    for range: NSRange,
+    baseTextOnly: Bool = false
   ) -> [(rect: CGRect, baselineY: CGFloat)] {
     guard let layout = furiganaLayout ?? rebuildFuriganaLayoutIfNeeded() else { return [] }
-    return coreTextLineFragments(forCharacterRange: range, layout: layout)
+    var out: [(rect: CGRect, baselineY: CGFloat)] = []
+    for (index, line) in layout.lines.enumerated() {
+      let lineRange = CTLineGetStringRange(line)
+      let sub = NSIntersectionRange(range, NSRange(location: lineRange.location, length: lineRange.length))
+      guard sub.length > 0,
+            let fragment = coreTextLineFragments(
+              forCharacterRange: sub,
+              layout: layout,
+              baseTextOnly: baseTextOnly
+            ).first
+      else { continue }
+      var box = fragment.rect
+      if let ink = Self.inkSpan(of: line, range: sub) {
+        let inkMidX = layout.textOrigin.x + layout.lineOrigins[index].x + (ink.lowerBound + ink.upperBound) / 2
+        let maxShift = box.width * 0.15
+        box.origin.x += min(max(inkMidX - box.midX, -maxShift), maxShift)
+      }
+      out.append((box, fragment.baselineY))
+    }
+    return out
+  }
+
+  /// Underline span per line: the ink-centered box minus `pad` on each side.
+  private func furiganaUnderlineFragments(
+    for range: NSRange,
+    pad: CGFloat
+  ) -> [(minX: CGFloat, maxX: CGFloat, rect: CGRect, baselineY: CGFloat)] {
+    inkCenteredFuriganaFragments(for: range).compactMap { fragment in
+      let box = fragment.rect
+      guard box.width > pad * 2 else { return nil }
+      return (box.minX + pad, box.maxX - pad, box, fragment.baselineY)
+    }
+  }
+
+  /// Horizontal ink extent (line coordinates) of the glyphs that map to `range`.
+  /// Glyphs with no outline (spaces) are skipped.
+  private static func inkSpan(of line: CTLine, range: NSRange) -> ClosedRange<CGFloat>? {
+    var minX = CGFloat.greatestFiniteMagnitude
+    var maxX = -CGFloat.greatestFiniteMagnitude
+    let runs = CTLineGetGlyphRuns(line) as! [CTRun]
+    for run in runs {
+      let count = CTRunGetGlyphCount(run)
+      guard count > 0,
+            let fontValue = (CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName]
+      else { continue }
+      let font = fontValue as! CTFont
+      var glyphs = [CGGlyph](repeating: 0, count: count)
+      var positions = [CGPoint](repeating: .zero, count: count)
+      var indices = [CFIndex](repeating: 0, count: count)
+      var boxes = [CGRect](repeating: .zero, count: count)
+      let all = CFRange(location: 0, length: 0)
+      CTRunGetGlyphs(run, all, &glyphs)
+      CTRunGetPositions(run, all, &positions)
+      CTRunGetStringIndices(run, all, &indices)
+      CTFontGetBoundingRectsForGlyphs(font, .horizontal, glyphs, &boxes, count)
+      for i in 0..<count where NSLocationInRange(indices[i], range) {
+        let box = boxes[i]
+        guard box.width > 0 else { continue }
+        minX = min(minX, positions[i].x + box.minX)
+        maxX = max(maxX, positions[i].x + box.maxX)
+      }
+    }
+    guard minX.isFinite, maxX > minX else { return nil }
+    return minX...maxX
   }
 
   private func drawInsetUnderlinesUsingViewRects(
@@ -1290,123 +1456,73 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   ) {
     let isScrub = tokenSelectionAppearance == .scrubUnderline
 
-    for (charRange, tokenIndices) in segments {
-      let isActive = !tokenIndices.isDisjoint(with: underlineHighlight)
-      guard !isActive else { continue }
-      guard charRange.length > 0 else { continue }
-      for fragment in furiganaUnderlineFragments(for: charRange) {
-        var br = fragment.rect
-        guard br.width > pad * 2 else { continue }
-        br = br.insetBy(dx: pad, dy: 0)
-        guard br.intersects(rect) else { continue }
+    func stroke(_ charRange: NSRange, lineWidth: CGFloat, color: UIColor) {
+      for fragment in furiganaUnderlineFragments(for: charRange, pad: pad) {
+        guard fragment.rect.intersects(rect) else { continue }
         let y = furiganaUnderlineCenterY(baselineY: fragment.baselineY)
         let path = UIBezierPath()
-        path.move(to: CGPoint(x: br.minX, y: y))
-        path.addLine(to: CGPoint(x: br.maxX, y: y))
-        path.lineWidth = max(1.5, tokenUnderlineWidth)
+        path.move(to: CGPoint(x: fragment.minX, y: y))
+        path.addLine(to: CGPoint(x: fragment.maxX, y: y))
+        path.lineWidth = lineWidth
         path.lineCapStyle = .round
-        tokenUnderlineColor.setStroke()
+        color.setStroke()
         path.stroke()
       }
     }
 
+    for (charRange, tokenIndices) in segments where charRange.length > 0 {
+      guard tokenIndices.isDisjoint(with: underlineHighlight) else { continue }
+      stroke(charRange, lineWidth: max(1.5, tokenUnderlineWidth), color: tokenUnderlineColor)
+    }
+
     if isScrub, !underlineHighlight.isEmpty {
-      for (charRange, tokenIndices) in segments {
-        let isActive = !tokenIndices.isDisjoint(with: underlineHighlight)
-        guard isActive, charRange.length > 0 else { continue }
-        for fragment in furiganaUnderlineFragments(for: charRange) {
-          var br = fragment.rect
-          guard br.width > pad * 2 else { continue }
-          br = br.insetBy(dx: pad, dy: 0)
-          guard br.intersects(rect) else { continue }
-          let y = furiganaUnderlineCenterY(baselineY: fragment.baselineY)
-          let path = UIBezierPath()
-          path.move(to: CGPoint(x: br.minX, y: y))
-          path.addLine(to: CGPoint(x: br.maxX, y: y))
-          path.lineWidth = max(1.5, scrubActiveUnderlineWidth)
-          path.lineCapStyle = .round
-          scrubActiveUnderlineColor.setStroke()
-          path.stroke()
-        }
+      for (charRange, tokenIndices) in segments where charRange.length > 0 {
+        guard !tokenIndices.isDisjoint(with: underlineHighlight) else { continue }
+        stroke(charRange, lineWidth: max(1.5, scrubActiveUnderlineWidth), color: scrubActiveUnderlineColor)
       }
     }
   }
 
   /// Grey underlines for non-selected segments; scrub mode adds a blue stroke on the active merged segment.
-  private static func drawInsetUnderlines(
+  /// TextKit (no furigana) underlines. Rects come from
+  /// `lineFragmentViewRectsForCharacterRange`, which trims `tokenSpacing` kern
+  /// and caps height at one line when `plainLineSpacing` is set, so wrapped
+  /// lines keep their underline directly under the glyphs.
+  private func drawPlainInsetUnderlines(
     segments: [(range: NSRange, tokenIndices: Set<Int>)],
-    layoutManager lm: NSLayoutManager,
-    textContainer c: NSTextContainer,
-    textContainerInset: UIEdgeInsets,
-    contentOffset: CGPoint,
     pad: CGFloat,
     rect: CGRect,
-    underlineVerticalGap: CGFloat,
-    tokenSelectionAppearance: LyricsTokenSelectionAppearance,
-    selectedTokenIndices: Set<Int>,
-    inactiveLineWidth: CGFloat,
-    inactiveColor: UIColor,
-    activeLineWidth: CGFloat,
-    activeColor: UIColor
+    selectedTokenIndices: Set<Int>
   ) {
     let isScrub = tokenSelectionAppearance == .scrubUnderline
+    let inactiveLineWidth = max(1.5, tokenUnderlineWidth)
+    let activeLineWidth = max(1.5, scrubActiveUnderlineWidth)
 
-    for (charRange, tokenIndices) in segments {
-      let isActive = !tokenIndices.isDisjoint(with: selectedTokenIndices)
-      guard !isActive else { continue }
-      guard charRange.length > 0 else { continue }
-      let gr = lm.glyphRange(forCharacterRange: charRange, actualCharacterRange: nil)
-      guard gr.length > 0 else { continue }
-      lm.enumerateLineFragments(forGlyphRange: gr) { _, _, _, lineGlyphRange, _ in
-        let sub = NSIntersectionRange(gr, lineGlyphRange)
-        guard sub.length > 0 else { return }
-        var br = lm.boundingRect(forGlyphRange: sub, in: c)
-        guard !br.isNull, !br.isEmpty else { return }
-        br.origin.x += textContainerInset.left
-        br.origin.y += textContainerInset.top
-        br.origin.x -= contentOffset.x
-        br.origin.y -= contentOffset.y
-        if br.width <= pad * 2 { return }
-        br = br.insetBy(dx: pad, dy: 0)
-        if !br.intersects(rect) { return }
-        let y = br.maxY + underlineVerticalGap - inactiveLineWidth * 0.5
+    func stroke(_ charRange: NSRange, lineWidth: CGFloat, color: UIColor) {
+      for fragment in lineFragmentViewRectsForCharacterRange(charRange) {
+        guard fragment.width > pad * 2 else { continue }
+        let br = fragment.insetBy(dx: pad, dy: 0)
+        guard br.intersects(rect) else { continue }
+        let y = br.maxY + underlineVerticalGap - lineWidth * 0.5
         let p = UIBezierPath()
         p.move(to: CGPoint(x: br.minX, y: y))
         p.addLine(to: CGPoint(x: br.maxX, y: y))
-        p.lineWidth = inactiveLineWidth
+        p.lineWidth = lineWidth
         p.lineCapStyle = .round
-        inactiveColor.setStroke()
+        color.setStroke()
         p.stroke()
       }
     }
 
+    for (charRange, tokenIndices) in segments where charRange.length > 0 {
+      guard tokenIndices.isDisjoint(with: selectedTokenIndices) else { continue }
+      stroke(charRange, lineWidth: inactiveLineWidth, color: tokenUnderlineColor)
+    }
+
     if isScrub, !selectedTokenIndices.isEmpty {
-      for (charRange, tokenIndices) in segments {
-        let isActive = !tokenIndices.isDisjoint(with: selectedTokenIndices)
-        guard isActive, charRange.length > 0 else { continue }
-        let gr = lm.glyphRange(forCharacterRange: charRange, actualCharacterRange: nil)
-        guard gr.length > 0 else { continue }
-        lm.enumerateLineFragments(forGlyphRange: gr) { _, _, _, lineGlyphRange, _ in
-          let sub = NSIntersectionRange(gr, lineGlyphRange)
-          guard sub.length > 0 else { return }
-          var br = lm.boundingRect(forGlyphRange: sub, in: c)
-          guard !br.isNull, !br.isEmpty else { return }
-          br.origin.x += textContainerInset.left
-          br.origin.y += textContainerInset.top
-          br.origin.x -= contentOffset.x
-          br.origin.y -= contentOffset.y
-          if br.width <= pad * 2 { return }
-          br = br.insetBy(dx: pad, dy: 0)
-          if !br.intersects(rect) { return }
-          let y = br.maxY + underlineVerticalGap - activeLineWidth * 0.5
-          let p = UIBezierPath()
-          p.move(to: CGPoint(x: br.minX, y: y))
-          p.addLine(to: CGPoint(x: br.maxX, y: y))
-          p.lineWidth = activeLineWidth
-          p.lineCapStyle = .round
-          activeColor.setStroke()
-          p.stroke()
-        }
+      for (charRange, tokenIndices) in segments where charRange.length > 0 {
+        guard !tokenIndices.isDisjoint(with: selectedTokenIndices) else { continue }
+        stroke(charRange, lineWidth: activeLineWidth, color: scrubActiveUnderlineColor)
       }
     }
   }
@@ -1428,10 +1544,10 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   @objc private func handleTap(_ g: UITapGestureRecognizer) {
     guard g.state == .ended else { return }
     let p = g.location(in: self)
-    guard let pos = closestPosition(to: p) else { return }
-    let idx = offset(from: beginningOfDocument, to: pos)
-    guard let a = attributedText, a.length > 0, idx >= 0, idx < a.length else { return }
-    guard let tIdx = tokenIndexResolving(near: idx, in: a) else { return }
+    // Same hit test as scrub. With furigana on, glyphs come from the Core Text
+    // layout; UITextView's own TextKit layout (closestPosition) wraps and
+    // spaces lines differently, so it can resolve to a neighboring token.
+    guard let tIdx = tokenIndex(at: p) else { return }
     let surface = tokenLookupSurfaces.indices.contains(tIdx) ? tokenLookupSurfaces[tIdx] : tokens[tIdx].text
     let rect = mergedWordBoundsInTextView(forTokenIndex: tIdx) ?? .zero
     onWordTapped?(surface, rect, tIdx)
@@ -1464,6 +1580,8 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     selectionAppearance: LyricsTokenSelectionAppearance,
     selectedTextColor: UIColor = .white,
     showsFurigana: Bool = false,
+    tokenSpacing: CGFloat = 0,
+    plainLineSpacing: CGFloat = 0,
     applyRuby: ((NSMutableAttributedString, String, UIFont) -> Void)? = nil
   ) -> NSAttributedString {
     let base: [NSAttributedString.Key: Any] = [
@@ -1479,9 +1597,20 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       if selectionAppearance == .definitionTip, highlight.contains(i), !showsFurigana {
         m.addAttribute(.foregroundColor, value: selectedTextColor, range: r)
       }
+      // Gap only between touching tokens, so punctuation keeps its normal spacing.
+      if tokenSpacing > 0, i + 1 < tokens.count,
+        NSRange(tokens[i + 1].range, in: text).location == NSMaxRange(r)
+      {
+        let last = (text as NSString).rangeOfComposedCharacterSequence(at: NSMaxRange(r) - 1)
+        m.addAttribute(.kern, value: tokenSpacing, range: last)
+      }
     }
     if showsFurigana {
       applyRuby?(m, text, font)
+    } else if plainLineSpacing > 0, m.length > 0 {
+      let paragraph = NSMutableParagraphStyle()
+      paragraph.lineSpacing = plainLineSpacing
+      m.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: m.length))
     }
     return m
   }

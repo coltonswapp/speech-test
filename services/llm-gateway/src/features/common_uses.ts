@@ -1,6 +1,7 @@
 import { Type } from "@google/genai";
 
-import { optionalString, parseJSONObject, requiredString, trimmedString, withoutVerbLabel, withPhraseReading } from "../validate.js";
+import { optionalString, parseJSONObject, requiredString, trimmedString, withoutVerbLabel } from "../validate.js";
+import { parseOtherUse, type CommonUseExample } from "./example_tokens.js";
 import { GEMINI_35_FLASH_LITE, PARTICLE_READING_RULE } from "./models.js";
 import { defineFeature } from "./types.js";
 
@@ -24,16 +25,22 @@ inThisSentence:
 
 otherUses:
 - 2 to 4 other common uses of this word.
-- Each item is a short Japanese phrase that shows the use, then " — ", then a plain English gloss.
-- The Japanese must include this word in a real phrase. かける → "眼鏡をかける (めがねおかける) — to put on glasses", not "to put on glasses".
-- After the Japanese and before the em dash, add a hiragana reading of the whole phrase in parentheses: 物置小屋 (ものおきごや) — a storage shed.
-- Hiragana only. Not romaji. Not furigana over the characters. Not a reading of only the selected word.
+- Each item is an object with japanese, reading, english, and tokens.
+- japanese: a short Japanese phrase that includes this word. かける → 眼鏡をかける, not "to put on glasses". Copy the phrase exactly. No reading and no English in this field.
+- reading: hiragana reading of the whole japanese phrase. Hiragana only. Not romaji. Not a reading of only the selected word. Empty string when japanese is already all kana.
 - ${PARTICLE_READING_RULE}
-- If the Japanese is already all kana, do not add a reading.
+- english: a plain English gloss of that phrase.
 - These are uses in general, not more notes about this sentence.
-- A short phrase, not a full sentence, and under 80 characters. No English-only items.
+- A short phrase, not a full sentence, and under 80 Japanese characters. No English-only items.
 - Do not repeat the in-sentence use.
 - If the word really has only one everyday use, return an empty list.
+- tokens: learner lookup units for japanese, left to right.
+- Copy every surface verbatim from japanese. Tokens must appear in order and cover the phrase.
+- Include particles. Keep punctuation as its own token when present. Punctuation is a hard boundary — never keep words on both sides of a comma or period in one token.
+- Keep conjugated verbs as one token when a learner would tap them as a unit (聞いた, not 聞い + た).
+- surface: the word as written in japanese.
+- lemma: dictionary form. Verbs and adjectives use the plain form (聞いた → 聞く, 高かった → 高い). When the surface is already the dictionary form, copy it.
+- reading: hiragana reading of the surface as written here, not of the lemma. Not romaji.
 
 kanjiNote:
 - One short line only when a kanji piece makes the meaning click.
@@ -49,7 +56,7 @@ No grammar jargon. otherUses are short Japanese phrases with a gloss, not full s
 
 A dictionary hint, when present, is optional. Prioritize the sentence.
 
-Return a JSON object with "word" (string), "inThisSentence" (string), "otherUses" (array of strings), and "kanjiNote" (string).`;
+Return a JSON object with "word" (string), "inThisSentence" (string), "otherUses" (array of objects with "japanese", "reading", "english", and "tokens"), and "kanjiNote" (string).`;
 
 const KANJI = /[\u3400-\u4DBF\u4E00-\u9FFF\u3005]/gu;
 
@@ -99,7 +106,32 @@ export const commonUses = defineFeature({
         properties: {
           word: { type: Type.STRING },
           inThisSentence: { type: Type.STRING },
-          otherUses: { type: Type.ARRAY, items: { type: Type.STRING } },
+          otherUses: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                japanese: { type: Type.STRING },
+                reading: { type: Type.STRING },
+                english: { type: Type.STRING },
+                tokens: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      surface: { type: Type.STRING },
+                      lemma: { type: Type.STRING },
+                      reading: { type: Type.STRING },
+                    },
+                    required: ["surface", "lemma", "reading"],
+                    propertyOrdering: ["surface", "lemma", "reading"],
+                  },
+                },
+              },
+              required: ["japanese", "reading", "english", "tokens"],
+              propertyOrdering: ["japanese", "reading", "english", "tokens"],
+            },
+          },
           kanjiNote: { type: Type.STRING },
         },
         required: ["word", "inThisSentence", "otherUses", "kanjiNote"],
@@ -118,14 +150,18 @@ export const commonUses = defineFeature({
     if (!inThisSentence) {
       throw new Error("common_uses: empty inThisSentence");
     }
-    const otherUses = Array.isArray(raw.otherUses)
-      ? raw.otherUses
-          .map((item) => withPhraseReading(withoutVerbLabel(trimmedString(item))))
-          .filter(Boolean)
+    const parsedUses = Array.isArray(raw.otherUses)
+      ? raw.otherUses.flatMap((item) => {
+          const parsed = parseOtherUse(item);
+          return parsed ? [parsed] : [];
+        })
       : [];
+    const otherUses = parsedUses.map((item) => item.display);
+    const examples: CommonUseExample[] = parsedUses.map((item) => item.example);
     return {
       inThisSentence,
       otherUses,
+      examples,
       kanjiNote: kanjiNoteForSurface(withoutVerbLabel(trimmedString(raw.kanjiNote)), surface),
     };
   },

@@ -52,6 +52,10 @@ final class OnboardingContainerViewController: UIViewController {
         progressLeadingToEdge.isActive = hidden
     }
 
+    func setProgressHidden(_ hidden: Bool) {
+        progressView.isHidden = hidden
+    }
+
     func setProgress(_ progress: Float) {
         progressView.setProgress(min(1, max(0, progress)), animated: true)
     }

@@ -152,34 +152,6 @@ struct DialogueTokenSync: Hashable {
     /// inserted to keep hanging punctuation from wrapping alone.
     func utf16Range(lineIndex: Int, tokenIndex: Int, inDisplay display: String) -> NSRange? {
         guard let original = utf16Range(lineIndex: lineIndex, tokenIndex: tokenIndex) else { return nil }
-        return Self.mapOriginalUTF16Range(original, onto: display)
-    }
-
-    private static let wordJoiner: unichar = 0x2060
-
-    private static func mapOriginalUTF16Range(_ range: NSRange, onto display: String) -> NSRange? {
-        guard range.location >= 0, range.length > 0 else { return nil }
-        let ns = display as NSString
-        var originalUTF16 = 0
-        var displayUTF16 = 0
-        var mappedLocation: Int?
-        let targetEnd = range.location + range.length
-        while displayUTF16 < ns.length {
-            let unit = ns.character(at: displayUTF16)
-            if unit == wordJoiner {
-                displayUTF16 += 1
-                continue
-            }
-            let unitLength = (unit >= 0xD800 && unit <= 0xDBFF && displayUTF16 + 1 < ns.length) ? 2 : 1
-            if mappedLocation == nil, originalUTF16 == range.location {
-                mappedLocation = displayUTF16
-            }
-            originalUTF16 += unitLength
-            displayUTF16 += unitLength
-            if let mappedLocation, originalUTF16 >= targetEnd {
-                return NSRange(location: mappedLocation, length: displayUTF16 - mappedLocation)
-            }
-        }
-        return nil
+        return DialogueContentLineWrap.mapOriginalUTF16Range(original, onto: display)
     }
 }

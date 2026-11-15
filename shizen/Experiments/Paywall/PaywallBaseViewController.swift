@@ -23,6 +23,13 @@ class PaywallBaseViewController: UIViewController {
     private var firstAppearedAt: Date?
     /// `reason` on `paywall_dismissed`; set by whatever closes the paywall.
     private var exitReason = "system"
+    /// A hard gate sets this and has no way out: it never dismisses itself, and a failed load
+    /// retries in place. Runs once, only when a trial, purchase, or restore actually grants
+    /// access, with the package to record (nil if none was selected).
+    var onAccessGranted: ((PaywallPackage?) -> Void)?
+    private var didGrantAccess = false
+    private var didTrackDismiss = false
+    private var loadFailureView: UIView?
 
     init(provider: PaywallProviding, placement: String? = "onboarding") {
         self.provider = provider
@@ -52,8 +59,31 @@ class PaywallBaseViewController: UIViewController {
         super.viewDidDisappear(animated)
         isOnScreen = false
         if isBeingDismissed || isMovingFromParent {
-            trackFunnel(.paywallDismissed, ["reason": exitReason])
+            trackDismiss()
         }
+    }
+
+    private func trackDismiss() {
+        guard !didTrackDismiss else { return }
+        didTrackDismiss = true
+        trackFunnel(.paywallDismissed, ["reason": exitReason])
+    }
+
+    /// The app backgrounded on a hard gate without access. They can still come back to it.
+    func trackAbandoned() {
+        guard !didGrantAccess else { return }
+        trackFunnel(.paywallDismissed, ["reason": "abandoned"])
+    }
+
+    /// Hands a hard gate its access. False when there's no gate, so the caller keeps its own ending.
+    private func grantAccessIfGated(_ package: PaywallPackage?) -> Bool {
+        guard let onAccessGranted else { return false }
+        guard !didGrantAccess else { return true }
+        didGrantAccess = true
+        // The gate lives inside the flow, so its own disappearance doesn't report the dismiss.
+        trackDismiss()
+        onAccessGranted(package)
+        return true
     }
 
     // MARK: Subclass hooks
@@ -133,14 +163,65 @@ class PaywallBaseViewController: UIViewController {
     private func loadOffering() async {
         do {
             let offering = try await provider.fetchOffering(placement: placement)
+            loadFailureView?.removeFromSuperview()
+            loadFailureView = nil
             self.offering = offering
             selectedPackage = offering.defaultPackage
             render(offering)
             selectedPackageDidChange(animated: false)
             if isOnScreen { trackImpression(offering) }
         } catch {
-            presentAlert(title: "Couldn't load plans", message: error.localizedDescription, dismissAfter: true)
+            if onAccessGranted != nil {
+                showLoadFailure(error)
+            } else {
+                presentAlert(title: "Couldn't load plans", message: error.localizedDescription, dismissAfter: true)
+            }
         }
+    }
+
+    /// Inline rather than an alert: the first load can fail before this view is in a window.
+    private func showLoadFailure(_ error: Error) {
+        loadFailureView?.removeFromSuperview()
+
+        let title = UILabel()
+        title.text = "Couldn't load plans"
+        title.font = .preferredFont(forTextStyle: .headline)
+        title.adjustsFontForContentSizeCategory = true
+        title.textAlignment = .center
+        title.numberOfLines = 0
+
+        let message = UILabel()
+        message.text = error.localizedDescription
+        message.font = .preferredFont(forTextStyle: .subheadline)
+        message.adjustsFontForContentSizeCategory = true
+        message.textColor = .secondaryLabel
+        message.textAlignment = .center
+        message.numberOfLines = 0
+
+        var retryConfig = UIButton.Configuration.glass()
+        retryConfig.title = "Try again"
+        retryConfig.baseForegroundColor = .label
+        retryConfig.cornerStyle = .capsule
+        let retry = UIButton(configuration: retryConfig)
+        retry.addAction(UIAction { [weak self, weak retry] _ in
+            retry?.configuration?.showsActivityIndicator = true
+            retry?.isUserInteractionEnabled = false
+            Task { await self?.loadOffering() }
+        }, for: .touchUpInside)
+
+        let stack = UIStackView(arrangedSubviews: [title, message, retry])
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 12
+        stack.setCustomSpacing(20, after: message)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor),
+            stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
+            stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
+        ])
+        loadFailureView = stack
     }
 
     // MARK: Actions
@@ -165,6 +246,7 @@ class PaywallBaseViewController: UIViewController {
                 }
                 exitReason = "purchased"
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
+                guard !grantAccessIfGated(package) else { return }
                 presentAlert(
                     title: "Welcome to Pro",
                     message: "Mock purchase of \(package.productIdentifier) succeeded.",
@@ -185,7 +267,10 @@ class PaywallBaseViewController: UIViewController {
             do {
                 let restored = try await provider.restorePurchases()
                 trackFunnel(.restoreCompleted, ["result": restored ? "restored" : "nothing"])
-                if restored { exitReason = "restored" }
+                if restored {
+                    exitReason = "restored"
+                    guard !grantAccessIfGated(selectedPackage) else { return }
+                }
                 presentAlert(
                     title: restored ? "Purchases restored" : "Nothing to restore",
                     message: restored ? nil : "No active subscription was found for this Apple ID.",
@@ -239,7 +324,7 @@ class PaywallBaseViewController: UIViewController {
     }
 
     /// Glass close (leading) and optional Restore (trailing) buttons over everything.
-    func installTopBar(tint: UIColor, showsRestore: Bool = true) {
+    func installTopBar(tint: UIColor, showsClose: Bool = true, showsRestore: Bool = true) {
         var closeConfig = UIButton.Configuration.glass()
         closeConfig.image = UIImage(systemName: "xmark")
         closeConfig.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
@@ -247,6 +332,7 @@ class PaywallBaseViewController: UIViewController {
         closeConfig.cornerStyle = .capsule
         let close = UIButton(configuration: closeConfig)
         close.accessibilityLabel = "Close"
+        close.isHidden = !showsClose
         close.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
         close.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(close)

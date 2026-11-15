@@ -41,6 +41,12 @@ const cachedLineSchema = z.object({
 
 export type TokenizeUsage = { promptTokens: number; outputTokens: number };
 
+/**
+ * Gemini answered, but twice its tokens didn't spell out the line (usually it
+ * "fixed" disfluent speech). Callers may fall back to a plain word split.
+ */
+export class SegmentationError extends DialogueGenerationError {}
+
 /** One tokenize round-trip. Exported for scripts/eval-tokenize-model.ts. */
 export async function requestTokenSurfaces(
   apiKey: string,
@@ -173,36 +179,43 @@ async function writeCachedLine(text: string, tokens: TokenizedToken[]): Promise<
 }
 
 export async function tokenizeJapaneseLine(
-  text: string
+  text: string,
+  options: {
+    /** Called once per Gemini request (not for cache hits). */
+    onUsage?: (usage: TokenizeUsage) => void;
+    /** Called when the line came from the cache (no request made). */
+    onCacheHit?: () => void;
+  } = {}
 ): Promise<TokenizedToken[]> {
   const trimmed = text.trim();
   if (!trimmed) return [];
 
   const cached = await readCachedLine(trimmed);
-  if (cached) return cached;
+  if (cached) {
+    options.onCacheHit?.();
+    return cached;
+  }
 
   const apiKey = getProviderKey("gemini");
   if (!apiKey) {
     throw new DialogueGenerationError("Missing Gemini API key.");
   }
 
-  const first = await requestTokenSurfaces(apiKey, trimmed, false);
+  const first = await requestTokenSurfaces(apiKey, trimmed, false, { onUsage: options.onUsage });
   const firstTokens = tokensWithReadings(first, trimmed);
   if (firstTokens) {
     await writeCachedLine(trimmed, firstTokens);
     return firstTokens;
   }
 
-  const retry = await requestTokenSurfaces(apiKey, trimmed, true);
+  const retry = await requestTokenSurfaces(apiKey, trimmed, true, { onUsage: options.onUsage });
   const retryTokens = tokensWithReadings(retry, trimmed);
   if (retryTokens) {
     await writeCachedLine(trimmed, retryTokens);
     return retryTokens;
   }
 
-  throw new DialogueGenerationError(
-    `Could not segment “${trimmed.slice(0, 24)}”.`
-  );
+  throw new SegmentationError(`Could not segment “${trimmed.slice(0, 24)}”.`);
 }
 
 export async function tokenizeJapaneseLines(

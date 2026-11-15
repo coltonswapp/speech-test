@@ -57,6 +57,34 @@ describe("validatedTokens", () => {
     assert.equal(validatedTokens(surfaces, text), null);
   });
 
+  it("maps 確かに聞いた without splitting into characters", () => {
+    const text = "確かに聞いた";
+    const tokens = validatedTokens(["確かに", "聞いた"], text);
+    assert.ok(tokens);
+    assert.deepEqual(
+      tokens!.map((token) => ({ text: token.text, start: token.start, end: token.end })),
+      [
+        { text: "確かに", start: 0, end: 3 },
+        { text: "聞いた", start: 3, end: 6 },
+      ]
+    );
+    assert.equal(text.slice(tokens![1]!.start, tokens![1]!.end), "聞いた");
+  });
+
+  it("drops punctuation and keeps a multi-kanji word", () => {
+    const text = "え、図書館で聞いた。";
+    const tokens = validatedTokens(
+      ["え", "、", "図書館", "で", "聞いた", "。"],
+      text
+    );
+    assert.ok(tokens);
+    assert.deepEqual(
+      tokens!.map((token) => token.text),
+      ["え", "図書館", "で", "聞いた"]
+    );
+    assert.equal(text.slice(tokens![1]!.start, tokens![1]!.end), "図書館");
+  });
+
   it("still glues んですけど endings", () => {
     const text = "行きたいんですけど";
     const surfaces = ["行きたい", "ん", "です", "けど"];

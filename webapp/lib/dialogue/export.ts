@@ -130,7 +130,8 @@ function exportGrammarPattern(pattern: GrammarPatternRef): GrammarPatternRef {
   };
 }
 
-function exportHighlights(
+/** Learner-facing highlights: trimmed pattern refs, undefined when empty. Shared with clip payloads. */
+export function exportHighlights(
   highlights: DialogueHighlights | null
 ): DialogueHighlights | undefined {
   if (!highlights) return undefined;

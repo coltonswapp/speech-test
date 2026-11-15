@@ -2,8 +2,8 @@
 //  ListenFirstBreakdowns.swift
 //  shizen
 //
-//  Hand-written breakdowns for every Japanese line the listen-first flow shows: the office
-//  conversation, the textbook/real pairs, each style's phrases, the level samples, Hana's
+//  Hand-written breakdowns for every Japanese line the listen-first flow shows: the drinks
+//  conversation, the textbook/real pairs, the level samples, Hana's
 //  Japanese lines, and the send-off. Onboarding never calls the LLM
 //  gateway, so the words, their glosses, and the deeper reading are all written out here.
 //  Every word must appear in its line, in order (punctuation left out).
@@ -20,33 +20,29 @@ extension ListenFirstContent {
     /// Keyed by the line's Japanese, exactly as shown.
     static let breakdowns: [String: SentenceScrubScript] = {
         var all: [String: SentenceScrubScript] = [:]
-        for (japanese, script) in conversationBreakdowns + phraseBreakdowns + squashBreakdowns + screenBreakdowns {
+        for (japanese, script) in conversationBreakdowns + squashBreakdowns + screenBreakdowns {
             assert(all[japanese] == nil, "Two breakdowns for \(japanese)")
             all[japanese] = script
         }
         return all
     }()
 
-    // MARK: - The office conversation
+    // MARK: - The drinks conversation
 
     private static let conversationBreakdowns: [(String, SentenceScrubScript)] = [
         (
             conversation[0].japanese,
             SentenceScrubScript(
                 words: [
-                    Word("あれ", "Huh?", note: "A surprised \"huh?\", not the あれ that means \"that\"."),
-                    Word("まだ", "still"),
-                    Word("いた", "were (here)", note: "Past of いる, \"to be\" for people."),
-                    Word("の", "softens it into a question", note: "Casual speech asks with の instead of ですか."),
                     Word("何", "what"),
                     Word("して", "doing", note: "て-form of する."),
                     Word("ん", "る, squashed", note: "している → してる → してん: る melts into ん before の."),
-                    Word("の", "softens it into a question"),
+                    Word("の", "softens it into a question", note: "Casual speech asks with の instead of ですか."),
                 ],
                 nuance: .init(
-                    naturalMeaning: "Oh, you're still here? What are you doing?",
-                    impliedMeaning: "Mika is surprised to find Kaito at the office this late. It's a friendly check-in, not a complaint.",
-                    notes: "してんの is している squashed twice: している → してる → してん. Ending both questions with の keeps them soft and casual."
+                    naturalMeaning: "What are you doing?",
+                    impliedMeaning: "Mika notices Kaito looking stuck on something and checks in.",
+                    notes: "してんの is している squashed twice: している → してる → してん. Ending on の keeps it soft and casual."
                 )
             )
         ),
@@ -55,16 +51,17 @@ extension ListenFirstContent {
             SentenceScrubScript(
                 words: [
                     Word("明日", "tomorrow"),
-                    Word("の", "'s, for", note: "Links 明日 to 資料: tomorrow's materials."),
-                    Word("資料", "materials, documents"),
-                    Word("でも", "but"),
-                    Word("ぜんぜん", "(not) at all", note: "Pairs with a negative: ぜんぜん〜ない, \"not at all\"."),
-                    Word("わかんない", "don't get it", note: "わからない with ら melted into ん."),
+                    Word("の", "'s", note: "Links 明日 to 飲み会: tomorrow's drinks."),
+                    Word("飲み会", "drinks, a drinking party", note: "A group night out, often with classmates or coworkers."),
+                    Word("行く", "go"),
+                    Word("か", "whether", note: "Turns 行く into \"whether to go\"."),
+                    Word("迷って", "unsure, torn", note: "迷う, \"to be lost\" or \"to hesitate\"."),
+                    Word("る", "(ongoing)", note: "迷っている with い dropped: 迷ってる."),
                 ],
                 nuance: .init(
-                    naturalMeaning: "Tomorrow's materials. But I don't get any of it.",
-                    impliedMeaning: "Kaito is stuck and a bit worn out, half explaining and half venting.",
-                    notes: "The answer drops the verb: 明日の資料 alone is a full reply. わかんない is the everyday way to say わからない."
+                    naturalMeaning: "I can't decide if I'm going to drinks tomorrow.",
+                    impliedMeaning: "Kaito is leaning toward staying home and half wants someone to talk him out of it.",
+                    notes: "The に after 飲み会 is dropped, and 迷っている loses its い: 迷ってる. Both are normal in speech."
                 )
             )
         ),
@@ -72,18 +69,18 @@ extension ListenFirstContent {
             conversation[2].japanese,
             SentenceScrubScript(
                 words: [
-                    Word("ごめん", "sorry", note: "Casual ごめんなさい."),
-                    Word("私", "I, me"),
+                    Word("え", "What?", note: "A quick, surprised \"huh?\"."),
                     Word("行か", "go", note: "行く in the shape it takes before ない."),
                     Word("なきゃ", "have to", note: "なければならない cut down to its first beat."),
-                    Word("終電", "the last train"),
-                    Word("なくなっ", "be gone, run out", note: "なくなる, \"to disappear\"."),
-                    Word("ちゃう", "(and that would be bad)", note: "Short for てしまう: something happens that you can't undo."),
+                    Word("サキ", "Saki", note: "A name."),
+                    Word("ちゃん", "(friendly name ending)", note: "Like さん, but warm and casual."),
+                    Word("来る", "come"),
+                    Word("よ", "(you should know)", note: "Tells someone something new."),
                 ],
                 nuance: .init(
-                    naturalMeaning: "Sorry, I've gotta go. I'll miss the last train.",
-                    impliedMeaning: "She feels a little bad leaving him alone with it, but the last train won't wait.",
-                    notes: "行かなきゃ is 行かなければならない with the end cut off. なくなっちゃう is なくなってしまう: the train being gone is the thing she wants to avoid."
+                    naturalMeaning: "What? You have to go! Saki's coming.",
+                    impliedMeaning: "Mika knows Kaito likes Saki, and she's using it.",
+                    notes: "行かなきゃ isn't only \"I have to leave\". Here it pushes Kaito: you have to go. よ hands him news he didn't have."
                 )
             )
         ),
@@ -92,290 +89,17 @@ extension ListenFirstContent {
             SentenceScrubScript(
                 words: [
                     Word("マジ", "for real, seriously", note: "Slang for 本当."),
-                    Word("か", "(surprised question)"),
-                    Word("じゃあ", "well then, okay"),
-                    Word("また", "again"),
-                    Word("明日", "tomorrow"),
+                    Word("で", "(for real?)", note: "マジで: \"seriously?\""),
+                    Word("何", "what"),
+                    Word("着れば", "if (I) wear", note: "着る, \"to wear\", in its \"if\" form."),
+                    Word("いい", "good"),
+                    Word("か", "whether"),
+                    Word("わかんない", "don't know", note: "わからない with ら melted into ん."),
                 ],
                 nuance: .init(
-                    naturalMeaning: "Seriously? Okay. See you tomorrow.",
-                    impliedMeaning: "Kaito is a little let down to be left on his own, but lets her go without a fuss.",
-                    notes: "マジか is a casual \"for real?\" between friends or close coworkers. また明日 is the everyday \"see you tomorrow\"."
-                )
-            )
-        ),
-    ]
-
-    // MARK: - Style phrases
-
-    private static let phraseBreakdowns: [(String, SentenceScrubScript)] = [
-        // Everything
-        (
-            "混んでるね。",
-            SentenceScrubScript(
-                words: [
-                    Word("混んでる", "is crowded", note: "混んでいる with the い dropped, as speech almost always does."),
-                    Word("ね", "huh, right?", note: "Invites the other person to agree."),
-                ],
-                nuance: .init(
-                    naturalMeaning: "It's really packed, huh.",
-                    impliedMeaning: "Small talk: noticing something together and inviting a nod.",
-                    notes: "Textbook: 混んでいますね. Dropping い and です is what makes it sound like a friend talking."
-                )
-            )
-        ),
-        (
-            "いつものでいい？",
-            SentenceScrubScript(
-                words: [
-                    Word("いつもの", "the usual", note: "\"Always\" + の: the always-one."),
-                    Word("で", "as, with"),
-                    Word("いい", "good, okay"),
-                ],
-                nuance: .init(
-                    naturalMeaning: "The usual?",
-                    impliedMeaning: "Said by someone who already knows your order: a friend, or the staff at your regular café.",
-                    notes: "〜でいい？ asks \"will … do?\". いつもの turns \"always\" into \"the usual thing\"."
-                )
-            )
-        ),
-        (
-            "ちょっと待ってて。",
-            SentenceScrubScript(
-                words: [
-                    Word("ちょっと", "a sec, a little"),
-                    Word("待って", "wait"),
-                    Word("て", "keep (waiting)", note: "From 待っていて with the い dropped."),
-                ],
-                nuance: .init(
-                    naturalMeaning: "Hang on a sec.",
-                    impliedMeaning: "\"Stay right there, I'll be back\", not just \"pause\".",
-                    notes: "待ってて is 待っていて squashed. The extra て means \"keep waiting\". Textbook: ちょっと待っていてください."
-                )
-            )
-        ),
-        // Casual
-        (
-            "今日、暇？",
-            SentenceScrubScript(
-                words: [
-                    Word("今日", "today"),
-                    Word("暇", "free, not busy"),
-                ],
-                nuance: .init(
-                    naturalMeaning: "Free today?",
-                    impliedMeaning: "Usually the lead-in to an invitation.",
-                    notes: "Casual speech drops は and ですか. A rising tone alone makes it a question. Textbook: 今日は暇ですか？"
-                )
-            )
-        ),
-        (
-            "それ、マジ？",
-            SentenceScrubScript(
-                words: [
-                    Word("それ", "that"),
-                    Word("マジ", "for real", note: "Slang for 本当."),
-                ],
-                nuance: .init(
-                    naturalMeaning: "Seriously?",
-                    impliedMeaning: "Surprise or disbelief at what you just heard.",
-                    notes: "Textbook would be それは本当ですか？ Among friends, two words do it."
-                )
-            )
-        ),
-        (
-            "行こ行こ！",
-            SentenceScrubScript(
-                words: [
-                    Word("行こ", "let's go", note: "行こう with the long う cut off."),
-                    Word("行こ", "let's go"),
-                ],
-                nuance: .init(
-                    naturalMeaning: "Let's go, let's go!",
-                    impliedMeaning: "Excited and eager: come on, let's do it.",
-                    notes: "Saying it twice adds energy. Textbook: 行きましょう."
-                )
-            )
-        ),
-        // College
-        (
-            "やばっ、寝坊した！",
-            SentenceScrubScript(
-                words: [
-                    Word("やばっ", "oh no", note: "やばい clipped short for a sudden reaction."),
-                    Word("寝坊", "oversleeping"),
-                    Word("した", "did", note: "Past of する."),
-                ],
-                nuance: .init(
-                    naturalMeaning: "Crap, I overslept!",
-                    impliedMeaning: "Panicked: they're probably already late.",
-                    notes: "Textbook: 寝坊してしまいました. やばい covers anything from \"uh-oh\" to \"amazing\"; here it's \"uh-oh\"."
-                )
-            )
-        ),
-        (
-            "終電行っちゃった。",
-            SentenceScrubScript(
-                words: [
-                    Word("終電", "the last train"),
-                    Word("行っ", "went", note: "行く, \"to go\"."),
-                    Word("ちゃった", "(and it's too late)", note: "てしまった squashed: it happened and can't be undone."),
-                ],
-                nuance: .init(
-                    naturalMeaning: "The last train's gone.",
-                    impliedMeaning: "They're stranded: a taxi, a long walk, or a night out.",
-                    notes: "Textbook: 終電が行ってしまった. Speech drops が and squashes てしまった to ちゃった."
-                )
-            )
-        ),
-        (
-            "テスト、ガチで無理。",
-            SentenceScrubScript(
-                words: [
-                    Word("テスト", "test, exam"),
-                    Word("ガチで", "seriously, for real", note: "Slang."),
-                    Word("無理", "impossible, no way"),
-                ],
-                nuance: .init(
-                    naturalMeaning: "This test is seriously impossible.",
-                    impliedMeaning: "Complaining, and probably exaggerating.",
-                    notes: "ガチで is younger slang for 本当に. 無理 is the everyday \"no way, can't\"."
-                )
-            )
-        ),
-        // Polite
-        (
-            "ご確認いただけますでしょうか。",
-            SentenceScrubScript(
-                words: [
-                    Word("ご確認", "checking", note: "確認 with the polite ご."),
-                    Word("いただけます", "could I receive", note: "Humble: \"could I have you (check)\"."),
-                    Word("でしょうか", "would it be…?", note: "A softer ですか."),
-                ],
-                nuance: .init(
-                    naturalMeaning: "Could you please take a look?",
-                    impliedMeaning: "A careful request at work, often to a client or a boss.",
-                    notes: "Literally \"might I be able to receive your checking?\" Each polite layer makes the request softer."
-                )
-            )
-        ),
-        (
-            "恐れ入りますが…",
-            SentenceScrubScript(
-                words: [
-                    Word("恐れ入ります", "I'm sorry to trouble you", note: "Humble and formal."),
-                    Word("が", "but…"),
-                ],
-                nuance: .init(
-                    naturalMeaning: "I'm sorry to trouble you, but…",
-                    impliedMeaning: "A cushion before a request or an interruption, common in shops and offices.",
-                    notes: "It often trails off: everyone knows a request is coming."
-                )
-            )
-        ),
-        (
-            "承知いたしました。",
-            SentenceScrubScript(
-                words: [
-                    Word("承知", "understanding, noted"),
-                    Word("いたしました", "did", note: "Humble form of しました."),
-                ],
-                nuance: .init(
-                    naturalMeaning: "Understood.",
-                    impliedMeaning: "Formal and respectful, and it promises you'll take care of it.",
-                    notes: "The humble version of わかりました, for customers and bosses."
-                )
-            )
-        ),
-        // Travel
-        (
-            "お待たせいたしました。",
-            SentenceScrubScript(
-                words: [
-                    Word("お待たせ", "making you wait"),
-                    Word("いたしました", "did", note: "Humble form of しました."),
-                ],
-                nuance: .init(
-                    naturalMeaning: "Thanks for waiting.",
-                    impliedMeaning: "Staff say it as they bring your order or come back to you.",
-                    notes: "Literally \"I have made you wait.\" You'll hear it at almost every counter."
-                )
-            )
-        ),
-        (
-            "こちらでお召し上がりですか？",
-            SentenceScrubScript(
-                words: [
-                    Word("こちら", "here", note: "Polite ここ."),
-                    Word("で", "at"),
-                    Word("お召し上がり", "eating", note: "Honorific 食べる, used for customers."),
-                    Word("ですか", "is it?"),
-                ],
-                nuance: .init(
-                    naturalMeaning: "For here?",
-                    impliedMeaning: "The \"for here or to go?\" question at cafés and fast food counters.",
-                    notes: "The answer is usually はい or 持ち帰りで (to go)."
-                )
-            )
-        ),
-        (
-            "少々お待ちください。",
-            SentenceScrubScript(
-                words: [
-                    Word("少々", "a moment", note: "Formal ちょっと."),
-                    Word("お待ち", "waiting", note: "Polite 待つ."),
-                    Word("ください", "please"),
-                ],
-                nuance: .init(
-                    naturalMeaning: "One moment, please.",
-                    impliedMeaning: "Staff stepping away briefly to check something.",
-                    notes: "A fixed phrase. Casual would be ちょっと待って."
-                )
-            )
-        ),
-        // Anime
-        (
-            "絶対、負けないからな！",
-            SentenceScrubScript(
-                words: [
-                    Word("絶対", "definitely, no matter what"),
-                    Word("負けない", "won't lose"),
-                    Word("から", "I'm telling you", note: "Here から isn't \"because\"; it's insistence."),
-                    Word("な", "(rough emphasis)"),
-                ],
-                nuance: .init(
-                    naturalMeaning: "I'm not going to lose, got it?",
-                    impliedMeaning: "A challenge, or a promise to a rival.",
-                    notes: "からな adds a rough \"you hear me?\". Common in anime, too strong for most real conversations."
-                )
-            )
-        ),
-        (
-            "なんでだよ！",
-            SentenceScrubScript(
-                words: [
-                    Word("なんで", "why"),
-                    Word("だ", "is"),
-                    Word("よ", "(emphasis)"),
-                ],
-                nuance: .init(
-                    naturalMeaning: "Why, though?!",
-                    impliedMeaning: "A frustrated protest: that makes no sense!",
-                    notes: "だよ adds force. Casual and a bit rough."
-                )
-            )
-        ),
-        (
-            "任せとけ！",
-            SentenceScrubScript(
-                words: [
-                    Word("任せ", "leave (it) to", note: "任せる."),
-                    Word("とけ", "do it, and that's that", note: "ておけ squashed: 任せておけ → 任せとけ."),
-                ],
-                nuance: .init(
-                    naturalMeaning: "Leave it to me!",
-                    impliedMeaning: "Confident, a little cocky.",
-                    notes: "A blunt command form. Textbook: 任せておけ, or politely 任せてください."
+                    naturalMeaning: "...Seriously? I don't know what to wear.",
+                    impliedMeaning: "He's going now. The question is settled, and the panic has already started.",
+                    notes: "何着ればいいか is \"what would be good to wear\". わかんない is the everyday way to say わからない."
                 )
             )
         ),

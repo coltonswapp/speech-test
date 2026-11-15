@@ -9,6 +9,7 @@ import {
   ListChecksIcon,
   BookOpenIcon,
   ChevronDownIcon,
+  FlaskConicalIcon,
   GraduationCapIcon,
   ImagesIcon,
   LayersIcon,
@@ -50,6 +51,7 @@ const ICONS: Record<string, LucideIcon> = {
   "/tts": AudioLinesIcon,
   "/tts/ambience": WindIcon,
   "/usage": ChartNoAxesColumnIcon,
+  "/experiments": FlaskConicalIcon,
   "/settings": SettingsIcon,
 };
 

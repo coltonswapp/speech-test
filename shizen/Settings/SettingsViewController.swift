@@ -57,6 +57,7 @@ final class SettingsViewController: UIViewController {
         case kana
         case lessons
         case dialogue
+        case clips
         case speaking
         case study
         case playground
@@ -68,6 +69,7 @@ final class SettingsViewController: UIViewController {
             case .kana: return "Kana"
             case .lessons: return "Lessons"
             case .dialogue: return "Dialogue"
+            case .clips: return "Clips"
             case .speaking: return "Speaking"
             case .study: return "Study"
             case .playground: return "Playground"
@@ -81,6 +83,7 @@ final class SettingsViewController: UIViewController {
             case .kana: return "textformat.characters"
             case .lessons: return "rectangle.grid.2x2"
             case .dialogue: return "bubble.left.and.bubble.right"
+            case .clips: return "play.rectangle"
             case .speaking: return "waveform"
             case .study: return "books.vertical"
             case .playground: return "sparkles"
@@ -101,9 +104,6 @@ final class SettingsViewController: UIViewController {
 
     private nonisolated enum DebugDestination: Int, CaseIterable, Hashable, Sendable {
         case onboarding
-        case journeyOnboarding
-        case tutorOnboarding
-        case naturalOnboarding
         case listenFirstOnboarding
         case textToSpeech
         case kanaLearningFlow
@@ -153,9 +153,6 @@ final class SettingsViewController: UIViewController {
         var title: String {
             switch self {
             case .onboarding: return "Auth + onboarding"
-            case .journeyOnboarding: return "Journey onboarding"
-            case .tutorOnboarding: return "Tutor-led onboarding"
-            case .naturalOnboarding: return "Listening-first onboarding"
             case .listenFirstOnboarding: return "Listening-first onboarding v2"
             case .textToSpeech: return "Text to Speech"
             case .kanaLearningFlow: return "Kana learning flow"
@@ -207,9 +204,6 @@ final class SettingsViewController: UIViewController {
         var subtitle: String {
             switch self {
             case .onboarding: return "Landing stubs · survey / slider / listening quiz · placeholder demos"
-            case .journeyOnboarding: return "Same landing · questions first · ear test · trial · auth at the end"
-            case .tutorOnboarding: return "Chat with Hana · name, goal, level · fake roleplay · streamed plan"
-            case .naturalOnboarding: return "Hana · textbook vs real · blind listen + gist · dissect spoken forms"
             case .listenFirstOnboarding: return "Payoff first · one shared conversation · unsquash · tap to skip · resumes"
             case .textToSpeech: return "Stream OpenAI TTS · sentence chunks · lyrics"
             case .kanaLearningFlow: return "Progress tiles · hiragana & katakana lessons · SRS"
@@ -221,7 +215,7 @@ final class SettingsViewController: UIViewController {
             case .hiraganaChart: return "Manual-layout gojūon reference"
             case .katakanaChart: return "Manual-layout gojūon reference"
             case .flashcards: return "Swipe right · know it / left · review"
-            case .savedVocabulary: return "Words saved from sentence scrub and the dictionary"
+            case .savedVocabulary: return "Words saved from Breakdown and the dictionary"
             case .lemmaResolution: return "Verb forms → dictionary headword · romaji · regression check"
             case .kanaSpelling: return "Tap tiles to spell the target word"
             case .kanaListenSpelling: return "Hear the word, then spell it in kana"
@@ -261,9 +255,6 @@ final class SettingsViewController: UIViewController {
         var symbolName: String {
             switch self {
             case .onboarding: return "person.crop.circle.badge.checkmark"
-            case .journeyOnboarding: return "door.left.hand.open"
-            case .tutorOnboarding: return "bubble.left.and.text.bubble.right"
-            case .naturalOnboarding: return "ear"
             case .listenFirstOnboarding: return "ear.badge.waveform"
             case .textToSpeech: return "waveform"
             case .kanaLearningFlow: return "square.grid.2x2"
@@ -591,6 +582,8 @@ final class SettingsViewController: UIViewController {
             return "CMS lessons and path layouts"
         case .dialogue:
             return "Replay, harness, and register"
+        case .clips:
+            return "YouTube clips with word-synced transcripts"
         case .speaking:
             return "Tutor, meters, and speech"
         case .study:
@@ -608,7 +601,7 @@ final class SettingsViewController: UIViewController {
         if currentBackend.geminiModel != nil, !GeminiJapaneseTokenizer.isConfigured {
             return "\(currentBackend.displayName) · no API key, falls back to MeCab"
         }
-        return "Sentence scrub · \(currentBackend.displayName)"
+        return "Breakdown · \(currentBackend.displayName)"
     }
 
     private func contextualGlossBackendSubtitle() -> String {
@@ -701,6 +694,8 @@ final class SettingsViewController: UIViewController {
                     .registerLadder,
                 ]) ?? []
             }
+        case .clips:
+            navigationController?.pushViewController(ClipListViewController(), animated: true)
         case .speaking:
             pushDetailList(title: link.title) { [weak self] in
                 self?.debugItems([
@@ -730,9 +725,6 @@ final class SettingsViewController: UIViewController {
             pushDetailList(title: link.title) { [weak self] in
                 self?.debugItems([
                     .onboarding,
-                    .journeyOnboarding,
-                    .tutorOnboarding,
-                    .naturalOnboarding,
                     .listenFirstOnboarding,
                     .stageLayouts,
                     .pillField,
@@ -766,12 +758,30 @@ final class SettingsViewController: UIViewController {
                 symbolName: "flask"
             ),
             SettingsMenuItem(
+                id: "dictionary-coverage",
+                title: "Dictionary coverage",
+                subtitle: "Lesson words with no callout · export for jmdict_supplement.tsv",
+                symbolName: "text.magnifyingglass"
+            ),
+            SettingsMenuItem(
+                id: "dictionary-checks",
+                title: "Dictionary checks",
+                subtitle: dictionaryChecksSubtitle(),
+                symbolName: "checklist"
+            ),
+            SettingsMenuItem(
                 id: "contextual-gloss",
                 title: "Contextual insights",
                 subtitle: contextualGlossBackendSubtitle(),
                 symbolName: "sparkles"
             ),
         ]
+    }
+
+    private func dictionaryChecksSubtitle() -> String {
+        let flagged = DictionaryFlagStore.shared.flags.count
+        let base = "Must-define words · flagged callouts (press and hold)"
+        return flagged == 0 ? base : "\(flagged) flagged · \(base)"
     }
 
     private func cmsLessonsItem() -> SettingsMenuItem {
@@ -835,6 +845,10 @@ final class SettingsViewController: UIViewController {
             presentAppTokenizerPicker(sourceView: sourceView)
         case "tokenizer-lab":
             navigationController?.pushViewController(TokenizerLabViewController(), animated: true)
+        case "dictionary-coverage":
+            navigationController?.pushViewController(DictionaryCoverageViewController(), animated: true)
+        case "dictionary-checks":
+            navigationController?.pushViewController(DictionaryChecksViewController(), animated: true)
         case "contextual-gloss":
             presentContextualGlossBackendPicker(sourceView: sourceView)
         case "cms-lessons":
@@ -936,12 +950,6 @@ final class SettingsViewController: UIViewController {
         switch row {
         case .onboarding:
             presentOnboardingPlayground()
-        case .journeyOnboarding:
-            presentOnboardingPlayground(entry: .journey)
-        case .tutorOnboarding:
-            present(TutorOnboardingHostController(), animated: true)
-        case .naturalOnboarding:
-            present(NaturalOnboardingHostController(), animated: true)
         case .listenFirstOnboarding:
             present(ListenFirstOnboardingHostController(), animated: true)
         case .textToSpeech:
@@ -1117,9 +1125,8 @@ final class SettingsViewController: UIViewController {
         }
     }
 
-    private func presentOnboardingPlayground(entry: AuthLandingViewController.Entry = .original) {
+    private func presentOnboardingPlayground() {
         let landing = AuthLandingViewController()
-        landing.entry = entry
         landing.isPreviewMode = true
         let nav = UINavigationController(rootViewController: landing)
         nav.setNavigationBarHidden(true, animated: false)
@@ -1172,7 +1179,7 @@ final class SettingsViewController: UIViewController {
     private func presentAppTokenizerPicker(sourceView: UIView) {
         let sheet = UIAlertController(
             title: "App tokenizer",
-            message: "Used for sentence scrub and other tokenized Japanese UI.",
+            message: "Used for Breakdown and other tokenized Japanese UI.",
             preferredStyle: .actionSheet
         )
         let current = JapaneseTokenizerBackend.preferred

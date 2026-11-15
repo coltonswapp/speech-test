@@ -55,6 +55,7 @@ struct ContextualRelatedWord: Equatable {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
         )
+        let focus = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         var seen = Set<String>()
         var words: [ContextualRelatedWord] = []
         for candidate in candidates {
@@ -63,12 +64,101 @@ struct ContextualRelatedWord: Equatable {
                 continue
             }
             if particleBlocklist.contains(word) { continue }
+            if word.count == 1, focus.contains(word) { continue }
             var note = glossWithoutVerbLabel(candidate.1)
             if note == word || note.count > 40 { note = "" }
             words.append(ContextualRelatedWord(word: word, note: note))
-            if words.count == 2 { break }
         }
-        return words
+        return Array(prioritized(words, surface: focus).prefix(2))
+    }
+
+    /// Same rule as the gateway `selectRelatedWords`: a complete split of the surface
+    /// leads, and other character chunks of that split are dropped. Nothing is invented.
+    private static func prioritized(
+        _ words: [ContextualRelatedWord],
+        surface: String
+    ) -> [ContextualRelatedWord] {
+        guard let cover = componentCover(surface: surface, words: words.map(\.word)) else {
+            return words
+        }
+        let byWord = Dictionary(words.map { ($0.word, $0) }, uniquingKeysWith: { first, _ in first })
+        var ordered: [ContextualRelatedWord] = []
+        var used = Set<String>()
+        for word in cover {
+            guard let item = byWord[word], used.insert(word).inserted else { continue }
+            ordered.append(item)
+        }
+        for item in words where used.insert(item.word).inserted {
+            if surface.contains(item.word) { continue }
+            ordered.append(item)
+        }
+        return ordered
+    }
+
+    /// Component words that tile `surface`, preferring fewer and longer pieces.
+    private static func componentCover(surface: String, words: [String]) -> [String]? {
+        let chars = Array(surface)
+        let count = chars.count
+        var seen = Set<String>()
+        let pieces = words.filter { piece in
+            let length = piece.count
+            guard length >= 2, length < count, seen.insert(piece).inserted else { return false }
+            return surface.contains(piece)
+        }
+        guard pieces.count >= 2 else { return nil }
+
+        var at = Array(repeating: [String](), count: count)
+        for piece in pieces {
+            let pieceChars = Array(piece)
+            let length = pieceChars.count
+            guard length > 0 else { continue }
+            var index = 0
+            while index + length <= count {
+                if Array(chars[index..<(index + length)]) == pieceChars {
+                    at[index].append(piece)
+                }
+                index += 1
+            }
+        }
+        for index in at.indices {
+            at[index].sort { $0.count > $1.count }
+        }
+
+        struct Choice {
+            var count: Int
+            var path: [String]
+        }
+        var best = Array(repeating: Choice(count: Int.max, path: []), count: count + 1)
+        best[count] = Choice(count: 0, path: [])
+        if count > 0 {
+            for index in stride(from: count - 1, through: 0, by: -1) {
+                for piece in at[index] {
+                    let length = piece.count
+                    let next = best[index + length]
+                    guard next.count < Int.max else { continue }
+                    let partCount = next.count + 1
+                    let path = [piece] + next.path
+                    let current = best[index]
+                    if partCount < current.count || (partCount == current.count && longerEarlier(path, than: current.path)) {
+                        best[index] = Choice(count: partCount, path: path)
+                    }
+                }
+            }
+        }
+        let chosen = best[0]
+        guard chosen.count >= 2, chosen.count < Int.max, chosen.path.joined() == surface else { return nil }
+        return chosen.path
+    }
+
+    private static func longerEarlier(_ path: [String], than other: [String]) -> Bool {
+        let left = path.map(\.count)
+        let right = other.map(\.count)
+        for index in 0..<max(left.count, right.count) {
+            let a = index < left.count ? left[index] : 0
+            let b = index < right.count ? right[index] : 0
+            if a != b { return a > b }
+        }
+        return false
     }
 
     private static let particleBlocklist: Set<String> = [

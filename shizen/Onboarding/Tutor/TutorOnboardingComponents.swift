@@ -2,7 +2,7 @@
 //  TutorOnboardingComponents.swift
 //  shizen
 //
-//  Shared step base and chat pieces for the Hana tutor onboarding.
+//  Shared step base and chat pieces for the Hana steps.
 //
 
 import InteractionKit
@@ -232,12 +232,6 @@ class TutorStepViewController: OnboardingViewController, UIGestureRecognizerDele
     /// Kick off the scripted beats once the header has started rising.
     func play() {}
 
-    func restart() {
-        resetStage()
-        hasStarted = true
-        start()
-    }
-
     func resetStage() {
         timeline.cancelAll()
         underHeaderScrollViews.removeAll()
@@ -361,18 +355,19 @@ class TutorStepViewController: OnboardingViewController, UIGestureRecognizerDele
         UIView.animateSlideIn(views, duration: 0.55, stagger: stagger, initialDelay: initialDelay)
     }
 
-    /// Demos a line's swipe until it's done, starting as a gentle lean and building slowly:
-    /// each hint pulls a little further and waits a little longer before the next. Skips a beat
-    /// while something is presented over the screen. A background tap fires the next one early.
+    /// Demos a line's swipe until it's done: starts as an obvious tug, repeats quickly, and pulls
+    /// further each time. Skips a beat while something is presented over the screen. A background
+    /// tap fires the next one early.
     func nudge(_ line: TutorSwipeLine, toward gesture: TutorSwipeLine.Gesture, after delay: TimeInterval, attempt: Int = 0) {
         timeline.after(delay) { [weak self, weak line] in
             guard let self, let line, !line.isDone(gesture) else { return }
             var next = attempt
             if self.presentedViewController == nil {
-                line.playHint(gesture, strength: min(1, 0.2 + 0.25 * CGFloat(attempt)))
+                line.playHint(gesture, strength: min(1, 0.7 + 0.15 * CGFloat(attempt)))
+                HapticsHelper.superLightHaptic()
                 next += 1
             }
-            self.nudge(line, toward: gesture, after: min(7, 3.5 + 1.25 * Double(attempt)), attempt: next)
+            self.nudge(line, toward: gesture, after: min(4, 2.5 + 0.5 * Double(attempt)), attempt: next)
         }
     }
 
@@ -653,6 +648,7 @@ final class TutorChatView: UIView {
     private weak var mascotAnchor: UIView?
     /// Hidden while another Hana flies into its slot; revealed when she lands.
     private var isMascotArriving = false
+    private var bottomScroll: (link: CADisplayLink, startY: CGFloat, startTime: CFTimeInterval, duration: TimeInterval)?
 
     private static let typingExpression = MascotPreset.thinking.expression
     /// Looking over at the bubble she just sent.
@@ -766,6 +762,43 @@ final class TutorChatView: UIView {
 
     func appendCustom(_ view: UIView) {
         insert(view)
+    }
+
+    /// Appends `views` together and fades them in one after another during a single scroll to the
+    /// new bottom. Appending them one by one restarts the scroll each time, which stutters.
+    func appendCustom(_ views: [UIView], stagger: TimeInterval, scrollDuration: TimeInterval) {
+        views.forEach { stack.addArrangedSubview($0) }
+        scrollView.layoutIfNeeded()
+        views.forEach { $0.prepareForSlideIn(slideDistance: TutorStepViewController.slideDistance(14)) }
+        UIView.animateSlideIn(views, duration: 0.5, stagger: stagger, initialDelay: 0)
+        startBottomScroll(duration: scrollDuration)
+    }
+
+    /// Frame by frame, not `setContentOffset(animated:)`: that has a fixed duration, and a finger
+    /// can't take over a UIView animation of the offset without the content jumping.
+    private func startBottomScroll(duration: TimeInterval) {
+        bottomScroll?.link.invalidate()
+        // Stops any scroll still animating from the last line.
+        scrollView.setContentOffset(scrollView.contentOffset, animated: false)
+        let link = CADisplayLink(target: self, selector: #selector(stepBottomScroll))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        bottomScroll = (link, scrollView.contentOffset.y, CACurrentMediaTime(), duration)
+        link.add(to: .main, forMode: .common)
+    }
+
+    @objc private func stepBottomScroll() {
+        guard let bottomScroll else { return }
+        let progress = min(1, max(0, (CACurrentMediaTime() - bottomScroll.startTime) / bottomScroll.duration))
+        if !scrollView.isDragging {
+            let inset = scrollView.contentInset
+            let maxY = max(-inset.top, scrollView.contentSize.height + inset.bottom - scrollView.bounds.height)
+            let eased = progress * progress * (3 - 2 * progress)
+            scrollView.contentOffset.y = bottomScroll.startY + (maxY - bottomScroll.startY) * eased
+        }
+        if progress >= 1 || scrollView.isDragging {
+            bottomScroll.link.invalidate()
+            self.bottomScroll = nil
+        }
     }
 
     /// Slides every message up and out, then empties the chat so a new set can start from the top.
@@ -1257,171 +1290,6 @@ final class TutorTypingIndicatorView: UIView {
 }
 
 // MARK: - Controls
-
-final class TutorReplyChip: UIControl {
-
-    let line: TutorLine
-
-    var isChosen = false {
-        didSet { applyChrome() }
-    }
-
-    init(line: TutorLine) {
-        self.line = line
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        layer.cornerRadius = 16
-        layer.cornerCurve = .continuous
-        accessibilityLabel = "\(line.japanese), \(line.english)"
-        accessibilityTraits = .button
-
-        let japanese = UILabel()
-        japanese.text = line.japanese
-        japanese.font = .systemFont(ofSize: 18, weight: .semibold)
-        japanese.textColor = .label
-        japanese.numberOfLines = 0
-
-        let english = UILabel()
-        english.text = line.english
-        english.font = .preferredFont(forTextStyle: .footnote)
-        english.textColor = .secondaryLabel
-        english.numberOfLines = 0
-
-        let stack = UIStackView(arrangedSubviews: [japanese, english])
-        stack.axis = .vertical
-        stack.spacing = 2
-        stack.isUserInteractionEnabled = false
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-
-        let icon = UIImageView(image: UIImage(systemName: "mic.fill"))
-        icon.tintColor = .tertiaryLabel
-        icon.contentMode = .scaleAspectFit
-        icon.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(icon)
-
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: icon.leadingAnchor, constant: -12),
-
-            icon.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-            icon.centerYAnchor.constraint(equalTo: centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: 16),
-        ])
-        applyChrome()
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (chip: TutorReplyChip, _) in
-            chip.applyChrome()
-        }
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override var isHighlighted: Bool {
-        didSet {
-            UIView.animate(withDuration: 0.15, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
-                self.transform = self.isHighlighted ? CGAffineTransform(scaleX: 0.97, y: 0.97) : .identity
-            }
-        }
-    }
-
-    private func applyChrome() {
-        layer.borderWidth = isChosen ? ExperimentCardStroke.emphasisWidth : ExperimentCardStroke.normalWidth
-        layer.borderColor = (isChosen ? ExperimentPalette.highlightBorder : ExperimentPalette.cardBorder).cgColor
-        backgroundColor = isChosen ? ExperimentPalette.highlightFill : ExperimentPalette.cardSurface
-    }
-}
-
-/// Fake mic capture: pulsing bars and the line to say. No audio is recorded.
-final class TutorListeningView: UIView {
-
-    private var bars: [UIView] = []
-
-    init(prompt: String) {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        backgroundColor = ExperimentPalette.cardSurface
-        layer.cornerRadius = 28
-        layer.cornerCurve = .continuous
-        layer.borderWidth = ExperimentCardStroke.normalWidth
-        layer.borderColor = ExperimentPalette.cardBorder.cgColor
-
-        let mic = UIImageView(image: UIImage(
-            systemName: "mic.fill",
-            withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
-        ))
-        mic.tintColor = .systemRed
-        mic.translatesAutoresizingMaskIntoConstraints = false
-
-        let label = UILabel()
-        label.text = "Say it: \(prompt)"
-        label.font = .systemFont(ofSize: 15, weight: .semibold)
-        label.textColor = .label
-        label.numberOfLines = 2
-        label.adjustsFontSizeToFitWidth = true
-        label.minimumScaleFactor = 0.8
-        label.translatesAutoresizingMaskIntoConstraints = false
-
-        let barStack = UIStackView()
-        barStack.axis = .horizontal
-        barStack.alignment = .center
-        barStack.spacing = 3
-        barStack.translatesAutoresizingMaskIntoConstraints = false
-        for _ in 0..<5 {
-            let bar = UIView()
-            bar.backgroundColor = .systemRed
-            bar.layer.cornerRadius = 1.5
-            bar.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                bar.widthAnchor.constraint(equalToConstant: 3),
-                bar.heightAnchor.constraint(equalToConstant: 22),
-            ])
-            barStack.addArrangedSubview(bar)
-            bars.append(bar)
-        }
-
-        addSubview(mic)
-        addSubview(label)
-        addSubview(barStack)
-
-        NSLayoutConstraint.activate([
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 56),
-            mic.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-            mic.centerYAnchor.constraint(equalTo: centerYAnchor),
-
-            label.leadingAnchor.constraint(equalTo: mic.trailingAnchor, constant: 12),
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: barStack.leadingAnchor, constant: -12),
-
-            barStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
-            barStack.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        guard window != nil else { return }
-        let durations: [CFTimeInterval] = [0.32, 0.45, 0.27, 0.5, 0.38]
-        for (index, bar) in bars.enumerated() {
-            let wobble = CABasicAnimation(keyPath: "transform.scale.y")
-            wobble.fromValue = 0.25
-            wobble.toValue = 1
-            wobble.duration = durations[index % durations.count]
-            wobble.autoreverses = true
-            wobble.repeatCount = .infinity
-            wobble.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            bar.layer.add(wobble, forKey: "listening")
-        }
-    }
-}
 
 final class TutorCapsuleLabel: UIView {
 

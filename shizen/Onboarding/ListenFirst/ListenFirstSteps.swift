@@ -3,8 +3,8 @@
 //  shizen
 //
 //  Screens unique to listening-first v2: the gap (a slider from textbook to real life),
-//  the shared Mika/Kaito listen, the unsquash ladder, plus style and path
-//  steps that reuse the Natural flow with v2 content.
+//  the shared Mika/Kaito listen, the unsquash ladder, plus the path step that
+//  reuses the Natural flow with v2 content.
 //
 
 import AVFoundation
@@ -485,7 +485,7 @@ final class ListenFirstGapStepViewController: ListenFirstStepViewController {
     }
 }
 
-// MARK: - 3 · Just listen
+// MARK: - 3 · Can you catch it?
 
 final class ListenFirstListenStepViewController: ListenFirstStepViewController {
 
@@ -513,7 +513,7 @@ final class ListenFirstListenStepViewController: ListenFirstStepViewController {
     private var hasAnswered = false
 
     override func buildStage() {
-        setupOnboarding(title: "Just listen. No transcript.", subtitle: ListenFirstContent.sceneTitle)
+        setupOnboarding(title: "Can you catch it?", subtitle: ListenFirstContent.sceneTitle)
         isPlaying = false
         hasHeardOnce = false
         hasAnswered = false
@@ -561,7 +561,7 @@ final class ListenFirstListenStepViewController: ListenFirstStepViewController {
             content.setCustomSpacing(24, after: last)
         }
 
-        hintRow = hanaRow("Listen for the three lines you just met. Just get the gist.")
+        hintRow = hanaRow("Those three lines are coming at full speed, with no text. Listen for one thing: what's going on?")
         hintRow.alpha = 0
         content.addArrangedSubview(hintRow)
         // Room under the play button, whether the hint or the gist question sits below it.
@@ -705,7 +705,7 @@ final class ListenFirstListenStepViewController: ListenFirstStepViewController {
         scrollToBottom()
         advanceProgressBeat(to: 2)
         timeline.after(0.8) { [weak self] in
-            self?.revealCTA("Show me the words")
+            self?.revealCTA("Show me how")
         }
     }
 
@@ -722,8 +722,8 @@ final class ListenFirstListenStepViewController: ListenFirstStepViewController {
     }
 }
 
-// MARK: - 4 · Now take it apart
-// The screen itself is in ListenFirstTakeApartStep.swift. The unsquash ladder views below
+// MARK: - Unsquash ladder
+// The unsquash ladder views below
 // (panel and callout strip) are no longer shown anywhere.
 
 /// A spoken chunk that splits into tiles, then steps back toward its textbook form on each tap.
@@ -1103,19 +1103,7 @@ final class ListenFirstCalloutStrip: UIView {
     }
 }
 
-// MARK: - 6 · Whose Japanese
-
-final class ListenFirstStyleStepViewController: NaturalRegisterStepViewController {
-    override func phrases(for register: NaturalRegister) -> [TutorLine] {
-        ListenFirstContent.phrases(for: register)
-    }
-
-    override func breakdown(for phrase: TutorLine) -> SentenceScrubScript? {
-        ListenFirstContent.breakdowns[phrase.japanese]
-    }
-}
-
-// MARK: - 8 · Your path
+// MARK: - 6 · Your path
 
 final class ListenFirstPlanStepViewController: NaturalPlanStepViewController {
 
@@ -1146,7 +1134,7 @@ final class ListenFirstPlanStepViewController: NaturalPlanStepViewController {
         ])
     }
 
-    /// Glides in from the level screen's spot. Once the path is built she lives in the chat.
+    /// Pops in at her spot. Once the path is built she lives in the chat.
     override func hanaStageDidAppear(firstTime: Bool) {
         guard let hanaStage else { return }
         if isPicking {
@@ -1242,14 +1230,13 @@ final class ListenFirstPlanStepViewController: NaturalPlanStepViewController {
         }
     }
 
-    /// Four rows, each tied to a setting the answers actually change.
+    /// Three rows from the answers.
     override var planChecklist: [String] {
         let gentleStart = natural.level == .brandNew || natural.level == .kana
         return [
             "Starting you on the \(natural.track) track",
             "Setting transcripts to “\(natural.level.title)”",
             gentleStart ? "Easing playback a touch slower to start" : "Keeping playback at natural speed",
-            "Flagging \(natural.register.focus)",
         ]
     }
 

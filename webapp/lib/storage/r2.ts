@@ -3,6 +3,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -86,4 +87,39 @@ export async function getSignedDownloadUrl(
 ): Promise<string> {
   const command = new GetObjectCommand({ Bucket: getBucket(), Key: key });
   return getSignedUrl(getClient(), command, { expiresIn: expiresInSeconds });
+}
+
+/** Signed PUT for one key. The uploader must send the same Content-Type. */
+export async function getSignedUploadUrl(
+  key: string,
+  contentType: string,
+  expiresInSeconds = 900
+): Promise<string> {
+  const command = new PutObjectCommand({
+    Bucket: getBucket(),
+    Key: key,
+    ContentType: contentType,
+  });
+  return getSignedUrl(getClient(), command, { expiresIn: expiresInSeconds });
+}
+
+/** Immediate "subfolders" under `prefix` (which should end in "/"). */
+export async function listChildPrefixes(prefix: string): Promise<string[]> {
+  const prefixes: string[] = [];
+  let token: string | undefined;
+  do {
+    const result = await getClient().send(
+      new ListObjectsV2Command({
+        Bucket: getBucket(),
+        Prefix: prefix,
+        Delimiter: "/",
+        ContinuationToken: token,
+      })
+    );
+    for (const entry of result.CommonPrefixes ?? []) {
+      if (entry.Prefix) prefixes.push(entry.Prefix);
+    }
+    token = result.IsTruncated ? result.NextContinuationToken : undefined;
+  } while (token);
+  return prefixes;
 }

@@ -19,8 +19,6 @@ final class MultiSelectHighlightExperimentViewController: UIViewController {
 
     private let heightSlider = UISlider()
     private let heightValueLabel = UILabel()
-    private let radiusSlider = UISlider()
-    private let radiusValueLabel = UILabel()
     private let textColorControl = UISegmentedControl(items: ["White", "Dark"])
 
     override func viewDidLoad() {
@@ -82,14 +80,6 @@ final class MultiSelectHighlightExperimentViewController: UIViewController {
             min: 0.15,
             max: 1,
             action: #selector(heightChanged)
-        ))
-        contentStack.addArrangedSubview(makeSliderSection(
-            title: "Corner radius",
-            slider: radiusSlider,
-            valueLabel: radiusValueLabel,
-            min: 0,
-            max: 14,
-            action: #selector(radiusChanged)
         ))
         contentStack.addArrangedSubview(makeTextColorSection())
 
@@ -260,7 +250,6 @@ final class MultiSelectHighlightExperimentViewController: UIViewController {
 
     private func reloadControls() {
         heightSlider.value = Float(ExperimentSettings.spanHighlightBandHeight)
-        radiusSlider.value = Float(ExperimentSettings.spanHighlightCornerRadius)
         textColorControl.selectedSegmentIndex = ExperimentSettings.spanHighlightUsesDarkText ? 1 : 0
         updateSliderLabels()
         refreshSwatchSelection()
@@ -268,7 +257,6 @@ final class MultiSelectHighlightExperimentViewController: UIViewController {
 
     private func updateSliderLabels() {
         heightValueLabel.text = "\(Int((heightSlider.value * 100).rounded()))%"
-        radiusValueLabel.text = "\(Int(radiusSlider.value.rounded())) pt"
     }
 
     private func refreshSwatchSelection() {
@@ -310,12 +298,6 @@ final class MultiSelectHighlightExperimentViewController: UIViewController {
 
     @objc private func heightChanged() {
         ExperimentSettings.spanHighlightBandHeight = CGFloat(heightSlider.value)
-        updateSliderLabels()
-        publish()
-    }
-
-    @objc private func radiusChanged() {
-        ExperimentSettings.spanHighlightCornerRadius = CGFloat(radiusSlider.value)
         updateSliderLabels()
         publish()
     }

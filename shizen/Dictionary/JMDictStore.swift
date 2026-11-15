@@ -37,14 +37,30 @@ struct JMDictEntry: Decodable, FetchableRecord, Equatable {
 
 /// Result of resolving a tapped token surface to JMdict entries.
 struct JMDictLookupResult {
+    /// Which step of `JMDictStore.lookup` produced `entries`. `tailTrim` and `prefix`
+    /// are guesses and often name a different word than the one tapped.
+    enum MatchKind: String {
+        case none
+        case lemmaGuess
+        case exact
+        case honorificStem
+        case tailTrim
+        case prefix
+    }
+
     let surface: String
     let entries: [JMDictEntry]
+    var matchKind: MatchKind = .none
+    /// Set when `surface` is kana and one entry clearly owns that reading (ここ → 此処, a word
+    /// usually written in kana), even though another entry outscores it (個々). That entry
+    /// becomes `primaryEntry`, and `isContextSensitiveKanaLookup` trusts it.
+    var preferredKanaSequence: Int? = nil
 
     /// Headword expression when lookup resolved to a different form than `surface` (e.g. 歩いて → 歩く).
+    /// Nil for a word usually written in kana: ここ is not "→ 此処", it is just ここ.
     var dictionaryForm: String? {
-        guard let primary = entries.max(by: { ($0.score ?? 0) < ($1.score ?? 0) }) ?? entries.first else {
-            return nil
-        }
+        guard let primary = primaryEntry else { return nil }
+        if preferredKanaSequence == primary.sequence, primary.isUsuallyKana { return nil }
         let expr = primary.expression.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !expr.isEmpty, expr != surface else { return nil }
         return expr
@@ -52,22 +68,47 @@ struct JMDictLookupResult {
 
     /// Preferred yomi for `dictionaryForm`, when present.
     var dictionaryFormReading: String? {
-        guard dictionaryForm != nil,
-              let primary = entries.max(by: { ($0.score ?? 0) < ($1.score ?? 0) }) ?? entries.first
-        else { return nil }
+        guard dictionaryForm != nil, let primary = primaryEntry else { return nil }
         let reading = primary.displayReading.trimmingCharacters(in: .whitespacesAndNewlines)
         return reading.isEmpty ? nil : reading
     }
 
     /// Highest-scored headword, whether or not it differs from `surface`.
     var resolvedLemma: String? {
-        let primary = entries.max(by: { ($0.score ?? 0) < ($1.score ?? 0) }) ?? entries.first
-        let expr = primary?.expression.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let expr = primaryEntry?.expression.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return expr.isEmpty ? nil : expr
     }
 
+    /// `entries` with the preferred kana entry's rows first (ここ: 此処 before 個々); otherwise unchanged.
+    var rankedEntries: [JMDictEntry] {
+        guard let preferredKanaSequence else { return entries }
+        return entries.filter { $0.sequence == preferredKanaSequence }
+            + entries.filter { $0.sequence != preferredKanaSequence }
+    }
+
+    /// Rows of the entry the lookup settled on (all senses of `primaryEntry`'s sequence).
+    var primaryEntryRows: [JMDictEntry] {
+        guard let primary = primaryEntry else { return [] }
+        return entries.filter { $0.sequence == primary.sequence }
+    }
+
     var primaryEntry: JMDictEntry? {
-        entries.max(by: { ($0.score ?? 0) < ($1.score ?? 0) }) ?? entries.first
+        if let preferredKanaSequence,
+           let preferred = entries
+               .filter({ $0.sequence == preferredKanaSequence })
+               .max(by: { ($0.score ?? 0) < ($1.score ?? 0) }) {
+            return preferred
+        }
+        return entries.max(by: { ($0.score ?? 0) < ($1.score ?? 0) }) ?? entries.first
+    }
+}
+
+extension JMDictEntry {
+    /// JMdict's "word usually written using kana alone" (`uk`) on this sense.
+    var isUsuallyKana: Bool {
+        guard let tags else { return false }
+        return tags.contains("usually written using kana alone")
+            || tags.split(separator: " ").contains("uk")
     }
 }
 
@@ -120,6 +161,7 @@ final class JMDictStore {
         let surfaceKana = JapaneseTokenizer.hiraganaReading(for: trimmed)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         var result: [JMDictEntry] = []
+        var matchKind: JMDictLookupResult.MatchKind = .none
         do {
             try dbQueue.read { db in
                 if treatAsRenyoStem || Self.looksInflectedForLemmaGuess(trimmed),
@@ -131,10 +173,12 @@ final class JMDictStore {
                     preferIkuOverOkonau: preferIkuOverOkonau
                    ), !rows.isEmpty {
                     result = rows
+                    matchKind = .lemmaGuess
                     return
                 }
                 if let rows = try exactMatch(in: db, surface: trimmed), !rows.isEmpty {
                     result = rows
+                    matchKind = .exact
                     return
                 }
                 if let rows = try bestLemmaGuessExactMatch(
@@ -144,12 +188,14 @@ final class JMDictStore {
                     preferIkuOverOkonau: preferIkuOverOkonau
                 ), !rows.isEmpty {
                     result = rows
+                    matchKind = .lemmaGuess
                     return
                 }
                 // お隣 is not a headword; 隣 is. Prefer that over prefix-jumping to お隣さん.
                 if let stem = Self.honorificOStem(trimmed),
                    let rows = try exactMatch(in: db, surface: stem), !rows.isEmpty {
                     result = rows
+                    matchKind = .honorificStem
                     return
                 }
                 // Tail trim: conjugated forms. Skip when the surface is a known i-adjective
@@ -161,21 +207,121 @@ final class JMDictStore {
                         if let rows = try exactMatch(in: db, surface: shortened), !rows.isEmpty {
                             if Self.shouldRejectSpuriousSingleKanjiTailMatch(trimmed: shortened, original: trimmed)
                                 || Self.shouldRejectKanjiSuffixTailMatch(trimmed: shortened, original: trimmed)
-                                || Self.shouldRejectConjugationRemainderTailMatch(trimmed: shortened, original: trimmed) {
+                                || Self.shouldRejectConjugationRemainderTailMatch(trimmed: shortened, original: trimmed)
+                                || Self.shouldRejectKatakanaSuffixTailMatch(trimmed: shortened, original: trimmed) {
                                 continue
                             }
                             result = rows
+                            matchKind = .tailTrim
                             return
                         }
                     }
                 }
                 result = try prefixMatchExpression(in: db, surface: trimmed, limit: 20)
                     .filter { !Self.shouldRejectLongerPrefixMatch(surface: trimmed, matchExpression: $0.expression) }
+                if !result.isEmpty {
+                    matchKind = .prefix
+                }
             }
         } catch {
             print("JMDictStore: query error: \(error)")
         }
-        return JMDictLookupResult(surface: trimmed, entries: result)
+        var lookup = JMDictLookupResult(surface: trimmed, entries: result, matchKind: matchKind)
+        if matchKind == .exact || matchKind == .lemmaGuess {
+            lookup.preferredKanaSequence = Self.preferredKanaSequence(surface: trimmed, entries: result)
+        }
+        return lookup
+    }
+
+    /// Kana a learner usually sees for these words, pinned where JMdict's scores pick a rarer
+    /// one (いる → 要る "to need", なる → 生る "to bear fruit"). Value is the headword expression.
+    static let pinnedKanaHeadwords: [String: String] = [
+        "いる": "居る",
+        "ある": "有る",
+        "なる": "成る",
+    ]
+
+    /// Grammar pieces whose "usually kana" reading belongs to an unrelated noun
+    /// (ます → 鱒 "trout", して → 仕手, だし → 出し). Never resolved by kana preference.
+    static let kanaPreferenceExclusions: Set<String> = ["ます", "して", "だし"]
+
+    /// The entry that owns a kana `surface` as its reading, or nil when it is a toss-up.
+    ///
+    /// 1. A pin in `pinnedKanaHeadwords`.
+    /// 2. Among common entries tagged "usually written in kana" whose reading is `surface`:
+    ///    the only one, or one that scores at least double the next (ここ → 此処 over 個々,
+    ///    ある → 有る over 或る).
+    ///
+    /// Only "usually written in kana" entries qualify. A plain score pick turns particles into
+    /// nouns (よ → 世, の → 野). Still nil when:
+    /// - a kana headword spelled like `surface` has a score of its own (よ, で, もう);
+    ///   score-0 ones (こと, ため) do not block.
+    /// - a more common word of the same kind shares the reading (かむ: 噛む over 擤む,
+    ///   ひく: 引く over 轢く). A different kind does not block (ここ: noun 個々 vs pronoun 此処).
+    static func preferredKanaSequence(surface: String, entries: [JMDictEntry]) -> Int? {
+        guard isKanaOnly(surface), !entries.isEmpty,
+              !kanaPreferenceExclusions.contains(surface) else { return nil }
+
+        if let pinned = pinnedKanaHeadwords[surface],
+           let row = entries.first(where: { $0.expression == pinned }) {
+            return row.sequence
+        }
+
+        let sameSpellingScore = entries
+            .filter { $0.expression == surface }
+            .map { $0.score ?? 0 }
+            .max() ?? 0
+        guard sameSpellingScore == 0 else { return nil }
+
+        struct Candidate {
+            let sequence: Int
+            var score: Int
+            var usuallyKana: Bool
+            /// From the first sense seen (entries arrive in sense order within a sequence).
+            let kind: String
+        }
+        var bySequence: [Int: Candidate] = [:]
+        var order: [Int] = []
+        for row in entries where row.expression != surface
+            && (row.reading == surface || row.primaryReading == surface) {
+            let score = row.score ?? 0
+            if var existing = bySequence[row.sequence] {
+                existing.score = max(existing.score, score)
+                existing.usuallyKana = existing.usuallyKana || row.isUsuallyKana
+                bySequence[row.sequence] = existing
+            } else {
+                order.append(row.sequence)
+                bySequence[row.sequence] = Candidate(
+                    sequence: row.sequence,
+                    score: score,
+                    usuallyKana: row.isUsuallyKana,
+                    kind: wordKind(row.tags)
+                )
+            }
+        }
+        let common = order.compactMap { bySequence[$0] }.filter { $0.score > 0 }
+
+        let ranked = common.filter(\.usuallyKana).sorted { $0.score > $1.score }
+        guard let top = ranked.first else { return nil }
+        if ranked.count > 1, top.score < ranked[1].score * 2 { return nil }
+        let outranked = common.contains {
+            !$0.usuallyKana && $0.kind == top.kind && $0.score * 2 > top.score * 3
+        }
+        return outranked ? nil : top.sequence
+    }
+
+    /// Coarse word kind from a JMdict tag string (codes like "v5k" or labels like "Godan verb").
+    private static func wordKind(_ tags: String?) -> String {
+        let lower = (tags ?? "").lowercased()
+        let codes = lower.split(separator: " ").map(String.init)
+        if codes.contains(where: { $0.hasPrefix("v5") || $0.hasPrefix("v1") || $0 == "vk" })
+            || lower.contains("godan verb") || lower.contains("ichidan verb") {
+            return "verb"
+        }
+        if codes.contains("adj-i") { return "adj-i" }
+        if codes.contains("adj-na") { return "adj-na" }
+        if codes.first == "n" || lower.hasPrefix("noun") { return "n" }
+        return codes.first ?? ""
     }
 
     /// Entries whose headword `expression` is exactly `expression`. A shared reading does not count.
@@ -228,6 +374,8 @@ final class JMDictStore {
         guard let primary = lookup.primaryEntry else { return true }
         let expression = primary.expression.trimmingCharacters(in: .whitespacesAndNewlines)
         if expression == surface { return false }
+        // ここ → 此処, すごい → 凄い: the entry clearly owns this kana reading.
+        if let preferred = lookup.preferredKanaSequence, primary.sequence == preferred { return false }
         if hasExactExpressionMatch(for: surface) { return true }
         if inflectionReadingLinesUp(surface: surface, entry: primary, inSentence: sentence) {
             return false
@@ -1096,6 +1244,17 @@ final class JMDictStore {
         lemmaReading: String,
         tags: String?
     ) -> String? {
+        // 来る changes its stem (き / こ / く). The rules below treat it as a godan る verb
+        // and read 来ました as くりました, or miss 来た and fall back to くる.
+        if ConjugationForm.wordClass(lemma: lemmaExpression, tags: tags) == .kuru,
+           let kuru = ConjugationForm.reading(
+            surface: surface,
+            lemma: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+           ) {
+            return kuru
+        }
         if let progressive = progressiveReading(
             surface: surface,
             lemmaExpression: lemmaExpression,
@@ -1907,6 +2066,16 @@ final class JMDictStore {
     private static func shouldRejectKanjiSuffixTailMatch(trimmed: String, original: String) -> Bool {
         guard trimmed != original, original.hasPrefix(trimmed) else { return false }
         return original.dropFirst(trimmed.count).contains(where: isKanjiCharacter)
+    }
+
+    /// Tail-trim is for kana conjugations, and conjugation is never katakana. Dropping
+    /// katakana (ウォーターパーク → ウォーター) splits a loanword compound and shows the wrong
+    /// word ("water"). Keep looking or miss, so the contextual gloss can cover the whole word.
+    private static func shouldRejectKatakanaSuffixTailMatch(trimmed: String, original: String) -> Bool {
+        guard trimmed != original, original.hasPrefix(trimmed) else { return false }
+        let remainder = original.dropFirst(trimmed.count)
+        guard !remainder.isEmpty else { return false }
+        return remainder.unicodeScalars.allSatisfy { (0x30A1...0x30FF).contains($0.value) }
     }
 
     /// 立てられなくて tail-trims to the noun 立て. Leftover られ/ない/て is conjugation,

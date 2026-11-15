@@ -2,7 +2,7 @@
 //  ListenFirstBreakdownStep.swift
 //  shizen
 //
-//  Screen 5 · Every line comes apart. One line from the conversation, Japanese only, and
+//  Screen 4 · Every line comes apart. One line from the conversation, Japanese only, and
 //  the two lesson gestures in order: swipe left for the English, then swipe right to take
 //  it apart in the lesson's real breakdown screen (scripted, so nothing calls the gateway).
 //
@@ -14,7 +14,7 @@ final class ListenFirstBreakdownStepViewController: ListenFirstStepViewControlle
 
     override var progressBeatCount: Int { 3 }
 
-    /// Mika's "gotta go" line: new English, and なきゃ and ちゃう to dissect.
+    /// Mika's "you have to go" line: the turn in the story, and なきゃ used to push, not to leave.
     private static let lineIndex = 2
 
     private var chat: TutorChatView?
@@ -55,7 +55,10 @@ final class ListenFirstBreakdownStepViewController: ListenFirstStepViewControlle
         guard let chat, let swipeLine else { return }
         timeline.after(0.3) { [weak self] in
             chat.play([
-                .tutorText("Here's another line from that conversation. No English this time."),
+                .tutorText(self?.listen.caughtGist == true
+                    ? "You got the gist. Here's how to catch the rest."
+                    : "Here's how to catch what you missed."),
+                .tutorText("This line's from that conversation."),
             ]) { [weak self] in
                 guard let self else { return }
                 chat.appendCustom(self.isTrailing
@@ -68,10 +71,10 @@ final class ListenFirstBreakdownStepViewController: ListenFirstStepViewControlle
     }
 
     private func askForEnglish() {
-        chat?.play([.tutorText("Swipe left on it to see the English.")]) { [weak self] in
+        chat?.play([.tutorText("Not sure what a line means? Swipe left.")]) { [weak self] in
             guard let self, let swipeLine = self.swipeLine else { return }
             swipeLine.isRevealEnabled = true
-            self.nudge(swipeLine, toward: .revealEnglish, after: 1.4)
+            self.nudge(swipeLine, toward: .revealEnglish, after: 0.8)
         }
     }
 
@@ -79,7 +82,7 @@ final class ListenFirstBreakdownStepViewController: ListenFirstStepViewControlle
     private func askForBreakdown() {
         advanceProgressBeat(to: 1)
         timeline.after(0.6) { [weak self] in
-            self?.chat?.play([.tutorText("Now swipe right to take it apart.")]) { [weak self] in
+            self?.chat?.play([.tutorText("Not sure how it's built? Swipe right to take it apart.")]) { [weak self] in
                 guard let self, let swipeLine = self.swipeLine,
                       let script = ListenFirstContent.breakdowns[self.line.japanese] else { return }
                 let line = self.line
@@ -88,7 +91,7 @@ final class ListenFirstBreakdownStepViewController: ListenFirstStepViewControlle
                         self?.finish()
                     }
                 }
-                self.nudge(swipeLine, toward: .breakdown, after: 1.4)
+                self.nudge(swipeLine, toward: .breakdown, after: 0.8)
             }
         }
     }
@@ -102,7 +105,7 @@ final class ListenFirstBreakdownStepViewController: ListenFirstStepViewControlle
             self?.chat?.play([
                 .tutorText("Left for the English, right to take it apart. Every line in a lesson works this way."),
             ]) { [weak self] in
-                self?.revealCTA("Next")
+                self?.revealCTA("Try the whole conversation")
             }
         }
     }

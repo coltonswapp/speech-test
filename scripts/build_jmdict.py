@@ -19,9 +19,14 @@ Priority score mapping (higher = more common):
     gai1               +1500
     gai2               +500
     nf01–nf24          +600 − (rank*25)  (nf01 most frequent)
+
+Supplement:
+    scripts/jmdict_supplement.tsv adds Shizen's own rows after the JMdict pass (words
+    lesson content uses that JMdict lacks). Pass --supplement '' to skip it.
 """
 
 import argparse
+import csv
 import gzip
 import os
 import sqlite3
@@ -252,6 +257,63 @@ def iter_entries(xml_path: str):
         elem.clear()
 
 
+# ── Supplement ────────────────────────────────────────────────────────────────
+
+# Synthetic sequence numbers sit far above JMdict's (1000000–9999999) so they never collide.
+SUPPLEMENT_SEQUENCE_BASE = 90_000_000
+SUPPLEMENT_DEFAULT_SCORE = 1000
+SUPPLEMENT_COLUMNS = ["expression", "reading", "glossary", "tags", "info", "score"]
+
+
+def iter_supplement(tsv_path: str):
+    """Yield entry dicts from the hand-curated supplement TSV.
+
+    Columns: expression, reading, glossary, tags, info, score (header row required).
+    Lines starting with # are comments. Rows with an empty glossary are skipped (a
+    to-do backlog). Rows sharing expression + reading become senses of one entry.
+    """
+    sequences: dict = {}
+    pending = 0
+    with open(tsv_path, encoding="utf-8", newline="") as f:
+        lines = (line for line in f if line.strip() and not line.lstrip().startswith("#"))
+        reader = csv.DictReader(lines, delimiter="\t", quoting=csv.QUOTE_NONE)
+        missing = [c for c in ("expression", "reading", "glossary") if c not in (reader.fieldnames or [])]
+        if missing:
+            raise SystemExit(f"ERROR: {tsv_path} header is missing {', '.join(missing)}")
+        for row in reader:
+            expression = (row.get("expression") or "").strip()
+            reading = (row.get("reading") or "").strip()
+            glossary = (row.get("glossary") or "").strip()
+            if not expression:
+                continue
+            if not glossary:
+                pending += 1
+                continue
+            if not reading:
+                raise SystemExit(f"ERROR: {tsv_path}: {expression} has a glossary but no reading")
+            score_raw = (row.get("score") or "").strip()
+            try:
+                score = int(score_raw) if score_raw else SUPPLEMENT_DEFAULT_SCORE
+            except ValueError:
+                raise SystemExit(f"ERROR: {tsv_path}: {expression} has non-integer score {score_raw!r}")
+            key = (expression, reading)
+            if key not in sequences:
+                sequences[key] = SUPPLEMENT_SEQUENCE_BASE + len(sequences)
+            yield {
+                "sequence": sequences[key],
+                "expression": expression,
+                "reading": reading,
+                # Same rule as JMdict rows: a kanji headword carries its kana reading.
+                "primary_reading": reading if expression != reading else None,
+                "glossary": glossary,
+                "info": (row.get("info") or "").strip() or None,
+                "tags": (row.get("tags") or "").strip() or None,
+                "score": score,
+            }
+    if pending:
+        print(f"Supplement: skipped {pending} row(s) with no glossary yet.")
+
+
 # ── Database ──────────────────────────────────────────────────────────────────
 
 DDL = """
@@ -296,7 +358,7 @@ END;
 # to avoid adding a column to entries. The FTS table is populated manually below.
 
 
-def build_db(xml_path: str, out_path: str):
+def build_db(xml_path: str, out_path: str, supplement_path: str = None):
     if os.path.exists(out_path):
         os.remove(out_path)
 
@@ -329,6 +391,18 @@ def build_db(xml_path: str, out_path: str):
 
     if batch:
         flush()
+
+    if supplement_path:
+        if not os.path.exists(supplement_path):
+            raise SystemExit(f"ERROR: supplement not found at {supplement_path}")
+        added = 0
+        for entry in iter_supplement(supplement_path):
+            batch.append(entry)
+            added += 1
+        if batch:
+            flush()
+        total += added
+        print(f"\nSupplement: added {added} row(s) from {supplement_path}")
 
     # Build FTS in a second pass so rowids are authoritative from the DB.
     print(f"\n{total} entries inserted. Building FTS index…")
@@ -388,6 +462,11 @@ def main():
         default=os.path.join(repo_root, "shizen", "jmdict.sqlite"),
         help="Output SQLite path (default: shizen/jmdict.sqlite)",
     )
+    parser.add_argument(
+        "--supplement",
+        default=os.path.join(repo_root, "scripts", "jmdict_supplement.tsv"),
+        help="Extra rows TSV merged after JMdict (default: scripts/jmdict_supplement.tsv; '' to skip)",
+    )
     args = parser.parse_args()
 
     xml_path = args.xml
@@ -400,7 +479,7 @@ def main():
         print(f"ERROR: XML not found at {xml_path}", file=sys.stderr)
         sys.exit(1)
 
-    build_db(xml_path, args.out)
+    build_db(xml_path, args.out, args.supplement or None)
 
 
 if __name__ == "__main__":

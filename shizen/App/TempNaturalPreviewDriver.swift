@@ -5,7 +5,7 @@ enum TempNaturalPreviewDriver {
     static func run(from root: UIViewController) {
         guard let script = ProcessInfo.processInfo.environment["NATURAL_PREVIEW"] else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            let host: UIViewController = ProcessInfo.processInfo.environment["NATURAL_PREVIEW_V2"] != nil ? ListenFirstOnboardingHostController() : NaturalOnboardingHostController()
+            let host: UIViewController = ListenFirstOnboardingHostController()
             root.present(host, animated: false)
             var t: Double = 1.0
             for command in script.split(separator: ",") {
@@ -27,8 +27,6 @@ enum TempNaturalPreviewDriver {
             }
         case "next":
             topStep(host)?.ctaTapped()
-        case "card":
-            all.compactMap { $0 as? TutorGoalCard }.first(where: { $0.window != nil && $0.tag == 1 })?.sendActions(for: .touchUpInside)
         case "nextex":
             all.compactMap { $0 as? GlassIconButton }.first(where: { $0.accessibilityLabel == "Next example" && $0.window != nil })?.sendActions(for: .touchUpInside)
         case "play":

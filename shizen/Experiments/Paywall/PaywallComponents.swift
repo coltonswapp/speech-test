@@ -349,10 +349,10 @@ final class PaywallPlanRow: UIControl, PaywallPlanControl {
 // MARK: - Plan tile
 
 /// A glass plan tile meant to sit side by side with the others: period, big price,
-/// per-week price, and a trial line, with an optional badge straddling the top border.
+/// a per-week price (per-month on yearly), and a trial line, with an optional badge straddling the top border.
 /// Selected tiles get a yellow border, a yellow-tinted glass, and a check in the corner.
 /// `compact` trims the type and padding for tiles that share space with the CTA.
-/// `inlineUnit` folds the period into the price ("$59.99/yr") for a shorter tile.
+/// `inlineUnit` folds the period into the price ("$34.99/yr") for a shorter tile.
 final class PaywallPlanTile: UIControl, PaywallPlanControl {
     let package: PaywallPackage
     private let accent: UIColor
@@ -383,7 +383,10 @@ final class PaywallPlanTile: UIControl, PaywallPlanControl {
         price.minimumScaleFactor = 0.6
         price.numberOfLines = 1
         let detailSize: CGFloat = compact ? 12 : 13
-        let perWeek = Self.label("\(package.pricePerWeek)/week", font: .systemFont(ofSize: detailSize, weight: .medium), color: .secondaryLabel)
+        let equivalentText = package.period == .annual
+            ? "\(package.pricePerMonth)/mo"
+            : "\(package.pricePerWeek)/week"
+        let equivalent = Self.label(equivalentText, font: .systemFont(ofSize: detailSize, weight: .medium), color: .secondaryLabel)
 
         let stack = UIStackView(arrangedSubviews: [period, price])
         stack.axis = .vertical
@@ -396,13 +399,13 @@ final class PaywallPlanTile: UIControl, PaywallPlanControl {
                 .foregroundColor: UIColor.secondaryLabel,
             ]))
             price.attributedText = text
-            stack.addArrangedSubview(perWeek)
+            stack.addArrangedSubview(equivalent)
             stack.setCustomSpacing(2, after: period)
             stack.setCustomSpacing(6, after: price)
         } else {
             let unit = Self.label("per \(package.period.unit)", font: .systemFont(ofSize: detailSize), color: .secondaryLabel)
             stack.addArrangedSubview(unit)
-            stack.addArrangedSubview(perWeek)
+            stack.addArrangedSubview(equivalent)
             stack.setCustomSpacing(compact ? 6 : 10, after: period)
             stack.setCustomSpacing(compact ? 8 : 12, after: unit)
         }
@@ -456,6 +459,7 @@ final class PaywallPlanTile: UIControl, PaywallPlanControl {
         accessibilityLabel = [
             package.period.title,
             "\(package.localizedPrice) per \(package.period.unit)",
+            package.period == .annual ? "\(package.pricePerMonth) per month" : nil,
             package.trialDays.map { "\($0) days free" },
             badge,
         ].compactMap { $0 }.joined(separator: ", ")

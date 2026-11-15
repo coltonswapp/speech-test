@@ -202,7 +202,6 @@ enum ExperimentSettings {
     private static let spanHighlightBandColorKey = "ExperimentSpanHighlightBandColor"
     private static let spanHighlightDarkTextKey = "ExperimentSpanHighlightDarkText"
     private static let spanHighlightBandHeightKey = "ExperimentSpanHighlightBandHeight"
-    private static let spanHighlightCornerRadiusKey = "ExperimentSpanHighlightCornerRadius"
     private static let kanjiDecompositionFormatKey = "ExperimentKanjiDecompositionFormat"
     private static let slideHeroStyleKey = "ExperimentSlideHeroStyle"
     private static let slideHeroGlowColorKey = "ExperimentSlideHeroGlowColor"
@@ -535,21 +534,12 @@ enum ExperimentSettings {
         set { UserDefaults.standard.set(Double(newValue), forKey: spanHighlightBandHeightKey) }
     }
 
-    static var spanHighlightCornerRadius: CGFloat {
-        get {
-            if UserDefaults.standard.object(forKey: spanHighlightCornerRadiusKey) == nil { return 2 }
-            return CGFloat(min(16, max(0, UserDefaults.standard.double(forKey: spanHighlightCornerRadiusKey))))
-        }
-        set { UserDefaults.standard.set(Double(newValue), forKey: spanHighlightCornerRadiusKey) }
-    }
-
     static func applySpanHighlightStyle() {
         LyricsSpanHighlightStyle.current = LyricsSpanHighlightStyle(
             fillColor: spanHighlightFillColor.uiColor,
             bandColor: spanHighlightBandColor.uiColor,
             textColor: spanHighlightUsesDarkText ? .label : .white,
-            bandHeightFraction: spanHighlightBandHeight,
-            cornerRadius: spanHighlightCornerRadius
+            bandHeightFraction: spanHighlightBandHeight
         )
     }
 
@@ -559,7 +549,6 @@ enum ExperimentSettings {
             spanHighlightBandColorKey,
             spanHighlightDarkTextKey,
             spanHighlightBandHeightKey,
-            spanHighlightCornerRadiusKey,
         ]
         keys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
         applySpanHighlightStyle()

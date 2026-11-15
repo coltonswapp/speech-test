@@ -6,18 +6,14 @@ final class AuthLandingViewController: UIViewController {
 
     static let presentationIdentifier = "shizen.auth.login"
 
-    enum Entry {
-        case original
-        case journey
-    }
-
     var isPreviewMode = false
-    var entry: Entry = .original
+    /// Runs once the production sheet is gone after sign-in, so the caller can route.
+    var onSignedIn: (() -> Void)?
 
-    /// Page sheet over the app. No close control; the user signs in to leave.
-    static func makeLoginSheet() -> UINavigationController {
+    /// Page sheet over the app, Sign in with Apple only. No close control; the user signs in to leave.
+    static func makeLoginSheet(onSignedIn: (() -> Void)? = nil) -> UINavigationController {
         let landing = AuthLandingViewController()
-        landing.entry = .original
+        landing.onSignedIn = onSignedIn
         let navigationController = UINavigationController(rootViewController: landing)
         navigationController.setNavigationBarHidden(true, animated: false)
         navigationController.restorationIdentifier = presentationIdentifier
@@ -46,19 +42,19 @@ final class AuthLandingViewController: UIViewController {
     }
 
     func signUpComplete() {
-        dismiss(animated: true)
+        dismiss(animated: true) { [onSignedIn] in
+            onSignedIn?()
+        }
     }
 
     private func embedIntro() {
         let page = IntroPage(
-            onGetStarted: { [weak self] in
-                guard let self, self.entry == .journey else { return }
-                self.pushOnboarding(provider: nil, flow: .journey)
-            },
+            onGetStarted: {},
             onAppleSignIn: { [weak self] in self?.appleTapped() },
             onLogin: { [weak self] in self?.loginTapped() },
             onSignUp: { [weak self] in self?.signUpTapped() },
-            revealsAuthOnGetStarted: entry == .original
+            revealsAuthOnGetStarted: true,
+            appleSignInOnly: !isPreviewMode
         )
         let host = UIHostingController(rootView: page)
         host.view.backgroundColor = .clear
@@ -128,10 +124,9 @@ final class AuthLandingViewController: UIViewController {
             self.view.isUserInteractionEnabled = false
             defer { self.view.isUserInteractionEnabled = true }
             do {
-                let isNewUser = try await AuthService.shared.signIn(with: provider, presenting: self)
-                if await self.shouldEnterApp(isNewUser: isNewUser) {
-                    OnboardingStore.markCompletedForCurrentUser()
-                    Task { await UserProfileStore.shared.flushSavedBufferIfNeeded() }
+                try await AuthService.shared.signIn(with: provider, presenting: self)
+                // Production routes from `MainViewController`. Preview always walks the steps.
+                guard self.isPreviewMode else {
                     self.signUpComplete()
                     return
                 }
@@ -144,19 +139,8 @@ final class AuthLandingViewController: UIViewController {
         }
     }
 
-    /// Existing Firebase accounts and profiles skip onboarding. Preview always walks the steps.
-    private func shouldEnterApp(isNewUser: Bool) async -> Bool {
-        guard !isPreviewMode else { return false }
-        if !isNewUser { return true }
-        return await UserProfileStore.shared.accountPresence() == .exists
-    }
-
     private func pushOnboarding(provider: AuthProvider?) {
-        pushOnboarding(provider: provider, flow: .original)
-    }
-
-    private func pushOnboarding(provider: AuthProvider?, flow: OnboardingCoordinator.Flow) {
-        let coordinator = OnboardingCoordinator(flow: flow)
+        let coordinator = OnboardingCoordinator(flow: .original)
         if isPreviewMode {
             coordinator.enablePreviewMode()
         }

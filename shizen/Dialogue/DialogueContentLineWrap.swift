@@ -151,6 +151,33 @@ enum DialogueContentLineWrap {
         return CFEqual(previous as CFTypeRef, next as CFTypeRef)
     }
 
+    /// Maps a range in the unglued text onto `display`, skipping the word joiners added here.
+    static func mapOriginalUTF16Range(_ range: NSRange, onto display: String) -> NSRange? {
+        guard range.location >= 0, range.length > 0 else { return nil }
+        let ns = display as NSString
+        var originalUTF16 = 0
+        var displayUTF16 = 0
+        var mappedLocation: Int?
+        let targetEnd = range.location + range.length
+        while displayUTF16 < ns.length {
+            let unit = ns.character(at: displayUTF16)
+            if unit == wordJoinerUnit {
+                displayUTF16 += 1
+                continue
+            }
+            let unitLength = (unit >= 0xD800 && unit <= 0xDBFF && displayUTF16 + 1 < ns.length) ? 2 : 1
+            if mappedLocation == nil, originalUTF16 == range.location {
+                mappedLocation = displayUTF16
+            }
+            originalUTF16 += unitLength
+            displayUTF16 += unitLength
+            if let mappedLocation, originalUTF16 >= targetEnd {
+                return NSRange(location: mappedLocation, length: displayUTF16 - mappedLocation)
+            }
+        }
+        return nil
+    }
+
     private static let wordJoinerUnit: unichar = 0x2060
 
     private static func isHangingPunctuation(_ character: Character) -> Bool {

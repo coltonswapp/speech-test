@@ -14,9 +14,10 @@ All of it goes through `shizen/App/Analytics.swift`; no other file imports PostH
 
 | Event | When | Properties |
 | --- | --- | --- |
-| `onboarding_step_viewed` | Each time an onboarding screen appears (fired by `OnboardingCoordinator`) | `step_index` (Int), `step_name` (stable snake_case id, e.g. `intro`, `level`, `team_note`), `flow` (`natural`, `listen_first`, `tutor`, `original`, `journey`) |
-| `onboarding_completed` | Onboarding finishes | `flow` |
-| `paywall_viewed` | Each appearance of the feature-carousel paywall | `variant` (`feature_carousel`), `offering_id`, `source` (e.g. `onboarding`) |
+| `onboarding_step_viewed` | Each time an onboarding screen appears (fired by `OnboardingCoordinator`) | `step_index` (Int), `step_name` (stable snake_case id, e.g. `intro`, `practice`, `team_note`), `flow` (`listen_first`, `original`) |
+| `onboarding_completed` | Onboarding finishes (listen-first: a trial, purchase, or restore granted access) | `flow` |
+| `onboarding_abandoned` | The app backgrounds on an onboarding step before the paywall. Once on the paywall, this is `paywall_dismissed` with `reason` `abandoned` instead | `flow`, `step_index`, `step_name` (the last screen) |
+| `paywall_viewed` | Each appearance of the feature-carousel or compact glass paywall | `variant` (`feature_carousel`, `bold_hero_glass_compact`), `offering_id`, `source` (e.g. `onboarding`) |
 | `trial_started` | A RevenueCat entitlement becomes active in a trial period (`PurchaseAnalytics`) | `product_id`, `package_id`, `period`, `price`, `currency` |
 | `purchased` | A RevenueCat entitlement becomes active as paid, or a trial converts | same as `trial_started` |
 | `Application Installed` / `Updated` / `Opened` / `Backgrounded` | PostHog SDK lifecycle events | build, version, `from_background` |
@@ -50,9 +51,9 @@ All carry `lesson_type` (`dialogue`, `grammar`, `kana`) and `lesson_id` (scene i
 | `audio_replayed` | Dialogue played again, restarted, a line jumped to, or a sentence played in a breakdown | `kind` (`dialogue`, `restart`, `line`, `sentence`), `speed`, `lesson_id` |
 | `playback_speed_changed` | Dialogue speed changed | `speed`, `lesson_id` |
 
-### Paywall detail (feature-carousel variant)
+### Paywall detail (`feature_carousel`, `bold_hero_glass_compact`)
 
-All carry `variant`, `offering_id`, `source`, `seconds_on_screen`.
+All carry `variant`, `offering_id`, `source`, `seconds_on_screen`. `bold_hero_glass_compact` is the onboarding paywall and doesn't send the carousel events or carousel summary.
 
 | Event | When | Extra properties |
 | --- | --- | --- |
@@ -61,7 +62,7 @@ All carry `variant`, `offering_id`, `source`, `seconds_on_screen`.
 | `paywall_cta_tapped` | Purchase button tapped (intent only) | plan properties + carousel summary |
 | `purchase_cancelled` / `purchase_failed` | Store sheet cancelled / errored | plan properties; failed adds `error_domain`, `error_code` |
 | `restore_completed` | Restore finished | `result` (`restored`, `nothing`, `failed`) |
-| `paywall_dismissed` | Paywall closes | `reason` (`close`, `purchased`, `restored`, `system`) + carousel summary |
+| `paywall_dismissed` | Paywall closes, or the app backgrounds on the onboarding paywall without access | `reason` (`close`, `purchased`, `restored`, `system`, `abandoned`) + carousel summary |
 | `pro_gate_hit` | A Pro-only feature blocks a free user (no gates exist yet) | `feature` |
 
 Carousel summary: `current_card`, `cards_seen`, `cards_seen_count`, `card_count`, `max_card_index`, `user_swipes`, `page_control_taps`, `auto_advances`, `user_drove_carousel`, `seconds_to_first_swipe`, and `dwell_<card>_s` (seconds each card was on screen).
@@ -78,7 +79,7 @@ Carousel summary: `current_card`, `cards_seen`, `cards_seen_count`, `card_count`
 
 ### Person properties
 
-Set on the person profile so any chart can be split by them: `is_pro`, `onboarding_flow`, `level`, `daily_goal_minutes` / `daily_goal`, `register`, `track`, `why_learning` (the onboarding options picked). No free text.
+Set on the person profile so any chart can be split by them: `is_pro`, `onboarding_flow`, `level`, `daily_goal_minutes` / `daily_goal`, `track`, `why_learning` (the onboarding options picked). No free text.
 
 Every event also carries PostHog's default context: app version/build, OS version, device model,
 locale, timezone, screen size, and PostHog's anonymous `distinct_id` (a random UUID the SDK

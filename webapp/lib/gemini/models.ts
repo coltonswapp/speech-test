@@ -14,6 +14,37 @@ export const GEMINI_TEXT_MODEL_DEFAULT = "gemini-3.5-flash-lite";
  */
 export const GEMINI_TOKENIZE_MODEL_DEFAULT = "gemini-3.8-flash";
 
+/**
+ * Speech-to-text for Studio experiments (clip POC). Pro over 3.8 Flash after
+ * a five-clip comparison (Nov 14): Flash tidied casual speech (ギャ男 for
+ * ギャル男, ですよね for っすよね) where Pro kept what was said. Pro is
+ * slower (up to ~65 s for a 60 s clip) and costs a few cents more per clip.
+ */
+export const GEMINI_ASR_MODEL_DEFAULT = "gemini-3.1-pro-preview";
+
+/**
+ * Feed step (is this clip worth showing in the app's feed?). A judgment call
+ * over a short transcript, so the stronger Flash is worth its few extra cents.
+ */
+export const GEMINI_FEED_MODEL_DEFAULT = "gemini-3.8-flash";
+
+/**
+ * Models the clip editor lets you pick per run (Transcribe, Translate) to
+ * compare output. All take audio and text in.
+ */
+export const CLIP_STEP_MODELS = [
+  { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro" },
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash" },
+  { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite" },
+  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+] as const;
+
+export type ClipStepModel = (typeof CLIP_STEP_MODELS)[number]["id"];
+
+export function isClipStepModel(value: unknown): value is ClipStepModel {
+  return CLIP_STEP_MODELS.some((model) => model.id === value);
+}
+
 export const GEMINI_TTS_MODELS = [
   { id: "gemini-3.8-flash-tts", label: "3.8 Flash TTS" },
   { id: "gemini-3.8-flash-lite-tts", label: "3.8 Flash-Lite TTS" },
@@ -55,6 +86,8 @@ const RATE_ROWS: RateRow[] = [
   { model: "gemini-3.5-flash-lite", rate: { inputPerMillion: 0.3, outputPerMillion: 2.5 } },
   { model: "gemini-3.8-flash", rate: { inputPerMillion: 0.75, outputPerMillion: 3.75 } },
   { model: "gemini-3.8-flash", from: "2027-01-01", rate: { inputPerMillion: 1.5, outputPerMillion: 7.5 } },
+  // Prompts up to 200K tokens (a 2-minute clip is ~4K); audio billed as text.
+  { model: "gemini-3.1-pro-preview", rate: { inputPerMillion: 2, outputPerMillion: 12 } },
   // TTS (output is audio, 25 tokens per second)
   { model: "gemini-3.1-flash-tts-preview", rate: { inputPerMillion: 1, outputPerMillion: 20 } },
   { model: "gemini-3.8-flash-tts", rate: { inputPerMillion: 0.5, outputPerMillion: 9 } },

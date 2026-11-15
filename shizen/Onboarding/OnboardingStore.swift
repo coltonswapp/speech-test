@@ -3,6 +3,7 @@ import Foundation
 enum OnboardingStore {
     private static let completedKey = "hasCompletedOnboarding"
     private static let completedUserIdKey = "hasCompletedOnboardingUserId"
+    private static let lessonStepsFinishedKey = "onboardingLessonStepsFinishedUserIds"
     private static let answersKey = "onboardingAnswers"
 
     static var hasCompletedOnboarding: Bool {
@@ -19,8 +20,35 @@ enum OnboardingStore {
     static func markCompletedForCurrentUser() {
         hasCompletedOnboarding = true
         if let uid = AuthService.shared.userId {
+            // Only one completed uid is kept, so the one it replaces still skips the lesson steps.
+            if let previous = UserDefaults.standard.string(forKey: completedUserIdKey) {
+                addLessonStepsFinished(previous)
+            }
+            addLessonStepsFinished(uid)
             UserDefaults.standard.set(uid, forKey: completedUserIdKey)
         }
+    }
+
+    /// True once this uid reached the paywall or finished onboarding on this device. Doesn't
+    /// mean completed: completion still means they entered the app with access.
+    static var hasFinishedLessonStepsForCurrentUser: Bool {
+        guard let uid = AuthService.shared.userId else { return false }
+        return isCompletedForCurrentUser || lessonStepsFinishedUserIds.contains(uid)
+    }
+
+    static func markLessonStepsFinishedForCurrentUser() {
+        guard let uid = AuthService.shared.userId else { return }
+        addLessonStepsFinished(uid)
+    }
+
+    private static var lessonStepsFinishedUserIds: [String] {
+        UserDefaults.standard.stringArray(forKey: lessonStepsFinishedKey) ?? []
+    }
+
+    private static func addLessonStepsFinished(_ uid: String) {
+        let finished = lessonStepsFinishedUserIds
+        guard !finished.contains(uid) else { return }
+        UserDefaults.standard.set(finished + [uid], forKey: lessonStepsFinishedKey)
     }
 
     static func save(_ info: UserOnboardingInfo) {

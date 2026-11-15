@@ -120,7 +120,6 @@ public final class TextToSpeechService: NSObject {
     // Streaming request state (mutated on the delegate queue).
     private let delegateQueue: OperationQueue
     private var currentTask: URLSessionDataTask?
-    private var conversationGenerationTask: Task<Void, Never>?
     private var errorBody = Data()
     private var leftoverByte: UInt8?
     private var hasStartedLivePlayback = false
@@ -336,7 +335,7 @@ public final class TextToSpeechService: NSObject {
             }
             lastSynthesisVoiceString = elevenLabsVoiceID
         case .gemini:
-            DispatchQueue.main.async { completion?(GeminiTTSError.noDialogueLines) }
+            DispatchQueue.main.async { completion?(TextToSpeechError.missingAPIKey(provider: .gemini)) }
             return
         }
 
@@ -412,161 +411,6 @@ public final class TextToSpeechService: NSObject {
         task.resume()
     }
 
-    /// Synthesize a multi-speaker conversation with Gemini TTS. Each dialogue line becomes
-    /// one sentence row; alignment uses the same VAD pass as single-speaker synthesis.
-    public func speakConversation(
-        lines: [ConversationDialogueLine],
-        speaker1Voice: GeminiTTSVoice = .zephyr,
-        speaker2Voice: GeminiTTSVoice = .puck,
-        model: String? = nil,
-        temperature: Double = 1,
-        completion: (@Sendable (Error?) -> Void)? = nil
-    ) {
-        stop()
-
-        let apiKey = credentials.key(for: .gemini)
-        guard !apiKey.isEmpty else {
-            DispatchQueue.main.async { completion?(TextToSpeechError.missingAPIKey(provider: .gemini)) }
-            return
-        }
-
-        let trimmedLines = lines.filter {
-            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-        guard !trimmedLines.isEmpty else {
-            DispatchQueue.main.async { completion?(GeminiTTSError.noDialogueLines) }
-            return
-        }
-
-        activeSynthesisProvider = .gemini
-        lastSynthesisProvider = .gemini
-        lastSynthesisVoiceString = "\(speaker1Voice.rawValue)/\(speaker2Voice.rawValue)"
-
-        didFinishRequest = false
-        hasStartedLivePlayback = false
-        leftoverByte = nil
-        errorBody.removeAll()
-        onFinish = completion
-
-        assembledSamples.removeAll()
-        assembledBuffer = nil
-        utteranceSourceText = GeminiConversationTTSClient.buildTranscript(from: trimmedLines)
-
-        incSamplesScannedCount = 0
-        incInSpeech = false
-        incRegionStart = 0
-        incSilenceRun = 0
-        incCommittedRegions.removeAll()
-        incHighestFinalizedIndex = -1
-
-        sentences = trimmedLines.enumerated().map { i, line in
-            SpeechSentence(
-                index: i,
-                text: line.text.trimmingCharacters(in: .whitespacesAndNewlines),
-                state: .streaming,
-                sampleRange: 0..<0,
-                peaks: [],
-                sampleRate: Self.sampleRate
-            )
-        }
-
-        state = .idle
-
-        do {
-            try configureAudioSessionForPlayback()
-            try startEngineIfNeeded()
-        } catch {
-            let wrapped = TextToSpeechError.audioEngineFailed(underlying: error)
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.delegate?.textToSpeechService(self, didFailWith: wrapped)
-            }
-            finish(with: wrapped)
-            return
-        }
-
-        let notifyStart: () -> Void = { [weak self] in
-            guard let self else { return }
-            self.delegate?.textToSpeechService(self, didStartStreamingFor: self.utteranceSourceText)
-        }
-        if Thread.isMainThread { notifyStart() } else { DispatchQueue.main.sync(execute: notifyStart) }
-
-        state = .streaming
-
-        let resolvedModel = model ?? GeminiConversationTTSClient.defaultModel
-        conversationGenerationTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let pcmData = try await GeminiConversationTTSClient.generatePCM(
-                    apiKey: apiKey,
-                    lines: trimmedLines,
-                    speaker1Voice: speaker1Voice,
-                    speaker2Voice: speaker2Voice,
-                    model: resolvedModel,
-                    temperature: temperature
-                )
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    self.conversationGenerationTask = nil
-                    self.ingestCompletePCM(pcmData)
-                    self.finish(with: nil)
-                }
-            } catch {
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    self.conversationGenerationTask = nil
-                    self.finish(with: error)
-                }
-            }
-        }
-    }
-
-    private func ingestCompletePCM(_ pcmData: Data) {
-        var data = pcmData
-        if data.count % 2 == 1 {
-            data = data.dropLast()
-        }
-        guard !data.isEmpty else { return }
-
-        let sampleCount = data.count / 2
-        var samples = [Float](repeating: 0, count: sampleCount)
-        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
-            guard let base = raw.baseAddress else { return }
-            let int16Ptr = base.assumingMemoryBound(to: Int16.self)
-            let scale: Float = 1.0 / 32768.0
-            for i in 0..<sampleCount {
-                samples[i] = Float(int16Ptr[i]) * scale
-            }
-        }
-
-        assembledSamples = samples
-        assembledBuffer = nil
-        runIncrementalScan()
-
-        guard let buffer = AVAudioPCMBuffer(
-            pcmFormat: pcmFormat,
-            frameCapacity: AVAudioFrameCount(sampleCount)
-        ) else { return }
-        buffer.frameLength = AVAudioFrameCount(sampleCount)
-        if let channel = buffer.floatChannelData?[0] {
-            samples.withUnsafeBufferPointer { src in
-                guard let base = src.baseAddress else { return }
-                channel.update(from: base, count: sampleCount)
-            }
-        }
-
-        playerNode.scheduleBuffer(buffer, completionHandler: nil)
-        if !hasStartedLivePlayback {
-            hasStartedLivePlayback = true
-            playbackSliceStartInAssembled = 0
-            lastReportedPlaybackSample = -1
-            playerNode.play()
-            playbackAnchorSample = playerNode.lastRenderTime.flatMap {
-                playerNode.playerTime(forNodeTime: $0)?.sampleTime
-            } ?? 0
-        }
-    }
-
     private func makeSynthesisRequest(
         provider: TTSProvider,
         apiKey: String,
@@ -624,8 +468,6 @@ public final class TextToSpeechService: NSObject {
     }
 
     public func stop() {
-        conversationGenerationTask?.cancel()
-        conversationGenerationTask = nil
         currentTask?.cancel()
         currentTask = nil
 
@@ -653,8 +495,6 @@ public final class TextToSpeechService: NSObject {
 
     /// Drops loaded audio, the sentence map, and synthesis bookkeeping without starting a new utterance.
     public func clearLoadedUtterance() {
-        conversationGenerationTask?.cancel()
-        conversationGenerationTask = nil
         currentTask?.cancel()
         currentTask = nil
 

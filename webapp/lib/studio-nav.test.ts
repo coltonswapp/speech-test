@@ -33,6 +33,7 @@ describe("studio nav destinations", () => {
         ["Ambience", "/tts/ambience"],
         ["TTS Studio", "/tts"],
         ["Usage", "/usage"],
+        ["Experiments", "/experiments"],
         ["Settings", "/settings"],
       ],
     );

@@ -17,6 +17,8 @@ enum Analytics {
         // Onboarding
         case onboardingStepViewed = "onboarding_step_viewed"
         case onboardingCompleted = "onboarding_completed"
+        /// Backgrounded on a step before the paywall; the paywall reports `paywall_dismissed` instead.
+        case onboardingAbandoned = "onboarding_abandoned"
 
         // Lessons (dialogue, grammar, kana). `lesson_type` tells them apart.
         case lessonStarted = "lesson_started"
@@ -140,6 +142,10 @@ enum Analytics {
 
     static func onboardingCompleted(flow: String) {
         capture(.onboardingCompleted, ["flow": flow])
+    }
+
+    static func onboardingAbandoned(index: Int, name: String, flow: String) {
+        capture(.onboardingAbandoned, ["step_index": index, "step_name": name, "flow": flow])
     }
 
     // MARK: Paywall & purchase

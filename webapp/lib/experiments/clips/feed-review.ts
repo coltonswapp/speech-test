@@ -21,9 +21,11 @@ Decide whether this clip is worth showing in the feed.
 Suitable:
 - Someone says something: an explanation, a story, an opinion, a description, a real exchange between people. There are sentences to learn from.
 - It makes sense on its own. A learner can tell what is being talked about without the minutes before it.
+- Short, simple lines are fine, even good, when they add up to something: a little scene or story with a point (a misunderstanding cleared up, a request and a reply, a joke with a payoff). Slow, simple dialogue is what beginners need.
 
 Not suitable:
 - Mostly reactions, exclamations, single words, greetings or fillers (うま！, すごい, かわいい, えー) with little said in sentences.
+- A string of reactions to what is on screen (おっ、なんだこれ？ / すっご / めっちゃ美味しそう) that doesn't build into a story or exchange, even if each line is a sentence. Ask: could a learner retell what happened or what was said?
 - A fragment that depends on what came before or stops before its point, so it is confusing alone.
 - Channel housekeeping: intro or outro patter, asking for likes and subscriptions, sponsor reads.
 - The transcript looks wrong or garbled (lines that don't fit together), so the clip would teach mistakes.

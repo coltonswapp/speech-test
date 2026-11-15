@@ -12,15 +12,11 @@ import {
   CLIP_ID_PATTERN,
   clipDraftSchema,
   clipPendingSchema,
-  clipIsAligned,
-  clipIsTokenized,
-  clipIsTranslated,
-  clipHasHighlights,
   type ClipDraft,
   type ClipPending,
   type ClipSummary,
 } from "@/lib/experiments/clips/types";
-import { clipFeedStatus } from "@/lib/experiments/clips/feed";
+import { deleteClipIndex, listIndexedClipSummaries, upsertClipIndex } from "@/lib/experiments/clips/clip-index";
 
 const ROOT = "experiments/clips/";
 // Pending clips (details entered, audio not uploaded yet) and the audio the
@@ -63,6 +59,9 @@ export async function writeClipDraft(draft: ClipDraft): Promise<ClipDraft> {
     Buffer.from(JSON.stringify(next, null, 2)),
     "application/json"
   );
+  // Lists read the index, so a draft saved without it would be invisible
+  // there; let the error surface (the draft itself is saved, so retrying is safe).
+  await upsertClipIndex(next);
   return next;
 }
 
@@ -73,6 +72,7 @@ export async function writeClipAudio(id: string, wav: Buffer): Promise<void> {
 /** Removes the draft and audio, freeing the id. Draft first so a half-done delete hides the clip. */
 export async function deleteClip(id: string): Promise<void> {
   await deleteObject(draftKey(id));
+  await deleteClipIndex(id);
   await deleteObject(clipAudioKey(id));
 }
 
@@ -152,30 +152,7 @@ export async function listClipDrafts(): Promise<ClipDraft[]> {
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-function feedSummary(draft: ClipDraft): Pick<ClipSummary, "feed" | "feedReason"> {
-  const status = clipFeedStatus(draft);
-  return { feed: status.state, feedReason: status.reason };
-}
-
+/** Studio's clip list, from the index (one query, not one read per draft). */
 export async function listClipSummaries(): Promise<ClipSummary[]> {
-  return (await listClipDrafts()).map((d) => ({
-    ...feedSummary(d),
-    id: d.id,
-    videoId: d.videoId,
-    videoTitle: d.video?.title ?? null,
-    channelName: d.video?.channelName ?? null,
-    channelUrl: d.video?.channelUrl ?? null,
-    startSec: d.startSec,
-    endSec: d.endSec,
-    orientation: d.orientation ?? "landscape",
-    sentenceCount: d.sentences.length,
-    tokenized: clipIsTokenized(d),
-    translated: clipIsTranslated(d),
-    highlighted: clipHasHighlights(d),
-    aligned: clipIsAligned(d),
-    jlptLevel: d.difficulty?.jlptLevel ?? null,
-    deprecated: Boolean(d.deprecated),
-    createdAt: d.createdAt,
-    updatedAt: d.updatedAt,
-  }));
+  return listIndexedClipSummaries();
 }

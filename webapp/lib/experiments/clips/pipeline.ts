@@ -3,6 +3,7 @@ import { alignAudioUrl, alignerConfigured, AlignerError } from "@/lib/aligner/cl
 import { SegmentationError, tokenizeJapaneseLine } from "@/lib/dialogue/gemini-tokenize";
 import { validatedTokens } from "@/lib/dialogue/japanese-segmentation";
 import { isKana } from "@/lib/experiments/clips/token-edits";
+import { clauseChunks, mergeInflections } from "@/lib/experiments/clips/fallback-tokens";
 import { ClipPipelineError } from "@/lib/experiments/clips/asr";
 import { clipAudioUrl } from "@/lib/experiments/clips/store";
 import {
@@ -30,14 +31,74 @@ function basicWordSplit(text: string): Array<{ text: string; reading?: string }>
     .map((s) => s.segment)
     .filter((s) => s.trim().length > 0);
   const tokens = validatedTokens(segments, text) ?? [];
-  return tokens.map((t) => ({ text: t.text, ...(isKana(t.text) ? { reading: t.text } : {}) }));
+  return mergeInflections(
+    tokens.map((t) => ({ text: t.text, ...(isKana(t.text) ? { reading: t.text } : {}) }))
+  );
 }
 
-/** Tokenize every sentence that has no tokens yet (cached per line). */
-export async function tokenizeClipDraft(draft: ClipDraft): Promise<ClipDraft> {
-  if (draft.sentences.length === 0) {
+type LineTokens = { tokens: Array<{ text: string; reading?: string }>; basicSplit: boolean };
+
+/**
+ * Gemini on the whole line; if it can't segment it (long, disfluent speech
+ * it "corrects"), Gemini again on clause-sized chunks; the plain word split
+ * only for a chunk that still fails. Each chunk is cached like a line.
+ */
+async function tokenizeClipLine(
+  text: string,
+  callbacks: Parameters<typeof tokenizeJapaneseLine>[1]
+): Promise<LineTokens> {
+  try {
+    return { tokens: await tokenizeJapaneseLine(text, callbacks), basicSplit: false };
+  } catch (error) {
+    if (!(error instanceof SegmentationError)) throw error;
+  }
+  const chunks = clauseChunks(text);
+  if (chunks.length < 2) return { tokens: basicWordSplit(text), basicSplit: true };
+  const tokens: LineTokens["tokens"] = [];
+  let basicSplit = false;
+  for (const chunk of chunks) {
+    // A chunk that is only punctuation has no tokens.
+    if (!JAPANESE_CHAR.test(chunk) && !/[0-9０-９A-Za-z]/.test(chunk)) continue;
+    try {
+      tokens.push(...(await tokenizeJapaneseLine(chunk, callbacks)));
+    } catch (error) {
+      if (!(error instanceof SegmentationError)) throw error;
+      tokens.push(...basicWordSplit(chunk));
+      basicSplit = true;
+    }
+  }
+  return { tokens, basicSplit };
+}
+
+/**
+ * Tokenize every sentence that has no tokens yet (cached per line).
+ * `retokenize`: sentence indexes to throw away and tokenize again (their
+ * timings go too; "Align edited lines" times them without touching the rest).
+ */
+export async function tokenizeClipDraft(
+  input: ClipDraft,
+  options: { retokenize?: number[] } = {}
+): Promise<ClipDraft> {
+  if (input.sentences.length === 0) {
     throw new ClipPipelineError("Transcribe or enter the transcript first.", 400);
   }
+  const redo = new Set(options.retokenize ?? []);
+  for (const i of redo) {
+    if (!Number.isInteger(i) || i < 0 || i >= input.sentences.length) {
+      throw new ClipPipelineError(`No line ${i + 1}.`, 400);
+    }
+  }
+  const draft: ClipDraft =
+    redo.size === 0
+      ? input
+      : {
+          ...input,
+          sentences: input.sentences.map((s, i) =>
+            redo.has(i)
+              ? { ...s, tokens: null, score: undefined, flagsCleared: undefined, basicSplit: undefined }
+              : s
+          ),
+        };
   const startedAt = Date.now();
   let calls = 0;
   let cachedLines = 0;
@@ -76,18 +137,12 @@ export async function tokenizeClipDraft(draft: ClipDraft): Promise<ClipDraft> {
     let basicSplit = false;
     try {
       lines += 1;
-      tokens = await tokenizeJapaneseLine(sentence.text, { onUsage, onCacheHit });
-    } catch (error) {
-      if (!(error instanceof SegmentationError)) {
-        throw new ClipPipelineError(
-          error instanceof Error ? error.message : String(error),
-          502
-        );
-      }
       // Real speech is often disfluent and Gemini "fixes" it, so its tokens
-      // stop matching the line. Don't block the clip on one line.
-      tokens = basicWordSplit(sentence.text);
-      basicSplit = true;
+      // stop matching the line; tokenizeClipLine falls back rather than
+      // blocking the clip on one line.
+      ({ tokens, basicSplit } = await tokenizeClipLine(sentence.text, { onUsage, onCacheHit }));
+    } catch (error) {
+      throw new ClipPipelineError(error instanceof Error ? error.message : String(error), 502);
     }
     if (tokens.length === 0) {
       throw new ClipPipelineError(`Could not segment “${sentence.text.slice(0, 24)}”.`, 422);

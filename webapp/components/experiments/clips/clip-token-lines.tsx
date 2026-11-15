@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { CheckIcon, PlayIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { formatTimecode } from "@/components/experiments/clips/clip-format";
 import { TokenEditMenu } from "@/components/experiments/clips/token-edit-menu";
 import type { ClipDraft } from "@/lib/experiments/clips/types";
+import { splitSentencePhrases } from "@/lib/experiments/clips/phrases";
 import type { EditableToken } from "@/lib/experiments/clips/token-edits";
 
 /** Aligner scores below this are worth a listen (they don't predict error well). */
@@ -83,6 +84,12 @@ export function ClipTokenLines({
         {draft.sentences.map((sentence, i) => {
           const first = sentence.tokens?.[0]?.startSec;
           const last = sentence.tokens?.at(-1)?.endSec;
+          // Where the app wraps this sentence (phrases.ts): a new row per phrase.
+          const phraseStarts = new Set(
+            splitSentencePhrases(sentence.text, sentence.tokens ?? [])
+              .slice(1)
+              .map((p) => p.tokenStart)
+          );
           const flagCount = (sentence.tokens ?? []).filter(
             (t) => t.readingFallback || (t.score !== undefined && t.score < LOW_SCORE)
           ).length;
@@ -116,6 +123,14 @@ export function ClipTokenLines({
                     line {sentence.score.toFixed(2)}
                   </Badge>
                 ) : null}
+                {phraseStarts.size > 0 ? (
+                  <Badge
+                    variant="outline"
+                    title="Long line: the app shows it as this many lines, broken where the rows break below (commas and clause endings)"
+                  >
+                    {phraseStarts.size + 1} phrases
+                  </Badge>
+                ) : null}
                 {sentence.basicSplit ? (
                   <Badge
                     variant="outline"
@@ -135,8 +150,9 @@ export function ClipTokenLines({
                     !sentence.flagsCleared &&
                     (token.readingFallback || (token.score !== undefined && token.score < LOW_SCORE));
                   return (
+                    <Fragment key={key}>
+                    {phraseStarts.has(j) ? <span aria-hidden className="basis-full" /> : null}
                     <button
-                      key={key}
                       type="button"
                       data-token-key={key}
                       disabled={editing && (disabled || saving)}
@@ -188,6 +204,7 @@ export function ClipTokenLines({
                         </span>
                       ) : null}
                     </button>
+                    </Fragment>
                   );
                 })}
                 {flagCount > 0 ? (

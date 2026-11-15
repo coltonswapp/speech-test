@@ -2,6 +2,7 @@ import { exportHighlights } from "@/lib/dialogue/export";
 import type { DialogueHighlights, ExportedTeachingPattern } from "@/lib/dialogue/types";
 import { clipIsAligned, type ClipDraft, type ClipOrientation } from "@/lib/experiments/clips/types";
 import { clipFeedStatus } from "@/lib/experiments/clips/feed";
+import { splitSentencePhrases } from "@/lib/experiments/clips/phrases";
 
 // App-facing clip payload (snake_case, like the public dialogue API). Every
 // time is in seconds on the YouTube video's timeline, onset shift applied, so
@@ -28,6 +29,20 @@ export type ClipPayload = {
     end_sec: number;
     text_jp: string;
     text_en?: string;
+    /**
+     * Long sentences only: where to wrap it into readable lines (see
+     * phrases.ts). Covers the sentence in order; `text_jp` pieces concatenate
+     * to the sentence's text_jp, and `token_start`/`token_end` are positions
+     * in `tokens` ([start, end)). Display only: translation, highlights and
+     * saving stay per sentence. Absent when the sentence is one line.
+     */
+    phrases?: Array<{
+      text_jp: string;
+      token_start: number;
+      token_end: number;
+      start_sec: number;
+      end_sec: number;
+    }>;
   }>;
   /** In order; surfaces map onto their sentence's text_jp left to right. */
   tokens: Array<{
@@ -97,6 +112,7 @@ export function buildClipPayload(
   const tokens: ClipPayload["tokens"] = [];
   draft.sentences.forEach((sentence, index) => {
     const timed = sentence.tokens ?? [];
+    const firstPosition = tokens.length;
     for (const token of timed) {
       tokens.push({
         position: tokens.length,
@@ -108,12 +124,24 @@ export function buildClipPayload(
       });
     }
     const en = sentence.en?.trim();
+    const phrases = splitSentencePhrases(sentence.text, timed);
     sentences.push({
       index,
       start_sec: toVideo(timed[0]?.startSec ?? 0),
       end_sec: toVideo(timed[timed.length - 1]?.endSec ?? 0),
       text_jp: sentence.text,
       ...(en ? { text_en: en } : {}),
+      ...(phrases.length > 1
+        ? {
+            phrases: phrases.map((p) => ({
+              text_jp: sentence.text.slice(p.charStart, p.charEnd),
+              token_start: firstPosition + p.tokenStart,
+              token_end: firstPosition + p.tokenEnd,
+              start_sec: toVideo(timed[p.tokenStart]?.startSec ?? 0),
+              end_sec: toVideo(timed[p.tokenEnd - 1]?.endSec ?? 0),
+            })),
+          }
+        : {}),
     });
   });
 

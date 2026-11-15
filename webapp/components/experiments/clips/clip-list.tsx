@@ -60,6 +60,8 @@ import {
 } from "@/components/experiments/clips/clip-upload-panel";
 import { usePersistentState } from "@/components/experiments/clips/use-persistent-state";
 
+const CLIP_LIST_PAGE = 50;
+
 export function ClipList() {
   const clipsQuery = useQuery({
     queryKey: ["experiment-clips"],
@@ -73,6 +75,10 @@ export function ClipList() {
   const [storedView, setView] = usePersistentState<Partial<CatalogView>>("clip-catalog-view", {});
   const view: CatalogView = { ...DEFAULT_CATALOG_VIEW, ...storedView };
   const shown = applyCatalogView(clips, view);
+  // Render a page at a time: with thousands of Shorts the full list is slow to draw.
+  const [limit, setLimit] = useState(CLIP_LIST_PAGE);
+  const groups = view.grouped ? groupByVideo(shown) : [];
+  const total = view.grouped ? groups.length : shown.length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -122,12 +128,12 @@ export function ClipList() {
           <p className="text-sm text-muted-foreground">No clips match these filters.</p>
         ) : !view.grouped ? (
           <ul className="divide-y divide-border/60 rounded-xl border border-border/60">
-            {shown.map((clip) => (
+            {shown.slice(0, limit).map((clip) => (
               <ClipRow key={clip.id} clip={clip} />
             ))}
           </ul>
         ) : (
-          groupByVideo(shown).map((group) => (
+          groups.slice(0, limit).map((group) => (
             <div key={group.videoId} className="rounded-xl border border-border/60">
               {group.clips.length > 1 ? (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 bg-muted/30 px-4 py-2">
@@ -159,6 +165,17 @@ export function ClipList() {
             </div>
           ))
         )}
+        {total > limit ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start"
+            onClick={() => setLimit(limit + CLIP_LIST_PAGE)}
+          >
+            Show more ({(total - limit).toLocaleString()} {view.grouped ? "videos" : "clips"} left)
+          </Button>
+        ) : null}
       </section>
     </div>
   );

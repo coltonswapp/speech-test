@@ -504,3 +504,33 @@ export const slideshowDeck = pgTable("slideshow_deck", {
   photoSeed: integer("photo_seed").notNull().default(0),
   payload: jsonb("payload").notNull().default({}),
 });
+
+// --- Clip experiment index ---
+// One row per clip draft (the draft itself stays in R2), so lists and the
+// app's feed page through Postgres instead of reading every draft. Written
+// on every draft save (lib/experiments/clips/store.ts); rebuilt from R2 by
+// `pnpm clip:index-backfill`, which also creates the table.
+
+export const clipIndex = pgTable(
+  "clip_index",
+  {
+    id: text("id").primaryKey(),
+    videoId: text("video_id").notNull(),
+    /** Aligned and not deprecated: in the public clip list. */
+    listed: boolean("listed").notNull(),
+    inFeed: boolean("in_feed").notNull(),
+    /** 5 = N5 … 1 = N1; null until rated. */
+    jlptLevel: integer("jlpt_level"),
+    startSec: real("start_sec").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    /** Studio's ClipSummary. */
+    summary: jsonb("summary").notNull(),
+    /** The app's ClipPayloadSummary; null when not listed. */
+    publicSummary: jsonb("public_summary"),
+  },
+  (t) => [
+    index("clip_index_public_idx").on(t.listed, t.inFeed, t.createdAt),
+    index("clip_index_video_idx").on(t.videoId),
+  ]
+);

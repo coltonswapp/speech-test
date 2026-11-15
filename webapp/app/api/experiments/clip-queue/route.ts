@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { clipErrorResponse } from "@/lib/experiments/clips/route-helpers";
-import { listClipDrafts, listClipPendings } from "@/lib/experiments/clips/store";
+import { listClipPendings } from "@/lib/experiments/clips/store";
+import { indexedClipIdsByVideo } from "@/lib/experiments/clips/clip-index";
 import { readClipQueue, writeClipQueue } from "@/lib/experiments/clips/queue-store";
 import {
   clipQueueFlags,
@@ -18,19 +19,17 @@ import { YOUTUBE_ID_PATTERN } from "@/lib/experiments/clips/types";
  */
 export async function GET() {
   try {
-    const [queue, drafts, pendings] = await Promise.all([
+    const [queue, clipIds, pendings] = await Promise.all([
       readClipQueue(),
-      listClipDrafts(),
+      indexedClipIdsByVideo(),
       listClipPendings(),
     ]);
-    const clipIds = new Map<string, string[]>();
-    for (const d of drafts) clipIds.set(d.videoId, [...(clipIds.get(d.videoId) ?? []), d.id]);
     const fetching = new Set(pendings.filter((p) => !p.done).map((p) => p.videoId));
     const channelCount = new Map(
       queue.channels.map((c) => [c.channelId, c.dumpShorts + c.dumpRegular])
     );
     const rows: ClipQueueRow[] = queue.items.map((item) => {
-      const ids = (clipIds.get(item.videoId) ?? []).sort();
+      const ids = clipIds.get(item.videoId) ?? [];
       return {
         ...item,
         flags: clipQueueFlags(item),

@@ -1,6 +1,8 @@
 import "server-only";
 import { alignAudioUrl, alignerConfigured, AlignerError } from "@/lib/aligner/client";
-import { tokenizeJapaneseLine } from "@/lib/dialogue/gemini-tokenize";
+import { SegmentationError, tokenizeJapaneseLine } from "@/lib/dialogue/gemini-tokenize";
+import { validatedTokens } from "@/lib/dialogue/japanese-segmentation";
+import { isKana } from "@/lib/experiments/clips/token-edits";
 import { ClipPipelineError } from "@/lib/experiments/clips/asr";
 import { clipAudioUrl } from "@/lib/experiments/clips/store";
 import {
@@ -16,6 +18,20 @@ const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
 /** Hiragana, katakana (incl. ー) or kanji. */
 const JAPANESE_CHAR = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}ー]/u;
+
+/**
+ * Fallback segmentation: ICU's Japanese dictionary word break (built into
+ * Node), cleaned by the same validation as Gemini output (punctuation dropped,
+ * colloquial んで/んだ suffixes merged). Kana tokens read as themselves; the
+ * rest get no reading, so the aligner romanizes them and flags them orange.
+ */
+function basicWordSplit(text: string): Array<{ text: string; reading?: string }> {
+  const segments = [...new Intl.Segmenter("ja", { granularity: "word" }).segment(text)]
+    .map((s) => s.segment)
+    .filter((s) => s.trim().length > 0);
+  const tokens = validatedTokens(segments, text) ?? [];
+  return tokens.map((t) => ({ text: t.text, ...(isKana(t.text) ? { reading: t.text } : {}) }));
+}
 
 /** Tokenize every sentence that has no tokens yet (cached per line). */
 export async function tokenizeClipDraft(draft: ClipDraft): Promise<ClipDraft> {
@@ -57,14 +73,21 @@ export async function tokenizeClipDraft(draft: ClipDraft): Promise<ClipDraft> {
       continue;
     }
     let tokens;
+    let basicSplit = false;
     try {
       lines += 1;
       tokens = await tokenizeJapaneseLine(sentence.text, { onUsage, onCacheHit });
     } catch (error) {
-      throw new ClipPipelineError(
-        error instanceof Error ? error.message : String(error),
-        502
-      );
+      if (!(error instanceof SegmentationError)) {
+        throw new ClipPipelineError(
+          error instanceof Error ? error.message : String(error),
+          502
+        );
+      }
+      // Real speech is often disfluent and Gemini "fixes" it, so its tokens
+      // stop matching the line. Don't block the clip on one line.
+      tokens = basicWordSplit(sentence.text);
+      basicSplit = true;
     }
     if (tokens.length === 0) {
       throw new ClipPipelineError(`Could not segment “${sentence.text.slice(0, 24)}”.`, 422);
@@ -73,6 +96,7 @@ export async function tokenizeClipDraft(draft: ClipDraft): Promise<ClipDraft> {
       ...sentence,
       tokens: tokens.map((t) => ({ text: t.text, ...(t.reading ? { reading: t.reading } : {}) })),
       score: undefined,
+      ...(basicSplit ? { basicSplit: true } : {}),
     });
   }
   const next = { ...draft, sentences, alignment: undefined };

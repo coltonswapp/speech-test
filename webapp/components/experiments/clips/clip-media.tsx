@@ -87,16 +87,20 @@ export function ClipMedia({
   audioUrl,
   controllerRef,
   preload = "metadata",
+  videoOnly = false,
   className,
 }: ClipMediaProps & {
   controllerRef?: Ref<ClipMediaController>;
   preload?: "auto" | "metadata";
+  /** Always the YouTube video, no source toggle (the whole-video page). */
+  videoOnly?: boolean;
   className?: string;
 }) {
-  const [source, setSource] = usePersistentState<ClipMediaSource>(
+  const [storedSource, setSource] = usePersistentState<ClipMediaSource>(
     "experiments.clips.playerSource",
     "video"
   );
+  const source: ClipMediaSource = videoOnly ? "video" : storedSource;
   const audioRef = useRef<HTMLAudioElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const ytRef = useRef<YTPlayer | null>(null);
@@ -187,7 +191,7 @@ export function ClipMedia({
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      <div className="flex items-center gap-1 text-xs">
+      <div className={cn("flex items-center gap-1 text-xs", videoOnly && "hidden")}>
         {(["audio", "video"] as const).map((option) => (
           <button
             key={option}

@@ -2,22 +2,23 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   clipErrorResponse,
+  createClipDraft,
   pcmWavInfo,
 } from "@/lib/experiments/clips/route-helpers";
 import {
   clipExists,
+  discardClipPending,
   isValidClipId,
+  listClipPendings,
   listClipSummaries,
   writeClipAudio,
-  writeClipDraft,
 } from "@/lib/experiments/clips/store";
-import { fetchYouTubeVideoInfo } from "@/lib/experiments/clips/youtube-info";
 import {
-  CLIP_DEFAULT_SHIFT_SECONDS,
   CLIP_MAX_SECONDS,
   YOUTUBE_ID_PATTERN,
   clipOrientationSchema,
-  type ClipDraft,
+  clipPendingInfo,
+  type ClipPendingInfo,
 } from "@/lib/experiments/clips/types";
 
 // The browser cuts the window and encodes mono 16 kHz WAV, so a 120 s clip is
@@ -26,7 +27,15 @@ const MAX_BYTES = 4_200_000;
 
 export async function GET() {
   try {
-    return NextResponse.json({ clips: await listClipSummaries() });
+    const [clips, pendings] = await Promise.all([listClipSummaries(), listClipPendings()]);
+    // Clips waiting for the clip audio script to upload their audio. A
+    // finished one lingers only so an open Studio page can see the result.
+    const stale = pendings.filter(
+      (p) => p.done && Date.now() - Date.parse(p.done.at) > 3_600_000
+    );
+    await Promise.all(stale.map((p) => discardClipPending(p.id).catch(() => undefined)));
+    const pending: ClipPendingInfo[] = pendings.filter((p) => !p.done).map(clipPendingInfo);
+    return NextResponse.json({ clips, pending });
   } catch (error) {
     return clipErrorResponse(error);
   }
@@ -87,25 +96,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Clip audio is not a PCM WAV." }, { status: 400 });
     }
 
-    // Best effort: a clip is still created if YouTube can't be reached; the
-    // editor's Refresh (or "Process" on the list) fills it in later.
-    const video = await fetchYouTubeVideoInfo(videoId).catch(() => undefined);
-    const now = new Date().toISOString();
-    const draft: ClipDraft = {
+    await writeClipAudio(id, wav);
+    const saved = await createClipDraft({
       id,
       videoId,
-      ...(video ? { video } : {}),
       startSec,
       endSec,
       orientation: orientation.data,
-      durationSec: Math.round(info.durationSec * 1000) / 1000,
-      shiftSec: CLIP_DEFAULT_SHIFT_SECONDS,
-      sentences: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-    await writeClipAudio(id, wav);
-    const saved = await writeClipDraft(draft);
+      durationSec: info.durationSec,
+    });
+    // The id is taken now, so a script upload waiting on it can never finish.
+    await discardClipPending(id).catch(() => undefined);
     return NextResponse.json({ draft: saved }, { status: 201 });
   } catch (error) {
     return clipErrorResponse(error);

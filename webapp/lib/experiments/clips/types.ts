@@ -57,10 +57,15 @@ export const clipSentenceSchema = z.object({
    * fallbacks). Reset when the line is re-aligned or its tokens change.
    */
   flagsCleared: z.boolean().optional(),
+  /**
+   * Gemini couldn't segment this line, so it got a plain dictionary word split
+   * (no readings except kana). Worth checking; cleared when its tokens change.
+   */
+  basicSplit: z.boolean().optional(),
 });
 export type ClipSentence = z.infer<typeof clipSentenceSchema>;
 
-export const CLIP_USAGE_STEPS = ["transcribe", "translate", "tokenize", "align", "level"] as const;
+export const CLIP_USAGE_STEPS = ["transcribe", "translate", "tokenize", "align", "level", "feed"] as const;
 export type ClipUsageStep = (typeof CLIP_USAGE_STEPS)[number];
 
 /** Gemini token counts for one model call (or a step's calls summed). */
@@ -156,8 +161,29 @@ export const clipDraftSchema = z.object({
    * Prefer this to Delete once a clip has been live.
    */
   deprecated: z.object({ at: z.string(), reason: z.string().optional() }).optional(),
-  /** Per-run cost log (Transcribe, Translate, Tokenize, Align, Level). */
-  usage: z.array(clipUsageRunSchema).optional(),
+  /**
+   * Whether the clip belongs in the app's feed (see feed.ts). `auto` is the
+   * Feed step's verdict, dropped when the transcript changes; `manual` is a
+   * hand-set answer in Studio, which always wins.
+   */
+  feed: z
+    .object({
+      auto: z
+        .object({
+          eligible: z.boolean(),
+          reason: z.string().optional(),
+          /** Missing when the clip failed the measured rules and no model was asked. */
+          model: z.string().optional(),
+          at: z.string(),
+        })
+        .optional(),
+      manual: z.object({ eligible: z.boolean(), at: z.string() }).optional(),
+    })
+    .optional(),
+  /** Per-run cost log (Transcribe, Translate, Tokenize, Align, Level, Feed). */
+  // A log entry this build can't read (e.g. a step added by a newer deploy)
+  // must never make the clip unreadable, so an unparseable log reads as none.
+  usage: z.array(clipUsageRunSchema).optional().catch(undefined),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -170,12 +196,79 @@ export type ClipDraftResponse = {
   audioUrl: string;
 };
 
+/** How long a script upload ticket (see ClipPending) works. */
+export const CLIP_PENDING_TTL_HOURS = 24;
+/** Longest audio the script may upload; anything over CLIP_MAX_SECONDS is split into clips. */
+export const CLIP_UPLOAD_MAX_SECONDS = 2 * 60 * 60;
+
+/**
+ * A clip whose details were entered in Studio and whose audio is still to
+ * come from the clip audio script (yt-dlp on your machine, then a direct
+ * upload to R2). Lives outside the clip folder, so nothing that lists clips
+ * sees it; the upload hook turns it into a ClipDraft once the audio checks
+ * out, or into a run of them (`<id>-01`, `<id>-02`, …) when the audio is
+ * longer than one clip or a split was asked for.
+ */
+export const clipPendingSchema = z.object({
+  id: z.string().regex(CLIP_ID_PATTERN),
+  videoId: z.string().regex(YOUTUBE_ID_PATTERN),
+  startSec: z.number().min(0),
+  /** null = to the end of the video (a whole Short); set from the audio. */
+  endSec: z.number().positive().nullable(),
+  orientation: clipOrientationSchema,
+  /**
+   * Split asked for: cut at pauses into clips of about this many seconds,
+   * with `id` as the prefix. null = one clip, unless the audio is too long.
+   */
+  splitTargetSec: z.number().positive().nullable().optional(),
+  /** SHA-256 (hex) of the ticket token; the token itself is never stored. */
+  tokenHash: z.string(),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  /** Set once the audio arrived and the clips were made; the token is dead from then on. */
+  done: z.object({ ids: z.array(z.string()), at: z.string() }).optional(),
+});
+export type ClipPending = z.infer<typeof clipPendingSchema>;
+
+/** A pending clip as Studio lists it (no token hash). */
+export type ClipPendingInfo = Omit<ClipPending, "tokenHash" | "done" | "splitTargetSec"> & {
+  splitTargetSec: number | null;
+};
+
+export function clipPendingInfo(pending: ClipPending): ClipPendingInfo {
+  return {
+    id: pending.id,
+    videoId: pending.videoId,
+    startSec: pending.startSec,
+    endSec: pending.endSec,
+    orientation: pending.orientation,
+    splitTargetSec: pending.splitTargetSec ?? null,
+    createdAt: pending.createdAt,
+    expiresAt: pending.expiresAt,
+  };
+}
+
+/** What the script reads from GET /hooks/clip-upload/[id]. */
+export type ClipUploadTicket = {
+  id: string;
+  videoId: string;
+  startSec: number;
+  endSec: number | null;
+  /** Longest audio the hook accepts (it splits long audio into clips itself). */
+  maxSeconds: number;
+  sampleRate: number;
+  /** Short-lived signed PUT for the WAV; send Content-Type: audio/wav. */
+  uploadUrl: string;
+};
+
 export type ClipSummary = {
   id: string;
   videoId: string;
   /** null until fetched from YouTube. */
   videoTitle: string | null;
   channelName: string | null;
+  /** The channel's page; steadier than its name for grouping. */
+  channelUrl: string | null;
   startSec: number;
   endSec: number;
   orientation: ClipOrientation;
@@ -187,8 +280,15 @@ export type ClipSummary = {
   /** 5 = N5 … 1 = N1; null until rated. */
   jlptLevel: number | null;
   deprecated: boolean;
+  /** Feed verdict: in / out, by the Feed step or by hand; "unchecked" until the step has run. */
+  feed: ClipFeedState;
+  /** Why (the failed rule, or the model's sentence); null when there is nothing to say. */
+  feedReason: string | null;
+  createdAt: string;
   updatedAt: string;
 };
+
+export type ClipFeedState = "in" | "out" | "manual-in" | "manual-out" | "unchecked";
 
 /**
  * Whether a clip rated `clipLevel` suits a learner at `learnerLevel` (both

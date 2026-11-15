@@ -7,6 +7,9 @@ export function isPublicPath(pathname: string): boolean {
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/public/") ||
     pathname.startsWith("/hooks/") ||
+    // The clip audio script (public/clip-fetch.mjs), fetched by curl with no
+    // session. It holds no secrets; its access is the token in the command.
+    pathname === "/clip-fetch.mjs" ||
     // Each /api/client route calls requireClientQaAccess (lib/client-auth.ts).
     pathname.startsWith("/api/client/") ||
     pathname.startsWith("/_next") ||

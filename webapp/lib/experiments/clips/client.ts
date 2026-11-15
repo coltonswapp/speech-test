@@ -4,6 +4,7 @@ import type {
   ClipDraft,
   ClipDraftResponse,
   ClipOrientation,
+  ClipPendingInfo,
   ClipSummary,
 } from "@/lib/experiments/clips/types";
 
@@ -22,7 +23,34 @@ const json = (body: unknown): RequestInit => ({
 });
 
 export const clipsApi = {
-  list: () => request<{ clips: ClipSummary[] }>("/api/experiments/clips"),
+  /** `pending`: clips waiting for the clip audio script to upload their audio. */
+  list: () =>
+    request<{ clips: ClipSummary[]; pending?: ClipPendingInfo[] }>("/api/experiments/clips"),
+  /**
+   * Saves a clip's details and returns the one-time token for the script
+   * command. Calling it again for a pending id replaces the old command.
+   */
+  createUpload: (input: {
+    id: string;
+    videoId: string;
+    startSec: number;
+    /** null = to the end of the video. */
+    endSec: number | null;
+    orientation: ClipOrientation;
+    /** Split at pauses into clips of about this length; null = only if too long for one clip. */
+    splitTargetSec: number | null;
+  }) =>
+    request<{ pending: ClipPendingInfo; token: string }>("/api/experiments/clip-uploads", {
+      method: "POST",
+      ...json(input),
+    }),
+  /** `created`: the ids of the clips made, once the script has uploaded; null until then. */
+  uploadStatus: (id: string) =>
+    request<{ pending: ClipPendingInfo | null; created: string[] | null; videoId: string | null }>(
+      `/api/experiments/clip-uploads/${id}`
+    ),
+  cancelUpload: (id: string) =>
+    request<{ ok: true }>(`/api/experiments/clip-uploads/${id}`, { method: "DELETE" }),
   get: (id: string) => request<ClipDraftResponse>(`/api/experiments/clips/${id}`),
   create: (input: {
     id: string;
@@ -56,6 +84,8 @@ export const clipsApi = {
       clearFlags?: { sentence: number; cleared: boolean };
       /** 5 = N5 … 1 = N1; null clears the rating. */
       jlptLevel?: number | null;
+      /** Hand-set feed answer; null = back to the automatic verdict. */
+      feedEligible?: boolean | null;
       /** Retire the clip, or null to restore it. */
       deprecated?: { reason?: string } | null;
     }
@@ -66,10 +96,10 @@ export const clipsApi = {
     }),
   delete: (id: string) =>
     request<{ ok: true }>(`/api/experiments/clips/${id}`, { method: "DELETE" }),
-  /** `model` applies to transcribe, translate and level; omitted = server default. */
+  /** `model` applies to transcribe, translate, level and feed; omitted = server default. */
   step: (
     id: string,
-    step: "transcribe" | "translate" | "tokenize" | "align" | "level",
+    step: "transcribe" | "translate" | "tokenize" | "align" | "level" | "feed",
     model?: string
   ) =>
     request<{ draft: ClipDraft }>(`/api/experiments/clips/${id}/${step}`, {

@@ -1,6 +1,7 @@
 import { exportHighlights } from "@/lib/dialogue/export";
 import type { DialogueHighlights, ExportedTeachingPattern } from "@/lib/dialogue/types";
 import { clipIsAligned, type ClipDraft, type ClipOrientation } from "@/lib/experiments/clips/types";
+import { clipFeedStatus } from "@/lib/experiments/clips/feed";
 
 // App-facing clip payload (snake_case, like the public dialogue API). Every
 // time is in seconds on the YouTube video's timeline, onset shift applied, so
@@ -68,6 +69,8 @@ export type ClipPayloadSummary = {
   preview_jp: string;
   /** 5 = N5 … 1 = N1; absent until the clip is rated. */
   jlpt_level?: number;
+  /** Whether the clip is in the feed (`?feed=1` lists only these). */
+  in_feed: boolean;
   updated_at: string;
 };
 
@@ -155,6 +158,7 @@ export function clipPayloadSummary(draft: ClipDraft): ClipPayloadSummary | null 
     sentence_count: draft.sentences.length,
     preview_jp: draft.sentences[0]?.text ?? "",
     ...(draft.difficulty ? { jlpt_level: draft.difficulty.jlptLevel } : {}),
+    in_feed: clipFeedStatus(draft).eligible,
     updated_at: draft.updatedAt,
   };
 }

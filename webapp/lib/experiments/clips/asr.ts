@@ -65,7 +65,8 @@ export async function transcribeClipAudio(
         },
       },
     }),
-    signal: AbortSignal.timeout(120_000),
+    // Pro can take over a minute on a 2-minute clip.
+    signal: AbortSignal.timeout(240_000),
   });
 
   if (!response.ok) {

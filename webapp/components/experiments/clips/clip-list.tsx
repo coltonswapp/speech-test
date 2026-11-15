@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { clipsApi } from "@/lib/experiments/clips/client";
 import { cn } from "@/lib/utils";
+import { FEED_STATE_LABELS, clipFeedNotReady, clipFeedStatus } from "@/lib/experiments/clips/feed";
 import {
   CLIP_ID_PATTERN,
   CLIP_MAX_SECONDS,
@@ -38,7 +39,6 @@ import {
 } from "@/lib/experiments/clips/types";
 import { splitAtPauses, splitClipId } from "@/lib/experiments/clips/split";
 import {
-  cutClipToWav,
   decodeFileToMono,
   encodeSamplesToWav,
 } from "@/lib/experiments/clips/wav-encode";
@@ -47,6 +47,18 @@ import {
   parseTimecode,
   parseYouTubeId,
 } from "@/components/experiments/clips/clip-format";
+import {
+  ClipCatalogControls,
+  DEFAULT_CATALOG_VIEW,
+  applyCatalogView,
+  type CatalogView,
+} from "@/components/experiments/clips/clip-catalog";
+import {
+  ClipUploadPanel,
+  PendingClipList,
+  type ClipUploadTicketState,
+} from "@/components/experiments/clips/clip-upload-panel";
+import { usePersistentState } from "@/components/experiments/clips/use-persistent-state";
 
 export function ClipList() {
   const clipsQuery = useQuery({
@@ -54,6 +66,13 @@ export function ClipList() {
     queryFn: () => clipsApi.list(),
   });
   const clips = clipsQuery.data?.clips ?? [];
+  const pending = clipsQuery.data?.pending ?? [];
+  // The script command for a clip whose details were just saved (or reissued).
+  const [ticket, setTicket] = useState<ClipUploadTicketState | null>(null);
+  const closeTicket = useCallback(() => setTicket(null), []);
+  const [storedView, setView] = usePersistentState<Partial<CatalogView>>("clip-catalog-view", {});
+  const view: CatalogView = { ...DEFAULT_CATALOG_VIEW, ...storedView };
+  const shown = applyCatalogView(clips, view);
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,23 +85,49 @@ export function ClipList() {
         </Link>
         <h1 className="text-xl font-semibold tracking-tight">Clip transcripts</h1>
         <p className="text-sm text-muted-foreground">
-          Cut a window from a local copy of a YouTube video (or split a whole video into a run of
-          clips), transcribe it, tokenize it, and force-align word timestamps.
+          Cut a window from a YouTube video (or split a whole video into a run of clips),
+          transcribe it, tokenize it, and force-align word timestamps. Shorts waiting to be
+          clipped are in the{" "}
+          <Link href="/experiments/clips/queue" className="underline underline-offset-2">
+            clip queue
+          </Link>
+          .
         </p>
       </div>
 
-      <NewClipForm />
+      <NewClipForm onTicket={setTicket} />
+
+      {ticket ? <ClipUploadPanel key={ticket.token} ticket={ticket} onClose={closeTicket} /> : null}
+
+      <PendingClipList
+        pending={pending.filter((clip) => clip.id !== ticket?.id)}
+        onTicket={setTicket}
+        onDiscarded={(id) => {
+          if (ticket?.id === id) setTicket(null);
+        }}
+      />
 
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-medium">Clips</h2>
+        {clips.length > 0 ? (
+          <ClipCatalogControls clips={clips} shown={shown} view={view} onChange={setView} />
+        ) : null}
         {clipsQuery.isPending ? (
           <Skeleton className="h-16 w-full" />
         ) : clipsQuery.isError ? (
           <p className="text-sm text-destructive">{clipsQuery.error.message}</p>
         ) : clips.length === 0 ? (
           <p className="text-sm text-muted-foreground">No clips yet.</p>
+        ) : shown.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No clips match these filters.</p>
+        ) : !view.grouped ? (
+          <ul className="divide-y divide-border/60 rounded-xl border border-border/60">
+            {shown.map((clip) => (
+              <ClipRow key={clip.id} clip={clip} />
+            ))}
+          </ul>
         ) : (
-          groupByVideo(clips).map((group) => (
+          groupByVideo(shown).map((group) => (
             <div key={group.videoId} className="rounded-xl border border-border/60">
               {group.clips.length > 1 ? (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 bg-muted/30 px-4 py-2">
@@ -97,6 +142,12 @@ export function ClipList() {
                       .filter(Boolean)
                       .join(" · ")}
                   </span>
+                  <Link
+                    href={`/experiments/clips/video/${group.videoId}`}
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    Review all together
+                  </Link>
                   <ProcessAllButton clips={group.clips} />
                 </div>
               ) : null}
@@ -113,7 +164,7 @@ export function ClipList() {
   );
 }
 
-/** Clips cut from the same video together (in video order); groups keep the list's newest-first order. */
+/** Clips cut from the same video together (in video order); groups keep the order their first clip has in the list. */
 function groupByVideo(clips: ClipSummary[]): { videoId: string; clips: ClipSummary[] }[] {
   const groups = new Map<string, ClipSummary[]>();
   for (const clip of clips) {
@@ -139,7 +190,8 @@ function ClipRow({ clip }: { clip: ClipSummary }) {
       >
         <span className="font-mono text-sm font-medium">{clip.id}</span>
         <span className="text-xs text-muted-foreground">
-          {clip.videoId} · {formatTimecode(clip.startSec)}–{formatTimecode(clip.endSec)}
+          {clip.videoId} · {formatTimecode(clip.startSec)}–{formatTimecode(clip.endSec)} ·{" "}
+          {Math.round(clip.endSec - clip.startSec)} s
           {clip.orientation === "portrait" ? " · Short" : ""}
         </span>
         <span className="text-xs text-muted-foreground">{clip.sentenceCount} sentences</span>
@@ -154,6 +206,7 @@ function ClipRow({ clip }: { clip: ClipSummary }) {
           <Badge variant={clip.jlptLevel ? "secondary" : "outline"}>
             {clip.jlptLevel ? `N${clip.jlptLevel}` : "No level"}
           </Badge>
+          <FeedBadge clip={clip} />
           <Badge variant={clip.translated ? "secondary" : "outline"}>English</Badge>
           <Badge variant={clip.highlighted ? "secondary" : "outline"}>Highlights</Badge>
           <Badge variant={clip.tokenized ? "secondary" : "outline"}>Tokenized</Badge>
@@ -164,20 +217,46 @@ function ClipRow({ clip }: { clip: ClipSummary }) {
   );
 }
 
+/** In the feed, kept out (hover for why), or not checked yet. Nothing for deprecated clips. */
+export function FeedBadge({ clip }: { clip: ClipSummary }) {
+  if (clip.deprecated) return null;
+  const inFeed = clip.feed === "in" || clip.feed === "manual-in";
+  return (
+    <Badge
+      variant={inFeed ? "secondary" : "outline"}
+      className={cn(!inFeed && clip.feed !== "unchecked" && "text-muted-foreground line-through")}
+      title={[FEED_STATE_LABELS[clip.feed], clip.feedReason].filter(Boolean).join(": ")}
+    >
+      Feed
+    </Badge>
+  );
+}
+
 function clipNeedsProcessing(clip: ClipSummary): boolean {
   return (
     !clip.deprecated &&
-    (!clip.aligned || !clip.translated || clip.jlptLevel === null || clip.videoTitle === null)
+    (!clip.aligned ||
+      !clip.translated ||
+      clip.jlptLevel === null ||
+      clip.videoTitle === null ||
+      clipNeedsFeedCheck(clip))
+  );
+}
+
+/** Ready for the Feed step and passing the measured rules, but never judged. */
+function clipNeedsFeedCheck(clip: ClipSummary): boolean {
+  return (
+    clip.feed === "unchecked" && clip.aligned && clip.translated && clip.sentenceCount > 0
   );
 }
 
 /**
  * Runs every unfinished step on each of a video's clips, one clip at a time:
- * video info, transcribe, tokenize, align, English, level. Finished steps are skipped and
+ * video info, transcribe, tokenize, align, English, level, feed check. Finished steps are skipped and
  * a hand-set level is kept. A clip that fails is reported and the rest carry
  * on; a piece with no speech (music, silence) is left empty.
  */
-function ProcessAllButton({ clips }: { clips: ClipSummary[] }) {
+export function ProcessAllButton({ clips }: { clips: ClipSummary[] }) {
   const queryClient = useQueryClient();
   const pending = clips.filter(clipNeedsProcessing);
   const [progress, setProgress] = useState<string | null>(null);
@@ -222,10 +301,17 @@ function ProcessAllButton({ clips }: { clips: ClipSummary[] }) {
             say("rating level");
             draft = (await clipsApi.step(clip.id, "level")).draft;
           }
+          // Free for clips the measured rules turn down; one model call otherwise.
+          if (clipFeedNotReady(draft) === null && clipFeedStatus(draft).state === "unchecked") {
+            say("checking for the feed");
+            draft = (await clipsApi.step(clip.id, "feed")).draft;
+          }
         } catch (error) {
           failed.push(`${clip.id}: ${error instanceof Error ? error.message : String(error)}`);
         }
         void queryClient.invalidateQueries({ queryKey: ["experiment-clips"] });
+        // The whole-video page shows each clip's draft; refresh this one.
+        void queryClient.invalidateQueries({ queryKey: ["experiment-clip", clip.id] });
       }
       return { failed, empty, done: pending.length - failed.length - empty };
     },
@@ -258,7 +344,7 @@ function ProcessAllButton({ clips }: { clips: ClipSummary[] }) {
         size="sm"
         variant="outline"
         disabled={run.isPending}
-        title="Get video info, transcribe, tokenize, align, translate and rate every clip that isn’t done yet"
+        title="Get video info, transcribe, tokenize, align, translate, rate and feed-check every clip that isn’t done yet"
         onClick={() => run.mutate()}
       >
         {run.isPending ? <Loader2Icon className="animate-spin" /> : <WandSparklesIcon />}
@@ -268,8 +354,15 @@ function ProcessAllButton({ clips }: { clips: ClipSummary[] }) {
   );
 }
 
-function NewClipForm() {
+/** Where a new clip's audio comes from. */
+type ClipAudioSource = "script" | "file";
+
+function NewClipForm({ onTicket }: { onTicket: (ticket: ClipUploadTicketState) => void }) {
   const router = useRouter();
+  // "script": save the details, then one pasted command downloads and uploads.
+  // "file": download the audio yourself and pick it.
+  const [source, setSource] = usePersistentState<ClipAudioSource>("clip-new-source", "script");
+  const viaScript = source === "script";
   const [file, setFile] = useState<File | null>(null);
   const [id, setId] = useState("");
   const [video, setVideo] = useState("");
@@ -301,7 +394,7 @@ function NewClipForm() {
       const startSec = whole ? 0 : parseTimecode(start);
       const endSec = whole ? null : parseTimecode(end);
       const offsetSec = parseTimecode(fileOffset) ?? 0;
-      if (!file) throw new Error("Choose an audio or video file.");
+      if (!viaScript && !file) throw new Error("Choose an audio or video file.");
       if (!CLIP_ID_PATTERN.test(id)) {
         throw new Error("Clip id: lowercase letters, digits and dashes only.");
       }
@@ -309,95 +402,112 @@ function NewClipForm() {
       if (!whole) {
         if (startSec === null || endSec === null) throw new Error("Enter start and end times.");
         if (endSec <= startSec) throw new Error("End must be after start.");
-        if (!split && endSec - startSec > CLIP_MAX_SECONDS) {
-          throw new Error(
-            `One clip is limited to ${CLIP_MAX_SECONDS} s. Turn on “Split into clips” for a longer stretch.`
-          );
-        }
       }
       if (startSec === null) throw new Error("Enter start and end times.");
-      if (split) {
-        const targetSec = Number(target);
-        if (
-          !Number.isFinite(targetSec) ||
-          targetSec < CLIP_SPLIT_MIN_TARGET_SECONDS ||
-          targetSec > CLIP_SPLIT_MAX_SECONDS
-        ) {
-          throw new Error(
-            `Clip length must be ${CLIP_SPLIT_MIN_TARGET_SECONDS}–${CLIP_SPLIT_MAX_SECONDS} s.`
-          );
-        }
-        setProgress("Decoding…");
-        const samples = await decodeFileToMono(file);
-        const fileSec = samples.length / CLIP_SAMPLE_RATE;
-        const from = startSec - offsetSec;
-        const to = endSec !== null ? endSec - offsetSec : fileSec;
-        if (from < 0) throw new Error("The range starts before the file does; check the file offset.");
-        if (from >= fileSec) throw new Error("The range starts after the file ends; check the file offset.");
-        if (to > fileSec + 0.5) {
-          throw new Error(
-            `File is ${fileSec.toFixed(1)} s long; the range ends at ${to.toFixed(1)} s in the file.`
-          );
-        }
-        const range = samples.subarray(
-          Math.round(from * CLIP_SAMPLE_RATE),
-          Math.min(samples.length, Math.round(to * CLIP_SAMPLE_RATE))
+
+      const targetSec = split ? Number(target) : CLIP_SPLIT_DEFAULT_TARGET_SECONDS;
+      if (
+        !Number.isFinite(targetSec) ||
+        targetSec < CLIP_SPLIT_MIN_TARGET_SECONDS ||
+        targetSec > CLIP_SPLIT_MAX_SECONDS
+      ) {
+        throw new Error(
+          `Clip length must be ${CLIP_SPLIT_MIN_TARGET_SECONDS}–${CLIP_SPLIT_MAX_SECONDS} s.`
         );
-        const segments = splitAtPauses(range, CLIP_SAMPLE_RATE, targetSec, CLIP_SPLIT_MAX_SECONDS);
-        const ids = segments.map((_, i) => splitClipId(id, i, segments.length));
-        // Check every id up front so a clash can't leave half a video uploaded.
-        const taken = new Set((await clipsApi.list()).clips.map((clip) => clip.id));
-        const clash = ids.find((candidate) => taken.has(candidate));
-        if (clash) throw new Error(`Clip “${clash}” already exists. Pick another id prefix.`);
-        const round3 = (n: number) => Math.round(n * 1000) / 1000;
-        for (const [i, segment] of segments.entries()) {
-          setProgress(`Uploading ${i + 1} of ${segments.length}…`);
-          try {
-            await clipsApi.create({
-              id: ids[i],
-              videoId,
-              startSec: round3(startSec + segment.startSec),
-              endSec: round3(startSec + segment.endSec),
-              orientation: vertical ? "portrait" : "landscape",
-              wav: encodeSamplesToWav(range, segment.startSec, segment.endSec),
-            });
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            throw new Error(
-              i === 0 ? message : `Created ${i} of ${segments.length} clips, then failed: ${message}`
-            );
-          }
-        }
-        return { created: ids };
       }
-      // Whole video: the file is the video, so the clip ends where the file does.
-      const { wav, durationSec } = await cutClipToWav(
-        file,
-        startSec,
-        endSec,
-        offsetSec,
-        CLIP_MAX_SECONDS
+
+      // Script: only the details are saved now; the audio follows from
+      // Terminal, and the server cuts it into clips the way the code below does.
+      if (viaScript) {
+        setProgress("Saving…");
+        const { token } = await clipsApi.createUpload({
+          id,
+          videoId,
+          startSec,
+          endSec,
+          orientation: vertical ? "portrait" : "landscape",
+          splitTargetSec: split ? targetSec : null,
+        });
+        return { created: [], videoId, ticket: { id, token } };
+      }
+      if (!file) throw new Error("Choose an audio or video file.");
+
+      setProgress("Decoding…");
+      const samples = await decodeFileToMono(file);
+      const fileSec = samples.length / CLIP_SAMPLE_RATE;
+      const from = startSec - offsetSec;
+      const to = endSec !== null ? endSec - offsetSec : fileSec;
+      if (from < 0) throw new Error("The range starts before the file does; check the file offset.");
+      if (from >= fileSec) throw new Error("The range starts after the file ends; check the file offset.");
+      if (to > fileSec + 0.5) {
+        throw new Error(
+          `File is ${fileSec.toFixed(1)} s long; the range ends at ${to.toFixed(1)} s in the file.`
+        );
+      }
+      const range = samples.subarray(
+        Math.round(from * CLIP_SAMPLE_RATE),
+        Math.min(samples.length, Math.round(to * CLIP_SAMPLE_RATE))
       );
-      const { draft } = await clipsApi.create({
-        id,
-        videoId,
-        startSec,
-        endSec: endSec ?? startSec + durationSec,
-        orientation: vertical ? "portrait" : "landscape",
-        wav,
-      });
-      return { created: [draft.id] };
+      const rangeSec = Math.floor((range.length / CLIP_SAMPLE_RATE) * 1000) / 1000;
+      const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
+      // Fits in one clip and no split asked for: one clip with this id.
+      if (!split && rangeSec <= CLIP_MAX_SECONDS) {
+        setProgress("Uploading…");
+        const { draft } = await clipsApi.create({
+          id,
+          videoId,
+          startSec,
+          endSec: endSec ?? round3(startSec + rangeSec),
+          orientation: vertical ? "portrait" : "landscape",
+          wav: encodeSamplesToWav(range, 0, rangeSec),
+        });
+        return { created: [draft.id], videoId, ticket: null };
+      }
+
+      // Longer than one clip (or split asked for): cut at pauses into a run
+      // of clips named <id>-01, <id>-02, …
+      const segments = splitAtPauses(range, CLIP_SAMPLE_RATE, targetSec, CLIP_SPLIT_MAX_SECONDS);
+      const ids = segments.map((_, i) => splitClipId(id, i, segments.length));
+      // Check every id up front so a clash can't leave half a video uploaded.
+      const taken = new Set((await clipsApi.list()).clips.map((clip) => clip.id));
+      const clash = ids.find((candidate) => taken.has(candidate));
+      if (clash) throw new Error(`Clip “${clash}” already exists. Pick another id prefix.`);
+      for (const [i, segment] of segments.entries()) {
+        setProgress(`Uploading ${i + 1} of ${segments.length}…`);
+        try {
+          await clipsApi.create({
+            id: ids[i],
+            videoId,
+            startSec: round3(startSec + segment.startSec),
+            endSec: round3(startSec + segment.endSec),
+            orientation: vertical ? "portrait" : "landscape",
+            wav: encodeSamplesToWav(range, segment.startSec, segment.endSec),
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(
+            i === 0 ? message : `Created ${i} of ${segments.length} clips, then failed: ${message}`
+          );
+        }
+      }
+      return { created: ids, videoId, ticket: null };
     },
-    onSuccess: ({ created }) => {
-      if (created.length === 1 && !split) {
+    onSuccess: ({ created, videoId, ticket }) => {
+      if (ticket) {
+        toast.success(`Saved ${ticket.id}. Run the command to add the audio.`);
+        onTicket(ticket);
+        return;
+      }
+      if (created.length === 1) {
         toast.success(`Created ${created[0]}.`);
         router.push(`/experiments/clips/${created[0]}`);
         return;
       }
       toast.success(
-        `Created ${created.length} clips (${created[0]} … ${created[created.length - 1]}). Use “Process” on the video below to run them.`
+        `Created ${created.length} clips (${created[0]} … ${created[created.length - 1]}). Process them here to transcribe, tokenize and align.`
       );
-      setFile(null);
+      router.push(`/experiments/clips/video/${videoId}`);
     },
     onError: (error) => toast.error(error.message),
     onSettled: () => {
@@ -416,6 +526,34 @@ function NewClipForm() {
     >
       <h2 className="text-sm font-medium">New clip</h2>
       <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+          <Label>Audio from</Label>
+          <div className="inline-flex gap-0.5 rounded-lg border border-border/60 p-0.5">
+            <Button
+              type="button"
+              size="sm"
+              variant={viaScript ? "secondary" : "ghost"}
+              aria-pressed={viaScript}
+              onClick={() => setSource("script")}
+            >
+              Terminal script
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={viaScript ? "ghost" : "secondary"}
+              aria-pressed={!viaScript}
+              onClick={() => setSource("file")}
+            >
+              Choose a file
+            </Button>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {viaScript
+              ? "Save the details here; one command then downloads the audio and attaches it"
+              : "Download the audio yourself, then pick the file"}
+          </span>
+        </div>
         <Field
           label={split ? "Clip id prefix" : "Clip id"}
           hint={
@@ -438,9 +576,7 @@ function NewClipForm() {
           <Label htmlFor="new-clip-whole">Whole video</Label>
           <span className="text-xs text-muted-foreground">
             {whole
-              ? split
-                ? "Start and end come from the file"
-                : `Start and end come from the file (up to ${CLIP_MAX_SECONDS} s)`
+              ? `Start and end come from the ${viaScript ? "video" : "file"}. Over ${CLIP_MAX_SECONDS} s, it’s split into clips automatically.`
               : "Off: enter start and end times"}
           </span>
         </div>
@@ -464,7 +600,8 @@ function NewClipForm() {
             </>
           ) : (
             <span className="text-xs text-muted-foreground">
-              For a 5–20 minute video: one upload becomes a run of clips from the same video
+              Off: one clip, unless it’s over {CLIP_MAX_SECONDS} s, which is split into ~
+              {CLIP_SPLIT_DEFAULT_TARGET_SECONDS} s clips automatically
             </span>
           )}
         </div>
@@ -477,10 +614,8 @@ function NewClipForm() {
               label="End (video time)"
               hint={
                 length !== null && length > 0
-                  ? `${length.toFixed(1)} s${!split && length > CLIP_MAX_SECONDS ? ` (max ${CLIP_MAX_SECONDS})` : ""}`
-                  : split
-                    ? "Any length; it is cut into clips"
-                    : `Up to ${CLIP_MAX_SECONDS} s after start`
+                  ? `${length.toFixed(1)} s${!split && length > CLIP_MAX_SECONDS ? ` (will be split into ~${CLIP_SPLIT_DEFAULT_TARGET_SECONDS} s clips)` : ""}`
+                  : `Any length; over ${CLIP_MAX_SECONDS} s is cut into clips`
               }
             >
               <Input value={end} onChange={(e) => setEnd(e.target.value)} placeholder="6:41.5" />
@@ -496,11 +631,18 @@ function NewClipForm() {
               : "The app gives vertical clips a taller player"}
           </span>
         </div>
-        <DownloadCommand videoId={parseYouTubeId(video)} section={section} whole={whole} />
-        <Field label="Audio file" hint="Local copy of the video or its audio (MP4, M4A, MP3, WAV)">
-          <FileDrop file={file} onFile={setFile} />
-        </Field>
-        {whole ? null : <Field
+        {viaScript ? null : (
+          <>
+            <DownloadCommand videoId={parseYouTubeId(video)} section={section} whole={whole} />
+            <Field
+              label="Audio file"
+              hint="Local copy of the video or its audio (MP4, M4A, MP3, WAV)"
+            >
+              <FileDrop file={file} onFile={setFile} />
+            </Field>
+          </>
+        )}
+        {whole || viaScript ? null : <Field
           label="File starts at (video time)"
           hint={
             fileOffsetOverride === null
@@ -520,9 +662,11 @@ function NewClipForm() {
           {create.isPending ? <Loader2Icon className="animate-spin" /> : <PlusIcon />}
           {create.isPending
             ? (progress ?? "Cutting and uploading…")
-            : split
-              ? "Split and create clips"
-              : "Create clip"}
+            : viaScript
+              ? "Save and get command"
+              : split
+                ? "Split and create clips"
+                : "Create clip"}
         </Button>
       </div>
     </form>

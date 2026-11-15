@@ -9,17 +9,16 @@ import {
   ArchiveIcon,
   ArchiveRestoreIcon,
   AudioLinesIcon,
-  CheckIcon,
   ChevronLeftIcon,
   ExternalLinkIcon,
   LanguagesIcon,
   Loader2Icon,
   MicIcon,
-  PlayIcon,
   RefreshCwIcon,
   SaveIcon,
   ScissorsIcon,
   SignalIcon,
+  SparklesIcon,
   Trash2Icon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +40,6 @@ import type { DialogueHighlights, DialogueLine } from "@/lib/dialogue/types";
 import { clipsApi } from "@/lib/experiments/clips/client";
 import {
   CLIP_STEP_MODELS,
-  estimateGeminiCostUSD,
   GEMINI_ASR_MODEL_DEFAULT,
   GEMINI_TEXT_MODEL_DEFAULT,
   isClipStepModel,
@@ -56,9 +54,21 @@ import {
   type ClipDraftResponse,
   type ClipUsageRun,
 } from "@/lib/experiments/clips/types";
+import {
+  FEED_STATE_LABELS,
+  clipFeedNotReady,
+  clipFeedRules,
+  clipFeedStatus,
+} from "@/lib/experiments/clips/feed";
 import { cn } from "@/lib/utils";
 import { formatTimecode } from "@/components/experiments/clips/clip-format";
-import { TokenEditMenu } from "@/components/experiments/clips/token-edit-menu";
+import { ClipTokenLines } from "@/components/experiments/clips/clip-token-lines";
+import {
+  formatCount,
+  formatUSD,
+  runCost,
+  STEP_LABELS,
+} from "@/lib/experiments/clips/usage-cost";
 import {
   ClipMedia,
   type ClipMediaController,
@@ -67,10 +77,8 @@ import {
 import { EditorSection } from "@/components/experiments/clips/editor-section";
 import type { EditableToken } from "@/lib/experiments/clips/token-edits";
 
-/** Aligner scores below this are worth a listen (they don't predict error well). */
-const LOW_SCORE = 0.3;
 
-type Step = "transcribe" | "translate" | "tokenize" | "align" | "level";
+type Step = "transcribe" | "translate" | "tokenize" | "align" | "level" | "feed";
 
 type ModelStep = "transcribe" | "translate";
 type StepModels = Record<ModelStep, string>;
@@ -160,7 +168,9 @@ export function ClipEditor({ clipId }: { clipId: string }) {
       setDraft(next);
       const tokenCount = next.sentences.reduce((n, s) => n + (s.tokens?.length ?? 0), 0);
       toast.success(
-        step === "level"
+        step === "feed"
+          ? FEED_STATE_LABELS[clipFeedStatus(next).state] + "."
+          : step === "level"
           ? `Rated N${next.difficulty?.jlptLevel ?? "?"}.`
           : step === "transcribe"
           ? `Transcribed ${next.sentences.length} sentences.`
@@ -170,6 +180,7 @@ export function ClipEditor({ clipId }: { clipId: string }) {
             ? `Tokenized ${tokenCount} tokens.`
             : `Aligned ${tokenCount} tokens.`
       );
+      if (step === "tokenize") warnBasicSplits(next);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -219,6 +230,7 @@ export function ClipEditor({ clipId }: { clipId: string }) {
     onSuccess: (next) => {
       const tokenCount = next.sentences.reduce((n, s) => n + (s.tokens?.length ?? 0), 0);
       toast.success(`Ready: ${next.sentences.length} sentences, ${tokenCount} tokens aligned.`);
+      warnBasicSplits(next);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -234,6 +246,12 @@ export function ClipEditor({ clipId }: { clipId: string }) {
 
   const setLevel = useMutation({
     mutationFn: (jlptLevel: number | null) => clipsApi.patch(clipId, { jlptLevel }),
+    onSuccess: ({ draft: next }) => setDraft(next),
+    onError: (error) => toast.error(error.message),
+  });
+
+  const setFeed = useMutation({
+    mutationFn: (feedEligible: boolean | null) => clipsApi.patch(clipId, { feedEligible }),
     onSuccess: ({ draft: next }) => setDraft(next),
     onError: (error) => toast.error(error.message),
   });
@@ -368,6 +386,13 @@ export function ClipEditor({ clipId }: { clipId: string }) {
           >
             {draft.videoId} <ExternalLinkIcon className="size-3" />
           </a>
+          <Link
+            href={`/experiments/clips/video/${draft.videoId}`}
+            className="hover:text-foreground"
+            title="Every clip from this video on one page, following the video"
+          >
+            · All clips from this video
+          </Link>
           <span>
             {formatTimecode(draft.startSec)}–{formatTimecode(draft.endSec)} (
             {draft.durationSec.toFixed(1)} s)
@@ -757,6 +782,14 @@ export function ClipEditor({ clipId }: { clipId: string }) {
         </p>
       </EditorSection>
 
+      <FeedSection
+        draft={draft}
+        disabled={busy || dirty || setFeed.isPending}
+        checking={busyStep === "feed"}
+        onCheck={() => runStep.mutate("feed")}
+        onSetManual={(eligible) => setFeed.mutate(eligible)}
+      />
+
       <UsageSection runs={draft.usage ?? []} />
       </div>
       </div>
@@ -764,39 +797,123 @@ export function ClipEditor({ clipId }: { clipId: string }) {
   );
 }
 
-const STEP_LABELS: Record<ClipUsageRun["step"], string> = {
-  transcribe: "Transcribe",
-  translate: "Translate",
-  tokenize: "Tokenize",
-  align: "Align",
-  level: "Level",
-};
-
-const formatCount = (n: number) => n.toLocaleString("en-US");
-
-function formatUSD(value: number): string {
-  if (value === 0) return "$0";
-  if (value < 0.0001) return "<$0.0001";
-  return `$${value.toFixed(4)}`;
+/** Toast naming lines that fell back to a plain word split during tokenize. */
+function warnBasicSplits(draft: ClipDraft) {
+  const lines = draft.sentences.flatMap((s, i) => (s.basicSplit ? [i + 1] : []));
+  if (lines.length === 0) return;
+  toast.warning(
+    `Line${lines.length === 1 ? "" : "s"} ${lines.join(", ")}: Gemini couldn't segment, so ${lines.length === 1 ? "it got" : "they got"} a basic word split. Check the tokens in Review.`
+  );
 }
 
 /**
- * Text-rate estimate (thinking billed as output). Audio input costs more than
- * text and our rate table has no audio rates, so runs with audio are a floor.
+ * Whether the app's feed shows this clip: the measured rules with what the
+ * clip scored, the Feed step's verdict, and a hand-set answer that beats both.
  */
-function runCost(run: ClipUsageRun): { usd: number; floor: boolean } | null {
-  if (run.step === "align") return null;
-  if (run.calls === 0) return { usd: 0, floor: false };
-  const usd = estimateGeminiCostUSD(
-    run.model,
-    run.inputTokens,
-    run.outputTokens + run.thinkingTokens,
-    new Date(run.at)
+function FeedSection({
+  draft,
+  disabled,
+  checking,
+  onCheck,
+  onSetManual,
+}: {
+  draft: ClipDraft;
+  disabled: boolean;
+  checking: boolean;
+  onCheck: () => void;
+  onSetManual: (eligible: boolean | null) => void;
+}) {
+  const status = clipFeedStatus(draft);
+  const notReady = clipFeedNotReady(draft);
+  const rules = clipFeedRules(draft);
+  const rulesPass = rules.every((rule) => rule.ok);
+  const auto = draft.feed?.auto;
+  const manual = draft.feed?.manual;
+  return (
+    <EditorSection
+      id="feed"
+      title="7. Feed"
+      summary={FEED_STATE_LABELS[status.state].toLowerCase()}
+      actions={
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={disabled || notReady !== null}
+          title={
+            notReady
+              ? `${notReady} Align and translate first.`
+              : rulesPass
+                ? "Ask Gemini whether this clip stands on its own and is worth showing"
+                : "The clip fails a rule below, so it is turned down without asking Gemini"
+          }
+          onClick={onCheck}
+        >
+          {checking ? <Loader2Icon className="animate-spin" /> : <SparklesIcon />}
+          {auto ? "Check again" : "Check for feed"}
+        </Button>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <Select
+          value={manual ? (manual.eligible ? "in" : "out") : "auto"}
+          disabled={disabled}
+          onValueChange={(value) => onSetManual(value === "auto" ? null : value === "in")}
+        >
+          <SelectTrigger className="w-44" aria-label="Feed">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">Automatic</SelectItem>
+            <SelectItem value="in">Always in the feed</SelectItem>
+            <SelectItem value="out">Never in the feed</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="min-w-0 flex-1 text-sm">
+          <span className="font-medium">{FEED_STATE_LABELS[status.state]}.</span>{" "}
+          <span className="text-muted-foreground">
+            {manual
+              ? "Your answer overrides the rules and the check below."
+              : status.reason ?? ""}
+          </span>
+        </p>
+      </div>
+      <ul className="flex flex-col gap-1 text-xs">
+        {rules.map((rule) => (
+          <li key={rule.label} className="flex flex-wrap gap-x-2">
+            <span className={rule.ok ? "text-muted-foreground" : "font-medium text-destructive"}>
+              {rule.ok ? "Passes" : "Fails"}
+            </span>
+            <span>{rule.label}</span>
+            <span className="text-muted-foreground tabular-nums">{rule.value}</span>
+          </li>
+        ))}
+        <li className="flex flex-wrap gap-x-2">
+          <span
+            className={
+              auto?.model && !auto.eligible ? "font-medium text-destructive" : "text-muted-foreground"
+            }
+          >
+            {auto?.model ? (auto.eligible ? "Passes" : "Fails") : "Not run"}
+          </span>
+          <span>Stands on its own and is worth watching</span>
+          <span className="text-muted-foreground">
+            {auto?.model
+              ? `${auto.model}${auto.reason ? `: ${auto.reason}` : ""}`
+              : rulesPass
+                ? "Gemini reads the transcript and its English."
+                : "Skipped while a rule above fails."}
+          </span>
+        </li>
+      </ul>
+      <p className="text-xs text-muted-foreground">
+        Every aligned clip can be opened in the app; the feed only takes clips that pass all of
+        these. Editing the transcript clears the check, so run it again afterwards.
+      </p>
+    </EditorSection>
   );
-  return usd === undefined ? null : { usd, floor: run.audioInputTokens > 0 };
 }
 
-/** Every Transcribe / Translate / Tokenize / Align / Level run on this clip, newest first. */
+/** Every Transcribe / Translate / Tokenize / Align / Level / Feed run on this clip, newest first. */
 function UsageSection({ runs }: { runs: ClipUsageRun[] }) {
   const newestFirst = [...runs].reverse();
   const costs = newestFirst.map(runCost);
@@ -1152,9 +1269,6 @@ function TimingReview({
   // Edit mode: clicking a token opens the split / merge / reading menu
   // instead of playing from it.
   const [editing, setEditing] = useState(false);
-  const [menu, setMenu] = useState<{ sentence: number; token: number; x: number; y: number } | null>(
-    null
-  );
   const [saving, setSaving] = useState(false);
 
   // Flat, time-ordered list for the playhead lookup (clip-relative + shift).
@@ -1284,12 +1398,6 @@ function TimingReview({
     media.play(Math.max(0, clipSeconds));
   };
 
-  const openMenu = (sentence: number, token: number, x: number, y: number) =>
-    setMenu({ sentence, token, x, y: y + 8 });
-
-  const toVideo = (clipSeconds: number) =>
-    formatTimecode(draft.startSec + clipSeconds + draft.shiftSec);
-
   const tokenCount = draft.sentences.reduce((n, s) => n + (s.tokens?.length ?? 0), 0);
   const fallbackCount = draft.sentences.reduce(
     (n, s) => n + (s.tokens ?? []).filter((t) => t.readingFallback).length,
@@ -1314,7 +1422,6 @@ function TimingReview({
             disabled={disabled && !editing}
             onClick={() => {
               setEditing((on) => !on);
-              setMenu(null);
             }}
           >
             {saving ? <Loader2Icon className="animate-spin" /> : <ScissorsIcon />}
@@ -1368,152 +1475,19 @@ function TimingReview({
         follow whichever player you started last: the clip audio above or the video on the
         right.
       </p>
-      {menu && draft.sentences[menu.sentence]?.tokens ? (
-        <TokenEditMenu
-          key={`${menu.sentence}:${menu.token}`}
-          x={menu.x}
-          y={menu.y}
-          sentenceText={draft.sentences[menu.sentence].text}
-          tokens={(draft.sentences[menu.sentence].tokens ?? []).map((t) => ({
-            text: t.text,
-            ...(t.reading ? { reading: t.reading } : {}),
-          }))}
-          index={menu.token}
-          onClose={() => setMenu(null)}
-          onApply={(tokens) => {
-            const sentence = menu.sentence;
-            setMenu(null);
-            setSaving(true);
-            void onEditTokens(sentence, tokens).finally(() => setSaving(false));
-          }}
-        />
-      ) : null}
-      <ol className="flex flex-col gap-4">
-        {draft.sentences.map((sentence, i) => {
-          const first = sentence.tokens?.[0]?.startSec;
-          const last = sentence.tokens?.at(-1)?.endSec;
-          const flagCount = (sentence.tokens ?? []).filter(
-            (t) => t.readingFallback || (t.score !== undefined && t.score < LOW_SCORE)
-          ).length;
-          return (
-            <li key={i} className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                {first !== undefined && last !== undefined ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Play line ${i + 1}`}
-                    title="Play this line"
-                    onClick={() => playFrom(first + draft.shiftSec, last + draft.shiftSec + 0.15)}
-                  >
-                    <PlayIcon />
-                  </Button>
-                ) : null}
-                <span>#{i + 1}</span>
-                {first !== undefined ? (
-                  <button
-                    type="button"
-                    className="font-mono hover:text-foreground"
-                    onClick={() => playFrom(first + draft.shiftSec)}
-                  >
-                    {toVideo(first)}
-                  </button>
-                ) : null}
-                {sentence.score !== undefined ? (
-                  <Badge variant={sentence.score < LOW_SCORE ? "destructive" : "outline"}>
-                    line {sentence.score.toFixed(2)}
-                  </Badge>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap gap-1" lang="ja">
-                {(sentence.tokens ?? []).map((token, j) => {
-                  const key = `${i}:${j}`;
-                  const timed = token.startSec !== undefined && token.endSec !== undefined;
-                  const weak =
-                    !sentence.flagsCleared &&
-                    (token.readingFallback || (token.score !== undefined && token.score < LOW_SCORE));
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      disabled={editing && (disabled || saving)}
-                      onContextMenu={(event) => {
-                        if (disabled || saving) return;
-                        event.preventDefault();
-                        openMenu(i, j, event.clientX, event.clientY);
-                      }}
-                      onClick={(event) => {
-                        if (editing) {
-                          openMenu(i, j, event.clientX, event.clientY);
-                          return;
-                        }
-                        if (timed) playFrom(token.startSec! + draft.shiftSec);
-                      }}
-                      title={
-                        timed
-                          ? `${toVideo(token.startSec!)} → ${toVideo(token.endSec!)} · score ${token.score?.toFixed(2)}${token.readingFallback ? " · reading fallback" : ""}`
-                          : undefined
-                      }
-                      className={cn(
-                        "flex flex-col items-center rounded-md border px-1.5 py-0.5 transition-colors",
-                        active === key
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : weak
-                            ? "border-amber-500/60 bg-amber-500/10"
-                            : "border-border/60 hover:bg-muted",
-                        !timed && !editing && "cursor-default",
-                        editing && "border-dashed hover:border-primary"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "text-[10px] leading-tight",
-                          active === key ? "text-primary-foreground/80" : "text-muted-foreground"
-                        )}
-                      >
-                        {token.reading ?? " "}
-                      </span>
-                      <span className="text-base leading-tight">{token.text}</span>
-                      {timed ? (
-                        <span
-                          className={cn(
-                            "font-mono text-[10px] leading-tight",
-                            active === key ? "text-primary-foreground/80" : "text-muted-foreground"
-                          )}
-                        >
-                          {(token.startSec! + draft.shiftSec).toFixed(2)}
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-                {flagCount > 0 ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="self-center text-xs text-muted-foreground"
-                    disabled={disabled}
-                    title={
-                      sentence.flagsCleared
-                        ? "Show this line's warnings again"
-                        : "Looks right: hide this line's orange warnings"
-                    }
-                    onClick={() => void onClearFlags(i, !sentence.flagsCleared)}
-                  >
-                    <CheckIcon />
-                    {sentence.flagsCleared ? "Reviewed" : `Clear ${flagCount} flag${flagCount === 1 ? "" : "s"}`}
-                  </Button>
-                ) : null}
-              </div>
-              {sentence.en ? (
-                <p className="text-sm text-muted-foreground">{sentence.en}</p>
-              ) : null}
-            </li>
-          );
-        })}
-      </ol>
+      <ClipTokenLines
+        draft={draft}
+        active={active}
+        editing={editing}
+        disabled={disabled}
+        saving={saving}
+        onPlay={playFrom}
+        onEditTokens={(sentence, tokens) => {
+          setSaving(true);
+          void onEditTokens(sentence, tokens).finally(() => setSaving(false));
+        }}
+        onClearFlags={(sentence, cleared) => void onClearFlags(sentence, cleared)}
+      />
     </EditorSection>
   );
 }

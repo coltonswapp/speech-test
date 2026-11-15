@@ -89,6 +89,20 @@ export async function getSignedDownloadUrl(
   return getSignedUrl(getClient(), command, { expiresIn: expiresInSeconds });
 }
 
+/** Signed PUT for one key. The uploader must send the same Content-Type. */
+export async function getSignedUploadUrl(
+  key: string,
+  contentType: string,
+  expiresInSeconds = 900
+): Promise<string> {
+  const command = new PutObjectCommand({
+    Bucket: getBucket(),
+    Key: key,
+    ContentType: contentType,
+  });
+  return getSignedUrl(getClient(), command, { expiresIn: expiresInSeconds });
+}
+
 /** Immediate "subfolders" under `prefix` (which should end in "/"). */
 export async function listChildPrefixes(prefix: string): Promise<string[]> {
   const prefixes: string[] = [];

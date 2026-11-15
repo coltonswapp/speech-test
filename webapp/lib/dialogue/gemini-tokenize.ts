@@ -41,6 +41,12 @@ const cachedLineSchema = z.object({
 
 export type TokenizeUsage = { promptTokens: number; outputTokens: number };
 
+/**
+ * Gemini answered, but twice its tokens didn't spell out the line (usually it
+ * "fixed" disfluent speech). Callers may fall back to a plain word split.
+ */
+export class SegmentationError extends DialogueGenerationError {}
+
 /** One tokenize round-trip. Exported for scripts/eval-tokenize-model.ts. */
 export async function requestTokenSurfaces(
   apiKey: string,
@@ -209,9 +215,7 @@ export async function tokenizeJapaneseLine(
     return retryTokens;
   }
 
-  throw new DialogueGenerationError(
-    `Could not segment “${trimmed.slice(0, 24)}”.`
-  );
+  throw new SegmentationError(`Could not segment “${trimmed.slice(0, 24)}”.`);
 }
 
 export async function tokenizeJapaneseLines(

@@ -78,6 +78,8 @@ const patchSchema = z.object({
   highlights: highlightsSchema.nullable().optional(),
   /** Hand-set level (5 = N5 … 1 = N1); null clears the rating. */
   jlptLevel: clipJlptLevelSchema.nullable().optional(),
+  /** Hand-set feed answer: true = always in the feed, false = never; null = back to the automatic verdict. */
+  feedEligible: z.boolean().nullable().optional(),
   /** Retire the clip (optional reason), or null to restore it. */
   deprecated: z.object({ reason: z.string().max(200).optional() }).nullable().optional(),
 });
@@ -98,7 +100,9 @@ export async function PATCH(
     if (parsed.data.sentences) {
       const sentences = applySentenceEdits(draft, parsed.data.sentences);
       if (sentences !== draft.sentences) {
-        draft = { ...draft, sentences, alignment: undefined };
+        // The Feed step judged the old transcript; a hand-set answer stays.
+        const feed = draft.feed?.manual ? { manual: draft.feed.manual } : undefined;
+        draft = { ...draft, sentences, alignment: undefined, feed };
       }
     }
     if (parsed.data.english) {
@@ -141,8 +145,14 @@ export async function PATCH(
           i !== index
             ? s
             : stillTimed
-              ? { ...s, tokens: carried }
-              : { ...s, tokens: carried, score: undefined, flagsCleared: undefined }
+              ? { ...s, tokens: carried, basicSplit: undefined }
+              : {
+                  ...s,
+                  tokens: carried,
+                  score: undefined,
+                  flagsCleared: undefined,
+                  basicSplit: undefined,
+                }
         ),
         ...(stillTimed ? {} : { alignment: undefined }),
       };
@@ -176,6 +186,15 @@ export async function PATCH(
             ? undefined
             : { jlptLevel, source: "manual", at: new Date().toISOString() },
       };
+    }
+    if (parsed.data.feedEligible !== undefined) {
+      const eligible = parsed.data.feedEligible;
+      const auto = draft.feed?.auto;
+      const feed = {
+        ...(auto ? { auto } : {}),
+        ...(eligible === null ? {} : { manual: { eligible, at: new Date().toISOString() } }),
+      };
+      draft = { ...draft, feed: feed.auto || feed.manual ? feed : undefined };
     }
     if (parsed.data.deprecated !== undefined) {
       const reason = parsed.data.deprecated?.reason?.trim();

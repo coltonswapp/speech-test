@@ -52,6 +52,10 @@ Auth is checked before the body is read. Errors are plain text (`401` bad token,
 
 `metadata.screenshot_jpeg` is an optional base64 JPEG (no `data:` prefix) of the lesson view under the QA sheet. Callers that omit it are unchanged. Studio uploads it to the private R2 bucket (`R2_BUCKET_NAME`) under `shizen-notes/<job>-<random>.jpg` and stores only the key. The base64 never goes to Shohei: his webhook ingest may strip large fields. Instead the Shohei POST carries `metadata.screenshot_url`, a signed R2 link valid for about 3 days, plus `metadata.screenshot_instructions` telling the routine to `curl -o screenshot.jpg` and read the file. If the upload fails, the note is still delivered without a screenshot.
 
+## Clip audio uploads (clip audio script)
+
+`GET`/`POST /hooks/clip-upload/:id` skips the Studio proxy; `public/clip-fetch.mjs` calls it from an editor's machine. Studio serves that script at `/clip-fetch.mjs` with no login (it holds no secrets), so the command Studio shows can `curl` it and pipe it into `node` from any folder. Auth is a one-time bearer token that Studio issues when a clip's details are saved (`POST /api/experiments/clip-uploads`, behind the normal Studio gate) and shows once inside the command. Only its SHA-256 is stored, in `experiments/clip-uploads/<id>/pending.json` in R2. The token works for that one id, for 24 hours, until the audio is accepted, the pending clip is discarded, or a new command is issued. It can fetch that clip's video id and range, get a 15-minute signed R2 `PUT` for `experiments/clip-uploads/<id>/source.wav`, and finalize, which creates clip `<id>` (or `<id>-01`, `<id>-02`, … when the audio is split) and never overwrites an existing clip; nothing else.
+
 ## Cron
 
 `GET /api/cron/slides` drafts the next unused spotlight and decomposition decks. Vercel Cron should send `Authorization: Bearer $CRON_SECRET` (also accepted: `STUDIO_AGENT_TOKEN`).

@@ -26,6 +26,8 @@ export async function POST(
       sentences: asr.sentences.map((text) => ({ text, tokens: null })),
       asr: { model: asr.model, at: new Date().toISOString() },
       alignment: undefined,
+      // The Feed step judged the old transcript; a hand-set answer stays.
+      feed: loaded.draft.feed?.manual ? { manual: loaded.draft.feed.manual } : undefined,
     };
     const withUsage = withUsageRun(next, {
       step: "transcribe",

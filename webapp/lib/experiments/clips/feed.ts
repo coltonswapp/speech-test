@@ -18,7 +18,7 @@ import {
 //      own and is it worth watching? Stored on the draft.
 // A hand-set answer in Studio overrides both.
 
-export const FEED_MIN_SECONDS = 30;
+export const FEED_MIN_SECONDS = 25;
 export const FEED_MAX_SECONDS = 90;
 /**
  * A line of at least this many words counts; single-word lines (えい！ / 妹？)

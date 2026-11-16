@@ -19,7 +19,8 @@ import {
 // A hand-set answer in Studio overrides both.
 
 export const FEED_MIN_SECONDS = 25;
-export const FEED_MAX_SECONDS = 90;
+/** Up to two minutes: story Shorts (瞬間seju dramas run 75–110 s) are worth it. */
+export const FEED_MAX_SECONDS = 120;
 /**
  * A line of at least this many words counts; single-word lines (えい！ / 妹？)
  * don't. Two, not more: slow, simple dialogue (答えてよ。 / あれ妹。) is

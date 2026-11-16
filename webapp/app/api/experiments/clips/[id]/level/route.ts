@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { estimateClipLevel } from "@/lib/experiments/clips/level";
+import { clipSpeechPace, estimateClipLevel } from "@/lib/experiments/clips/level";
 import { clipErrorResponse, loadClipOr404, requestedStepModel } from "@/lib/experiments/clips/route-helpers";
 import { writeClipDraft } from "@/lib/experiments/clips/store";
 import { clipIsAligned } from "@/lib/experiments/clips/types";
@@ -20,14 +20,11 @@ export async function POST(
     if ("response" in loaded) return loaded.response;
     const draft = loaded.draft;
     const startedAt = Date.now();
-    // Time actually spent speaking (first token to last), once aligned.
-    const first = draft.sentences[0]?.tokens?.[0]?.startSec;
-    const last = draft.sentences.at(-1)?.tokens?.at(-1)?.endSec;
-    const spoken =
-      clipIsAligned(draft) && first !== undefined && last !== undefined ? last - first : null;
+    // Speaking pace (characters per second inside lines), once aligned.
+    const pace = clipIsAligned(draft) ? clipSpeechPace(draft.sentences) : null;
     const result = await estimateClipLevel(
       draft.sentences.map((s) => s.text),
-      spoken,
+      pace,
       model
     );
     const at = new Date().toISOString();

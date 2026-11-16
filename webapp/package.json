@@ -23,6 +23,7 @@
     "clip:fetch": "node public/clip-fetch.mjs",
     "clip:queue-seed": "dotenv -e .env.local -- tsx scripts/clip-queue-seed.ts",
     "clip:index-backfill": "dotenv -e .env.local -- tsx scripts/clip-index-backfill.ts",
+    "clip:queue-batch": "dotenv -e .env.local -- tsx scripts/clip-queue-batch.ts",
     "clip:asr-compare": "dotenv -e .env.local -- tsx scripts/clip-asr-compare.ts",
     "eval:token-sync": "dotenv -e .env.local -- tsx scripts/eval-token-sync.ts",
     "tts:voice-catalog": "dotenv -e .env.local -- tsx scripts/generate-gemini-voice-catalog.ts"

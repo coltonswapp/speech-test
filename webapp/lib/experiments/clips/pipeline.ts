@@ -70,6 +70,9 @@ async function tokenizeClipLine(
   return { tokens, basicSplit };
 }
 
+/** Lines tokenized at once (each is its own Gemini request). */
+const TOKENIZE_CONCURRENCY = 4;
+
 /**
  * Tokenize every sentence that has no tokens yet (cached per line).
  * `retokenize`: sentence indexes to throw away and tokenize again (their
@@ -127,33 +130,39 @@ export async function tokenizeClipDraft(
       422
     );
   }
-  const sentences: ClipSentence[] = [];
-  for (const sentence of draft.sentences) {
-    if (sentence.tokens && sentence.tokens.length > 0) {
-      sentences.push(sentence);
-      continue;
+  // One request per line (batching lines changes how Gemini segments them),
+  // but several lines in flight at once: a 37-line clip took 6.5 minutes one
+  // line at a time. Each line's answer doesn't depend on the others.
+  const sentences: ClipSentence[] = [...draft.sentences];
+  const todo = draft.sentences.flatMap((s, i) => (s.tokens && s.tokens.length > 0 ? [] : [i]));
+  lines = todo.length;
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < todo.length) {
+      const index = todo[cursor++]!;
+      const sentence = draft.sentences[index]!;
+      let tokens;
+      let basicSplit = false;
+      try {
+        // Real speech is often disfluent and Gemini "fixes" it, so its tokens
+        // stop matching the line; tokenizeClipLine falls back rather than
+        // blocking the clip on one line.
+        ({ tokens, basicSplit } = await tokenizeClipLine(sentence.text, { onUsage, onCacheHit }));
+      } catch (error) {
+        throw new ClipPipelineError(error instanceof Error ? error.message : String(error), 502);
+      }
+      if (tokens.length === 0) {
+        throw new ClipPipelineError(`Could not segment “${sentence.text.slice(0, 24)}”.`, 422);
+      }
+      sentences[index] = {
+        ...sentence,
+        tokens: tokens.map((t) => ({ text: t.text, ...(t.reading ? { reading: t.reading } : {}) })),
+        score: undefined,
+        ...(basicSplit ? { basicSplit: true } : {}),
+      };
     }
-    let tokens;
-    let basicSplit = false;
-    try {
-      lines += 1;
-      // Real speech is often disfluent and Gemini "fixes" it, so its tokens
-      // stop matching the line; tokenizeClipLine falls back rather than
-      // blocking the clip on one line.
-      ({ tokens, basicSplit } = await tokenizeClipLine(sentence.text, { onUsage, onCacheHit }));
-    } catch (error) {
-      throw new ClipPipelineError(error instanceof Error ? error.message : String(error), 502);
-    }
-    if (tokens.length === 0) {
-      throw new ClipPipelineError(`Could not segment “${sentence.text.slice(0, 24)}”.`, 422);
-    }
-    sentences.push({
-      ...sentence,
-      tokens: tokens.map((t) => ({ text: t.text, ...(t.reading ? { reading: t.reading } : {}) })),
-      score: undefined,
-      ...(basicSplit ? { basicSplit: true } : {}),
-    });
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(TOKENIZE_CONCURRENCY, todo.length) }, worker));
   const next = { ...draft, sentences, alignment: undefined };
   if (lines === 0) return next; // nothing needed tokenizing; don't log an empty run
   return withUsageRun(

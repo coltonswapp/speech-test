@@ -49,6 +49,12 @@ const cases: Expectation[] = [
     absent: ["今", "日"],
   },
   {
+    surface: "ご覧ください",
+    sentence: "こちらの資料をご覧ください。",
+    leads: ["ご覧", "見る"],
+    absent: ["ください"],
+  },
+  {
     surface: "働く",
     sentence: "兄は東京で働いています。",
     absent: ["働", "く"],

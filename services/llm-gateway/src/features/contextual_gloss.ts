@@ -44,6 +44,7 @@ grammarNote:
 - なのかなって → な "is" + の "it's that" + かな "I wonder" + って "quoting that thought"
 - んじゃないかな → ん "it's that" + じゃない "isn't" + かな "I wonder"
 - ないかなと → ない "not" + かな "I wonder" + と "quoting that thought"
+- Special honorific and humble words replace a plain verb instead of being built from it. Say that in the note, and do not write the plain verb as one of the parts. Name the politeness: respectful when it raises the listener's action, humble when it lowers the speaker's. ご覧ください → ご覧 "look" (respectful word for 見る) + ください "please". Others: ご覧になる / 見る, いらっしゃる / 行く, 来る, いる, おっしゃる / 言う, 召し上がる / 食べる, 飲む, なさる / する, 申す / 言う, 参る / 行く, 来る, 拝見する / 見る, いただく / もらう, 食べる, 存じる / 知る, 思う.
 - Use an empty string when the meaning alone is enough (most nouns, abbreviations, and ordinary compounds such as 大学生, 何時, スマホ).
 - Do NOT describe neighboring tokens (に, は, を, か, etc.).
 - Do NOT restate the meaning in different words, and do not name the word's type. A parts breakdown is the note, not a second copy of meaning.
@@ -56,6 +57,7 @@ relatedWords:
 - A looser relative may use a slot only after those components. 減る "to decrease" must not take the place of 減少.
 - Do not split a word that does not come apart. 今日, スマホ, and 働く have no component words. Do not invent pieces or arbitrary character chunks (not 口減 from 人口減少, not 今 and 日 from 今日).
 - Do not suggest a single kanji. Each character is already shown on its own. 大学生 → 大学 "university", not 大, 学, or 生.
+- For a special honorific or humble word, its own part comes first, then the plain verb it stands in for. ご覧ください → ご覧 "look (respectful)", then 見る "to see". Not ください, which teaches nothing here.
 - When there is no such compound, suggest a word that shares a root or is the other form of this word. 引っ越し → 引っ越す "to move".
 - Each word is a dictionary headword in Japanese script only.
 - note is a short gloss, 1-4 words (population, to move). Never a part-of-speech label.

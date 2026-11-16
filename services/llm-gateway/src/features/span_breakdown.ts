@@ -26,6 +26,7 @@ inThisSentence:
 - For a katakana borrowing, one short mention of the source in that plain sentence or in partsNote, not both (デジタル → digital, from English). If the Japanese sense is not the English word's sense, give the Japanese meaning and name the English source (テンション → excitement, from English "tension"). Write "from English", not "loanword".
 - If the span is not a borrowing (onomatopoeia, a name, native slang), or you are not sure, omit the source. Do not invent an etymology.
 - Hiragana and kanji spans are unchanged.
+- A special honorific or humble word replaces a plain verb instead of being built from it. Say so, and never show the plain verb as a part. ご覧ください → "ご覧 (respectful word for 見る) + ください — please look". Same for いらっしゃる, おっしゃる, 召し上がる, なさる, 申す, 参る, 拝見する, いただく, 存じる.
 
 otherUses:
 - 2 to 4 other common uses, only when the span is a real expression or compound that people use on its own.

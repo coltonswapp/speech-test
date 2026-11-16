@@ -75,15 +75,16 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     /// Landscape: gap between the player's bottom edge and the top of the transcript.
     private static let landscapeGapBelowPlayer: CGFloat = 4
     /// Lines fade out over this band as they scroll up to the player; the first
-    /// line rests just under it.
-    private static let transcriptFadeHeight: CGFloat = 20
+    /// line rests just under it. Tall enough that a line dissolves gradually
+    /// rather than reading as sliced off under the grabber.
+    private static let transcriptFadeHeight: CGFloat = 36
     /// Keep the last word lit this long after it ends (covers short pauses).
     private static let playerCornerRadius: CGFloat = 16
     private static let highlightHoldSeconds: TimeInterval = 0.6
     /// Start a replayed sentence slightly early so the first mora isn't clipped.
     private static let replayLeadInSeconds: TimeInterval = 0.15
-    /// "Previous" restarts the current line unless it began less than this long ago.
-    private static let previousLineGraceSeconds: TimeInterval = 1.2
+    /// How far the back button jumps.
+    private static let skipBackSeconds: TimeInterval = 5
     /// After the user scrolls, wait this long before auto-scrolling again.
     /// Extra room between tokens so neighbors are easier to tap.
     private static let tokenSpacing: CGFloat = 6
@@ -112,6 +113,13 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
 
     /// Experiment (options menu): highlights open from a transport-bar button as a
     /// sheet instead of a second vertical page under the transcript.
+    /// Experiment (options menu): blurred thumbnail glow behind the player
+    /// (ClipAmbientBackdrop.swift). Settings are shared across players.
+    private var ambientBackdrop: ClipAmbientBackdropView?
+    /// Karaoke marker fill: yellow, or the thumbnail's hue when that experiment
+    /// is on (ClipThumbnailAccent.swift).
+    private var karaokeHighlightColor = ClipThumbnailAccent.fallback
+    private var karaokeAccentTask: Task<Void, Never>?
     private static let highlightsInSheetKey = "clipPlayer.highlightsInSheet"
     private static var highlightsInSheet: Bool {
         get { UserDefaults.standard.bool(forKey: highlightsInSheetKey) }
@@ -134,21 +142,19 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     var transcriptScrollView: UIScrollView { scrollView }
     var navigationMenuItem: UIBarButtonItem? { navigationItem.rightBarButtonItem }
 
-    /// Vertical swipe on the video: +1 = next clip, -1 = previous.
-    var onSwipeToAdjacentClip: ((Int) -> Void)?
-    private lazy var feedSwipePan = UIPanGestureRecognizer(target: self, action: #selector(playerSwiped(_:)))
+    /// Vertical drag anywhere outside the transcript (video, info row, transport bar):
+    /// the feed moves its pager with the finger.
+    var onFeedPan: ((UIPanGestureRecognizer) -> Void)?
+    private lazy var feedSwipePan = UIPanGestureRecognizer(target: self, action: #selector(feedPanned(_:)))
 
     /// Feed autoplay: starts now, or as soon as the embed is ready.
     func startPlayback() {
         playerView.play()
     }
 
-    @objc private func playerSwiped(_ pan: UIPanGestureRecognizer) {
-        guard pan.state == .ended else { return }
-        let translation = pan.translation(in: view).y
-        let velocity = pan.velocity(in: view).y
-        guard abs(translation) > 48 || abs(velocity) > 600 else { return }
-        onSwipeToAdjacentClip?(translation < 0 ? 1 : -1)
+    @objc private func feedPanned(_ pan: UIPanGestureRecognizer) {
+        if pan.state == .began { dismissCallout(animated: true) }
+        onFeedPan?(pan)
     }
 
     /// Leaving a feed page: stop audio and close any open callout.
@@ -174,11 +180,11 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         return interaction
     }()
     private var transportButtonsBottom: NSLayoutConstraint!
-    private let previousButton = GlassIconButton(
-        symbolName: "backward.fill",
+    private let skipBackButton = GlassIconButton(
+        symbolName: "gobackward.5",
         pointSize: ClipPlayerViewController.transportGlyphPointSize,
         glyphDimension: ClipPlayerViewController.transportGlyphPointSize + 4,
-        accessibilityLabel: "Previous line"
+        accessibilityLabel: "Back 5 seconds"
     )
     private let playPauseButton = GlassIconButton(
         symbolName: "play.fill",
@@ -186,13 +192,29 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         glyphDimension: ClipPlayerViewController.transportGlyphPointSize + 4,
         accessibilityLabel: "Play"
     )
-    /// Next to rewind; shown only while the transcript isn't following playback.
-    private let recenterButton = GlassIconButton(
-        symbolName: "text.line.first.and.arrowtriangle.forward",
-        pointSize: ClipPlayerViewController.transportGlyphPointSize,
-        glyphDimension: ClipPlayerViewController.transportGlyphPointSize + 4,
-        accessibilityLabel: "Follow transcript"
-    )
+    /// Glass pill centered above the transport bar (Maps' "Re-center"); shown only
+    /// while the transcript isn't following playback.
+    private let recenterButton: UIButton = {
+        var config = UIButton.Configuration.glass()
+        config.cornerStyle = .capsule
+        config.title = "Recenter"
+        config.image = UIImage(systemName: "arrow.down")
+        config.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
+        config.imagePadding = 6
+        config.baseForegroundColor = .label
+        config.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
+        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
+            var updated = attributes
+            updated.font = .systemFont(ofSize: 15, weight: .semibold)
+            return updated
+        }
+        let button = UIButton(configuration: config)
+        button.accessibilityHint = "Scrolls the transcript to the line being spoken and follows along."
+        return button
+    }()
+    /// Which way the recenter arrow points: toward the spoken line from the scrolled position.
+    private var recenterPointsUp = false
+    private static let recenterHiddenTransform = CGAffineTransform(translationX: 0, y: 12).scaledBy(x: 0.9, y: 0.9)
     /// Left of play; sheet mode only (see `highlightsInSheet`).
     private let highlightsButton = GlassIconButton(
         symbolName: "text.book.closed",
@@ -208,10 +230,10 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     private let highlightsPage = UIView()
     private var highlightsPageHeight: NSLayoutConstraint!
     /// Transcript (page 0).
-    private let scrollView = UIScrollView()
+    private let scrollView: UIScrollView = ClipTranscriptScrollView()
     private let stack = UIStackView()
     /// VOCAB / GRAMMAR / notes from Studio (page 1), like a lesson's highlights page.
-    private let highlightsScrollView = UIScrollView()
+    private let highlightsScrollView: UIScrollView = ClipTranscriptScrollView()
     private let highlightsView = DialogueLearningHighlightsContentView()
     private var hasHighlightsPage = false
     private var handoffCoordinator: NestedVerticalScrollHandoffCoordinator?
@@ -255,6 +277,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     private let transcriptFadeView = ClipTopFadeView()
     /// Spoken line over the bottom fifth of the Shorts player at the full detent.
     private let captionOverlay = ClipCaptionOverlayView()
+    /// Soft white rim over the player (and its caption overlay) so it lifts off the backdrop.
+    private let playerBorderView = UIView()
     /// Last token started (drives the caption's spoken part); nil before the first word.
     private var captionToken: TokenRef?
     /// Host-owned anchor for the top edge effect, like the dialogue lesson, so the
@@ -289,7 +313,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     private var displayLink: CADisplayLink?
     private var isUserScrolling = false
     /// Transcript follows the spoken line until the learner scrolls it; the
-    /// recenter button (or rewind / a line's timestamp) turns following back on.
+    /// recenter button (or back-5 / a line's timestamp) turns following back on.
     private var isFollowingPlayback = true
     private var lastLoopSeekTime: CFTimeInterval = 0
     /// When the transcript last auto-scrolled; wrap-following waits for that to settle.
@@ -321,11 +345,22 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         backgroundTap.cancelsTouchesInView = false
         backgroundTap.delegate = self
         view.addGestureRecognizer(backgroundTap)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(ambientVideoChangedElsewhere(_:)),
+            name: ClipAmbientSettings.didChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(portraitDetentChangedElsewhere(_:)),
+            name: Self.portraitDetentDidChange,
+            object: nil
+        )
         if isInFeed {
-            // The transcript hands off at its edges; the video can be flicked directly.
+            // The transcript hands off at its edges; everywhere else drags the feed directly.
             feedSwipePan.delegate = self
-            feedSwipePan.cancelsTouchesInView = false
-            playerView.addGestureRecognizer(feedSwipePan)
+            view.addGestureRecognizer(feedSwipePan)
         }
         applyPreview()
         load()
@@ -346,6 +381,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     private func loadPlayer(videoID: String, startSec: Double) {
         if let loadedMedia, loadedMedia.videoID == videoID, loadedMedia.startSec == startSec { return }
         loadedMedia = (videoID, startSec)
+        ambientBackdrop?.loadThumbnail(videoID: videoID)
+        updateKaraokeAccent()
         playerView.load(videoID: videoID, startSeconds: startSec, showsControls: Self.showsYouTubeControls)
     }
 
@@ -400,6 +437,18 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         captionOverlay.layer.cornerCurve = .continuous
         captionOverlay.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         transcriptPage.addSubview(captionOverlay)
+
+        playerBorderView.translatesAutoresizingMaskIntoConstraints = false
+        playerBorderView.isUserInteractionEnabled = false
+        playerBorderView.backgroundColor = .clear
+        playerBorderView.layer.cornerRadius = Self.playerCornerRadius
+        playerBorderView.layer.cornerCurve = .continuous
+        playerBorderView.layer.borderWidth = 1
+        playerBorderView.layer.borderColor = UIColor.white.withAlphaComponent(0.16).cgColor
+        transcriptPage.addSubview(playerBorderView)
+
+        // The feed doesn't show the clip facts row; the player sits right under the safe area.
+        clipInfoLabel.isHidden = isInFeed
 
         // Transcript starts at the player's bottom edge (under the Shorts grabber)
         // and fades out there: lines never show beside or above the player, and
@@ -487,6 +536,11 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             clipInfoLabel.leadingAnchor.constraint(equalTo: transcriptPage.leadingAnchor, constant: Self.horizontalInset),
             clipInfoLabel.trailingAnchor.constraint(equalTo: transcriptPage.trailingAnchor, constant: -Self.horizontalInset),
 
+            playerBorderView.topAnchor.constraint(equalTo: playerView.topAnchor),
+            playerBorderView.bottomAnchor.constraint(equalTo: playerView.bottomAnchor),
+            playerBorderView.leadingAnchor.constraint(equalTo: playerView.leadingAnchor),
+            playerBorderView.trailingAnchor.constraint(equalTo: playerView.trailingAnchor),
+
             captionOverlay.leadingAnchor.constraint(equalTo: playerView.leadingAnchor),
             captionOverlay.trailingAnchor.constraint(equalTo: playerView.trailingAnchor),
             captionOverlay.bottomAnchor.constraint(equalTo: playerView.bottomAnchor),
@@ -564,8 +618,148 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     }
 
     /// Swaps the player between the 16:9 full-width frame and the centered 9:16 Shorts frame.
+    /// Posted by the player whose Shorts size the user changed.
+    private static let portraitDetentDidChange = Notification.Name("ClipPlayer.portraitDetentDidChange")
+
+    /// Another player changed the remembered Shorts size: match it without animating
+    /// (this page is offscreen or just peeking in during a feed swipe).
+    @objc private func portraitDetentChangedElsewhere(_ notification: Notification) {
+        guard (notification.object as AnyObject?) !== self,
+              let stored = UserDefaults.standard.string(forKey: Self.portraitDetentKey),
+              let detent = PortraitDetent(rawValue: stored),
+              detent != portraitDetent else { return }
+        portraitDetent = detent
+        guard isViewLoaded, isPortraitLayout else { return }
+        updatePortraitPlayerHeight()
+        transcriptPage.layoutIfNeeded()
+        updateInnerInsets()
+    }
+
+    /// Adds or removes the ambient backdrop (Shorts and landscape) when the experiment is on.
+    private func updateAmbientVideo() {
+        guard isViewLoaded else { return }
+        let wants = ClipAmbientSettings.isEnabled
+        if wants, ambientBackdrop == nil {
+            let backdrop = ClipAmbientBackdropView()
+            if let videoID = loadedMedia?.videoID { backdrop.loadThumbnail(videoID: videoID) }
+            backdrop.translatesAutoresizingMaskIntoConstraints = false
+            // Behind the transcript and player, over the page background.
+            transcriptPage.insertSubview(backdrop, at: 0)
+            NSLayoutConstraint.activate([
+                backdrop.topAnchor.constraint(equalTo: transcriptPage.topAnchor),
+                backdrop.leadingAnchor.constraint(equalTo: transcriptPage.leadingAnchor),
+                backdrop.trailingAnchor.constraint(equalTo: transcriptPage.trailingAnchor),
+                backdrop.bottomAnchor.constraint(equalTo: transcriptPage.bottomAnchor),
+            ])
+            ambientBackdrop = backdrop
+            transcriptPage.layoutIfNeeded()
+            backdrop.track(sourceFrame: playerView.frame)
+        } else if wants, let backdrop = ambientBackdrop {
+            // Tuning changed: re-read settings and re-fit.
+            backdrop.applySettings()
+            backdrop.track(sourceFrame: playerView.frame)
+        } else if !wants, let backdrop = ambientBackdrop {
+            backdrop.removeFromSuperview()
+            ambientBackdrop = nil
+        }
+    }
+
+    @objc private func ambientVideoChangedElsewhere(_ notification: Notification) {
+        updateAmbientVideo()
+        updateKaraokeAccent()
+    }
+
+    /// Picks the karaoke fill for the loaded video. A cached color applies at once
+    /// (no yellow flash when coming back to a clip); otherwise the thumbnail is
+    /// fetched and the live marker crossfades to its hue.
+    private func updateKaraokeAccent() {
+        karaokeAccentTask?.cancel()
+        karaokeAccentTask = nil
+        guard ClipAmbientSettings.thumbnailHighlight, let videoID = loadedMedia?.videoID else {
+            applyKaraokeHighlightColor(ClipThumbnailAccent.fallback, animated: false)
+            return
+        }
+        if let cached = ClipThumbnailAccent.cachedColor(videoID: videoID) {
+            applyKaraokeHighlightColor(cached, animated: false)
+            return
+        }
+        karaokeAccentTask = Task { @MainActor [weak self] in
+            let color = await ClipThumbnailAccent.color(videoID: videoID)
+            guard !Task.isCancelled, let self, self.loadedMedia?.videoID == videoID,
+                  ClipAmbientSettings.thumbnailHighlight else { return }
+            self.applyKaraokeHighlightColor(color, animated: true)
+        }
+    }
+
+    private func applyKaraokeHighlightColor(_ color: UIColor, animated: Bool) {
+        guard color != karaokeHighlightColor else { return }
+        karaokeHighlightColor = color
+        guard let activeToken, rows.indices.contains(activeToken.sentence) else { return }
+        let row = rows[activeToken.sentence]
+        let range = row.tokenRanges.indices.contains(activeToken.token) ? row.tokenRanges[activeToken.token] : nil
+        if animated {
+            UIView.transition(with: row.textView, duration: 0.25, options: .transitionCrossDissolve) {
+                self.setKaraoke(row: activeToken.sentence, range: range)
+            }
+        } else {
+            setKaraoke(row: activeToken.sentence, range: range)
+        }
+    }
+
+    /// Sliders in a half-height sheet; the glow above updates live.
+    private func presentClipDetails() {
+        guard let payload, presentedViewController == nil else { return }
+        dismissCallout(animated: false)
+        let sheet = ClipDetailsViewController.makeSheet(
+            payload: payload,
+            onSelectClip: { [weak self] clip in self?.openClipFromSameVideo(clip) },
+            onPlayAll: { [weak self] clips in self?.playVideoClipsInFeed(clips) }
+        )
+        present(sheet, animated: true)
+    }
+
+    /// "More From This Video" in Clip Details: closes the sheet and opens that clip on top of this one.
+    private func openClipFromSameVideo(_ clip: ClipSummary) {
+        dismiss(animated: true) { [weak self] in
+            guard let self else { return }
+            let player = ClipPlayerViewController(clipID: clip.clipID, preview: clip)
+            if let navigationController = self.navigationController {
+                navigationController.pushViewController(player, animated: true)
+            } else {
+                self.present(UINavigationController(rootViewController: player), animated: true)
+            }
+        }
+    }
+
+    /// "Play All" in Clip Details: closes the sheet and plays the video's clips, in order, as a feed.
+    private func playVideoClipsInFeed(_ clips: [ClipSummary]) {
+        dismiss(animated: true) { [weak self] in
+            guard let self else { return }
+            self.playerView.pause()
+            let feed = ClipFeedViewController(clips: clips)
+            if let navigationController = self.navigationController {
+                navigationController.pushViewController(feed, animated: true)
+            } else {
+                self.present(UINavigationController(rootViewController: feed), animated: true)
+            }
+        }
+    }
+
+    private func presentAmbientTuning() {
+        guard presentedViewController == nil else { return }
+        dismissCallout(animated: false)
+        let nav = UINavigationController(rootViewController: ClipAmbientTuningViewController())
+        if let sheet = nav.sheetPresentationController {
+            sheet.detents = [.medium(), .large()]
+            sheet.largestUndimmedDetentIdentifier = .medium
+            sheet.prefersGrabberVisible = true
+        }
+        present(nav, animated: true)
+    }
+
     private func applyPlayerOrientation(portrait: Bool) {
         isPortraitLayout = portrait
+        defer { updateAmbientVideo() }
         if portrait { updatePortraitPlayerHeight() }
         NSLayoutConstraint.deactivate(portrait ? landscapePlayerConstraints : portraitPlayerConstraints)
         NSLayoutConstraint.activate(portrait ? portraitPlayerConstraints : landscapePlayerConstraints)
@@ -646,8 +840,13 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         if detent != portraitDetent {
             detentLandHaptic.impactOccurred()
         }
+        let changed = detent != portraitDetent
         portraitDetent = detent
         UserDefaults.standard.set(detent.rawValue, forKey: Self.portraitDetentKey)
+        if changed {
+            // Other open players (feed neighbours) take the same size.
+            NotificationCenter.default.post(name: Self.portraitDetentDidChange, object: self)
+        }
         let distance = target - portraitPlayerHeight.constant
         let relativeVelocity = abs(distance) > 1 ? velocity / distance : 0
         isResizingPlayer = true
@@ -812,7 +1011,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
 
     /// Clip facts row between the nav bar and the player's top edge.
     private var infoRowHeight: CGFloat {
-        Self.infoRowTopPadding + ceil(clipInfoLabel.font.lineHeight) + Self.infoRowBottomPadding
+        if isInFeed { return Self.infoRowBottomPadding }
+        return Self.infoRowTopPadding + ceil(clipInfoLabel.font.lineHeight) + Self.infoRowBottomPadding
     }
 
     private func updateInnerInsets() {
@@ -824,6 +1024,10 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         }
         if isPortraitLayout, !isResizingPlayer {
             updatePortraitPlayerHeight()
+        }
+        if let ambientBackdrop {
+            transcriptPage.layoutIfNeeded()
+            ambientBackdrop.track(sourceFrame: playerView.frame)
         }
         let pairs: [(UIScrollView, UIEdgeInsets)] = [
             // Transcript's frame starts under the player; its first line rests just
@@ -965,7 +1169,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         )
     }
 
-    /// Bottom bar like the dialogue lesson: previous line on the left, play on the
+    /// Bottom bar like the dialogue lesson: back 5 seconds on the left, play on the
     /// right, and the page chevron (or elapsed time) between them. The bar hosts
     /// the scroll-edge interaction, so the transcript softens around the glass buttons.
     private func configureTransportBar() {
@@ -975,7 +1179,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         transportEdgeInteraction.scrollView = scrollView
         transcriptPage.addSubview(transportBar)
 
-        previousButton.addAction(UIAction { [weak self] _ in self?.previousTapped() }, for: .primaryActionTriggered)
+        skipBackButton.addAction(UIAction { [weak self] _ in self?.skipBackTapped() }, for: .primaryActionTriggered)
         playPauseButton.addAction(UIAction { [weak self] _ in self?.playPauseTapped() }, for: .primaryActionTriggered)
         highlightsButton.addAction(UIAction { [weak self] _ in self?.presentHighlightsSheet() }, for: .primaryActionTriggered)
         highlightsButton.translatesAutoresizingMaskIntoConstraints = false
@@ -985,7 +1189,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         }, for: .primaryActionTriggered)
         recenterButton.translatesAutoresizingMaskIntoConstraints = false
         recenterButton.alpha = 0
-        recenterButton.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
+        recenterButton.transform = Self.recenterHiddenTransform
         recenterButton.isUserInteractionEnabled = false
         recenterButton.accessibilityElementsHidden = true
 
@@ -994,17 +1198,18 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         elapsedLabel.textColor = .secondaryLabel
         elapsedLabel.textAlignment = .center
 
-        transportBar.addSubview(previousButton)
+        transportBar.addSubview(skipBackButton)
         transportBar.addSubview(elapsedLabel)
         transportBar.addSubview(playPauseButton)
-        transportBar.addSubview(recenterButton)
         transportBar.addSubview(highlightsButton)
+        // Over the transcript, above the bar's center (the elapsed time / page chevron).
+        transcriptPage.addSubview(recenterButton)
         setTransportEnabled(false)
 
         let size = Self.transportButtonSize
         // Kept above the home indicator in updateInnerInsets (pages live in a scroll view,
         // so the safe area is applied by hand).
-        transportButtonsBottom = previousButton.bottomAnchor.constraint(
+        transportButtonsBottom = skipBackButton.bottomAnchor.constraint(
             equalTo: transportBar.bottomAnchor,
             constant: -Self.transportBarVerticalPadding
         )
@@ -1012,35 +1217,34 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             transportBar.bottomAnchor.constraint(equalTo: transcriptPage.bottomAnchor),
             transportBar.leadingAnchor.constraint(equalTo: transcriptPage.leadingAnchor),
             transportBar.trailingAnchor.constraint(equalTo: transcriptPage.trailingAnchor),
-            transportBar.topAnchor.constraint(equalTo: previousButton.topAnchor, constant: -Self.transportBarVerticalPadding),
+            transportBar.topAnchor.constraint(equalTo: skipBackButton.topAnchor, constant: -Self.transportBarVerticalPadding),
 
-            previousButton.leadingAnchor.constraint(equalTo: transportBar.leadingAnchor, constant: Self.horizontalInset),
+            skipBackButton.leadingAnchor.constraint(equalTo: transportBar.leadingAnchor, constant: Self.horizontalInset),
             transportButtonsBottom,
-            previousButton.widthAnchor.constraint(equalToConstant: size),
-            previousButton.heightAnchor.constraint(equalToConstant: size),
+            skipBackButton.widthAnchor.constraint(equalToConstant: size),
+            skipBackButton.heightAnchor.constraint(equalToConstant: size),
 
             playPauseButton.trailingAnchor.constraint(equalTo: transportBar.trailingAnchor, constant: -Self.horizontalInset),
-            playPauseButton.centerYAnchor.constraint(equalTo: previousButton.centerYAnchor),
+            playPauseButton.centerYAnchor.constraint(equalTo: skipBackButton.centerYAnchor),
             playPauseButton.widthAnchor.constraint(equalToConstant: size),
             playPauseButton.heightAnchor.constraint(equalToConstant: size),
 
             highlightsButton.trailingAnchor.constraint(equalTo: playPauseButton.leadingAnchor, constant: -12),
-            highlightsButton.centerYAnchor.constraint(equalTo: previousButton.centerYAnchor),
+            highlightsButton.centerYAnchor.constraint(equalTo: skipBackButton.centerYAnchor),
             highlightsButton.widthAnchor.constraint(equalToConstant: size),
             highlightsButton.heightAnchor.constraint(equalToConstant: size),
 
-            recenterButton.leadingAnchor.constraint(equalTo: previousButton.trailingAnchor, constant: 12),
-            recenterButton.centerYAnchor.constraint(equalTo: previousButton.centerYAnchor),
-            recenterButton.widthAnchor.constraint(equalToConstant: size),
-            recenterButton.heightAnchor.constraint(equalToConstant: size),
+            recenterButton.centerXAnchor.constraint(equalTo: transportBar.centerXAnchor),
+            recenterButton.bottomAnchor.constraint(equalTo: transportBar.topAnchor, constant: -4),
+            recenterButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 40),
 
             elapsedLabel.centerXAnchor.constraint(equalTo: transportBar.centerXAnchor),
-            elapsedLabel.centerYAnchor.constraint(equalTo: previousButton.centerYAnchor),
+            elapsedLabel.centerYAnchor.constraint(equalTo: skipBackButton.centerYAnchor),
         ])
     }
 
     private func setTransportEnabled(_ enabled: Bool) {
-        previousButton.isEnabled = enabled
+        skipBackButton.isEnabled = enabled
         playPauseButton.isEnabled = enabled
     }
 
@@ -1129,16 +1333,36 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             speedMenu,
             UIMenu(options: .displayInline, children: [furigana, english, loop, youTubeControls]),
         ]
-        if !isInFeed {
-            elements.append(UIMenu(title: "Experiments", options: .displayInline, children: [highlightsSheet]))
+        let ambient = UIAction(
+            title: "Ambient backdrop",
+            image: UIImage(systemName: "sparkles.tv"),
+            state: ClipAmbientSettings.isEnabled ? .on : .off
+        ) { _ in
+            ClipAmbientSettings.isEnabled.toggle()
         }
-        if let payload {
-            let start = Int(payload.media.startSec.rounded(.down))
-            let url = URL(string: "https://www.youtube.com/watch?v=\(payload.media.videoID)&t=\(start)s")
-            let open = UIAction(title: "Open in YouTube", image: UIImage(systemName: "arrow.up.right.square")) { _ in
-                if let url { UIApplication.shared.open(url) }
+        let thumbnailHighlight = UIAction(
+            title: "Highlight from thumbnail",
+            image: UIImage(systemName: "paintpalette"),
+            state: ClipAmbientSettings.thumbnailHighlight ? .on : .off
+        ) { _ in
+            ClipAmbientSettings.thumbnailHighlight.toggle()
+        }
+        let tuneAmbient = UIAction(
+            title: "Tune ambient…",
+            image: UIImage(systemName: "slider.horizontal.3")
+        ) { [weak self] _ in
+            self?.presentAmbientTuning()
+        }
+        // In the feed, highlights are always a sheet.
+        let experiments: [UIMenuElement] = (isInFeed ? [] : [highlightsSheet])
+            + [ambient, thumbnailHighlight, tuneAmbient]
+        elements.append(UIMenu(title: "Experiments", options: .displayInline, children: experiments))
+        if payload != nil {
+            // Title, channel, and the Open in YouTube link live on the details sheet.
+            let details = UIAction(title: "Clip Details", image: UIImage(systemName: "info.circle")) { [weak self] _ in
+                self?.presentClipDetails()
             }
-            elements.append(UIMenu(options: .displayInline, children: [open]))
+            elements.append(UIMenu(options: .displayInline, children: [details]))
         }
         return elements
     }
@@ -1233,7 +1457,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             let timeButton = UIButton(type: .system)
             var timeConfig = UIButton.Configuration.plain()
             timeConfig.title = Self.formatTime(sentence.startSec)
-            timeConfig.contentInsets = .zero
+            // Vertical padding makes the small timestamp an easier tap target.
+            timeConfig.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0)
             timeConfig.baseForegroundColor = .tertiaryLabel
             timeConfig.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
                 var updated = attributes
@@ -1285,6 +1510,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             textColumn.axis = .vertical
             textColumn.alignment = .fill
             textColumn.spacing = 4
+            // The timestamp's bottom padding already separates it from the line.
+            textColumn.setCustomSpacing(0, after: timeButton)
 
             let breakdownButton = UIButton(type: .system)
             var chevronConfig = UIButton.Configuration.plain()
@@ -1457,11 +1684,24 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
                 continue
             }
             ranges.append(NSRange(range, in: text))
-            japaneseTokens.append(JapaneseToken(text: trimmed, range: range))
+            // 私|たち reads as one word, but the token gap split it (and the
+            // reading over 私 made the hole look worse). Join the plural suffix
+            // to its noun for display and taps; karaoke keeps `ranges`.
+            if Self.pluralSuffixes.contains(trimmed),
+               let previous = japaneseTokens.last,
+               previous.range.upperBound == range.lowerBound {
+                let joined = previous.range.lowerBound..<range.upperBound
+                japaneseTokens[japaneseTokens.count - 1] = JapaneseToken(text: String(text[joined]), range: joined)
+            } else {
+                japaneseTokens.append(JapaneseToken(text: trimmed, range: range))
+            }
             searchStart = range.upperBound
         }
         return (ranges, complete ? japaneseTokens : nil)
     }
+
+    /// Suffixes that make one word with the noun before them (私たち, 子供達).
+    private static let pluralSuffixes: Set<String> = ["たち", "達"]
 
     // MARK: - Player
 
@@ -1575,6 +1815,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         if nextSentence != activeSentence {
             activeSentence = nextSentence
             updateRowEmphasis()
+            updateRecenterArrow()
             if let nextSentence { autoScroll(toRow: nextSentence) }
         } else if tokenChanged, let nextToken {
             // Same line, next word: follow the marker as the line wraps.
@@ -1618,7 +1859,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         textView.setKaraokeHighlight(
             range: displayRange,
             fullHeight: true,
-            highlightColor: FuriganaTranscriptLabel.tokenSyncHighlightColor
+            highlightColor: karaokeHighlightColor
         )
     }
 
@@ -1652,6 +1893,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     private func setFollowingPlayback(_ following: Bool) {
         guard following != isFollowingPlayback else { return }
         isFollowingPlayback = following
+        if !following { updateRecenterArrow() }
         recenterButton.isUserInteractionEnabled = !following
         recenterButton.accessibilityElementsHidden = following
         UIView.animate(
@@ -1662,8 +1904,40 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             options: [.beginFromCurrentState, .allowUserInteraction]
         ) {
             self.recenterButton.alpha = following ? 0 : 1
-            self.recenterButton.transform = following ? CGAffineTransform(scaleX: 0.6, y: 0.6) : .identity
+            self.recenterButton.transform = following ? Self.recenterHiddenTransform : .identity
         }
+    }
+
+    /// Points the recenter arrow up when the spoken line is above the visible
+    /// transcript (or above its middle), down otherwise.
+    private func updateRecenterArrow() {
+        guard !isFollowingPlayback else { return }
+        let row = activeSentence ?? 0
+        guard rows.indices.contains(row) else { return }
+        let rowFrame = rows[row].container.convert(rows[row].container.bounds, to: scrollView)
+        let inset = scrollView.adjustedContentInset
+        let visibleTop = scrollView.contentOffset.y + inset.top
+        let visibleBottom = scrollView.contentOffset.y + scrollView.bounds.height - inset.bottom
+        let pointsUp = rowFrame.midY < (visibleTop + visibleBottom) / 2
+        guard pointsUp != recenterPointsUp else { return }
+        recenterPointsUp = pointsUp
+        // The glyph stays `arrow.down`; flipping it 180° swings the arrow toward the line.
+        // Unseen (following, so the pill is hidden) it just snaps.
+        let flip = pointsUp ? CGAffineTransform(rotationAngle: .pi) : .identity
+        if recenterButton.alpha > 0 {
+            UIView.animate(
+                withDuration: 0.45,
+                delay: 0,
+                usingSpringWithDamping: 0.7,
+                initialSpringVelocity: 0,
+                options: [.beginFromCurrentState, .allowUserInteraction]
+            ) {
+                self.recenterButton.imageView?.transform = flip
+            }
+        } else {
+            recenterButton.imageView?.transform = flip
+        }
+        recenterButton.accessibilityLabel = pointsUp ? "Recenter, current line is above" : "Recenter, current line is below"
     }
 
     /// Back to following the spoken line; `scroll` jumps there now instead of at the next line.
@@ -1683,26 +1957,22 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         }
     }
 
-    /// Restart the current line; near its start, jump to the line before.
-    private func previousTapped() {
-        guard !rows.isEmpty else { return }
-        let time = playerView.currentTime
-        let current = activeSentence ?? 0
-        var target = current
-        if rows.indices.contains(current),
-           time - rows[current].sentence.startSec < Self.previousLineGraceSeconds {
-            target = max(0, current - 1)
-        }
+    /// Jump back a few seconds (clamped to the clip's start); play state is unchanged.
+    private func skipBackTapped() {
+        guard let payload, !payload.isDeprecated else { return }
+        let target = max(payload.media.startSec, playerView.currentTime - Self.skipBackSeconds)
         resumeFollowingPlayback(scroll: false)
-        playSentence(target)
+        playerView.seek(to: target)
     }
 
+    /// A line's timestamp: back to that line, scrolled into place, and play from it.
     private func playSentence(_ index: Int) {
         guard let payload, !payload.isDeprecated, rows.indices.contains(index) else { return }
         resumeFollowingPlayback(scroll: false)
         let start = max(payload.media.startSec, rows[index].sentence.startSec - Self.replayLeadInSeconds)
         playerView.seek(to: start)
         playerView.play()
+        autoScroll(toRow: index)
     }
 
     private func toggleFurigana() {
@@ -1839,7 +2109,11 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        if gestureRecognizer === feedSwipePan { return true }
+        if gestureRecognizer === feedSwipePan {
+            // The transcript scrolls itself (and hands off at its edges); the Shorts grabber resizes.
+            guard let touched = touch.view else { return true }
+            return !touched.isDescendant(of: scrollView) && !touched.isDescendant(of: resizeHandle)
+        }
         guard calloutToken != nil else { return false }
         var view = touch.view
         while let current = view {
@@ -1855,6 +2129,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         if scrollView === outerScrollView { updateSeamChevron() }
+        if scrollView === self.scrollView { updateRecenterArrow() }
     }
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
@@ -2085,10 +2360,14 @@ private final class ClipTopFadeView: UIView {
         didSet { setNeedsLayout() }
     }
     private let fadeMask = CAGradientLayer()
+    private static let rampPositions: [Double] = (0...8).map { Double($0) / 8 }
+    private static let rampSamples: [CGFloat] = rampPositions.map { t in CGFloat(t * t * (3 - 2 * t)) }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        fadeMask.colors = [UIColor.clear.cgColor, UIColor.black.cgColor]
+        // Eased (smoothstep) ramp: a linear one leaves a visible hard line at the
+        // top where glyphs go from partly visible to gone.
+        fadeMask.colors = Self.rampSamples.map { UIColor.black.withAlphaComponent($0).cgColor }
         layer.mask = fadeMask
     }
 
@@ -2105,7 +2384,8 @@ private final class ClipTopFadeView: UIView {
         // Follow the frame during animated resizes instead of lagging behind with an implicit animation.
         CATransaction.setDisableActions(true)
         fadeMask.frame = CGRect(x: 0, y: 0, width: bounds.width, height: height)
-        fadeMask.locations = [0, NSNumber(value: Double(min(fadeHeight / height, 1)))]
+        let end = Double(min(fadeHeight / height, 1))
+        fadeMask.locations = Self.rampPositions.map { NSNumber(value: $0 * end) }
         CATransaction.commit()
     }
 }
@@ -2114,6 +2394,16 @@ private final class ClipPassthroughView: UIView {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let hit = super.hitTest(point, with: event)
         return hit === self ? nil : hit
+    }
+}
+
+/// With `delaysContentTouches = false`, UIKit's default refuses to cancel touches in
+/// `UIControl`s, so a drag that starts on a line's timestamp (a full-width button) or
+/// chevron finishes as a tap instead of scrolling. Let the scroll take those touches.
+private final class ClipTranscriptScrollView: UIScrollView {
+    override func touchesShouldCancel(in view: UIView) -> Bool {
+        if view is UITextInput { return super.touchesShouldCancel(in: view) }
+        return true
     }
 }
 
@@ -2179,3 +2469,4 @@ private final class ClipHighlightsSheetViewController: UIViewController {
         ])
     }
 }
+

@@ -11,7 +11,7 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
 
     var mainTabScrollViews: [UIScrollView] { [scrollView] }
 
-    private let scrollView = UIScrollView()
+    private let scrollView = ControlCancellingScrollView()
     private let contentStack = UIStackView()
     private let dailyDialogueCard = DailyDialogueCardView()
     private let decksStack = UIStackView()
@@ -210,6 +210,18 @@ private struct PracticeDeckPreview {
     let subtitle: String
     let sampleJapanese: String
     let recentWords: [String]
+}
+
+// MARK: - Scroll view
+
+/// Vertical scroll that can take the touch from the deck cards (`UIControl`s). Without
+/// this, a scroll that starts on a card (with `delaysContentTouches = false`) never
+/// scrolls and ends as a tap that opens the deck.
+private final class ControlCancellingScrollView: UIScrollView {
+    override func touchesShouldCancel(in view: UIView) -> Bool {
+        if view is UITextInput { return super.touchesShouldCancel(in: view) }
+        return true
+    }
 }
 
 // MARK: - Deck preview card

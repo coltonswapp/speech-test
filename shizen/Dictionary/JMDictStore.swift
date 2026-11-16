@@ -138,7 +138,7 @@ final class JMDictStore {
         }
     }
 
-    /// Looks up entries for a surface string: inflected-form → lemma (when recognized, including i-adjective くて/かった), exact match, lemma again, honorific お-stem, tail trim, then a conservative expression prefix.
+    /// Looks up entries for a surface string: inflected-form → lemma (when recognized, including i-adjective くて/かった), exact match, lemma again, honorific お/ご/御 stem, tail trim, then a conservative expression prefix.
     func entries(forSurface surface: String) -> [JMDictEntry] {
         lookup(forSurface: surface).entries
     }
@@ -181,18 +181,21 @@ final class JMDictStore {
                     matchKind = .exact
                     return
                 }
+                // たら / たり guesses wait until here so 当たり and やたら keep their own entries.
                 if let rows = try bestLemmaGuessExactMatch(
                     in: db,
                     surface: trimmed,
                     surfaceKana: surfaceKana,
-                    preferIkuOverOkonau: preferIkuOverOkonau
+                    preferIkuOverOkonau: preferIkuOverOkonau,
+                    includeTaraTari: true
                 ), !rows.isEmpty {
                     result = rows
                     matchKind = .lemmaGuess
                     return
                 }
-                // お隣 is not a headword; 隣 is. Prefer that over prefix-jumping to お隣さん.
-                if let stem = Self.honorificOStem(trimmed),
+                // お隣 and ご期待 are not headwords; 隣 and 期待 are. Prefer that over
+                // prefix-jumping to お隣さん.
+                if let stem = Self.honorificPrefixSplit(trimmed)?.stem,
                    let rows = try exactMatch(in: db, surface: stem), !rows.isEmpty {
                     result = rows
                     matchKind = .honorificStem
@@ -1017,6 +1020,12 @@ final class JMDictStore {
         let expr = entry.expression
         let reading = entry.displayReading.trimmingCharacters(in: .whitespacesAndNewlines)
         if surface == expr { return reading }
+        // ご期待 resolved to 期待: the entry's reading lacks the prefix the learner sees.
+        // 御 is left alone, since it reads お or ご depending on the word.
+        if let split = Self.honorificPrefixSplit(surface), split.stem == expr,
+           split.prefix != "御", !reading.isEmpty {
+            return split.prefix + reading
+        }
         if let ctx = Self.contextualReadingFromLemma(
             surface: surface,
             lemmaExpression: expr,
@@ -2121,13 +2130,16 @@ final class JMDictStore {
         "ない",
     ]
 
-    /// Honorific お- plus a kanji stem (お隣 → 隣). Kana-only remainders (おく, おいしい)
-    /// are not honorific prefixes.
-    private static func honorificOStem(_ surface: String) -> String? {
-        guard surface.hasPrefix("お"), surface.count > 1 else { return nil }
+    /// Honorific お / ご / 御 plus a kanji stem (お隣 → 隣, ご期待 → 期待). Kana-only
+    /// remainders (おく, おいしい, ごめん) are not honorific prefixes. This is only a shape
+    /// check: `lookup` tries it after the whole surface missed, so ご飯 and ご覧 keep
+    /// their own entries.
+    static func honorificPrefixSplit(_ surface: String) -> (prefix: String, stem: String)? {
+        guard let first = surface.first, surface.count > 1,
+              ["お", "ご", "御"].contains(first) else { return nil }
         let stem = String(surface.dropFirst())
         guard stem.contains(where: isKanjiCharacter) else { return nil }
-        return stem
+        return (String(first), stem)
     }
 
     /// Prefix match is for incomplete input (食べ → 食べる). Do not jump to a
@@ -2196,11 +2208,13 @@ final class JMDictStore {
         surface: String,
         treatAsRenyoStem: Bool = false,
         surfaceKana: String,
-        preferIkuOverOkonau: Bool = false
+        preferIkuOverOkonau: Bool = false,
+        includeTaraTari: Bool = false
     ) throws -> [JMDictEntry]? {
         let guesses = Self.buildInflectionLemmaCandidates(
             surface: surface,
-            treatAsRenyoStem: treatAsRenyoStem
+            treatAsRenyoStem: treatAsRenyoStem,
+            includeTaraTari: includeTaraTari
         )
         let adjLemma = Self.iAdjectiveLemmaCandidate(surface: surface)
         let mustBeVerb = treatAsRenyoStem || Self.surfaceRequiresVerbLemma(surface)
@@ -2315,6 +2329,7 @@ final class JMDictStore {
             "なかった", "なくて", "なければ", "なきゃ", "なくちゃ",
             "ない", "て",
             "った", "んだ", "いた", "いだ", "した", "た",
+            "たら", "だら", "たり", "だり",
             "よう", "ろう", "もう", "ぼう", "のう", "とう", "そう", "ごう", "こう", "おう",
         ]
         return verbEndings.contains { surface.hasSuffix($0) && surface.count > $0.count }
@@ -2576,9 +2591,11 @@ final class JMDictStore {
         return nil
     }
 
+    /// `includeTaraTari` adds たら / たり guesses. Pass it only after an exact match missed.
     private static func buildInflectionLemmaCandidates(
         surface: String,
-        treatAsRenyoStem: Bool = false
+        treatAsRenyoStem: Bool = false,
+        includeTaraTari: Bool = false
     ) -> [String] {
         var out: [String] = []
         var seen = Set<String>()
@@ -2644,6 +2661,18 @@ final class JMDictStore {
         }
         addTeFormLemmaCandidates(from: surface, add: add)
         addTaFormLemmaCandidates(from: surface, add: add)
+
+        // 伸ばしたら / 読んだら / 食べたり / 飲んだり: conditional たら and listing たり sit on
+        // the た-form, so drop the last kana and guess from that (伸ばした → 伸ばす). Recursing
+        // also covers 行かなかったら and 見ていたり; i-adjective かったら was handled above.
+        // Only when the caller has already missed an exact match: やたら, あたり, 当たり, and
+        // ばったり are words of their own, not やる / ある / 当たる / ばる.
+        if includeTaraTari,
+           ["たら", "だら", "たり", "だり"].contains(where: { surface.hasSuffix($0) && surface.count > $0.count }) {
+            for lemma in buildInflectionLemmaCandidates(surface: String(surface.dropLast())) {
+                add(lemma)
+            }
+        }
 
         // Tokenizer splits mid-contraction: 残ってる → 残っ + てる. The bare っ-final
         // stem is the godan 連用形 double-consonant form; try つ and う endings.

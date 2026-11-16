@@ -87,7 +87,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   public var tokenSelectionAppearance: LyricsTokenSelectionAppearance = .definitionTip
 
   /// Extra points after each token that directly abuts the next one, for easier
-  /// tapping. Applied as kern on the token's last character; highlight, underline
+  /// tapping. Applied as tracking on the token's last character; highlight, underline
   /// and selection rects are trimmed so they do not extend into the gap. Set before
   /// `configure`.
   public var tokenSpacing: CGFloat = 0
@@ -356,13 +356,17 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       }
       var end = start + count
       if end < measured.length, keepsTogether(end) {
-        let probe = CTTypesetterCreateLine(typesetter, CFRange(location: start, length: count))
         var candidate = end - 1
         while candidate > start {
           // Only take a token boundary Core Text also accepts, so 、 never starts a line.
+          // Measure the whole piece, not the caret offset at `candidate`: the offset
+          // leaves out part of the token-final `tokenSpacing` kern that Core Text
+          // counts when breaking, so every multi-character piece came up short and
+          // only a one-character line (私 / も) passed.
           if !keepsTogether(candidate) {
-            let x = CTLineGetOffsetForStringIndex(probe, candidate, nil)
-            if CTTypesetterSuggestLineBreak(typesetter, start, Double(x) + 0.5) >= candidate - start { break }
+            let piece = CTTypesetterCreateLine(typesetter, CFRange(location: start, length: candidate - start))
+            let width = CTLineGetTypographicBounds(piece, nil, nil, nil)
+            if CTTypesetterSuggestLineBreak(typesetter, start, width + 0.5) >= candidate - start { break }
           }
           candidate -= 1
         }
@@ -486,6 +490,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
           : .white),
       showsFurigana: showsFurigana,
       tokenSpacing: tokenSpacing,
+      lookupSurfaces: tokenLookupSurfaces,
       plainLineSpacing: plainLineSpacing,
       applyRuby: applyRuby
     )
@@ -570,6 +575,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       selectionAppearance: tokenSelectionAppearance,
       showsFurigana: showsFurigana,
       tokenSpacing: tokenSpacing,
+      lookupSurfaces: tokenLookupSurfaces,
       plainLineSpacing: plainLineSpacing,
       applyRuby: applyRuby
     )
@@ -843,12 +849,12 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   /// Tight per–line-fragment rects in view coordinates. Using the full `boundingRect(forGlyphRange:)`
   /// for a range that spans line fragments can expand to the text view width on each line; drawing
   /// per line fragment matches glyphs only.
-  /// `tokenSpacing` kern on the character before `end` (exclusive), or 0.
+  /// `tokenSpacing` tracking on the character before `end` (exclusive), or 0.
   private func trailingTokenKern(endingAt end: Int) -> CGFloat {
     guard tokenSpacing > 0, end > 0 else { return 0 }
     let source = visibleAttributedText ?? attributedText
     guard let source, end <= source.length else { return 0 }
-    let value = source.attribute(.kern, at: end - 1, effectiveRange: nil)
+    let value = source.attribute(.tracking, at: end - 1, effectiveRange: nil)
     return (value as? NSNumber).map { CGFloat($0.doubleValue) } ?? 0
   }
 
@@ -894,15 +900,28 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       return
     }
     let selectionIndices = activeSelectionIndices
+    // Character runs under a full-strength selection pill; the karaoke wash skips them.
+    var pillRuns: [NSRange] = []
     if tokenSelectionAppearance == .definitionTip, !selectionIndices.isEmpty {
       let highlight = selectionIndices
       let source = visibleAttributedText ?? full
+      // One pill per run of touching selected tokens: 中華 + 料理屋 share a lookup, and
+      // drawing each token on its own left a `tokenSpacing` hole in the middle.
+      var selectedRuns: [NSRange] = []
       source.enumerateAttribute(
         .scrubTokenIndex, in: NSRange(location: 0, length: source.length), options: []
       ) { value, charRange, _ in
         guard let value else { return }
         let n: Int = (value as? NSNumber)?.intValue ?? (value as? Int) ?? -1
         guard highlight.contains(n), charRange.length > 0 else { return }
+        if let last = selectedRuns.last, NSMaxRange(last) == charRange.location {
+          selectedRuns[selectedRuns.count - 1] = NSUnionRange(last, charRange)
+        } else {
+          selectedRuns.append(charRange)
+        }
+      }
+      if !dimsSelectionHighlight { pillRuns = selectedRuns }
+      for charRange in selectedRuns {
         for fragment in self.lineFragmentViewRectsForCharacterRange(charRange, baseTextOnly: showsFurigana) {
           var b = fragment
           if self.showsFurigana {
@@ -930,8 +949,9 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       }
     }
     // After the selection fill so a dimmed pill does not cover the playback marker,
-    // and before glyphs so the wash stays behind the characters.
-    drawKaraokeHighlight(in: rect)
+    // and before glyphs so the wash stays behind the characters. A full-strength
+    // pill wins: the wash would clash with the blue, so it's left out there.
+    drawKaraokeHighlight(in: rect, excluding: pillRuns)
     if showsFurigana {
       _ = rebuildFuriganaLayoutIfNeeded()
       drawFuriganaCoreText()
@@ -1033,12 +1053,34 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     }
   }
 
-  private func drawKaraokeHighlight(in rect: CGRect) {
+  /// `range` minus every run in `excluded`, as the ranges left over, in order.
+  private static func subtracting(_ excluded: [NSRange], from range: NSRange) -> [NSRange] {
+    var pieces = [range]
+    for cut in excluded {
+      pieces = pieces.flatMap { piece -> [NSRange] in
+        guard let overlap = piece.intersection(cut), overlap.length > 0 else { return [piece] }
+        var rest: [NSRange] = []
+        if overlap.location > piece.location {
+          rest.append(NSRange(location: piece.location, length: overlap.location - piece.location))
+        }
+        if NSMaxRange(overlap) < NSMaxRange(piece) {
+          rest.append(NSRange(location: NSMaxRange(overlap), length: NSMaxRange(piece) - NSMaxRange(overlap)))
+        }
+        return rest
+      }
+    }
+    return pieces
+  }
+
+  private func drawKaraokeHighlight(in rect: CGRect, excluding excluded: [NSRange]) {
     guard let range = karaokeRange, range.length > 0 else { return }
+    let visible = Self.subtracting(excluded, from: range)
     // Furigana path: ink-centered like the underlines, so the wash sits on the glyph.
-    let fragments = showsFurigana
-      ? inkCenteredFuriganaFragments(for: range, baseTextOnly: true).map(\.rect)
-      : lineFragmentViewRectsForCharacterRange(range)
+    let fragments = visible.flatMap { piece in
+      showsFurigana
+        ? inkCenteredFuriganaFragments(for: piece, baseTextOnly: true).map(\.rect)
+        : lineFragmentViewRectsForCharacterRange(piece)
+    }
     guard !fragments.isEmpty else { return }
 
     let source: NSAttributedString? = visibleAttributedText ?? attributedText
@@ -1092,9 +1134,88 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     drawFuriganaReadings(layout: layout)
   }
 
+  /// One reading to paint: its base glyph span and its own size.
+  private struct PlacedReading {
+    let reading: String
+    let attributes: [NSAttributedString.Key: Any]
+    let baseMinX: CGFloat
+    let baseMaxX: CGFloat
+    let size: CGSize
+    let y: CGFloat
+    var x: CGFloat
+  }
+
+  /// Minimum space between two readings that would otherwise touch.
+  private static let rubyCollisionGap: CGFloat = 1
+
   /// Centers each reading on its base glyphs. Core Text ruby is not used for
-  /// drawing — it widens kanji and leaves holes between tokens.
+  /// drawing — it widens kanji and leaves holes between tokens. Readings wider
+  /// than their kanji (しゅうかん over 週間, next to まえ over 前) would overlap,
+  /// so colliding neighbors on a line are set side by side and the group is
+  /// centered over their combined kanji.
   private func drawFuriganaReadings(layout: FuriganaTextLayout) {
+    var byLine: [Int: [PlacedReading]] = [:]
+    collectFuriganaReadings(layout: layout) { lineIndex, placed in
+      byLine[lineIndex, default: []].append(placed)
+    }
+    for (_, readings) in byLine {
+      for placed in Self.resolvingRubyCollisions(readings) {
+        (placed.reading as NSString).draw(
+          with: CGRect(origin: CGPoint(x: placed.x, y: placed.y), size: placed.size),
+          options: .usesLineFragmentOrigin,
+          attributes: placed.attributes,
+          context: nil
+        )
+      }
+    }
+  }
+
+  /// Groups readings that would overlap and lays each group out edge to edge,
+  /// centered on the span from its first kanji to its last.
+  private static func resolvingRubyCollisions(_ readings: [PlacedReading]) -> [PlacedReading] {
+    let sorted = readings.sorted { $0.baseMinX < $1.baseMinX }
+    var groups: [[PlacedReading]] = []
+    var groupMaxX = -CGFloat.greatestFiniteMagnitude
+    for item in sorted {
+      if !groups.isEmpty, item.x < groupMaxX + rubyCollisionGap {
+        groups[groups.count - 1].append(item)
+        groupMaxX = layOut(&groups[groups.count - 1])
+        // Re-centering can push the group's left edge into the one before it.
+        while groups.count > 1,
+              let start = groups[groups.count - 1].first?.x,
+              let previous = groups[groups.count - 2].last,
+              start < previous.x + previous.size.width + rubyCollisionGap {
+          let merged = groups.removeLast()
+          groups[groups.count - 1].append(contentsOf: merged)
+          groupMaxX = layOut(&groups[groups.count - 1])
+        }
+      } else {
+        groups.append([item])
+        groupMaxX = item.x + item.size.width
+      }
+    }
+    return groups.flatMap { $0 }
+  }
+
+  /// Places `group` side by side, centered on its kanji. Returns its right edge.
+  @discardableResult
+  private static func layOut(_ group: inout [PlacedReading]) -> CGFloat {
+    guard let first = group.first, let last = group.last else { return 0 }
+    guard group.count > 1 else { return first.x + first.size.width }
+    let total = group.reduce(0) { $0 + $1.size.width }
+      + rubyCollisionGap * CGFloat(group.count - 1)
+    var x = (first.baseMinX + last.baseMaxX) / 2 - total / 2
+    for index in group.indices {
+      group[index].x = x
+      x += group[index].size.width + rubyCollisionGap
+    }
+    return x - rubyCollisionGap
+  }
+
+  private func collectFuriganaReadings(
+    layout: FuriganaTextLayout,
+    _ add: (Int, PlacedReading) -> Void
+  ) {
     guard let visible = visibleAttributedText, visible.length > 0 else { return }
     let rubyKey = NSAttributedString.Key(kCTRubyAnnotationAttributeName as String)
     let lines = layout.lines
@@ -1114,11 +1235,11 @@ public final class LyricsInsetUnderlineTextView: UITextView {
         let sub = NSIntersectionRange(range, lineNSRange)
         guard sub.length > 0 else { continue }
 
-        let startX = CTLineGetOffsetForStringIndex(line, sub.location, nil)
-        // The caret after a token's last character includes the `tokenSpacing`
-        // kern; without trimming it the reading drifts right into the gap.
-        let endX = CTLineGetOffsetForStringIndex(line, NSMaxRange(sub), nil)
-          - self.trailingTokenKern(endingAt: NSMaxRange(sub))
+        // Glyph edges, not carets: a caret sits mid-way through the `tokenSpacing`
+        // gap, which pulled readings left of their kanji.
+        guard let extent = self.glyphExtent(of: sub, in: line) else { continue }
+        let startX = extent.minX
+        let endX = extent.maxX
         let origin = lineOrigins[index]
         let baseFont = visible.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont
           ?? Self.fontForAttributes(from: visible)
@@ -1132,20 +1253,18 @@ public final class LyricsInsetUnderlineTextView: UITextView {
           .foregroundColor: Self.rubyTextColor,
         ]
         let rubySize = (reading as NSString).size(withAttributes: rubyAttrs)
-        let baseMidX = layout.textOrigin.x + origin.x + (startX + endX) / 2
+        let baseMinX = layout.textOrigin.x + origin.x + startX
+        let baseMaxX = layout.textOrigin.x + origin.x + endX
         let glyphTop = layout.textOrigin.y + (layout.textSize.height - origin.y - baseFont.ascender)
-        let rubyRect = CGRect(
-          x: baseMidX - rubySize.width / 2,
-          y: glyphTop - rubySize.height + 1,
-          width: rubySize.width,
-          height: rubySize.height
-        )
-        (reading as NSString).draw(
-          with: rubyRect,
-          options: .usesLineFragmentOrigin,
+        add(index, PlacedReading(
+          reading: reading,
           attributes: rubyAttrs,
-          context: nil
-        )
+          baseMinX: baseMinX,
+          baseMaxX: baseMaxX,
+          size: rubySize,
+          y: glyphTop - rubySize.height + 1,
+          x: (baseMinX + baseMaxX) / 2 - rubySize.width / 2
+        ))
         break
       }
     }
@@ -1250,6 +1369,32 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     return CTRubyAnnotationGetSizeFactor(annotation)
   }
 
+  /// Left edge of the first glyph and right edge of the last glyph of `range` on `line`,
+  /// in line coordinates, without the token-final `tokenSpacing` kern. Read from glyph
+  /// positions, not caret offsets: Core Text puts the caret halfway through a kerned gap,
+  /// so caret-based marks started kern/2 before a token's first kanji and, after trimming
+  /// the full kern, stopped kern/2 short of its last one.
+  private func glyphExtent(of range: NSRange, in line: CTLine) -> (minX: CGFloat, maxX: CGFloat)? {
+    var minX = CGFloat.greatestFiniteMagnitude
+    var maxX = -CGFloat.greatestFiniteMagnitude
+    for run in CTLineGetGlyphRuns(line) as! [CTRun] {
+      let count = CTRunGetGlyphCount(run)
+      guard count > 0 else { continue }
+      var indices = [CFIndex](repeating: 0, count: count)
+      var positions = [CGPoint](repeating: .zero, count: count)
+      var advances = [CGSize](repeating: .zero, count: count)
+      CTRunGetStringIndices(run, CFRange(), &indices)
+      CTRunGetPositions(run, CFRange(), &positions)
+      CTRunGetAdvances(run, CFRange(), &advances)
+      for i in 0..<count where NSLocationInRange(indices[i], range) {
+        minX = min(minX, positions[i].x)
+        maxX = max(maxX, positions[i].x + advances[i].width - trailingTokenKern(endingAt: indices[i] + 1))
+      }
+    }
+    guard minX.isFinite, maxX > minX else { return nil }
+    return (minX, maxX)
+  }
+
   private func coreTextLineFragmentViewRects(
     forCharacterRange range: NSRange,
     layout: FuriganaTextLayout,
@@ -1279,16 +1424,8 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       let lineNSRange = NSRange(location: lineRange.location, length: lineRange.length)
       let sub = NSIntersectionRange(range, lineNSRange)
       guard sub.length > 0 else { continue }
-      // Walk every index, including the end, so the last kanji of お店
-      // is not dropped when a single start/end pair undershoots.
-      var minX = CGFloat.greatestFiniteMagnitude
-      var maxX: CGFloat = -.greatestFiniteMagnitude
-      for stringIndex in sub.location...NSMaxRange(sub) {
-        let x = CTLineGetOffsetForStringIndex(line, stringIndex, nil)
-        minX = min(minX, x)
-        maxX = max(maxX, x)
-      }
-      guard minX.isFinite, maxX > minX else { continue }
+      guard let extent = glyphExtent(of: sub, in: line) else { continue }
+      let (minX, maxX) = (extent.minX, extent.maxX)
       var ascent: CGFloat = 0
       var descent: CGFloat = 0
       var leading: CGFloat = 0
@@ -1303,7 +1440,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
         glyphDescent = descent
       }
       let origin = lineOrigins[index]
-      let width = max(1, maxX - minX - trailingTokenKern(endingAt: NSMaxRange(sub)))
+      let width = max(1, maxX - minX)
       let baselineY = layout.textOrigin.y + (layout.textSize.height - origin.y)
       let y = baselineY - glyphAscent
       out.append((
@@ -1581,9 +1718,15 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     selectedTextColor: UIColor = .white,
     showsFurigana: Bool = false,
     tokenSpacing: CGFloat = 0,
+    lookupSurfaces: [String] = [],
     plainLineSpacing: CGFloat = 0,
     applyRuby: ((NSMutableAttributedString, String, UIFont) -> Void)? = nil
   ) -> NSAttributedString {
+    // Tokens merged into one lookup (県 + 大会 → 県大会) read, tap and highlight as one
+    // word, so no gap goes between them.
+    let sharesLookup: (Int) -> Bool = { i in
+      lookupSurfaces.count == tokens.count && lookupSurfaces[i] == lookupSurfaces[i + 1]
+    }
     let base: [NSAttributedString.Key: Any] = [
       .font: font,
       .foregroundColor: UIColor.label,
@@ -1599,10 +1742,14 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       }
       // Gap only between touching tokens, so punctuation keeps its normal spacing.
       if tokenSpacing > 0, i + 1 < tokens.count,
-        NSRange(tokens[i + 1].range, in: text).location == NSMaxRange(r)
+        NSRange(tokens[i + 1].range, in: text).location == NSMaxRange(r),
+        !sharesLookup(i)
       {
         let last = (text as NSString).rangeOfComposedCharacterSequence(at: NSMaxRange(r) - 1)
-        m.addAttribute(.kern, value: tokenSpacing, range: last)
+        // Tracking, not kern: a kern on the character right after 、 or 。 makes Core Text
+        // halve that punctuation and add the removed width after the kerned character
+        // (、県 + 大会 left a ~14pt hole after 県). Tracking adds the gap and nothing else.
+        m.addAttribute(.tracking, value: tokenSpacing, range: last)
       }
     }
     if showsFurigana {

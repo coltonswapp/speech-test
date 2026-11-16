@@ -32,8 +32,12 @@ nonisolated struct ClipSummary: Decodable, Hashable, Sendable {
     /// The video's YouTube title and channel. Nil until Studio has fetched them.
     let title: String?
     let channelName: String?
+    /// Whether Studio put the clip in the feed. Nil from servers that predate
+    /// the feed check, where every listed clip is in the feed.
+    let inFeed: Bool?
 
     var isPortrait: Bool { orientation == .portrait }
+    var isInFeed: Bool { inFeed ?? true }
 
     enum CodingKeys: String, CodingKey {
         case clipID = "clip_id"
@@ -46,6 +50,7 @@ nonisolated struct ClipSummary: Decodable, Hashable, Sendable {
         case jlptLevel = "jlpt_level"
         case title
         case channelName = "channel_name"
+        case inFeed = "in_feed"
     }
 }
 
@@ -260,11 +265,52 @@ extension ContentCMSClient {
         let clips: [ClipSummary]
     }
 
+    private nonisolated struct ClipPageResponse: Decodable, Sendable {
+        let clips: [ClipSummary]
+        let nextCursor: String?
+
+        enum CodingKeys: String, CodingKey {
+            case clips
+            case nextCursor = "next_cursor"
+        }
+    }
+
     /// `learnerLevel` (5 = N5 … 1 = N1): only clips rated at that level or
     /// easier; unrated clips are left out. Nil = every clip.
-    static func fetchClipList(learnerLevel: Int? = nil) async throws -> [ClipSummary] {
-        let query = learnerLevel.map { [URLQueryItem(name: "level", value: String($0))] } ?? []
+    /// `feedOnly`: just the clips Studio judged worth a swipe (long enough,
+    /// enough said, makes sense alone). Servers that predate the feed check
+    /// ignore it and return every clip.
+    /// One page of the clip list, newest first: pass `nextCursor` back for the
+    /// next page; nil means this was the last one. Filters as `fetchClipList`.
+    static func fetchClipPage(
+        learnerLevel: Int?,
+        feedOnly: Bool,
+        limit: Int,
+        cursor: String?
+    ) async throws -> (clips: [ClipSummary], nextCursor: String?) {
+        var query = learnerLevel.map { [URLQueryItem(name: "level", value: String($0))] } ?? []
+        if feedOnly { query.append(URLQueryItem(name: "feed", value: "1")) }
+        query.append(URLQueryItem(name: "limit", value: String(limit)))
+        if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
         let data = try await fetchPublicClipData(path: ["clips"], query: query)
+        let response = try JSONDecoder().decode(ClipPageResponse.self, from: data)
+        return (response.clips, response.nextCursor)
+    }
+
+    static func fetchClipList(learnerLevel: Int? = nil, feedOnly: Bool = false) async throws -> [ClipSummary] {
+        var query = learnerLevel.map { [URLQueryItem(name: "level", value: String($0))] } ?? []
+        if feedOnly { query.append(URLQueryItem(name: "feed", value: "1")) }
+        let data = try await fetchPublicClipData(path: ["clips"], query: query)
+        return try JSONDecoder().decode(ClipListResponse.self, from: data).clips
+    }
+
+    /// Every listed clip cut from one YouTube video, in video order (earliest
+    /// first), whatever its level. Includes the clip you asked from.
+    static func fetchClipList(videoID: String) async throws -> [ClipSummary] {
+        let data = try await fetchPublicClipData(
+            path: ["clips"],
+            query: [URLQueryItem(name: "video_id", value: videoID)]
+        )
         return try JSONDecoder().decode(ClipListResponse.self, from: data).clips
     }
 

@@ -9,11 +9,12 @@ import { cn } from "@/lib/utils";
 import { formatTimecode } from "@/components/experiments/clips/clip-format";
 import { TokenEditMenu } from "@/components/experiments/clips/token-edit-menu";
 import type { ClipDraft } from "@/lib/experiments/clips/types";
+import { CLIP_LOW_SCORE } from "@/lib/experiments/clips/checks";
 import { splitSentencePhrases } from "@/lib/experiments/clips/phrases";
 import type { EditableToken } from "@/lib/experiments/clips/token-edits";
 
 /** Aligner scores below this are worth a listen (they don't predict error well). */
-export const LOW_SCORE = 0.3;
+export const LOW_SCORE = CLIP_LOW_SCORE;
 
 /** `${sentence}:${token}` — the key `active` and `data-token-key` use. */
 export const tokenKey = (sentence: number, token: number) => `${sentence}:${token}`;

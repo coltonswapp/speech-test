@@ -27,6 +27,9 @@ function formatErrorBody(body: unknown, status: number): string {
       return `HTTP ${status}`;
     }
   }
+  if (typeof body === "string" && /^\s*<(!doctype|html)/i.test(body)) {
+    return `HTTP ${status} (HTML page, not JSON: is this route deployed on the Studio at STUDIO_BASE_URL?)`;
+  }
   if (typeof body === "string" && body.trim()) return body;
   return `HTTP ${status}`;
 }

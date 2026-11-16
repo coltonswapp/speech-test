@@ -1,9 +1,9 @@
 import type { RecipeId, SlideRecipe } from "./types";
 
 // Matches iOS UIFont.systemFont: SF Pro + SF Symbols for Latin/icons,
-// Hiragino Sans for Japanese, Noto Sans JP when those faces are missing.
+// Hiragino Sans for Japanese, then other system Japanese faces.
 const SYSTEM_SANS =
-  '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro Icons", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", var(--font-noto-sans-jp), "Noto Sans JP", sans-serif';
+  '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro Icons", var(--font-jp), sans-serif';
 
 const lightChrome = {
   watermark: "shizenapp.com",

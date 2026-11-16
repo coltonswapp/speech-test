@@ -29,6 +29,13 @@ export const GEMINI_ASR_MODEL_DEFAULT = "gemini-3.1-pro-preview";
 export const GEMINI_FEED_MODEL_DEFAULT = "gemini-3.8-flash";
 
 /**
+ * Level step (clip JLPT level). Flash-Lite rated fast native dramas N4 from
+ * their simple words alone (Nov 15); the stronger Flash weighs pace and
+ * casual speech better, for a fraction of a cent per clip.
+ */
+export const GEMINI_LEVEL_MODEL_DEFAULT = "gemini-3.8-flash";
+
+/**
  * Models the clip editor lets you pick per run (Transcribe, Translate) to
  * compare output. All take audio and text in.
  */

@@ -2,6 +2,7 @@
 //
 //   pnpm clip:queue-batch 10              # pick 10, fetch audio, process, report
 //   pnpm clip:queue-batch 10 --dry-run    # just show which Shorts it would pick
+//   pnpm clip:queue-batch 7 --channel seju   # several from one channel (name or id contains "seju")
 //   pnpm clip:queue-batch --resume        # finish clips a stopped run left half-done
 //   pnpm clip:queue-batch --report short-abc,short-def
 //
@@ -56,6 +57,24 @@ async function api<T>(pathname: string, init: RequestInit = {}, timeoutMs = 60_0
 const getDraft = async (id: string) => (await api<{ draft: ClipDraft }>(`/api/experiments/clips/${id}`)).draft;
 
 // --- Picking -----------------------------------------------------------
+
+/** Longer audio is cut into several clips, which splits a story Short in two. */
+const SPLITS_AT_SECONDS = 120;
+
+function pickFromChannel(rows: ClipQueueRow[], count: number, match: string): ClipQueueRow[] {
+  const needle = match.toLowerCase();
+  // You asked for this channel, so warnings (a title that says ASMR, a long
+  // Short) don't hold a Short back; only one that would be cut in two does.
+  return rows
+    .filter(
+      (r) =>
+        r.progress === "none" &&
+        r.status === "queued" &&
+        (r.channelName.toLowerCase().includes(needle) || (r.channelId ?? "").toLowerCase() === needle) &&
+        (r.durationSec ?? 0) <= SPLITS_AT_SECONDS
+    )
+    .slice(0, count);
+}
 
 function pick(rows: ClipQueueRow[], count: number): ClipQueueRow[] {
   const channel = (r: ClipQueueRow) => r.channelId ?? r.channelName;
@@ -226,7 +245,8 @@ async function main() {
 
   const count = Number(args.find((a) => /^\d+$/.test(a)) ?? 5);
   const { rows } = await api<{ rows: ClipQueueRow[] }>("/api/experiments/clip-queue");
-  const picked = pick(rows, count);
+  const channelMatch = option("--channel");
+  const picked = channelMatch ? pickFromChannel(rows, count, channelMatch) : pick(rows, count);
   if (picked.length === 0) return console.log("Nothing left in To do.");
   console.log(`\nPicked ${picked.length}:`);
   for (const r of picked) console.log(`  ${r.videoId}  ${r.channelName} · ${r.durationSec ?? "?"} s · ${r.title.slice(0, 50)}`);

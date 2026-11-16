@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "shizen-studio": {
+      "command": "webapp/studio-mcp/node_modules/.bin/tsx",
+      "args": ["webapp/studio-mcp/src/index.ts"]
+    }
+  }
+}

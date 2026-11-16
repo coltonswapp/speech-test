@@ -22,6 +22,7 @@ import {
   type UnitSummary,
 } from "./client.ts";
 import { analyzeScenario } from "./flags.ts";
+import { registerClipTools } from "./clips.ts";
 
 function jsonResult(data: unknown) {
   return {
@@ -663,6 +664,8 @@ server.registerTool(
     }
   }
 );
+
+registerClipTools(server);
 
 async function main() {
   const transport = new StdioServerTransport();

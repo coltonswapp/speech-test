@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "shizen-studio": {
+      "command": "webapp/studio-mcp/node_modules/.bin/tsx",
+      "args": ["webapp/studio-mcp/src/index.ts"],
+      "env": {
+        "STUDIO_BASE_URL": "${STUDIO_BASE_URL:-http://localhost:3000}",
+        "STUDIO_AGENT_TOKEN": "${STUDIO_AGENT_TOKEN:-}"
+      }
+    }
+  }
+}

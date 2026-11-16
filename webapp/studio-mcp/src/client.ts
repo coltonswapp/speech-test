@@ -51,7 +51,20 @@ export async function studioFetch<T>(
   }
 
   const signal = rest.signal ?? AbortSignal.timeout(timeoutMs);
-  const res = await fetch(url, { ...rest, headers, signal });
+  let res: Response;
+  try {
+    res = await fetch(url, { ...rest, headers, signal });
+  } catch (err) {
+    // Node's fetch only says "fetch failed"; the real reason (ENOTFOUND,
+    // ECONNREFUSED, cert errors, timeouts) is on err.cause.
+    const cause = (err as { cause?: { code?: string; message?: string } })?.cause;
+    const reason =
+      cause?.code || cause?.message || (err instanceof Error ? err.message : String(err));
+    const origin = new URL(url).origin;
+    throw new Error(
+      `Could not reach Studio at ${origin} (${reason}). Check STUDIO_BASE_URL and network access.`
+    );
+  }
   const text = await res.text();
   let parsed: unknown = null;
   if (text) {

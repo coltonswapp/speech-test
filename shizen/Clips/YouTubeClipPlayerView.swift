@@ -51,6 +51,15 @@ final class YouTubeClipPlayerView: UIView {
     /// the clip instead of a black box. Aspect-fill crops hqdefault's letterbox /
     /// Shorts pillarbox bars to the frame.
     private let posterView = UIImageView()
+    /// With YouTube's controls off, the embed gets no touches at all and this
+    /// tap plays/pauses instead. A touch inside the web view leaves it in a
+    /// hover state, and the Shorts player then keeps its overlay (channel,
+    /// like, share, scrubber) up while playing until the next touch elsewhere.
+    /// Feed swipes that start on the video were doing exactly that.
+    private lazy var togglePlaybackTap = UITapGestureRecognizer(
+        target: self,
+        action: #selector(togglePlaybackTapped)
+    )
     private var posterTask: Task<Void, Never>?
     private var sampleTime: TimeInterval = 0
     private var sampleHostTime: CFTimeInterval = CACurrentMediaTime()
@@ -78,6 +87,11 @@ final class YouTubeClipPlayerView: UIView {
         webView.isOpaque = false
         webView.backgroundColor = .black
         webView.scrollView.isScrollEnabled = false
+        #if DEBUG
+        // Safari → Develop → this iPhone shows YouTube's player live, to see
+        // why some loads keep the Shorts overlay up while playing.
+        webView.isInspectable = true
+        #endif
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(webView)
@@ -92,6 +106,7 @@ final class YouTubeClipPlayerView: UIView {
         posterView.clipsToBounds = true
         posterView.backgroundColor = .black
         posterView.isUserInteractionEnabled = false
+        addGestureRecognizer(togglePlaybackTap)
         posterView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(posterView)
         NSLayoutConstraint.activate([
@@ -137,6 +152,8 @@ final class YouTubeClipPlayerView: UIView {
         if videoID != self.videoID { showPoster(videoID: videoID) }
         self.videoID = videoID
         self.showsControls = showsControls
+        webView.isUserInteractionEnabled = showsControls
+        togglePlaybackTap.isEnabled = !showsControls
         isReady = false
         state = .unstarted
         sampleTime = startSeconds
@@ -155,6 +172,10 @@ final class YouTubeClipPlayerView: UIView {
         pendingResume = (time, isPlaying, playbackRate)
         load(videoID: videoID, startSeconds: time, showsControls: shows)
         onStateChange?(state)
+    }
+
+    @objc private func togglePlaybackTapped() {
+        if isPlaying { pause() } else { play() }
     }
 
     func play() {

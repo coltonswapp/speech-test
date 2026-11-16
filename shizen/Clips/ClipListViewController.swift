@@ -41,6 +41,7 @@ final class ClipListViewController: UITableViewController {
         super.viewDidLoad()
         navigationItem.largeTitleDisplayMode = .never
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "clip")
+        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "playAll")
         let refresh = UIRefreshControl()
         refresh.addTarget(self, action: #selector(reload), for: .valueChanged)
         refreshControl = refresh
@@ -67,16 +68,15 @@ final class ClipListViewController: UITableViewController {
         )
         let feedItem = UIBarButtonItem(
             image: UIImage(systemName: "rectangle.stack.badge.play"),
-            primaryAction: UIAction { [weak self] _ in
-                guard let self else { return }
-                self.navigationController?.pushViewController(
-                    ClipFeedViewController(learnerLevel: self.learnerLevel),
-                    animated: true
-                )
-            }
+            primaryAction: UIAction { [weak self] _ in self?.openFeed() }
         )
         feedItem.accessibilityLabel = "Open feed"
         navigationItem.rightBarButtonItems = [levelItem, feedItem]
+    }
+
+    /// The feed-eligible clips (same level filter) as a swipeable feed.
+    private func openFeed() {
+        navigationController?.pushViewController(ClipFeedViewController(learnerLevel: learnerLevel), animated: true)
     }
 
     @objc private func reload() {
@@ -105,13 +105,18 @@ final class ClipListViewController: UITableViewController {
         }
     }
 
-    override func numberOfSections(in tableView: UITableView) -> Int { 1 }
+    /// Section 0: "Play All" (once clips are listed). Section 1: the clips.
+    private static let playAllSection = 0
+    private static let clipsSection = 1
+
+    override func numberOfSections(in tableView: UITableView) -> Int { 2 }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        clips.count
+        section == Self.playAllSection ? (clips.isEmpty ? 0 : 1) : clips.count
     }
 
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
+        guard section == Self.clipsSection else { return nil }
         if let errorText { return "Couldn’t load clips. \(errorText)" }
         if isLoading && clips.isEmpty { return "Loading…" }
         if clips.isEmpty, let learnerLevel {
@@ -124,6 +129,21 @@ final class ClipListViewController: UITableViewController {
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        if indexPath.section == Self.playAllSection {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "playAll", for: indexPath)
+            var content = UIListContentConfiguration.cell()
+            content.text = "Play All"
+            let feedCount = clips.filter(\.isInFeed).count
+            content.secondaryText = feedCount == 1 ? "1 clip in the feed" : "\(feedCount) of \(clips.count) clips in the feed"
+            content.textProperties.color = .tintColor
+            content.textProperties.font = .preferredFont(forTextStyle: .headline)
+            content.secondaryTextProperties.color = .secondaryLabel
+            content.image = UIImage(systemName: "play.fill")
+            content.imageProperties.tintColor = .tintColor
+            cell.contentConfiguration = content
+            cell.accessibilityTraits = .button
+            return cell
+        }
         let cell = tableView.dequeueReusableCell(withIdentifier: "clip", for: indexPath)
         let clip = clips[indexPath.row]
         var content = UIListContentConfiguration.subtitleCell()
@@ -146,6 +166,10 @@ final class ClipListViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
+        if indexPath.section == Self.playAllSection {
+            openFeed()
+            return
+        }
         let clip = clips[indexPath.row]
         navigationController?.pushViewController(
             ClipPlayerViewController(clipID: clip.clipID, preview: clip),

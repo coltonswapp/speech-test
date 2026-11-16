@@ -11,11 +11,23 @@ final class MainViewController: UIViewController {
     private enum MainSection: Int, CaseIterable {
         case dialogue
         case practice
+        case feed
+
+        /// Sections shown as tabs, in order (raw values must match their index).
+        /// The clip feed is an experiment: Debug builds only for now.
+        static var visible: [MainSection] {
+            #if DEBUG
+            return [.dialogue, .practice, .feed]
+            #else
+            return [.dialogue, .practice]
+            #endif
+        }
 
         var title: String {
             switch self {
             case .dialogue: return "Dialogue"
             case .practice: return "Practice"
+            case .feed: return "Feed"
             }
         }
 
@@ -29,12 +41,16 @@ final class MainViewController: UIViewController {
                 let flow = PracticeHomeViewController()
                 flow.title = nil
                 return flow
+            case .feed:
+                let feed = MainFeedTabViewController()
+                feed.topOverlayHeight = GameCategoryTabBar.layoutHeight
+                return feed
             }
         }
     }
 
     private lazy var tabBar = GameCategoryTabBar(
-        titles: [Self.dialogueTabTitle(), MainSection.practice.title],
+        titles: MainSection.visible.map { $0 == .dialogue ? Self.dialogueTabTitle() : $0.title },
         initialSelectedIndex: MainSection.dialogue.rawValue
     )
     private let pagingScrollView = HorizontalPagingScrollView()
@@ -49,6 +65,15 @@ final class MainViewController: UIViewController {
     private var verticalScrollObservations: [NSKeyValueObservation] = []
     private var authObserver: NSObjectProtocol?
     private var isPresentingAuthGate = false
+    /// The clip menu button while the feed is immersive; nil otherwise.
+    private var feedOptionsItem: UIBarButtonItem?
+    /// Immersive feed only: a progressive blur from the top of the screen that thins out
+    /// and ends `feedTopBlurFade` points below the navigation bar.
+    private let feedTopBlur = ProgressiveBlurView(style: .systemUltraThinMaterial, steps: 4)
+    private static let feedTopBlurFade: CGFloat = 12
+    /// The variable blur has no material tint, so it runs at full opacity; its strength
+    /// is `ProgressiveBlurView.maxRadius`.
+    private static let feedTopBlurOpacity: CGFloat = 1
 
     private static let verticalScrollTopRevealThreshold: CGFloat = 12
     private static let verticalScrollDirectionThreshold: CGFloat = 2
@@ -63,6 +88,7 @@ final class MainViewController: UIViewController {
         view.backgroundColor = ExperimentPalette.pageBackground
         setupPager()
         installPages()
+        setupFeedTopBlur()
         setupTabBar()
         setupNavigationBar()
         tabBar.delegate = self
@@ -102,6 +128,7 @@ final class MainViewController: UIViewController {
         tabBar.syncScrollPositionToSelection(animated: false)
         lastPagerHapticPageIndex = defaultIndex
         resetVerticalScrollTrackingForActivePage()
+        updateFeedActivity()
     }
 
     // MARK: - Navigation
@@ -221,6 +248,22 @@ final class MainViewController: UIViewController {
 
     // MARK: - Layout
 
+    private func setupFeedTopBlur() {
+        feedTopBlur.translatesAutoresizingMaskIntoConstraints = false
+        feedTopBlur.isUserInteractionEnabled = false
+        feedTopBlur.alpha = 0
+        view.addSubview(feedTopBlur)
+        NSLayoutConstraint.activate([
+            feedTopBlur.topAnchor.constraint(equalTo: view.topAnchor),
+            feedTopBlur.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            feedTopBlur.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            feedTopBlur.bottomAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.topAnchor,
+                constant: Self.feedTopBlurFade
+            ),
+        ])
+    }
+
     private func setupTabBar() {
         view.addSubview(tabBar)
         view.bringSubviewToFront(tabBar)
@@ -261,13 +304,23 @@ final class MainViewController: UIViewController {
     }
 
     private func installPages() {
-        for section in MainSection.allCases {
+        for section in MainSection.visible {
             let pageContainer = UIView()
             pageContainer.translatesAutoresizingMaskIntoConstraints = false
             pagesStackView.addArrangedSubview(pageContainer)
             pageContainer.widthAnchor.constraint(equalTo: pagingScrollView.frameLayoutGuide.widthAnchor).isActive = true
 
             let child = section.makeViewController()
+            if let feed = child as? MainFeedTabViewController {
+                feed.onImmersiveChange = { [weak self, weak feed] immersive in
+                    guard let feed else { return }
+                    self?.setFeedImmersiveChrome(immersive, feed: feed)
+                }
+                feed.onClipMenuChanged = { [weak self, weak feed] in
+                    guard let self, let feed, self.feedOptionsItem != nil else { return }
+                    self.feedOptionsItem?.menu = feed.currentClipMenu
+                }
+            }
             embed(child, in: pageContainer)
             pageViewControllers.append(child)
         }
@@ -314,8 +367,8 @@ final class MainViewController: UIViewController {
         let width = pagingScrollView.bounds.width
         guard width > 0 else { return }
         let progress = pagingScrollView.contentOffset.x / width
-        let clamped = max(0, min(progress, CGFloat(MainSection.allCases.count - 1)))
-        lastPagerHapticPageIndex = max(0, min(Int(round(clamped)), MainSection.allCases.count - 1))
+        let clamped = max(0, min(progress, CGFloat(MainSection.visible.count - 1)))
+        lastPagerHapticPageIndex = max(0, min(Int(round(clamped)), MainSection.visible.count - 1))
     }
 
     private var activePageIndex: Int {
@@ -403,6 +456,45 @@ final class MainViewController: UIViewController {
         return scrollView.contentOffset.y < maxOffsetY - Self.verticalScrollBottomExpandDistance
     }
 
+    /// The feed plays only while it's the nearest page: past halfway out, it pauses.
+    private func updateFeedActivity() {
+        let active = activePageIndex
+        for (index, child) in pageViewControllers.enumerated() {
+            (child as? MainFeedTabViewController)?.setActive(index == active)
+        }
+    }
+
+    /// Immersive feed: the tab bar fades out and side-swiping between tabs stops, and the
+    /// navigation bar trades dictionary/settings for ✕ and the clip's menu. Runs inside
+    /// the feed's fade animation.
+    private func setFeedImmersiveChrome(_ immersive: Bool, feed: MainFeedTabViewController) {
+        tabBar.alpha = immersive ? 0 : 1
+        tabBar.isUserInteractionEnabled = !immersive
+        pagingScrollView.isScrollEnabled = !immersive
+        // The system's soft edge blur fades a long way below the bar and hazes the clip's
+        // info line, so the immersive feed swaps it for a shorter one of our own.
+        pagingScrollView.topEdgeEffect.isHidden = immersive
+        feedTopBlur.alpha = immersive ? Self.feedTopBlurOpacity : 0
+        if immersive {
+            let close = UIBarButtonItem(
+                systemItem: .close,
+                primaryAction: UIAction { [weak feed] _ in feed?.exitImmersive() }
+            )
+            // The clip's own menu (it rebuilds itself each time it opens); swapped
+            // for the next clip's in `onClipMenuChanged`.
+            let options = UIBarButtonItem(image: UIImage(systemName: "ellipsis"), menu: feed.currentClipMenu)
+            options.accessibilityLabel = "Options"
+            feedOptionsItem = options
+            navigationItem.setLeftBarButton(close, animated: true)
+            navigationItem.setRightBarButton(options, animated: true)
+            navigationItem.title = "Feed"
+        } else {
+            feedOptionsItem = nil
+            setupNavigationBar()
+            navigationItem.title = title
+        }
+    }
+
     private func revealInactiveTabsForHorizontalInteraction(animated: Bool) {
         tabBar.setShowsInactiveTabs(true, animated: animated)
     }
@@ -485,11 +577,12 @@ extension MainViewController: UIScrollViewDelegate {
         if pageIndex != trackedVerticalScrollPageIndex {
             trackedVerticalScrollPageIndex = pageIndex
             resetVerticalScrollTrackingForActivePage()
+            updateFeedActivity()
         }
         if !isUpdatingFromScroll {
             revealInactiveTabsForHorizontalInteraction(animated: true)
-            let clamped = max(0, min(progress, CGFloat(MainSection.allCases.count - 1)))
-            let nearestPage = max(0, min(Int(round(clamped)), MainSection.allCases.count - 1))
+            let clamped = max(0, min(progress, CGFloat(MainSection.visible.count - 1)))
+            let nearestPage = max(0, min(Int(round(clamped)), MainSection.visible.count - 1))
             if nearestPage != lastPagerHapticPageIndex {
                 lastPagerHapticPageIndex = nearestPage
                 UIImpactFeedbackGenerator(style: .soft).impactOccurred()
@@ -550,5 +643,13 @@ final class HorizontalPagingScrollView: UIScrollView {
         }
         let translation = pan.translation(in: self)
         return abs(translation.x) > abs(translation.y)
+    }
+
+    /// With `delaysContentTouches = false`, UIKit's default refuses to cancel touches in
+    /// `UIControl`s, so a swipe that starts on a card or button finishes as a tap
+    /// (`.touchUpInside`). Let the page swipe take the touch from controls too.
+    override func touchesShouldCancel(in view: UIView) -> Bool {
+        if view is UITextInput { return super.touchesShouldCancel(in: view) }
+        return true
     }
 }

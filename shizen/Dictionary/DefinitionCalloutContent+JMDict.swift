@@ -171,9 +171,12 @@ extension DefinitionCalloutContent {
 
 // MARK: - Lookup assumptions
 
-/// Why a kana-only word got the entry it did, or why it got none. The dictionary sheet shows
-/// this under the headword so a learner (and we) can see when the definition is a pick.
+/// Why a word got the entry it did, or why it got none: mostly kana-only picks, plus a
+/// polite prefix that was set aside. The dictionary sheet shows this under the headword so a
+/// learner (and we) can see when the definition is a pick.
 enum KanaLookupNote: Equatable {
+    /// ご期待 → 期待: the tapped word is a polite お / ご / 御 on a word the dictionary lists bare.
+    case honorificPrefix(prefix: String, stem: String)
     /// ここ → 此処: JMdict says this word is usually written in kana.
     case usuallyKana(kanji: String)
     /// いる → 居る: chosen from `JMDictStore.pinnedKanaHeadwords` over a higher-scored entry.
@@ -186,6 +189,10 @@ enum KanaLookupNote: Equatable {
         if contextSensitive {
             let candidates = DefinitionCalloutContent.contextCandidates(surface: trimmed, lookup: lookup, limit: 4)
             return candidates.isEmpty ? nil : .dependsOnContext(surface: trimmed, candidates: candidates)
+        }
+        if lookup.matchKind == .honorificStem,
+           let split = JMDictStore.honorificPrefixSplit(trimmed) {
+            return .honorificPrefix(prefix: split.prefix, stem: split.stem)
         }
         guard let preferred = lookup.preferredKanaSequence,
               let primary = lookup.primaryEntry,
@@ -200,6 +207,8 @@ enum KanaLookupNote: Equatable {
     /// Short form for the callout. Nil for `dependsOnContext`, which the callout lists itself.
     var calloutText: String? {
         switch self {
+        case .honorificPrefix(let prefix, let stem):
+            return "Polite \(prefix) + \(stem)"
         case .usuallyKana(let kanji):
             return "Usually written in kana · \(kanji)"
         case .pinned(_, let headword):
@@ -212,6 +221,8 @@ enum KanaLookupNote: Equatable {
     /// Text for the sheet. `listsCandidates` is false when the definitions below already show them.
     func text(listsCandidates: Bool) -> String {
         switch self {
+        case .honorificPrefix(let prefix, let stem):
+            return "\(prefix) is a polite prefix on \(stem). It adds respect, not meaning."
         case .usuallyKana(let kanji):
             return "Usually written in kana · kanji \(kanji)"
         case .pinned(let surface, let headword):

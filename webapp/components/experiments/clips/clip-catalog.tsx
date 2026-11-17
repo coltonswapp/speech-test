@@ -181,9 +181,13 @@ export function applyCatalogView(clips: ClipSummary[], view: CatalogView): ClipS
       return false;
     }
     if (words.length > 0) {
-      const haystack = [clip.id, text(clip.videoId), text(clip.videoTitle), text(clip.channelName)].join(
-        " "
-      );
+      const haystack = [
+        clip.id,
+        text(clip.videoId),
+        text(clip.videoTitle),
+        text(clip.videoTitleEn),
+        text(clip.channelName),
+      ].join(" ");
       if (!words.every((word) => haystack.includes(word))) return false;
     }
     return true;

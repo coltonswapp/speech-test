@@ -111,6 +111,15 @@ export const clipVideoInfoSchema = z.object({
   /** The channel's page, e.g. https://www.youtube.com/@handle. */
   channelUrl: z.string().optional(),
   thumbnailUrl: z.string().optional(),
+  /**
+   * The title in English, hashtags left out (see video-title.ts). Missing
+   * when the title has no Japanese or the translation failed. Kept on Refresh
+   * while YouTube's title is unchanged.
+   */
+  titleEn: z
+    .object({ text: z.string(), model: z.string(), at: z.string() })
+    .optional()
+    .catch(undefined),
   fetchedAt: z.string(),
 });
 export type ClipVideoInfo = z.infer<typeof clipVideoInfoSchema>;
@@ -192,6 +201,11 @@ export const clipDraftSchema = z.object({
   // A log entry this build can't read (e.g. a step added by a newer deploy)
   // must never make the clip unreadable, so an unparseable log reads as none.
   usage: z.array(clipUsageRunSchema).optional().catch(undefined),
+  /**
+   * When the clip first appeared in the app's clip list (see clipListedAt);
+   * kept through later edits, deprecation and re-alignment.
+   */
+  listedAt: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -274,6 +288,8 @@ export type ClipSummary = {
   videoId: string;
   /** null until fetched from YouTube. */
   videoTitle: string | null;
+  /** The title in English; null when there is none. */
+  videoTitleEn: string | null;
   channelName: string | null;
   /** The channel's page; steadier than its name for grouping. */
   channelUrl: string | null;
@@ -297,6 +313,8 @@ export type ClipSummary = {
   tagsSource: "auto" | "manual" | null;
   /** Characters per second of speech; null until aligned. */
   pace: number | null;
+  /** When the clip first appeared in the app; null if it never has. */
+  listedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -337,6 +355,18 @@ export function sentenceIsTimed(sentence: ClipSentence): boolean {
 
 export function clipIsAligned(draft: ClipDraft): boolean {
   return clipIsTokenized(draft) && draft.sentences.every(sentenceIsTimed);
+}
+
+/**
+ * When the clip first appeared in the app's clip list: the saved `listedAt`,
+ * else (listed now, never stamped: drafts from before the field) when it was
+ * aligned, which is what put it there. null for a clip that isn't listed and
+ * never was.
+ */
+export function clipListedAt(draft: ClipDraft): string | null {
+  if (draft.listedAt) return draft.listedAt;
+  if (!clipIsAligned(draft) || draft.deprecated) return null;
+  return draft.alignment?.at ?? draft.updatedAt;
 }
 
 /**

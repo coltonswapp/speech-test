@@ -44,18 +44,18 @@ export async function indexedClipIdsByVideo(videoIds?: string[]): Promise<Map<st
   return byVideo;
 }
 
-/** Opaque page cursor: the last row's created_at and id. */
-function encodeCursor(createdAt: Date, id: string): string {
-  return Buffer.from(`${createdAt.toISOString()}|${id}`, "utf8").toString("base64url");
+/** Opaque page cursor: the last row's listed_at and id. */
+function encodeCursor(listedAt: Date, id: string): string {
+  return Buffer.from(`${listedAt.toISOString()}|${id}`, "utf8").toString("base64url");
 }
 
-export function decodeClipCursor(cursor: string): { createdAt: Date; id: string } | null {
+export function decodeClipCursor(cursor: string): { listedAt: Date; id: string } | null {
   const text = Buffer.from(cursor, "base64url").toString("utf8");
   const bar = text.indexOf("|");
   if (bar < 0) return null;
-  const createdAt = new Date(text.slice(0, bar));
+  const listedAt = new Date(text.slice(0, bar));
   const id = text.slice(bar + 1);
-  return Number.isNaN(createdAt.getTime()) || !id ? null : { createdAt, id };
+  return Number.isNaN(listedAt.getTime()) || !id ? null : { listedAt, id };
 }
 
 export type PublicClipQuery = {
@@ -69,14 +69,14 @@ export type PublicClipQuery = {
    * (format=vlog,anime & topic=food → vlogs or anime, about food).
    */
   tags?: Partial<Record<ClipTagFacet, string[]>>;
-  /** Text search: video title, channel, first line, or a tag value (case-insensitive). */
+  /** Text search: video title (Japanese or English), channel, first line, or a tag value (case-insensitive). */
   q?: string | null;
   /** null = everything (older app builds). */
   limit: number | null;
-  cursor: { createdAt: Date; id: string } | null;
+  cursor: { listedAt: Date; id: string } | null;
 };
 
-/** Listed clips for the app: newest first, or video order for one video. */
+/** Listed clips for the app: newest in the app first, or video order for one video. */
 export async function listPublicClips(
   q: PublicClipQuery
 ): Promise<{ clips: ClipPayloadSummary[]; nextCursor: string | null }> {
@@ -88,6 +88,7 @@ export async function listPublicClips(
     const like = `%${q.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     where.push(sql`(
       ${clipIndex.publicSummary}->>'title' ILIKE ${like}
+      OR ${clipIndex.publicSummary}->>'title_en' ILIKE ${like}
       OR ${clipIndex.publicSummary}->>'channel_name' ILIKE ${like}
       OR ${clipIndex.publicSummary}->>'preview_jp' ILIKE ${like}
       OR ${clipIndex.id} ILIKE ${like}
@@ -101,15 +102,15 @@ export async function listPublicClips(
   if (paged && q.cursor) {
     where.push(
       or(
-        lt(clipIndex.createdAt, q.cursor.createdAt),
-        and(eq(clipIndex.createdAt, q.cursor.createdAt), lt(clipIndex.id, q.cursor.id))
+        lt(clipIndex.listedAt, q.cursor.listedAt),
+        and(eq(clipIndex.listedAt, q.cursor.listedAt), lt(clipIndex.id, q.cursor.id))
       )!
     );
   }
   const base = db
     .select({
       id: clipIndex.id,
-      createdAt: clipIndex.createdAt,
+      listedAt: clipIndex.listedAt,
       publicSummary: clipIndex.publicSummary,
     })
     .from(clipIndex)
@@ -117,12 +118,14 @@ export async function listPublicClips(
     .orderBy(
       ...(q.videoId !== null
         ? [asc(clipIndex.startSec)]
-        : [desc(clipIndex.createdAt), desc(clipIndex.id)])
+        : [desc(clipIndex.listedAt), desc(clipIndex.id)])
     );
   const rows = paged ? await base.limit(q.limit! + 1) : await base;
   const page = paged ? rows.slice(0, q.limit!) : rows;
   const last = page[page.length - 1];
-  const nextCursor = paged && rows.length > q.limit! && last ? encodeCursor(last.createdAt, last.id) : null;
+  // Listed rows always have listed_at (clipListedAt), so the cursor never lacks one.
+  const nextCursor =
+    paged && rows.length > q.limit! && last?.listedAt ? encodeCursor(last.listedAt, last.id) : null;
   return {
     clips: page.map((r) => r.publicSummary as ClipPayloadSummary),
     nextCursor,

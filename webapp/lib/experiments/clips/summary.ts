@@ -6,6 +6,7 @@ import {
   clipIsAligned,
   clipIsTokenized,
   clipIsTranslated,
+  clipListedAt,
   type ClipDraft,
   type ClipSummary,
 } from "@/lib/experiments/clips/types";
@@ -24,6 +25,7 @@ export function clipSummary(d: ClipDraft): ClipSummary {
     id: d.id,
     videoId: d.videoId,
     videoTitle: d.video?.title ?? null,
+    videoTitleEn: d.video?.titleEn?.text ?? null,
     channelName: d.video?.channelName ?? null,
     channelUrl: d.video?.channelUrl ?? null,
     startSec: d.startSec,
@@ -36,6 +38,7 @@ export function clipSummary(d: ClipDraft): ClipSummary {
     aligned: clipIsAligned(d),
     jlptLevel: d.difficulty?.jlptLevel ?? null,
     deprecated: Boolean(d.deprecated),
+    listedAt: clipListedAt(d),
     createdAt: d.createdAt,
     updatedAt: d.updatedAt,
   };
@@ -54,6 +57,8 @@ export type ClipIndexRow = {
   /** Characters per second of speech; null until aligned. */
   pace: number | null;
   startSec: number;
+  /** When the clip first appeared in the app (the public list's order); null if never. */
+  listedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   summary: ClipSummary;
@@ -63,6 +68,7 @@ export type ClipIndexRow = {
 export function clipIndexRow(draft: ClipDraft): ClipIndexRow {
   const publicSummary = clipPayloadSummary(draft);
   const pace = clipIsAligned(draft) ? roundPace(clipSpeechPace(draft.sentences)) : null;
+  const listedAt = clipListedAt(draft);
   return {
     id: draft.id,
     videoId: draft.videoId,
@@ -72,6 +78,7 @@ export function clipIndexRow(draft: ClipDraft): ClipIndexRow {
     tags: clipTagKeys(clipEffectiveTags(draft.tags), pace),
     pace,
     startSec: draft.startSec,
+    listedAt: listedAt ? new Date(listedAt) : null,
     createdAt: new Date(draft.createdAt),
     updatedAt: new Date(draft.updatedAt),
     summary: clipSummary(draft),
@@ -96,9 +103,11 @@ CREATE TABLE IF NOT EXISTS clip_index (
   summary jsonb NOT NULL,
   public_summary jsonb
 );
-CREATE INDEX IF NOT EXISTS clip_index_public_idx ON clip_index (listed, in_feed, created_at);
 CREATE INDEX IF NOT EXISTS clip_index_video_idx ON clip_index (video_id);
 ALTER TABLE clip_index ADD COLUMN IF NOT EXISTS tags text[] NOT NULL DEFAULT '{}';
 ALTER TABLE clip_index ADD COLUMN IF NOT EXISTS pace real;
 CREATE INDEX IF NOT EXISTS clip_index_tags_idx ON clip_index USING gin (tags);
+ALTER TABLE clip_index ADD COLUMN IF NOT EXISTS listed_at timestamp with time zone;
+DROP INDEX IF EXISTS clip_index_public_idx;
+CREATE INDEX IF NOT EXISTS clip_index_listed_idx ON clip_index (listed, in_feed, listed_at);
 `;

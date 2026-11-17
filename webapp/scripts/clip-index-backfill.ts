@@ -7,11 +7,15 @@
 // Run it once to fill the index, and again after changing a feed rule
 // threshold (lib/experiments/clips/feed.ts): the index stores each clip's
 // verdict, so it only picks up a new threshold when the clip is re-saved.
-import { GetObjectCommand, ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
+//
+// --write also stamps `listedAt` on listed drafts from before the field (their
+// alignment time; see clipListedAt), so a later re-align can't move them up
+// the app's list. Their updatedAt is left alone.
+import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { inArray, sql } from "drizzle-orm";
 import { db } from "../lib/db/standalone-client";
 import { clipIndex } from "../lib/db/schema";
-import { clipDraftSchema, type ClipDraft } from "../lib/experiments/clips/types";
+import { clipDraftSchema, clipListedAt, type ClipDraft } from "../lib/experiments/clips/types";
 import { CLIP_INDEX_DDL, clipIndexRow } from "../lib/experiments/clips/summary";
 
 const ROOT = "experiments/clips/";
@@ -69,13 +73,30 @@ async function main() {
     drafts.push(...batch.filter((d): d is ClipDraft => d !== null));
   }
   const rows = drafts.map(clipIndexRow);
+  const unstamped = drafts.filter((d) => !d.listedAt && clipListedAt(d));
   console.log(
-    `${drafts.length} drafts in R2: ${rows.filter((r) => r.listed).length} listed, ${rows.filter((r) => r.inFeed).length} in the feed.`
+    `${drafts.length} drafts in R2: ${rows.filter((r) => r.listed).length} listed, ${rows.filter((r) => r.inFeed).length} in the feed; ${unstamped.length} listed without listedAt.`
   );
   if (!write) {
     console.log("Dry run. Add --write to create the table and fill it.");
     process.exit(0);
   }
+
+  for (const draft of unstamped) {
+    // Added to the stored JSON as is, so nothing the schema would drop is lost.
+    const key = `${ROOT}${draft.id}/draft.json`;
+    const out = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const stored = JSON.parse(await out.Body!.transformToString("utf8"));
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: JSON.stringify({ ...stored, listedAt: clipListedAt(draft) }, null, 2),
+        ContentType: "application/json",
+      })
+    );
+  }
+  if (unstamped.length > 0) console.log(`Stamped listedAt on ${unstamped.length} drafts.`);
 
   await db.execute(sql.raw(CLIP_INDEX_DDL));
   for (const row of rows) {

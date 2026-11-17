@@ -10,8 +10,11 @@ import { FEED_MAX_SECONDS, FEED_MIN_SECONDS } from "@/lib/experiments/clips/feed
 // are stored (queued / skipped); whether a video is being fetched or already
 // is a clip is read from the clips themselves, so the queue never goes stale.
 
-/** Where an entry came from: the competitor index, or a scan of a channel's Shorts. */
-export const clipQueueSourceSchema = z.enum(["dump", "channel-scan"]);
+/**
+ * Where an entry came from: the competitor index, a scan of a channel's
+ * Shorts, or links someone picked (Studio MCP add_to_clip_queue).
+ */
+export const clipQueueSourceSchema = z.enum(["dump", "channel-scan", "link"]);
 
 export const clipQueueStatusSchema = z.enum(["queued", "skipped"]);
 export type ClipQueueStatus = z.infer<typeof clipQueueStatusSchema>;
@@ -50,6 +53,13 @@ export const clipQueueSchema = z.object({
   updatedAt: z.string(),
 });
 export type ClipQueue = z.infer<typeof clipQueueSchema>;
+
+/**
+ * Longest entry the batch takes (scripts/clip-queue-batch.ts SPLITS_AT_SECONDS):
+ * longer audio gets split into several clips, which the queue doesn't do.
+ * Adding to the queue refuses anything longer.
+ */
+export const QUEUE_MAX_SECONDS = 120;
 
 /** Under this, a Short is rarely more than a reaction. */
 export const QUEUE_MIN_SECONDS = 20;

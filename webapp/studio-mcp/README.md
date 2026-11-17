@@ -44,7 +44,14 @@ Create and queue
 - discard_clip_pending
 - list_clip_queue, set_clip_queue_status
 - run_clip_queue_batch (`pnpm clip:queue-batch`: count, channel, dryRun, resume)
-- seed_clip_queue (`pnpm clip:queue-seed`), backfill_clip_index (`pnpm clip:index-backfill`), compare_clip_asr (`pnpm clip:asr-compare`)
+- seed_clip_queue (`pnpm clip:queue-seed`)
+
+Add Shorts to the queue (`src/queue-add.ts`, lookups in `src/youtube.ts`)
+- find_channel_shorts: channel URL / @handle / UC id / name + count → recent Shorts as candidates (job). A name is used only when exactly one search result matches it exactly; otherwise the matches come back to choose from
+- review_youtube_videos: 1–20 links or ids → one candidate per input, in order (job)
+- add_to_clip_queue: the approved ids → `queued` entries. Doesn't process; follow with run_clip_queue_batch. Safe to retry
+- Candidate verdicts: addable, in-queue, skipped-in-queue, already-clipped, fetching, unavailable (deleted / private / live / age-restricted), ineligible (not vertical, over 120 s), duplicate-input, invalid-input. Queue warnings (under 20 s, outside feed length, no Japanese title, music title) don't block adding
+- Needs yt-dlp on PATH (or `YT_DLP_PATH`); no YouTube API key. Queue checks and the write are `POST /api/experiments/clip-queue` (`dryRun` for review), backfill_clip_index (`pnpm clip:index-backfill`), compare_clip_asr (`pnpm clip:asr-compare`)
 
 The script tools run from `webapp/` with `webapp/.env.local` (production R2 and database for seed / backfill / ASR compare); `--write` style changes are off unless `write: true`. Batch and step tools talk to `STUDIO_BASE_URL`; against prod set `STUDIO_AGENT_TOKEN`.
 

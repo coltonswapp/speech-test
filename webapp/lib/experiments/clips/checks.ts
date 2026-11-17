@@ -23,6 +23,7 @@ export const CLIP_PIPELINE_STEPS = [
   "align",
   "translate",
   "level",
+  "tag",
   "feed",
 ] as const;
 export type ClipPipelineStep = (typeof CLIP_PIPELINE_STEPS)[number];
@@ -37,6 +38,7 @@ export function clipMissingSteps(draft: ClipDraft): ClipPipelineStep[] {
     align: clipIsAligned(draft),
     translate: clipIsTranslated(draft),
     level: Boolean(draft.difficulty),
+    tag: Boolean(draft.tags?.auto || draft.tags?.manual),
     feed: Boolean(draft.feed?.auto || draft.feed?.manual),
   };
   return CLIP_PIPELINE_STEPS.filter((step) => !done[step]);

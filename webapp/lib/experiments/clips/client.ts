@@ -1,4 +1,5 @@
 import { formatApiError } from "@/lib/api-error";
+import type { ClipTagPick } from "@/lib/experiments/clips/tags";
 import type { DialogueHighlights } from "@/lib/dialogue/types";
 import type {
   ClipDraft,
@@ -86,6 +87,8 @@ export const clipsApi = {
       jlptLevel?: number | null;
       /** Hand-set feed answer; null = back to the automatic verdict. */
       feedEligible?: boolean | null;
+      /** Hand-set catalog tags; null = back to the Tag step's. */
+      tags?: ClipTagPick | null;
       /** Retire the clip, or null to restore it. */
       deprecated?: { reason?: string } | null;
     }
@@ -96,10 +99,10 @@ export const clipsApi = {
     }),
   delete: (id: string) =>
     request<{ ok: true }>(`/api/experiments/clips/${id}`, { method: "DELETE" }),
-  /** `model` applies to transcribe, translate, level and feed; omitted = server default. */
+  /** `model` applies to transcribe, translate, level, tag and feed; omitted = server default. */
   step: (
     id: string,
-    step: "transcribe" | "translate" | "tokenize" | "align" | "level" | "feed",
+    step: "transcribe" | "translate" | "tokenize" | "align" | "level" | "tag" | "feed",
     model?: string
   ) =>
     request<{ draft: ClipDraft }>(`/api/experiments/clips/${id}/${step}`, {

@@ -318,6 +318,10 @@ export function ProcessAllButton({ clips }: { clips: ClipSummary[] }) {
             say("rating level");
             draft = (await clipsApi.step(clip.id, "level")).draft;
           }
+          if (!draft.tags?.auto && !draft.tags?.manual) {
+            say("tagging");
+            draft = (await clipsApi.step(clip.id, "tag")).draft;
+          }
           // Free for clips the measured rules turn down; one model call otherwise.
           if (clipFeedNotReady(draft) === null && clipFeedStatus(draft).state === "unchecked") {
             say("checking for the feed");
@@ -361,7 +365,7 @@ export function ProcessAllButton({ clips }: { clips: ClipSummary[] }) {
         size="sm"
         variant="outline"
         disabled={run.isPending}
-        title="Get video info, transcribe, tokenize, align, translate, rate and feed-check every clip that isn’t done yet"
+        title="Get video info, transcribe, tokenize, align, translate, rate, tag and feed-check every clip that isn’t done yet"
         onClick={() => run.mutate()}
       >
         {run.isPending ? <Loader2Icon className="animate-spin" /> : <WandSparklesIcon />}

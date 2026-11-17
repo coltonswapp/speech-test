@@ -75,10 +75,12 @@ import {
   type ClipMediaProps,
 } from "@/components/experiments/clips/clip-media";
 import { EditorSection } from "@/components/experiments/clips/editor-section";
+import { ClipTagsSection } from "@/components/experiments/clips/clip-tags-section";
+import type { ClipTagPick } from "@/lib/experiments/clips/tags";
 import type { EditableToken } from "@/lib/experiments/clips/token-edits";
 
 
-type Step = "transcribe" | "translate" | "tokenize" | "align" | "level" | "feed";
+type Step = "transcribe" | "translate" | "tokenize" | "align" | "level" | "tag" | "feed";
 
 type ModelStep = "transcribe" | "translate";
 type StepModels = Record<ModelStep, string>;
@@ -159,7 +161,7 @@ export function ClipEditor({ clipId }: { clipId: string }) {
         step,
         step === "transcribe" || step === "translate"
           ? stepModels[step]
-          : step === "level"
+          : step === "level" || step === "tag"
             ? stepModels.translate // the text model picked for Translate
             : undefined
       ),
@@ -172,6 +174,8 @@ export function ClipEditor({ clipId }: { clipId: string }) {
           ? FEED_STATE_LABELS[clipFeedStatus(next).state] + "."
           : step === "level"
           ? `Rated N${next.difficulty?.jlptLevel ?? "?"}.`
+          : step === "tag"
+          ? `Tagged ${next.tags?.auto ? [next.tags.auto.format, ...next.tags.auto.topics].join(", ") : ""}.`
           : step === "transcribe"
           ? `Transcribed ${next.sentences.length} sentences.`
           : step === "translate"
@@ -253,6 +257,15 @@ export function ClipEditor({ clipId }: { clipId: string }) {
   const setFeed = useMutation({
     mutationFn: (feedEligible: boolean | null) => clipsApi.patch(clipId, { feedEligible }),
     onSuccess: ({ draft: next }) => setDraft(next),
+    onError: (error) => toast.error(error.message),
+  });
+
+  const setTags = useMutation({
+    mutationFn: (tags: ClipTagPick | null) => clipsApi.patch(clipId, { tags }),
+    onSuccess: ({ draft: next }) => {
+      setDraft(next);
+      toast.success(next.tags?.manual ? "Tags saved." : "Back to the Tag step’s tags.");
+    },
     onError: (error) => toast.error(error.message),
   });
 
@@ -782,6 +795,15 @@ export function ClipEditor({ clipId }: { clipId: string }) {
         </p>
       </EditorSection>
 
+      <ClipTagsSection
+        draft={draft}
+        disabled={busy || dirty || setTags.isPending}
+        tagging={busyStep === "tag"}
+        saving={setTags.isPending}
+        onTag={() => runStep.mutate("tag")}
+        onSave={(tags) => setTags.mutateAsync(tags)}
+      />
+
       <FeedSection
         draft={draft}
         disabled={busy || dirty || setFeed.isPending}
@@ -832,7 +854,7 @@ function FeedSection({
   return (
     <EditorSection
       id="feed"
-      title="7. Feed"
+      title="8. Feed"
       summary={FEED_STATE_LABELS[status.state].toLowerCase()}
       actions={
         <Button
@@ -913,7 +935,7 @@ function FeedSection({
   );
 }
 
-/** Every Transcribe / Translate / Tokenize / Align / Level / Feed run on this clip, newest first. */
+/** Every Transcribe / Translate / Tokenize / Align / Level / Tag / Feed run on this clip, newest first. */
 function UsageSection({ runs }: { runs: ClipUsageRun[] }) {
   const newestFirst = [...runs].reverse();
   const costs = newestFirst.map(runCost);

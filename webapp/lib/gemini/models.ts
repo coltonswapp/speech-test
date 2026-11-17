@@ -36,6 +36,13 @@ export const GEMINI_FEED_MODEL_DEFAULT = "gemini-3.8-flash";
 export const GEMINI_LEVEL_MODEL_DEFAULT = "gemini-3.8-flash";
 
 /**
+ * Tag step (catalog format / topics / register / speakers / dialect). On the
+ * first 90 clips (Nov 16) Flash read dialect and period speech from the
+ * transcript alone, for about 0.1¢ a clip.
+ */
+export const GEMINI_TAG_MODEL_DEFAULT = "gemini-3.8-flash";
+
+/**
  * Models the clip editor lets you pick per run (Transcribe, Translate) to
  * compare output. All take audio and text in.
  */

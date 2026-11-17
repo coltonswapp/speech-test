@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { highlightsSchema } from "@/lib/dialogue/types";
+import { clipTagsSchema, type ClipTagValues } from "@/lib/experiments/clips/tags";
 
 // Clip POC (YouTube clip + word-synced transcript). Client-safe: no server
 // imports. A draft lives in R2 at `experiments/clips/<id>/draft.json` next to
@@ -65,7 +66,7 @@ export const clipSentenceSchema = z.object({
 });
 export type ClipSentence = z.infer<typeof clipSentenceSchema>;
 
-export const CLIP_USAGE_STEPS = ["transcribe", "translate", "tokenize", "align", "level", "feed"] as const;
+export const CLIP_USAGE_STEPS = ["transcribe", "translate", "tokenize", "align", "level", "tag", "feed"] as const;
 export type ClipUsageStep = (typeof CLIP_USAGE_STEPS)[number];
 
 /** Gemini token counts for one model call (or a step's calls summed). */
@@ -180,7 +181,14 @@ export const clipDraftSchema = z.object({
       manual: z.object({ eligible: z.boolean(), at: z.string() }).optional(),
     })
     .optional(),
-  /** Per-run cost log (Transcribe, Translate, Tokenize, Align, Level, Feed). */
+  /**
+   * Catalog tags (format, topics, register, speakers, dialect, series; see
+   * tags.ts). `auto` is the Tag step's answer, `manual` a hand-set one in
+   * Studio, which wins. Unreadable tags read as none, so a vocabulary change
+   * can never make a clip unreadable.
+   */
+  tags: clipTagsSchema.optional().catch(undefined),
+  /** Per-run cost log (Transcribe, Translate, Tokenize, Align, Level, Tag, Feed). */
   // A log entry this build can't read (e.g. a step added by a newer deploy)
   // must never make the clip unreadable, so an unparseable log reads as none.
   usage: z.array(clipUsageRunSchema).optional().catch(undefined),
@@ -284,6 +292,11 @@ export type ClipSummary = {
   feed: ClipFeedState;
   /** Why (the failed rule, or the model's sentence); null when there is nothing to say. */
   feedReason: string | null;
+  /** Catalog tags that count (hand-set, else the Tag step's); null until tagged. */
+  tags: ClipTagValues | null;
+  tagsSource: "auto" | "manual" | null;
+  /** Characters per second of speech; null until aligned. */
+  pace: number | null;
   createdAt: string;
   updatedAt: string;
 };

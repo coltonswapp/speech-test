@@ -6,6 +6,7 @@ import { GEMINI_LEVEL_MODEL_DEFAULT } from "@/lib/gemini/models";
 import { ClipPipelineError } from "@/lib/experiments/clips/asr";
 import type { GeminiTokenCounts } from "@/lib/experiments/clips/types";
 import { geminiTokenCounts } from "@/lib/experiments/clips/usage";
+import { CLIP_PACE_FAST_FROM, clipSpeechPace } from "@/lib/experiments/clips/tags";
 
 const responseSchema = z.object({
   jlptLevel: z.number().int().min(1).max(5),
@@ -14,28 +15,12 @@ const responseSchema = z.object({
 
 /**
  * Characters per second of speech at which a clip is at least N3 for a
- * listener, whatever its vocabulary. Measured over time inside lines (pauses
- * between lines left out). On Nov 15's Shorts: slow skits and anime 4–6,
- * relaxed talk 6–8, fast native dramas and vlogs 9–10.5. The editor rated
- * the 瞬間seju dramas (9.6) N2–N3; the model had said N4.
+ * listener, whatever its vocabulary. Same as the "fast" pace tag (tags.ts).
+ * The editor rated the 瞬間seju dramas (9.6) N2–N3; the model had said N4.
  */
-export const LEVEL_FAST_PACE = 9;
+export const LEVEL_FAST_PACE = CLIP_PACE_FAST_FROM;
 
-/** Characters per second of speech, from the sentences' token timings. */
-export function clipSpeechPace(
-  sentences: Array<{ text: string; tokens: Array<{ startSec?: number; endSec?: number }> | null }>
-): number | null {
-  let seconds = 0;
-  let chars = 0;
-  for (const s of sentences) {
-    const start = s.tokens?.[0]?.startSec;
-    const end = s.tokens?.at(-1)?.endSec;
-    if (start === undefined || end === undefined || end <= start) continue;
-    seconds += end - start;
-    chars += s.text.length;
-  }
-  return seconds > 0 ? chars / seconds : null;
-}
+export { clipSpeechPace };
 
 function buildPrompt(sentences: string[], pace: number | null): string {
   const paceLine =

@@ -3,10 +3,47 @@ import type { DialogueHighlights, ExportedTeachingPattern } from "@/lib/dialogue
 import { clipIsAligned, type ClipDraft, type ClipOrientation } from "@/lib/experiments/clips/types";
 import { clipFeedStatus } from "@/lib/experiments/clips/feed";
 import { splitSentencePhrases } from "@/lib/experiments/clips/phrases";
+import {
+  clipEffectiveTags,
+  clipPaceLabel,
+  clipSpeechPace,
+  type ClipPace,
+} from "@/lib/experiments/clips/tags";
 
 // App-facing clip payload (snake_case, like the public dialogue API). Every
 // time is in seconds on the YouTube video's timeline, onset shift applied, so
 // the app compares them straight to the player's current time.
+
+/**
+ * Catalog tags (values in lib/experiments/clips/tags.ts; new values can appear
+ * as the vocabulary grows, so treat unknown ones as plain labels).
+ */
+export type ClipPayloadTags = {
+  /** anime, drama, comedy-skit, variety, vlog, streamer, explainer, how-to, interview, learner, other */
+  format: string;
+  /** 0–3, most important first: food, travel, school, work, romance… */
+  topics: string[];
+  /** casual, polite, keigo */
+  register: string;
+  /** monologue, dialogue, group, narration */
+  speakers: string;
+  /** standard, kansai, other */
+  dialect: string;
+  /** The show or franchise, when known. */
+  series?: string;
+};
+
+/** How fast it's spoken: characters per second of speech, and its bucket. */
+export type ClipPayloadPace = { label: ClipPace; chars_per_sec: number };
+
+function payloadTagFields(draft: ClipDraft): { tags?: ClipPayloadTags; pace?: ClipPayloadPace } {
+  const tags = clipEffectiveTags(draft.tags);
+  const cps = clipSpeechPace(draft.sentences);
+  return {
+    ...(tags ? { tags } : {}),
+    ...(cps !== null ? { pace: { label: clipPaceLabel(cps), chars_per_sec: Math.round(cps * 10) / 10 } } : {}),
+  };
+}
 
 export type ClipPayload = {
   clip_id: string;
@@ -62,6 +99,9 @@ export type ClipPayload = {
   patterns?: ExportedTeachingPattern[];
   /** 5 = N5 … 1 = N1; absent until the clip is rated. */
   jlpt_level?: number;
+  /** Absent until the clip is tagged. */
+  tags?: ClipPayloadTags;
+  pace?: ClipPayloadPace;
   /**
    * Present on a retired clip. It is no longer in the clip list and its video
    * may be gone, so the app should not try to play it; the transcript above is
@@ -84,6 +124,9 @@ export type ClipPayloadSummary = {
   preview_jp: string;
   /** 5 = N5 … 1 = N1; absent until the clip is rated. */
   jlpt_level?: number;
+  /** Absent until the clip is tagged. */
+  tags?: ClipPayloadTags;
+  pace?: ClipPayloadPace;
   /** Whether the clip is in the feed (`?feed=1` lists only these). */
   in_feed: boolean;
   updated_at: string;
@@ -168,6 +211,7 @@ export function buildClipPayload(
     ...(highlights ? { highlights } : {}),
     ...(highlights && patterns.length > 0 ? { patterns } : {}),
     ...(draft.difficulty ? { jlpt_level: draft.difficulty.jlptLevel } : {}),
+    ...payloadTagFields(draft),
     ...(draft.deprecated ? { deprecated: draft.deprecated } : {}),
     updated_at: draft.updatedAt,
   };
@@ -186,6 +230,7 @@ export function clipPayloadSummary(draft: ClipDraft): ClipPayloadSummary | null 
     sentence_count: draft.sentences.length,
     preview_jp: draft.sentences[0]?.text ?? "",
     ...(draft.difficulty ? { jlpt_level: draft.difficulty.jlptLevel } : {}),
+    ...payloadTagFields(draft),
     in_feed: clipFeedStatus(draft).eligible,
     updated_at: draft.updatedAt,
   };

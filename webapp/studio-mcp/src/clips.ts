@@ -20,10 +20,10 @@ import {
 const WEBAPP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const BIN = (name: string) => path.join(WEBAPP_DIR, "node_modules", ".bin", name);
 
-const STEPS = ["video-info", "transcribe", "tokenize", "align", "translate", "level", "feed"] as const;
+const STEPS = ["video-info", "transcribe", "tokenize", "align", "translate", "level", "tag", "feed"] as const;
 type Step = (typeof STEPS)[number];
 /** Steps whose route takes `{ model }`. */
-const MODEL_STEPS = new Set<Step>(["transcribe", "translate", "level", "feed"]);
+const MODEL_STEPS = new Set<Step>(["transcribe", "translate", "level", "tag", "feed"]);
 const STEP_MODELS = [
   "gemini-3.1-pro-preview",
   "gemini-3.8-flash",
@@ -68,6 +68,10 @@ type ClipDraft = {
   alignment?: { alignerVersion: string; at: string };
   difficulty?: { jlptLevel: number; source: "auto" | "manual"; reason?: string; model?: string; at: string };
   deprecated?: { at: string; reason?: string };
+  tags?: {
+    auto?: { format: string; topics: string[]; register: string; speakers: string; dialect: string; series?: string; reason?: string; suggested?: string[]; model: string; at: string };
+    manual?: { format: string; topics: string[]; register: string; speakers: string; dialect: string; series?: string; at: string };
+  };
   feed?: {
     auto?: { eligible: boolean; reason?: string; model?: string; at: string };
     manual?: { eligible: boolean; at: string };
@@ -94,6 +98,9 @@ type ClipSummary = {
   deprecated: boolean;
   feed: "in" | "out" | "manual-in" | "manual-out" | "unchecked";
   feedReason: string | null;
+  tags: { format: string; topics: string[]; register: string; speakers: string; dialect: string; series?: string } | null;
+  tagsSource: "auto" | "manual" | null;
+  pace: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -238,6 +245,7 @@ function missingSteps(d: ClipDraft): Step[] {
     align: aligned,
     translate: s.length > 0 && s.every((x) => Boolean(x.en?.trim())),
     level: Boolean(d.difficulty),
+    tag: Boolean(d.tags?.auto || d.tags?.manual),
     feed: Boolean(d.feed?.auto || d.feed?.manual),
   };
   return STEPS.filter((step) => !done[step]);
@@ -403,13 +411,16 @@ export function registerClipTools(server: McpServer) {
     {
       title: "List clips",
       description:
-        "List YouTube clips in Studio (Experiments → Clips), newest first, with pipeline state (tokenized / aligned / translated), JLPT level (5 = N5 … 1 = N1), feed verdict (in / out / manual-in / manual-out / unchecked) and why. Also returns clips still waiting for their audio (pending). Deprecated clips are left out unless deprecated is true or \"only\". Use get_clip for one clip's transcript and warnings, clip_report for warnings across clips.",
+        "List YouTube clips in Studio (Experiments → Clips), newest first, with pipeline state (tokenized / aligned / translated), JLPT level (5 = N5 … 1 = N1), catalog tags (format, topics, register, speakers, dialect, series) and pace (characters per second), feed verdict (in / out / manual-in / manual-out / unchecked) and why. Also returns clips still waiting for their audio (pending). Deprecated clips are left out unless deprecated is true or \"only\". Use get_clip for one clip's transcript and warnings, clip_report for warnings across clips.",
       inputSchema: {
         feed: z.enum(["in", "out", "manual-in", "manual-out", "unchecked", "eligible", "not-eligible"]).optional()
           .describe("eligible = in or manual-in; not-eligible = everything else."),
         level: z.number().int().min(1).max(5).optional().describe("Exact JLPT level (5 = N5 … 1 = N1)."),
         unrated: z.boolean().optional().describe("Only clips with no level."),
-        unfinished: z.boolean().optional().describe("Only clips missing a pipeline step (not aligned, translated, rated, video info, or feed verdict)."),
+        format: z.string().optional().describe("Tag: anime, drama, comedy-skit, variety, vlog, streamer, explainer, how-to, interview, learner, other."),
+        topic: z.string().optional().describe("Tag: food, travel, school, work, romance, family, friends, sports, games, health-fitness, money-shopping, tech, animals, history-culture, beauty-fashion, entertainment, daily-life."),
+        untagged: z.boolean().optional().describe("Only clips with no catalog tags."),
+        unfinished: z.boolean().optional().describe("Only clips missing a pipeline step (not aligned, translated, rated, tagged, video info, or feed verdict)."),
         channel: z.string().optional().describe("Case-insensitive substring of channel name or URL."),
         search: z.string().optional().describe("Case-insensitive substring of clip id, video id or title."),
         orientation: z.enum(["landscape", "portrait"]).optional(),
@@ -438,10 +449,13 @@ export function registerClipTools(server: McpServer) {
           })
           .filter((c) => args.level === undefined || c.jlptLevel === args.level)
           .filter((c) => !args.unrated || c.jlptLevel === null)
+          .filter((c) => !args.format || c.tags?.format === args.format)
+          .filter((c) => !args.topic || Boolean(c.tags?.topics.includes(args.topic)))
+          .filter((c) => !args.untagged || c.tags === null)
           .filter(
             (c) =>
               !args.unfinished ||
-              !c.aligned || !c.translated || c.jlptLevel === null || c.videoTitle === null || c.feed === "unchecked"
+              !c.aligned || !c.translated || c.jlptLevel === null || c.tags === null || c.videoTitle === null || c.feed === "unchecked"
           )
           .filter((c) => !ch || [c.channelName, c.channelUrl].some((v) => v?.toLowerCase().includes(ch)))
           .filter((c) => !q || [c.id, c.videoId, c.videoTitle].some((v) => v?.toLowerCase().includes(q)))
@@ -459,6 +473,9 @@ export function registerClipTools(server: McpServer) {
             .filter(Boolean)
             .join(", ") || "transcript only / empty",
           jlptLevel: c.jlptLevel,
+          tags: c.tags,
+          tagsSource: c.tagsSource,
+          pace: c.pace,
           feed: c.feed,
           feedReason: c.feedReason,
           deprecated: c.deprecated,
@@ -482,7 +499,7 @@ export function registerClipTools(server: McpServer) {
     {
       title: "Get clip",
       description:
-        "One clip: video, level, feed verdict and the measured feed rules, missing pipeline steps, cost, and the transcript. view \"review\" (default) shows each line as `index · Japanese · English · tokens` with tokens like `今日(きょう) | は` (reading only where it differs) and that line's warnings: low aligner score (< 0.3, worth a listen), reading fallback (reading guessed, check it), untimed tokens, basic split (phrase breaks fell back), missing English, flagsCleared (an editor marked it reviewed). view \"full\" adds every token's timing and score. Use sentenceFrom/sentenceTo for long clips.",
+        "One clip: video, level, catalog tags, feed verdict and the measured feed rules, missing pipeline steps, cost, and the transcript. view \"review\" (default) shows each line as `index · Japanese · English · tokens` with tokens like `今日(きょう) | は` (reading only where it differs) and that line's warnings: low aligner score (< 0.3, worth a listen), reading fallback (reading guessed, check it), untimed tokens, basic split (phrase breaks fell back), missing English, flagsCleared (an editor marked it reviewed). view \"full\" adds every token's timing and score. Use sentenceFrom/sentenceTo for long clips.",
       inputSchema: {
         id: z.string().regex(CLIP_ID),
         view: z.enum(["review", "full"]).default("review"),
@@ -546,6 +563,7 @@ export function registerClipTools(server: McpServer) {
           translation: draft.translation ?? null,
           alignment: draft.alignment ?? null,
           difficulty: draft.difficulty ?? null,
+          tags: draft.tags ?? null,
           deprecated: draft.deprecated ?? null,
           feedStored: draft.feed ?? null,
           feed: checks?.feed,
@@ -589,18 +607,28 @@ export function registerClipTools(server: McpServer) {
     {
       title: "List public clips (the app's list / feed)",
       description:
-        "What the app's clip list or feed returns (/api/public/clips): aligned, non-deprecated clips. level = the learner's level (only clips at that level or easier; unrated left out). feed true = only feed clips. videoId = clips cut from one video. limit + cursor page it.",
+        "What the app's clip list or feed returns (/api/public/clips): aligned, non-deprecated clips. level = the learner's level (only clips at that level or easier; unrated left out). feed true = only feed clips. videoId = clips cut from one video. Tag filters (comma-separated values = any of; facets combine with and): format, topic, register (casual/polite/keigo), speakers (monologue/dialogue/group/narration), dialect (standard/kansai/other), pace (slow/natural/fast), series. facets true returns the tag values in use with counts instead (/api/public/clips/facets). limit + cursor page it.",
       inputSchema: {
         level: z.number().int().min(1).max(5).optional(),
         feed: z.boolean().optional(),
         videoId: z.string().regex(YOUTUBE_ID).optional(),
+        format: z.string().optional(),
+        topic: z.string().optional(),
+        register: z.string().optional(),
+        speakers: z.string().optional(),
+        dialect: z.string().optional(),
+        pace: z.string().optional(),
+        series: z.string().optional(),
+        facets: z.boolean().optional(),
         limit: z.number().int().min(1).max(50).default(20),
         cursor: z.string().optional(),
       },
     },
-    async ({ level, feed, videoId, limit, cursor }) => {
+    async ({ level, feed, videoId, limit, cursor, facets, ...tagFilters }) => {
       try {
+        if (facets) return jsonResult(await studioFetch(`/api/public/clips/facets${feed ? "?feed=1" : ""}`));
         const params = new URLSearchParams();
+        for (const [facet, value] of Object.entries(tagFilters)) if (value) params.set(facet, value);
         if (level !== undefined) params.set("level", String(level));
         if (feed) params.set("feed", "1");
         if (videoId) params.set("video_id", videoId);
@@ -664,14 +692,15 @@ export function registerClipTools(server: McpServer) {
     {
       title: "Edit clip",
       description: [
-        "Edit a clip draft (PATCH /api/experiments/clips/:id). Send only what changes. Fields are applied in this order: sentences, english, tokens, clearFlags, highlights, jlptLevel, feedEligible, deprecated, shiftSec, orientation.",
-        "• sentences: the FULL transcript, one sentence per entry. Any change drops alignment and the automatic feed verdict (a hand-set feed answer stays); changed lines lose their tokens. Afterwards run run_clip_steps mode \"missing\" (tokenize → align → translate → level → feed).",
+        "Edit a clip draft (PATCH /api/experiments/clips/:id). Send only what changes. Fields are applied in this order: sentences, english, tokens, clearFlags, highlights, jlptLevel, feedEligible, tags, deprecated, shiftSec, orientation.",
+        "• sentences: the FULL transcript, one sentence per entry. Any change drops alignment and the automatic feed verdict (a hand-set feed answer stays); changed lines lose their tokens. Afterwards run run_clip_steps mode \"missing\" (tokenize → align → translate → level → tag → feed).",
         "• english: one string per sentence, same count and order as the saved transcript (send sentences first in the same call if both change). Empty string clears a line.",
         "• tokens: hand-fix one sentence's tokens {sentence, tokens:[{text, reading?}]}. Token texts must join to exactly that sentence. Merges and reading fixes keep their timings; split halves need re-aligning (run_clip_steps steps [\"align\"], onlyUntimed).",
         "• clearFlags {sentence, cleared}: mark a line's warnings as reviewed.",
         "• highlights: replace vocabulary / grammarPatterns / contextNotes (grammar source indices are sentence indices); null clears.",
         "• jlptLevel 1–5 (5 = N5): hand-set level the Level step won't overwrite silently; null clears.",
         "• feedEligible: true = always in the feed, false = never; null = back to the automatic verdict.",
+        "• tags {format, topics (0–3), register, speakers, dialect, series?}: hand-set catalog tags from the vocabulary (see list_clips filters; register casual/polite/keigo, speakers monologue/dialogue/group/narration, dialect standard/kansai/other). They win over the Tag step's and are never overwritten by it; null = back to the Tag step's.",
         "• deprecated {reason?}: retire a clip that has been live (hidden from lists, still served by id so saved items keep working); null restores. Prefer this to delete_clip.",
         "• shiftSec (−2…2): audio/video offset. orientation: portrait = 9:16 Short.",
       ].join("\n"),
@@ -689,6 +718,17 @@ export function registerClipTools(server: McpServer) {
         highlights: highlightsSchema.nullable().optional(),
         jlptLevel: z.number().int().min(1).max(5).nullable().optional(),
         feedEligible: z.boolean().nullable().optional(),
+        tags: z
+          .object({
+            format: z.string(),
+            topics: z.array(z.string()).max(3),
+            register: z.string(),
+            speakers: z.string(),
+            dialect: z.string(),
+            series: z.string().optional(),
+          })
+          .nullable()
+          .optional(),
         deprecated: z.object({ reason: z.string().max(200).optional() }).nullable().optional(),
         shiftSec: z.number().min(-2).max(2).optional(),
         orientation: z.enum(["landscape", "portrait"]).optional(),
@@ -745,9 +785,9 @@ export function registerClipTools(server: McpServer) {
     {
       title: "Run clip pipeline steps",
       description: [
-        "Run pipeline steps on one or more clips as a background job. Steps, in order: video-info (YouTube title/channel), transcribe (Gemini ASR; REPLACES the transcript, tokens, alignment and auto feed verdict), tokenize (words + readings), align (word timings), translate (English per line), level (JLPT estimate from text + pace), feed (measured rules, then Gemini judges coherence).",
-        "mode \"missing\" (default) runs only what each clip lacks, in order, retrying once (like `pnpm clip:queue-batch --resume`). mode \"steps\" re-runs exactly `steps`, in pipeline order; after transcribe, also run tokenize/align/translate/level/feed (or follow with mode \"missing\").",
-        "model (transcribe/translate/level/feed only) picks a Gemini model to compare. retokenize: sentence indices to re-tokenize (others keep their tokens). onlyUntimed: align only lines without timings (default when some lines are already timed).",
+        "Run pipeline steps on one or more clips as a background job. Steps, in order: video-info (YouTube title/channel), transcribe (Gemini ASR; REPLACES the transcript, tokens, alignment and auto feed verdict), tokenize (words + readings), align (word timings), translate (English per line), level (JLPT estimate from text + pace), tag (catalog format / topics / register / speakers / dialect / series from title, channel and transcript; hand-set tags win), feed (measured rules, then Gemini judges coherence).",
+        "mode \"missing\" (default) runs only what each clip lacks, in order, retrying once (like `pnpm clip:queue-batch --resume`). mode \"steps\" re-runs exactly `steps`, in pipeline order; after transcribe, also run tokenize/align/translate/level/tag/feed (or follow with mode \"missing\").",
+        "model (transcribe/translate/level/tag/feed only) picks a Gemini model to compare. retokenize: sentence indices to re-tokenize (others keep their tokens). onlyUntimed: align only lines without timings (default when some lines are already timed).",
         "Returns a job; with waitSeconds it waits that long first. The result lists, per clip, steps run, problems and the new verdict / level / warnings.",
       ].join("\n"),
       inputSchema: {

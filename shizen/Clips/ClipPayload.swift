@@ -19,6 +19,77 @@ nonisolated enum ClipOrientation: String, Decodable, Sendable {
     }
 }
 
+/// Catalog tags from Studio's Tag step. Values grow over time, so unknown ones
+/// are kept as plain strings and shown as-is.
+nonisolated struct ClipTags: Decodable, Hashable, Sendable {
+    /// anime, drama, comedy-skit, variety, vlog, streamer, explainer, how-to, interview, learner, other
+    let format: String
+    /// 0–3, most important first: food, travel, school, work, romance…
+    let topics: [String]
+    /// casual, polite, keigo
+    let register: String
+    /// monologue, dialogue, group, narration
+    let speakers: String
+    /// standard, kansai, other
+    let dialect: String
+    /// The show or franchise, when known.
+    let series: String?
+}
+
+/// How fast the clip is spoken (measured from word timings).
+nonisolated struct ClipPace: Decodable, Hashable, Sendable {
+    /// slow, natural, fast
+    let label: String
+    let charsPerSec: Double
+
+    enum CodingKeys: String, CodingKey {
+        case label
+        case charsPerSec = "chars_per_sec"
+    }
+}
+
+/// One tag value to filter the clip list by: `?<facet>=<value>` on `/api/public/clips`.
+nonisolated struct ClipTagFilter: Hashable, Sendable {
+    enum Facet: String, CaseIterable, Sendable {
+        case format, topic, register, speakers, dialect, pace, series
+
+        var title: String {
+            switch self {
+            case .format: "Format"
+            case .topic: "Topic"
+            case .register: "Register"
+            case .speakers: "Speakers"
+            case .dialect: "Dialect"
+            case .pace: "Pace"
+            case .series: "Series"
+            }
+        }
+    }
+
+    let facet: Facet
+    let value: String
+
+    /// `#food`, `#comedy skit`; series keep their own spelling.
+    var hashtag: String {
+        facet == .series ? "#\(value)" : "#\(value.replacingOccurrences(of: "-", with: " "))"
+    }
+}
+
+extension ClipTags {
+    /// Every tag as a filter, in display order. Standard dialect is left out
+    /// (it's most clips); pace comes from the clip's measured pace.
+    func filters(pace: ClipPace?) -> [ClipTagFilter] {
+        var filters = [ClipTagFilter(facet: .format, value: format)]
+        filters += topics.map { ClipTagFilter(facet: .topic, value: $0) }
+        filters.append(ClipTagFilter(facet: .register, value: register))
+        filters.append(ClipTagFilter(facet: .speakers, value: speakers))
+        if dialect != "standard" { filters.append(ClipTagFilter(facet: .dialect, value: dialect)) }
+        if let pace { filters.append(ClipTagFilter(facet: .pace, value: pace.label)) }
+        if let series, !series.isEmpty { filters.append(ClipTagFilter(facet: .series, value: series)) }
+        return filters
+    }
+}
+
 nonisolated struct ClipSummary: Decodable, Hashable, Sendable {
     let clipID: String
     let videoID: String
@@ -35,6 +106,10 @@ nonisolated struct ClipSummary: Decodable, Hashable, Sendable {
     /// Whether Studio put the clip in the feed. Nil from servers that predate
     /// the feed check, where every listed clip is in the feed.
     let inFeed: Bool?
+    /// Nil until Studio has tagged the clip.
+    let tags: ClipTags?
+    /// Nil until aligned.
+    let pace: ClipPace?
 
     var isPortrait: Bool { orientation == .portrait }
     var isInFeed: Bool { inFeed ?? true }
@@ -51,6 +126,26 @@ nonisolated struct ClipSummary: Decodable, Hashable, Sendable {
         case title
         case channelName = "channel_name"
         case inFeed = "in_feed"
+        case tags
+        case pace
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        clipID = try container.decode(String.self, forKey: .clipID)
+        videoID = try container.decode(String.self, forKey: .videoID)
+        startSec = try container.decode(Double.self, forKey: .startSec)
+        endSec = try container.decode(Double.self, forKey: .endSec)
+        sentenceCount = try container.decode(Int.self, forKey: .sentenceCount)
+        previewJP = try container.decode(String.self, forKey: .previewJP)
+        orientation = try container.decodeIfPresent(ClipOrientation.self, forKey: .orientation)
+        jlptLevel = try container.decodeIfPresent(Int.self, forKey: .jlptLevel)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        channelName = try container.decodeIfPresent(String.self, forKey: .channelName)
+        inFeed = try container.decodeIfPresent(Bool.self, forKey: .inFeed)
+        // Extras must never drop a clip from the list.
+        tags = try? container.decodeIfPresent(ClipTags.self, forKey: .tags)
+        pace = try? container.decodeIfPresent(ClipPace.self, forKey: .pace)
     }
 }
 
@@ -65,6 +160,10 @@ nonisolated struct ClipPayload: Decodable, Sendable {
     let patterns: [TeachingPattern]?
     /// 5 = N5 … 1 = N1. Nil until rated in Studio.
     let jlptLevel: Int?
+    /// Nil until Studio has tagged the clip.
+    let tags: ClipTags?
+    /// Nil until aligned.
+    let pace: ClipPace?
     /// Set on a retired clip: it is out of the clip list and its video may be
     /// gone, so don't play it. The transcript is still here for saved items.
     let deprecated: Deprecation?
@@ -192,6 +291,8 @@ nonisolated struct ClipPayload: Decodable, Sendable {
         case highlights
         case patterns
         case jlptLevel = "jlpt_level"
+        case tags
+        case pace
         case deprecated
     }
 
@@ -205,6 +306,8 @@ nonisolated struct ClipPayload: Decodable, Sendable {
         highlights = try? container.decodeIfPresent(Highlights.self, forKey: .highlights)
         patterns = try? container.decodeIfPresent([TeachingPattern].self, forKey: .patterns)
         jlptLevel = try? container.decodeIfPresent(Int.self, forKey: .jlptLevel)
+        tags = try? container.decodeIfPresent(ClipTags.self, forKey: .tags)
+        pace = try? container.decodeIfPresent(ClipPace.self, forKey: .pace)
         // Any `deprecated` value counts, even one we can't read: never play a retired clip.
         if container.contains(.deprecated), (try? container.decodeNil(forKey: .deprecated)) != true {
             deprecated = (try? container.decode(Deprecation.self, forKey: .deprecated))
@@ -297,9 +400,18 @@ extension ContentCMSClient {
         return (response.clips, response.nextCursor)
     }
 
-    static func fetchClipList(learnerLevel: Int? = nil, feedOnly: Bool = false) async throws -> [ClipSummary] {
+    static func fetchClipList(
+        learnerLevel: Int? = nil,
+        feedOnly: Bool = false,
+        filters: [ClipTagFilter] = [],
+        search: String? = nil
+    ) async throws -> [ClipSummary] {
         var query = learnerLevel.map { [URLQueryItem(name: "level", value: String($0))] } ?? []
         if feedOnly { query.append(URLQueryItem(name: "feed", value: "1")) }
+        query += tagQuery(filters)
+        if let search = search?.trimmingCharacters(in: .whitespacesAndNewlines), !search.isEmpty {
+            query.append(URLQueryItem(name: "q", value: search))
+        }
         let data = try await fetchPublicClipData(path: ["clips"], query: query)
         return try JSONDecoder().decode(ClipListResponse.self, from: data).clips
     }
@@ -312,6 +424,36 @@ extension ContentCMSClient {
             query: [URLQueryItem(name: "video_id", value: videoID)]
         )
         return try JSONDecoder().decode(ClipListResponse.self, from: data).clips
+    }
+
+    /// Tag filters as query items: values within a facet comma-joined ("any of"),
+    /// facets combined ("and"). One series per request (names may hold commas).
+    private static func tagQuery(_ filters: [ClipTagFilter]) -> [URLQueryItem] {
+        ClipTagFilter.Facet.allCases.compactMap { facet in
+            let values = filters.filter { $0.facet == facet }.map(\.value)
+            guard let first = values.first else { return nil }
+            return URLQueryItem(name: facet.rawValue, value: facet == .series ? first : values.joined(separator: ","))
+        }
+    }
+
+    nonisolated struct ClipFacetValue: Decodable, Hashable, Sendable {
+        let value: String
+        let count: Int
+    }
+
+    private nonisolated struct ClipFacetsResponse: Decodable, Sendable {
+        let facets: [String: [ClipFacetValue]]
+    }
+
+    /// Tag values in use across listed clips, with how many clips carry each, most first.
+    static func fetchClipFacets() async throws -> [ClipTagFilter.Facet: [ClipFacetValue]] {
+        let data = try await fetchPublicClipData(path: ["clips", "facets"])
+        let raw = try JSONDecoder().decode(ClipFacetsResponse.self, from: data).facets
+        var facets: [ClipTagFilter.Facet: [ClipFacetValue]] = [:]
+        for (key, values) in raw {
+            if let facet = ClipTagFilter.Facet(rawValue: key) { facets[facet] = values }
+        }
+        return facets
     }
 
     static func fetchClip(id: String) async throws -> ClipPayload {

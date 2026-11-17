@@ -4,8 +4,9 @@
 //
 //  Clip Details sheet (options menu → Clip Details): the source video's title,
 //  channel, and what the clip covers, with links out to YouTube, plus the
-//  other clips cut from the same video. A Japanese title gets an English
-//  rendering from the on-device model when available.
+//  other clips cut from the same video, and its catalog tags (tap one for
+//  more clips with that tag). A Japanese title gets an English rendering from
+//  the on-device model when available.
 //
 
 import FoundationModels
@@ -16,16 +17,27 @@ import UIKit
 final class ClipDetailsViewController: UIHostingController<ClipDetailsView> {
     /// `onSelectClip`: a clip picked under "More From This Video". Nil hides that section.
     /// `onPlayAll`: every clip from this video, in video order, for a feed.
+    /// `onPlayFeed`: clips picked from a tag's list, as a feed starting at the given one.
+    /// Nil hides the tags' links (the tags still show).
     init(
         payload: ClipPayload,
         onSelectClip: ((ClipSummary) -> Void)? = nil,
-        onPlayAll: (([ClipSummary]) -> Void)? = nil
+        onPlayAll: (([ClipSummary]) -> Void)? = nil,
+        onPlayFeed: (([ClipSummary], Int) -> Void)? = nil
     ) {
         super.init(rootView: ClipDetailsView(
             details: ClipDetails(payload: payload),
             onSelectClip: onSelectClip,
             onPlayAll: onPlayAll
         ))
+        if let onPlayFeed {
+            rootView.onSelectTag = { [weak self] filter in
+                self?.navigationController?.pushViewController(
+                    ClipExplorerViewController(selected: [filter], onPlay: onPlayFeed),
+                    animated: true
+                )
+            }
+        }
         title = "Clip Details"
         navigationItem.largeTitleDisplayMode = .never
         navigationItem.rightBarButtonItem = UIBarButtonItem(
@@ -43,13 +55,15 @@ final class ClipDetailsViewController: UIHostingController<ClipDetailsView> {
     static func makeSheet(
         payload: ClipPayload,
         onSelectClip: ((ClipSummary) -> Void)? = nil,
-        onPlayAll: (([ClipSummary]) -> Void)? = nil
+        onPlayAll: (([ClipSummary]) -> Void)? = nil,
+        onPlayFeed: (([ClipSummary], Int) -> Void)? = nil
     ) -> UINavigationController {
         let nav = UINavigationController(
             rootViewController: ClipDetailsViewController(
                 payload: payload,
                 onSelectClip: onSelectClip,
-                onPlayAll: onPlayAll
+                onPlayAll: onPlayAll,
+                onPlayFeed: onPlayFeed
             )
         )
         if let sheet = nav.sheetPresentationController {
@@ -74,6 +88,9 @@ struct ClipDetails {
     let vocabularyCount: Int
     let grammarCount: Int
     let jlptLevel: Int?
+    /// Catalog tags as filters (format, topics, style, pace, series); empty until tagged.
+    let tagFilters: [ClipTagFilter]
+    let pace: ClipPace?
     let isDeprecated: Bool
     /// The full video on YouTube, opened at the clip's start.
     let videoURL: URL?
@@ -96,6 +113,8 @@ struct ClipDetails {
         vocabularyCount = payload.highlights?.vocabulary?.count ?? 0
         grammarCount = payload.highlights?.grammarPatterns?.count ?? 0
         jlptLevel = payload.jlptLevel
+        tagFilters = payload.tags?.filters(pace: payload.pace) ?? []
+        pace = payload.pace
         isDeprecated = payload.isDeprecated
         let start = Int(media.startSec.rounded(.down))
         videoURL = URL(string: "https://www.youtube.com/watch?v=\(media.videoID)&t=\(start)s")
@@ -108,6 +127,8 @@ struct ClipDetailsView: View {
     var onSelectClip: ((ClipSummary) -> Void)?
     /// "Play All" under "More From This Video": the whole video's clips as a feed.
     var onPlayAll: (([ClipSummary]) -> Void)?
+    /// A tag tapped: more clips with it. Nil makes the tags display-only.
+    var onSelectTag: ((ClipTagFilter) -> Void)?
     @Environment(\.openURL) private var openURL
     @State private var translation: TitleTranslation = .idle
     /// The video's other clips, in video order. Empty until loaded, or if there are none.
@@ -142,7 +163,31 @@ struct ClipDetailsView: View {
                     LabeledContent("Grammar", value: "\(details.grammarCount)")
                 }
                 LabeledContent("Level", value: details.jlptLevel.map { "N\($0)" } ?? "Not rated")
+                if let pace = details.pace {
+                    LabeledContent(
+                        "Pace",
+                        value: "\(pace.label.capitalized) · \(pace.charsPerSec.formatted(.number.precision(.fractionLength(1)))) chars/s"
+                    )
+                }
                 LabeledContent("Format", value: details.isPortrait ? "YouTube Short" : "Video")
+            }
+
+            if !details.tagFilters.isEmpty {
+                Section {
+                    ClipTagFlow(chips: details.tagFilters.map { ClipTagChip(filter: $0) }) { filter in
+                        onSelectTag?(filter)
+                    }
+                    .allowsHitTesting(onSelectTag != nil)
+                    .padding(.vertical, 6)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+                } header: {
+                    Text("Tags")
+                } footer: {
+                    if onSelectTag != nil {
+                        Text("Tap a tag for more clips like this one.")
+                    }
+                }
             }
 
             if let onSelectClip, !otherClips.isEmpty {

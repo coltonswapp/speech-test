@@ -30,6 +30,9 @@ const PUBLIC_CLIPS_MAX_LIMIT = 50;
  * Comma-separate values for "any of" within a facet; facets combine with "and":
  * `?format=vlog,anime&topic=food&pace=slow`. Untagged clips never match a tag
  * filter (pace only needs alignment).
+ *
+ * `?q=` searches the video title, channel, the clip's first line and its tag
+ * values (case-insensitive substring), e.g. `?q=ラーメン` or `?q=kansai`.
  */
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -56,6 +59,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Bad cursor." }, { status: 400 });
   }
   const feedOnly = ["1", "true"].includes(params.get("feed") ?? "");
+  const q = params.get("q")?.trim() || null;
+  if (q !== null && q.length > 100) {
+    return NextResponse.json({ error: "q is at most 100 characters." }, { status: 400 });
+  }
   const tags: Partial<Record<ClipTagFacet, string[]>> = {};
   for (const facet of CLIP_TAG_FACETS) {
     const raw = params.get(facet);
@@ -68,7 +75,7 @@ export async function GET(request: NextRequest) {
     tags[facet] = values;
   }
   try {
-    const { clips, nextCursor } = await listPublicClips({ feedOnly, level, videoId, tags, limit, cursor });
+    const { clips, nextCursor } = await listPublicClips({ feedOnly, level, videoId, tags, q, limit, cursor });
     return NextResponse.json(
       { clips, ...(limit !== null ? { next_cursor: nextCursor } : {}) },
       { headers: { "Cache-Control": "private, no-store" } }

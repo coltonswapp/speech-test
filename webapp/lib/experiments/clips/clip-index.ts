@@ -69,6 +69,8 @@ export type PublicClipQuery = {
    * (format=vlog,anime & topic=food → vlogs or anime, about food).
    */
   tags?: Partial<Record<ClipTagFacet, string[]>>;
+  /** Text search: video title, channel, first line, or a tag value (case-insensitive). */
+  q?: string | null;
   /** null = everything (older app builds). */
   limit: number | null;
   cursor: { createdAt: Date; id: string } | null;
@@ -82,6 +84,16 @@ export async function listPublicClips(
   if (q.feedOnly) where.push(eq(clipIndex.inFeed, true));
   if (q.level !== null) where.push(gte(clipIndex.jlptLevel, q.level));
   if (q.videoId !== null) where.push(eq(clipIndex.videoId, q.videoId));
+  if (q.q) {
+    const like = `%${q.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    where.push(sql`(
+      ${clipIndex.publicSummary}->>'title' ILIKE ${like}
+      OR ${clipIndex.publicSummary}->>'channel_name' ILIKE ${like}
+      OR ${clipIndex.publicSummary}->>'preview_jp' ILIKE ${like}
+      OR ${clipIndex.id} ILIKE ${like}
+      OR array_to_string(${clipIndex.tags}, ' ') ILIKE ${like}
+    )`);
+  }
   for (const [facet, values] of Object.entries(q.tags ?? {}) as Array<[ClipTagFacet, string[]]>) {
     if (values.length > 0) where.push(arrayOverlaps(clipIndex.tags, values.map((v) => clipTagKey(facet, v))));
   }

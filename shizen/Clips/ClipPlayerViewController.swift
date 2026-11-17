@@ -713,7 +713,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         let sheet = ClipDetailsViewController.makeSheet(
             payload: payload,
             onSelectClip: { [weak self] clip in self?.openClipFromSameVideo(clip) },
-            onPlayAll: { [weak self] clips in self?.playVideoClipsInFeed(clips) }
+            onPlayAll: { [weak self] clips in self?.playVideoClipsInFeed(clips) },
+            onPlayFeed: { [weak self] clips, start in self?.playVideoClipsInFeed(clips, startingAt: start) }
         )
         present(sheet, animated: true)
     }
@@ -731,12 +732,13 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         }
     }
 
-    /// "Play All" in Clip Details: closes the sheet and plays the video's clips, in order, as a feed.
-    private func playVideoClipsInFeed(_ clips: [ClipSummary]) {
+    /// "Play All" in Clip Details (the video's clips, in order), or clips picked from
+    /// a tag's list: closes the sheet and plays them as a feed.
+    private func playVideoClipsInFeed(_ clips: [ClipSummary], startingAt start: Int = 0) {
         dismiss(animated: true) { [weak self] in
             guard let self else { return }
             self.playerView.pause()
-            let feed = ClipFeedViewController(clips: clips)
+            let feed = ClipFeedViewController(clips: clips, startingAt: start)
             if let navigationController = self.navigationController {
                 navigationController.pushViewController(feed, animated: true)
             } else {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
+import { clipTagPickSchema } from "@/lib/experiments/clips/tags";
 import { highlightsSchema } from "@/lib/dialogue/types";
 import { clipErrorResponse, loadClipOr404 } from "@/lib/experiments/clips/route-helpers";
 import { clipAudioUrl, deleteClip, writeClipDraft } from "@/lib/experiments/clips/store";
@@ -80,6 +81,8 @@ const patchSchema = z.object({
   jlptLevel: clipJlptLevelSchema.nullable().optional(),
   /** Hand-set feed answer: true = always in the feed, false = never; null = back to the automatic verdict. */
   feedEligible: z.boolean().nullable().optional(),
+  /** Hand-set catalog tags (vocabulary in tags.ts); null = back to the Tag step's. */
+  tags: clipTagPickSchema.nullable().optional(),
   /** Retire the clip (optional reason), or null to restore it. */
   deprecated: z.object({ reason: z.string().max(200).optional() }).nullable().optional(),
 });
@@ -195,6 +198,15 @@ export async function PATCH(
         ...(eligible === null ? {} : { manual: { eligible, at: new Date().toISOString() } }),
       };
       draft = { ...draft, feed: feed.auto || feed.manual ? feed : undefined };
+    }
+    if (parsed.data.tags !== undefined) {
+      const manual = parsed.data.tags;
+      const auto = draft.tags?.auto;
+      const tags = {
+        ...(auto ? { auto } : {}),
+        ...(manual === null ? {} : { manual: { ...manual, at: new Date().toISOString() } }),
+      };
+      draft = { ...draft, tags: tags.auto || tags.manual ? tags : undefined };
     }
     if (parsed.data.deprecated !== undefined) {
       const reason = parsed.data.deprecated?.reason?.trim();

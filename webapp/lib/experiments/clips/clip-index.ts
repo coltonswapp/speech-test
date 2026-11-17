@@ -1,9 +1,10 @@
 import "server-only";
-import { and, asc, desc, eq, gte, inArray, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, arrayOverlaps, asc, desc, eq, gte, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { clipIndex } from "@/lib/db/schema";
 import type { ClipPayloadSummary } from "@/lib/experiments/clips/payload";
 import { clipIndexRow } from "@/lib/experiments/clips/summary";
+import { CLIP_TAG_FACETS, clipTagKey, type ClipTagFacet } from "@/lib/experiments/clips/tags";
 import type { ClipDraft, ClipSummary } from "@/lib/experiments/clips/types";
 
 // Postgres index of clip drafts (see `clip_index` in lib/db/schema.ts). R2
@@ -63,6 +64,11 @@ export type PublicClipQuery = {
   level: number | null;
   /** One video's clips, in video order (not paged). */
   videoId: string | null;
+  /**
+   * Tag filters: any of the values within a facet, every facet given
+   * (format=vlog,anime & topic=food → vlogs or anime, about food).
+   */
+  tags?: Partial<Record<ClipTagFacet, string[]>>;
   /** null = everything (older app builds). */
   limit: number | null;
   cursor: { createdAt: Date; id: string } | null;
@@ -76,6 +82,9 @@ export async function listPublicClips(
   if (q.feedOnly) where.push(eq(clipIndex.inFeed, true));
   if (q.level !== null) where.push(gte(clipIndex.jlptLevel, q.level));
   if (q.videoId !== null) where.push(eq(clipIndex.videoId, q.videoId));
+  for (const [facet, values] of Object.entries(q.tags ?? {}) as Array<[ClipTagFacet, string[]]>) {
+    if (values.length > 0) where.push(arrayOverlaps(clipIndex.tags, values.map((v) => clipTagKey(facet, v))));
+  }
   const paged = q.videoId === null && q.limit !== null;
   if (paged && q.cursor) {
     where.push(
@@ -112,4 +121,25 @@ export async function listPublicClips(
 export async function countIndexedClips(): Promise<number> {
   const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(clipIndex);
   return row?.n ?? 0;
+}
+
+export type ClipFacetCounts = Record<ClipTagFacet, Array<{ value: string; count: number }>>;
+
+/** How many listed clips (or feed clips) carry each tag value, most first. */
+export async function listedClipFacetCounts(feedOnly: boolean): Promise<ClipFacetCounts> {
+  const rows = await db.execute(sql`
+    SELECT key, count(*)::int AS n
+    FROM ${clipIndex}, unnest(${clipIndex.tags}) AS key
+    WHERE ${clipIndex.listed} ${feedOnly ? sql`AND ${clipIndex.inFeed}` : sql``}
+    GROUP BY key
+    ORDER BY n DESC, key
+  `);
+  const counts = Object.fromEntries(CLIP_TAG_FACETS.map((f) => [f, []])) as unknown as ClipFacetCounts;
+  // postgres-js returns the rows as an array.
+  for (const row of rows as unknown as Array<{ key: string; n: number }>) {
+    const colon = row.key.indexOf(":");
+    const facet = row.key.slice(0, colon) as ClipTagFacet;
+    if (colon > 0 && facet in counts) counts[facet].push({ value: row.key.slice(colon + 1), count: row.n });
+  }
+  return counts;
 }

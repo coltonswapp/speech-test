@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { decodeClipCursor, listPublicClips } from "@/lib/experiments/clips/clip-index";
 import { YOUTUBE_ID_PATTERN } from "@/lib/experiments/clips/types";
+import { CLIP_TAG_FACETS, type ClipTagFacet } from "@/lib/experiments/clips/tags";
 
 const PUBLIC_CLIPS_MAX_LIMIT = 50;
 
@@ -22,6 +23,13 @@ const PUBLIC_CLIPS_MAX_LIMIT = 50;
  *
  * `?video_id=<YouTube id>` keeps only the clips cut from that video, in video
  * order (earliest first): "more from this video" next to a clip. Not paged.
+ *
+ * Tag filters (values in lib/experiments/clips/tags.ts; /api/public/clips/facets
+ * lists the ones in use, with counts): `?format=`, `?topic=`, `?register=`,
+ * `?speakers=`, `?dialect=`, `?pace=` (slow, natural, fast) and `?series=`.
+ * Comma-separate values for "any of" within a facet; facets combine with "and":
+ * `?format=vlog,anime&topic=food&pace=slow`. Untagged clips never match a tag
+ * filter (pace only needs alignment).
  */
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -48,8 +56,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Bad cursor." }, { status: 400 });
   }
   const feedOnly = ["1", "true"].includes(params.get("feed") ?? "");
+  const tags: Partial<Record<ClipTagFacet, string[]>> = {};
+  for (const facet of CLIP_TAG_FACETS) {
+    const raw = params.get(facet);
+    if (raw === null) continue;
+    // Series names are free text and may hold commas; one series per request.
+    const values = (facet === "series" ? [raw] : raw.split(",")).map((v) => v.trim()).filter(Boolean);
+    if (values.length === 0 || values.length > 20 || values.some((v) => v.length > 80)) {
+      return NextResponse.json({ error: `Bad ${facet} filter.` }, { status: 400 });
+    }
+    tags[facet] = values;
+  }
   try {
-    const { clips, nextCursor } = await listPublicClips({ feedOnly, level, videoId, limit, cursor });
+    const { clips, nextCursor } = await listPublicClips({ feedOnly, level, videoId, tags, limit, cursor });
     return NextResponse.json(
       { clips, ...(limit !== null ? { next_cursor: nextCursor } : {}) },
       { headers: { "Cache-Control": "private, no-store" } }

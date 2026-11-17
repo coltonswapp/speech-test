@@ -33,7 +33,7 @@ const option = (name: string) => {
 const STUDIO = (option("--studio") ?? process.env.CLIP_STUDIO_URL ?? "http://localhost:3000").replace(/\/$/, "");
 const CONCURRENCY = Number(option("--concurrency") ?? 5);
 const STEP_TIMEOUT_MS = 8 * 60_000;
-const STEPS = ["video-info", "transcribe", "tokenize", "align", "translate", "level", "feed"] as const;
+const STEPS = ["video-info", "transcribe", "tokenize", "align", "translate", "level", "tag", "feed"] as const;
 type Step = (typeof STEPS)[number];
 
 const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -130,6 +130,7 @@ function missingSteps(d: ClipDraft): Step[] {
     align: aligned,
     translate: s.length > 0 && s.every((x) => Boolean(x.en?.trim())),
     level: Boolean(d.difficulty),
+    tag: Boolean(d.tags?.auto || d.tags?.manual),
     feed: Boolean(d.feed?.auto || d.feed?.manual),
   };
   return STEPS.filter((step) => !done[step]);

@@ -521,6 +521,10 @@ export const clipIndex = pgTable(
     inFeed: boolean("in_feed").notNull(),
     /** 5 = N5 … 1 = N1; null until rated. */
     jlptLevel: integer("jlpt_level"),
+    /** Catalog tags as `facet:value` (`format:vlog`, `topic:food`, `pace:fast`…); see clipTagKeys. */
+    tags: text("tags").array().notNull().default([]),
+    /** Characters per second of speech; null until aligned. */
+    pace: real("pace"),
     startSec: real("start_sec").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
@@ -532,5 +536,6 @@ export const clipIndex = pgTable(
   (t) => [
     index("clip_index_public_idx").on(t.listed, t.inFeed, t.createdAt),
     index("clip_index_video_idx").on(t.videoId),
+    index("clip_index_tags_idx").using("gin", t.tags),
   ]
 );

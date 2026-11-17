@@ -14,6 +14,7 @@ export const STEP_LABELS: Record<ClipUsageStep, string> = {
   tokenize: "Tokenize",
   align: "Align",
   level: "Level",
+  tag: "Tag",
   feed: "Feed",
 };
 

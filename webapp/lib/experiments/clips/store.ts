@@ -11,6 +11,7 @@ import {
 import {
   CLIP_ID_PATTERN,
   clipDraftSchema,
+  clipListedAt,
   clipPendingSchema,
   type ClipDraft,
   type ClipPending,
@@ -53,7 +54,9 @@ export async function readClipDraft(id: string): Promise<ClipDraft | null> {
 }
 
 export async function writeClipDraft(draft: ClipDraft): Promise<ClipDraft> {
-  const next = { ...draft, updatedAt: new Date().toISOString() };
+  const now = new Date().toISOString();
+  const listedAt = clipListedAt({ ...draft, updatedAt: now });
+  const next = { ...draft, ...(listedAt ? { listedAt } : {}), updatedAt: now };
   await putObject(
     draftKey(draft.id),
     Buffer.from(JSON.stringify(next, null, 2)),

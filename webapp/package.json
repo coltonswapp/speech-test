@@ -26,6 +26,7 @@
     "clip:queue-batch": "dotenv -e .env.local -- tsx scripts/clip-queue-batch.ts",
     "clip:asr-compare": "dotenv -e .env.local -- tsx scripts/clip-asr-compare.ts",
     "clip:tag": "dotenv -e .env.local -- tsx scripts/clip-tag.ts",
+    "clip:video-info": "dotenv -e .env.local -- tsx scripts/clip-video-info.ts",
     "eval:token-sync": "dotenv -e .env.local -- tsx scripts/eval-token-sync.ts",
     "tts:voice-catalog": "dotenv -e .env.local -- tsx scripts/generate-gemini-voice-catalog.ts"
   },

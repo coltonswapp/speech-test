@@ -607,7 +607,7 @@ export function registerClipTools(server: McpServer) {
     {
       title: "List public clips (the app's list / feed)",
       description:
-        "What the app's clip list or feed returns (/api/public/clips): aligned, non-deprecated clips. level = the learner's level (only clips at that level or easier; unrated left out). feed true = only feed clips. videoId = clips cut from one video. Tag filters (comma-separated values = any of; facets combine with and): format, topic, register (casual/polite/keigo), speakers (monologue/dialogue/group/narration), dialect (standard/kansai/other), pace (slow/natural/fast), series. facets true returns the tag values in use with counts instead (/api/public/clips/facets). limit + cursor page it.",
+        "What the app's clip list or feed returns (/api/public/clips): aligned, non-deprecated clips. level = the learner's level (only clips at that level or easier; unrated left out). feed true = only feed clips. videoId = clips cut from one video. Tag filters (comma-separated values = any of; facets combine with and): format, topic, register (casual/polite/keigo), speakers (monologue/dialogue/group/narration), dialect (standard/kansai/other), pace (slow/natural/fast), series. q searches title, channel, first line and tag values. facets true returns the tag values in use with counts instead (/api/public/clips/facets). limit + cursor page it.",
       inputSchema: {
         level: z.number().int().min(1).max(5).optional(),
         feed: z.boolean().optional(),
@@ -619,6 +619,7 @@ export function registerClipTools(server: McpServer) {
         dialect: z.string().optional(),
         pace: z.string().optional(),
         series: z.string().optional(),
+        q: z.string().max(100).optional().describe("Text search: title, channel, first line or a tag value."),
         facets: z.boolean().optional(),
         limit: z.number().int().min(1).max(50).default(20),
         cursor: z.string().optional(),

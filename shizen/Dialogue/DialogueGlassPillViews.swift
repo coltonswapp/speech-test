@@ -386,7 +386,8 @@ final class GlassChipControl: UIControl {
 
 // MARK: - Toggle tag
 
-/// Glass pill matching `DialogueGlassPillView`'s surface that toggles on tap.
+/// Glass pill matching `DialogueGlassPillView`'s surface that toggles on tap
+/// (or, with `isToggleable` off, acts as a button).
 /// Selected tags tint blue with a semibold label; width is measured at semibold
 /// so toggling never reflows the row.
 final class GlassTagControl: UIControl {
@@ -474,9 +475,16 @@ final class GlassTagControl: UIControl {
         selectionHaptic.prepare()
     }
 
+    /// False: a tap doesn't toggle; it sends `.primaryActionTriggered` (a tag that opens something).
+    var isToggleable = true
+
     @objc private func toggleSelected() {
-        isSelected.toggle()
         selectionHaptic.selectionChanged()
+        guard isToggleable else {
+            sendActions(for: .primaryActionTriggered)
+            return
+        }
+        isSelected.toggle()
         sendActions(for: .valueChanged)
     }
 

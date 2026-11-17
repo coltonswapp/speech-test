@@ -695,7 +695,22 @@ final class SettingsViewController: UIViewController {
                 ]) ?? []
             }
         case .clips:
-            navigationController?.pushViewController(ClipListViewController(), animated: true)
+            pushDetailList(title: link.title) {
+                [
+                    SettingsMenuItem(
+                        id: "clip-list",
+                        title: "Clip list",
+                        subtitle: "Every aligned clip · level filter · feed",
+                        symbolName: "list.bullet.rectangle"
+                    ),
+                    SettingsMenuItem(
+                        id: "clip-explorer",
+                        title: "Explore clips",
+                        subtitle: "Search · filter by tag · play results as a feed",
+                        symbolName: "number"
+                    ),
+                ]
+            }
         case .speaking:
             pushDetailList(title: link.title) { [weak self] in
                 self?.debugItems([
@@ -853,6 +868,10 @@ final class SettingsViewController: UIViewController {
             presentContextualGlossBackendPicker(sourceView: sourceView)
         case "cms-lessons":
             navigationController?.pushViewController(CMSLessonsViewController(), animated: true)
+        case "clip-list":
+            navigationController?.pushViewController(ClipListViewController(), animated: true)
+        case "clip-explorer":
+            navigationController?.pushViewController(ClipExplorerViewController(), animated: true)
         default:
             guard item.id.hasPrefix("debug-"),
                   let raw = Int(item.id.dropFirst("debug-".count)),

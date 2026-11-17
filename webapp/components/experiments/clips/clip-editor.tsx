@@ -361,6 +361,11 @@ export function ClipEditor({ clipId }: { clipId: string }) {
           {draft.video ? (
             <>
               <span className="font-medium">{draft.video.title}</span>
+              {draft.video.titleEn ? (
+                <span className="text-muted-foreground" title={`English title (${draft.video.titleEn.model})`}>
+                  {draft.video.titleEn.text}
+                </span>
+              ) : null}
               {draft.video.channelUrl ? (
                 <a
                   href={draft.video.channelUrl}
@@ -383,7 +388,7 @@ export function ClipEditor({ clipId }: { clipId: string }) {
             size="sm"
             className="text-muted-foreground"
             disabled={refreshVideoInfo.isPending}
-            title="Fetch the video’s title and channel from YouTube. Fails if the video is deleted, private or not embeddable."
+            title="Fetch the video’s title and channel from YouTube (and translate the title if it changed). Fails if the video is deleted, private or not embeddable."
             onClick={() => refreshVideoInfo.mutate()}
           >
             {refreshVideoInfo.isPending ? <Loader2Icon className="animate-spin" /> : <RefreshCwIcon />}

@@ -1,6 +1,6 @@
 import { exportHighlights } from "@/lib/dialogue/export";
 import type { DialogueHighlights, ExportedTeachingPattern } from "@/lib/dialogue/types";
-import { clipIsAligned, type ClipDraft, type ClipOrientation } from "@/lib/experiments/clips/types";
+import { clipIsAligned, clipListedAt, type ClipDraft, type ClipOrientation } from "@/lib/experiments/clips/types";
 import { clipFeedStatus } from "@/lib/experiments/clips/feed";
 import { splitSentencePhrases } from "@/lib/experiments/clips/phrases";
 import {
@@ -56,6 +56,8 @@ export type ClipPayload = {
     orientation: ClipOrientation;
     /** The video's YouTube title; absent until fetched. */
     title?: string;
+    /** The title in English, hashtags left out; absent when there is none. */
+    title_en?: string;
     channel_name?: string;
     channel_url?: string;
     thumbnail_url?: string;
@@ -119,6 +121,8 @@ export type ClipPayloadSummary = {
   orientation: ClipOrientation;
   /** The video's YouTube title and channel; absent until fetched. */
   title?: string;
+  /** The title in English, hashtags left out; absent when there is none. */
+  title_en?: string;
   channel_name?: string;
   sentence_count: number;
   preview_jp: string;
@@ -129,6 +133,8 @@ export type ClipPayloadSummary = {
   pace?: ClipPayloadPace;
   /** Whether the clip is in the feed (`?feed=1` lists only these). */
   in_feed: boolean;
+  /** When the clip first appeared in the app; the list is newest first by this. */
+  listed_at: string;
   updated_at: string;
 };
 
@@ -200,6 +206,7 @@ export function buildClipPayload(
       ...(draft.video
         ? {
             title: draft.video.title,
+            ...(draft.video.titleEn ? { title_en: draft.video.titleEn.text } : {}),
             channel_name: draft.video.channelName,
             ...(draft.video.channelUrl ? { channel_url: draft.video.channelUrl } : {}),
             ...(draft.video.thumbnailUrl ? { thumbnail_url: draft.video.thumbnailUrl } : {}),
@@ -226,12 +233,19 @@ export function clipPayloadSummary(draft: ClipDraft): ClipPayloadSummary | null 
     start_sec: draft.startSec,
     end_sec: draft.endSec,
     orientation: draft.orientation ?? "landscape",
-    ...(draft.video ? { title: draft.video.title, channel_name: draft.video.channelName } : {}),
+    ...(draft.video
+      ? {
+          title: draft.video.title,
+          ...(draft.video.titleEn ? { title_en: draft.video.titleEn.text } : {}),
+          channel_name: draft.video.channelName,
+        }
+      : {}),
     sentence_count: draft.sentences.length,
     preview_jp: draft.sentences[0]?.text ?? "",
     ...(draft.difficulty ? { jlpt_level: draft.difficulty.jlptLevel } : {}),
     ...payloadTagFields(draft),
     in_feed: clipFeedStatus(draft).eligible,
+    listed_at: clipListedAt(draft) ?? draft.updatedAt,
     updated_at: draft.updatedAt,
   };
 }

@@ -5,7 +5,8 @@ import { writeClipDraft } from "@/lib/experiments/clips/store";
 import { fetchYouTubeVideoInfo } from "@/lib/experiments/clips/youtube-info";
 
 /**
- * Fetch (or refresh) the clip's video title and channel from YouTube. Errors
+ * Fetch (or refresh) the clip's video title and channel from YouTube, and the
+ * English title (kept while the title is unchanged). Errors
  * leave the saved info as it was; a 404 or 422 means the video is gone,
  * private or not embeddable.
  */
@@ -17,7 +18,7 @@ export async function POST(
     const { id } = await ctx.params;
     const loaded = await loadClipOr404(id);
     if ("response" in loaded) return loaded.response;
-    const video = await fetchYouTubeVideoInfo(loaded.draft.videoId);
+    const video = await fetchYouTubeVideoInfo(loaded.draft.videoId, loaded.draft.video);
     return NextResponse.json({ draft: await writeClipDraft({ ...loaded.draft, video }) });
   } catch (error) {
     return clipErrorResponse(error);

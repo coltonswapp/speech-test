@@ -526,6 +526,8 @@ export const clipIndex = pgTable(
     /** Characters per second of speech; null until aligned. */
     pace: real("pace"),
     startSec: real("start_sec").notNull(),
+    /** When the clip first appeared in the app (clipListedAt); the public list's order. */
+    listedAt: timestamp("listed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
     /** Studio's ClipSummary. */
@@ -534,7 +536,7 @@ export const clipIndex = pgTable(
     publicSummary: jsonb("public_summary"),
   },
   (t) => [
-    index("clip_index_public_idx").on(t.listed, t.inFeed, t.createdAt),
+    index("clip_index_listed_idx").on(t.listed, t.inFeed, t.listedAt),
     index("clip_index_video_idx").on(t.videoId),
     index("clip_index_tags_idx").using("gin", t.tags),
   ]

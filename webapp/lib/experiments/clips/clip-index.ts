@@ -62,6 +62,8 @@ export type PublicClipQuery = {
   feedOnly: boolean;
   /** Learner level: clips at it or easier; unrated clips never match. */
   level: number | null;
+  /** Exactly this JLPT level (5 = N5 … 1 = N1); unrated clips never match. */
+  jlpt?: number | null;
   /** One video's clips, in video order (not paged). */
   videoId: string | null;
   /**
@@ -83,6 +85,7 @@ export async function listPublicClips(
   const where: SQL[] = [eq(clipIndex.listed, true)];
   if (q.feedOnly) where.push(eq(clipIndex.inFeed, true));
   if (q.level !== null) where.push(gte(clipIndex.jlptLevel, q.level));
+  if (q.jlpt != null) where.push(eq(clipIndex.jlptLevel, q.jlpt));
   if (q.videoId !== null) where.push(eq(clipIndex.videoId, q.videoId));
   if (q.q) {
     const like = `%${q.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -140,12 +143,19 @@ export async function countIndexedClips(): Promise<number> {
 
 export type ClipFacetCounts = Record<ClipTagFacet, Array<{ value: string; count: number }>>;
 
-/** How many listed clips (or feed clips) carry each tag value, most first. */
-export async function listedClipFacetCounts(feedOnly: boolean): Promise<ClipFacetCounts> {
+/**
+ * How many listed clips (or feed clips) carry each tag value, most first.
+ * `jlpt`: count only clips rated exactly that level (5 = N5 … 1 = N1).
+ */
+export async function listedClipFacetCounts(
+  feedOnly: boolean,
+  jlpt: number | null = null
+): Promise<ClipFacetCounts> {
   const rows = await db.execute(sql`
     SELECT key, count(*)::int AS n
     FROM ${clipIndex}, unnest(${clipIndex.tags}) AS key
     WHERE ${clipIndex.listed} ${feedOnly ? sql`AND ${clipIndex.inFeed}` : sql``}
+      ${jlpt !== null ? sql`AND ${clipIndex.jlptLevel} = ${jlpt}` : sql``}
     GROUP BY key
     ORDER BY n DESC, key
   `);

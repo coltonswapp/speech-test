@@ -14,6 +14,9 @@ const PUBLIC_CLIPS_MAX_LIMIT = 50;
  * that level or easier come back, and unrated clips are left out. Without it,
  * every clip is listed.
  *
+ * `?jlpt=3` keeps only clips rated exactly that level (N3), for browsing one
+ * level at a time. Combines with everything else, including `level`.
+ *
  * `?feed=1` keeps only feed clips (see lib/experiments/clips/feed.ts): the
  * ones worth a swipe. The rest stay listed without it, and by `video_id`.
  *
@@ -40,6 +43,11 @@ export async function GET(request: NextRequest) {
   const level = levelParam === null ? null : Number(levelParam);
   if (level !== null && !(Number.isInteger(level) && level >= 1 && level <= 5)) {
     return NextResponse.json({ error: "level must be 1 (N1) to 5 (N5)." }, { status: 400 });
+  }
+  const jlptParam = params.get("jlpt");
+  const jlpt = jlptParam === null ? null : Number(jlptParam);
+  if (jlpt !== null && !(Number.isInteger(jlpt) && jlpt >= 1 && jlpt <= 5)) {
+    return NextResponse.json({ error: "jlpt must be 1 (N1) to 5 (N5)." }, { status: 400 });
   }
   const videoId = params.get("video_id");
   if (videoId !== null && !YOUTUBE_ID_PATTERN.test(videoId)) {
@@ -75,7 +83,7 @@ export async function GET(request: NextRequest) {
     tags[facet] = values;
   }
   try {
-    const { clips, nextCursor } = await listPublicClips({ feedOnly, level, videoId, tags, q, limit, cursor });
+    const { clips, nextCursor } = await listPublicClips({ feedOnly, level, jlpt, videoId, tags, q, limit, cursor });
     return NextResponse.json(
       { clips, ...(limit !== null ? { next_cursor: nextCursor } : {}) },
       { headers: { "Cache-Control": "private, no-store" } }

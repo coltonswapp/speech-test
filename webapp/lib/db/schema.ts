@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // --- TTS Studio ---
 
@@ -539,5 +540,45 @@ export const clipIndex = pgTable(
     index("clip_index_listed_idx").on(t.listed, t.inFeed, t.listedAt),
     index("clip_index_video_idx").on(t.videoId),
     index("clip_index_tags_idx").using("gin", t.tags),
+  ]
+);
+
+// --- Clip feedback (learner thumbs + "report an issue") ---
+// Written by POST /api/client/clips/[id]/feedback. Created by
+// scripts/clip-feedback-table.ts (CLIP_FEEDBACK_DDL in lib/clip-feedback/schema.ts).
+
+export const clipFeedback = pgTable(
+  "clip_feedback",
+  {
+    id: text("id").primaryKey(), // cfb_<random>
+    /** clip_index.id (soft: drafts live in R2). */
+    clipId: text("clip_id").notNull(),
+    /** Firebase uid; `qa-client` / `local-dev` for debug builds. */
+    userId: text("user_id").notNull(),
+    kind: text("kind").notNull(), // rating | flag
+    rating: text("rating"), // up | down; set when kind = rating
+    /** translation | tokenization | reading | timing | video | other */
+    reason: text("reason"),
+    note: text("note"),
+    /** The line the learner reported from; null for clip-wide feedback. */
+    sentenceIndex: integer("sentence_index"),
+    tokenPosition: integer("token_position"),
+    /** The line (text, English, tokens) as the learner saw it; clips get re-aligned. */
+    snapshot: jsonb("snapshot"),
+    appVersion: text("app_version"),
+    appBuild: text("app_build"),
+    /** open | resolved | wontfix | duplicate; null for a plain rating with no issue. */
+    status: text("status"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedNote: text("resolved_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("clip_feedback_status_idx").on(t.status, t.createdAt),
+    index("clip_feedback_clip_idx").on(t.clipId),
+    index("clip_feedback_user_idx").on(t.userId, t.createdAt),
+    // One thumbs rating per learner per clip; flags can repeat.
+    uniqueIndex("clip_feedback_rating_uniq").on(t.clipId, t.userId).where(sql`kind = 'rating'`),
   ]
 );

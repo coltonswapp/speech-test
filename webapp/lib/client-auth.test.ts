@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from "jose";
-import { firebaseStaffTokenMatches, isClientQaAuthorized } from "./client-auth";
+import { firebaseLearnerUid, firebaseStaffTokenMatches, isClientQaAuthorized } from "./client-auth";
 import { isPublicPath } from "./studio-auth";
 
 const QA = "qa-learner-token-aaaaaaaa";
@@ -68,7 +68,11 @@ describe("/api/client route files", () => {
     for (const file of files) {
       const src = readFileSync(file, "utf8");
       const handlers = [...src.matchAll(/export async function (GET|POST|PUT|PATCH|DELETE)\b/g)].length;
-      const guards = [...src.matchAll(/requireClientQaAccess\(request\)|handleNotePost\(request, isClientQaAuthorized\)/g)].length;
+      const guards = [
+        ...src.matchAll(
+          /requireClientQaAccess\(request\)|requireClientLearner\(request\)|isClientQaAuthorized\(request\)|handleNotePost\(request, isClientQaAuthorized\)/g,
+        ),
+      ].length;
       assert.ok(handlers > 0, file);
       assert.equal(guards, handlers, file);
     }
@@ -108,6 +112,16 @@ describe("firebaseStaffTokenMatches", () => {
     assert.equal(await check(await sign({ staff: true }, { iss: "https://securetoken.google.com/other" })), false);
     assert.equal(await check(await sign({ staff: true }, { exp: Math.floor(Date.now() / 1000) - 600 })), false);
     assert.equal(await check(await sign({ staff: true, firebase: { sign_in_provider: "anonymous" } })), false);
+  });
+
+  it("firebaseLearnerUid: any signed-in user, never anonymous", async () => {
+    const uid = async (token: string) => firebaseLearnerUid(`Bearer ${token}`, keys);
+    assert.equal(await uid(await sign({ firebase: { sign_in_provider: "apple.com" } })), "uid-1");
+    assert.equal(await uid(await sign({ staff: true })), "uid-1");
+    assert.equal(await uid(await sign({ firebase: { sign_in_provider: "anonymous" } })), null);
+    assert.equal(await uid(await sign({}, { aud: "other-project" })), null);
+    assert.equal(await uid(await sign({}, { exp: Math.floor(Date.now() / 1000) - 600 })), null);
+    assert.equal(await firebaseLearnerUid(null, keys), null);
   });
 
   it("rejects a token signed by a key Google didn't publish", async () => {

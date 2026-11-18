@@ -76,6 +76,7 @@ import {
 } from "@/components/experiments/clips/clip-media";
 import { EditorSection } from "@/components/experiments/clips/editor-section";
 import { ClipTagsSection } from "@/components/experiments/clips/clip-tags-section";
+import { ClipFeedbackSection } from "@/components/experiments/clips/clip-feedback";
 import type { ClipTagPick } from "@/lib/experiments/clips/tags";
 import type { EditableToken } from "@/lib/experiments/clips/token-edits";
 
@@ -816,6 +817,8 @@ export function ClipEditor({ clipId }: { clipId: string }) {
         onCheck={() => runStep.mutate("feed")}
         onSetManual={(eligible) => setFeed.mutate(eligible)}
       />
+
+      <ClipFeedbackSection clipId={clipId} />
 
       <UsageSection runs={draft.usage ?? []} />
       </div>

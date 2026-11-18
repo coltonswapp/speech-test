@@ -44,19 +44,42 @@ export async function indexedClipIdsByVideo(videoIds?: string[]): Promise<Map<st
   return byVideo;
 }
 
-/** Opaque page cursor: the last row's listed_at and id. */
-function encodeCursor(listedAt: Date, id: string): string {
-  return Buffer.from(`${listedAt.toISOString()}|${id}`, "utf8").toString("base64url");
+/**
+ * Opaque page cursor: the last row's sort key and id. Newest-first lists key
+ * on listed_at; shuffled lists (`seed`) on the row's shuffle key.
+ */
+export type ClipCursor =
+  | { kind: "listed"; listedAt: Date; id: string }
+  | { kind: "shuffle"; key: string; id: string };
+
+const SHUFFLE_CURSOR_PREFIX = "~";
+const SHUFFLE_KEY = /^[0-9a-f]{32}$/;
+
+function encodeCursor(cursor: ClipCursor): string {
+  const text =
+    cursor.kind === "listed"
+      ? `${cursor.listedAt.toISOString()}|${cursor.id}`
+      : `${SHUFFLE_CURSOR_PREFIX}${cursor.key}|${cursor.id}`;
+  return Buffer.from(text, "utf8").toString("base64url");
 }
 
-export function decodeClipCursor(cursor: string): { listedAt: Date; id: string } | null {
+export function decodeClipCursor(cursor: string): ClipCursor | null {
   const text = Buffer.from(cursor, "base64url").toString("utf8");
   const bar = text.indexOf("|");
   if (bar < 0) return null;
-  const listedAt = new Date(text.slice(0, bar));
+  const head = text.slice(0, bar);
   const id = text.slice(bar + 1);
-  return Number.isNaN(listedAt.getTime()) || !id ? null : { listedAt, id };
+  if (!id) return null;
+  if (head.startsWith(SHUFFLE_CURSOR_PREFIX)) {
+    const key = head.slice(SHUFFLE_CURSOR_PREFIX.length);
+    return SHUFFLE_KEY.test(key) ? { kind: "shuffle", key, id } : null;
+  }
+  const listedAt = new Date(head);
+  return Number.isNaN(listedAt.getTime()) ? null : { kind: "listed", listedAt, id };
 }
+
+/** `?seed=`: short and URL-safe (the app sends a random one per feed). */
+export const CLIP_SHUFFLE_SEED = /^[A-Za-z0-9_-]{1,64}$/;
 
 export type PublicClipQuery = {
   feedOnly: boolean;
@@ -73,12 +96,22 @@ export type PublicClipQuery = {
   tags?: Partial<Record<ClipTagFacet, string[]>>;
   /** Text search: video title (Japanese or English), channel, first line, or a tag value (case-insensitive). */
   q?: string | null;
+  /**
+   * Shuffle seed: a stable random order for this seed (md5 of id + seed), so
+   * each feed session gets its own order and paging still works. null =
+   * newest first. Ignored with videoId.
+   */
+  seed?: string | null;
   /** null = everything (older app builds). */
   limit: number | null;
-  cursor: { listedAt: Date; id: string } | null;
+  /** Must match the order: a shuffle cursor with a seed, a listed one without. */
+  cursor: ClipCursor | null;
 };
 
-/** Listed clips for the app: newest in the app first, or video order for one video. */
+/**
+ * Listed clips for the app: newest in the app first, shuffled by `seed`, or
+ * video order for one video.
+ */
 export async function listPublicClips(
   q: PublicClipQuery
 ): Promise<{ clips: ClipPayloadSummary[]; nextCursor: string | null }> {
@@ -102,18 +135,28 @@ export async function listPublicClips(
     if (values.length > 0) where.push(arrayOverlaps(clipIndex.tags, values.map((v) => clipTagKey(facet, v))));
   }
   const paged = q.videoId === null && q.limit !== null;
+  const seed = q.videoId === null ? (q.seed ?? null) : null;
+  // "C" collation: plain byte order for the hex keys, the same in ORDER BY and the cursor test.
+  const shuffleKey = sql<string>`(md5(${clipIndex.id} || ${seed ?? ""}::text) COLLATE "C")`;
   if (paged && q.cursor) {
-    where.push(
-      or(
-        lt(clipIndex.listedAt, q.cursor.listedAt),
-        and(eq(clipIndex.listedAt, q.cursor.listedAt), lt(clipIndex.id, q.cursor.id))
-      )!
-    );
+    if (q.cursor.kind === "shuffle") {
+      const { key, id } = q.cursor;
+      where.push(sql`(${shuffleKey} > ${key} OR (${shuffleKey} = ${key} AND ${clipIndex.id} > ${id}))`);
+    } else {
+      const { listedAt, id } = q.cursor;
+      where.push(
+        or(
+          lt(clipIndex.listedAt, listedAt),
+          and(eq(clipIndex.listedAt, listedAt), lt(clipIndex.id, id))
+        )!
+      );
+    }
   }
   const base = db
     .select({
       id: clipIndex.id,
       listedAt: clipIndex.listedAt,
+      shuffleKey,
       publicSummary: clipIndex.publicSummary,
     })
     .from(clipIndex)
@@ -121,14 +164,22 @@ export async function listPublicClips(
     .orderBy(
       ...(q.videoId !== null
         ? [asc(clipIndex.startSec)]
-        : [desc(clipIndex.listedAt), desc(clipIndex.id)])
+        : seed !== null
+          ? [asc(shuffleKey), asc(clipIndex.id)]
+          : [desc(clipIndex.listedAt), desc(clipIndex.id)])
     );
   const rows = paged ? await base.limit(q.limit! + 1) : await base;
   const page = paged ? rows.slice(0, q.limit!) : rows;
   const last = page[page.length - 1];
-  // Listed rows always have listed_at (clipListedAt), so the cursor never lacks one.
-  const nextCursor =
-    paged && rows.length > q.limit! && last?.listedAt ? encodeCursor(last.listedAt, last.id) : null;
+  let nextCursor: string | null = null;
+  if (paged && rows.length > q.limit! && last) {
+    if (seed !== null) {
+      nextCursor = encodeCursor({ kind: "shuffle", key: last.shuffleKey, id: last.id });
+    } else if (last.listedAt) {
+      // Listed rows always have listed_at (clipListedAt), so the cursor never lacks one.
+      nextCursor = encodeCursor({ kind: "listed", listedAt: last.listedAt, id: last.id });
+    }
+  }
   return {
     clips: page.map((r) => r.publicSummary as ClipPayloadSummary),
     nextCursor,

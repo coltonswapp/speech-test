@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { decodeClipCursor, listPublicClips } from "@/lib/experiments/clips/clip-index";
+import { CLIP_SHUFFLE_SEED, decodeClipCursor, listPublicClips } from "@/lib/experiments/clips/clip-index";
 import { YOUTUBE_ID_PATTERN } from "@/lib/experiments/clips/types";
 import { CLIP_TAG_FACETS, type ClipTagFacet } from "@/lib/experiments/clips/tags";
 
@@ -23,6 +23,10 @@ const PUBLIC_CLIPS_MAX_LIMIT = 50;
  * `?limit=20` pages the list (at most 50): the response's `next_cursor`,
  * passed back as `?cursor=`, gets the next page; null on the last one.
  * Without `limit`, every clip comes back at once (older app builds).
+ *
+ * `?seed=<random>` shuffles instead of newest first: the same seed gives the
+ * same order (so paging works), a new seed a new one. The app sends a fresh
+ * seed per feed. Ignored with `video_id`.
  *
  * `?video_id=<YouTube id>` keeps only the clips cut from that video, in video
  * order (earliest first): "more from this video" next to a clip. Not paged.
@@ -66,6 +70,13 @@ export async function GET(request: NextRequest) {
   if (cursorParam && !cursor) {
     return NextResponse.json({ error: "Bad cursor." }, { status: 400 });
   }
+  const seed = params.get("seed");
+  if (seed !== null && !CLIP_SHUFFLE_SEED.test(seed)) {
+    return NextResponse.json({ error: "seed must be 1–64 letters, digits, - or _." }, { status: 400 });
+  }
+  if (cursor && videoId === null && (cursor.kind === "shuffle") !== (seed !== null)) {
+    return NextResponse.json({ error: "cursor doesn’t match seed." }, { status: 400 });
+  }
   const feedOnly = ["1", "true"].includes(params.get("feed") ?? "");
   const q = params.get("q")?.trim() || null;
   if (q !== null && q.length > 100) {
@@ -83,7 +94,9 @@ export async function GET(request: NextRequest) {
     tags[facet] = values;
   }
   try {
-    const { clips, nextCursor } = await listPublicClips({ feedOnly, level, jlpt, videoId, tags, q, limit, cursor });
+    const { clips, nextCursor } = await listPublicClips({
+      feedOnly, level, jlpt, videoId, tags, q, seed, limit, cursor,
+    });
     return NextResponse.json(
       { clips, ...(limit !== null ? { next_cursor: nextCursor } : {}) },
       { headers: { "Cache-Control": "private, no-store" } }

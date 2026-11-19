@@ -37,6 +37,20 @@ export const FEED_SENTENCE_WORDS = 2;
  * 11.6; scenery and walking clips scored 1–5.
  */
 export const FEED_MIN_SENTENCE_WORDS_PER_10S = 6;
+/**
+ * The same floor for clips rated N5/N4: lessons and comprehensible-input
+ * Shorts are slow on purpose. Set Nov 19 from 22 test clips: beginner clips
+ * from learner channels scored 4.2–5.1 (a cafe ordering scene, short
+ * narrations), while near-silent ones scored 2.4–3.6.
+ */
+export const FEED_MIN_SENTENCE_WORDS_PER_10S_BEGINNER = 4;
+
+/** The words-per-10 s floor for this clip: lower once the Level step rated it N5 or N4. */
+export function clipFeedMinWordsPer10s(draft: Pick<ClipDraft, "difficulty">): number {
+  return (draft.difficulty?.jlptLevel ?? 0) >= 4
+    ? FEED_MIN_SENTENCE_WORDS_PER_10S_BEGINNER
+    : FEED_MIN_SENTENCE_WORDS_PER_10S;
+}
 
 /** Tokens that are only punctuation aren't words. */
 const WORD_TOKEN = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}0-9０-９]/u;
@@ -75,6 +89,8 @@ export type ClipFeedRule = { label: string; value: string; ok: boolean; problem:
 /** The measured rules, each with what the clip scored. */
 export function clipFeedRules(draft: ClipDraft): ClipFeedRule[] {
   const m = clipFeedMetrics(draft);
+  const minWords = clipFeedMinWordsPer10s(draft);
+  const beginner = minWords !== FEED_MIN_SENTENCE_WORDS_PER_10S ? " (N5/N4 clip)" : "";
   return [
     {
       label: `Length ${FEED_MIN_SECONDS}–${FEED_MAX_SECONDS} s`,
@@ -86,10 +102,10 @@ export function clipFeedRules(draft: ClipDraft): ClipFeedRule[] {
           : `Too long (${m.seconds.toFixed(0)} s; the feed takes ${FEED_MIN_SECONDS}–${FEED_MAX_SECONDS} s).`,
     },
     {
-      label: `Said in sentences: ${FEED_MIN_SENTENCE_WORDS_PER_10S}+ words per 10 s, counting lines of ${FEED_SENTENCE_WORDS}+ words`,
+      label: `Said in sentences: ${minWords}+ words per 10 s${beginner}, counting lines of ${FEED_SENTENCE_WORDS}+ words`,
       value: `${m.sentenceWordsPer10s.toFixed(1)} per 10 s (${m.sentenceWords} of ${m.words} words)`,
-      ok: m.sentenceWordsPer10s >= FEED_MIN_SENTENCE_WORDS_PER_10S,
-      problem: `Not much said (${m.sentenceWordsPer10s.toFixed(1)} words per 10 s; the feed needs ${FEED_MIN_SENTENCE_WORDS_PER_10S}). Mostly quiet, scenery or one-word reactions.`,
+      ok: m.sentenceWordsPer10s >= minWords,
+      problem: `Not much said (${m.sentenceWordsPer10s.toFixed(1)} words per 10 s; the feed needs ${minWords}${beginner}). Mostly quiet, scenery or one-word reactions.`,
     },
   ];
 }

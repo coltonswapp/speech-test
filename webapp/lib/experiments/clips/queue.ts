@@ -19,6 +19,35 @@ export const clipQueueSourceSchema = z.enum(["dump", "channel-scan", "link"]);
 export const clipQueueStatusSchema = z.enum(["queued", "skipped"]);
 export type ClipQueueStatus = z.infer<typeof clipQueueStatusSchema>;
 
+/**
+ * Rough CEFR level from the local video dump (scripts/clip-queue-difficulty.ts),
+ * for picking what to process next. A soft hint, not a rating: the clip's own
+ * JLPT level comes from the Level step once it's made. In tests (Nov 19), B1+
+ * almost never came out N5/N4, while A1/A2 often did.
+ */
+export const CLIP_QUEUE_DIFFICULTIES = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
+export const clipQueueDifficultySchema = z.enum(CLIP_QUEUE_DIFFICULTIES);
+export type ClipQueueDifficulty = z.infer<typeof clipQueueDifficultySchema>;
+
+/** Named ranges for `--difficulty`; also accepts levels like "A1,A2". */
+export const CLIP_QUEUE_DIFFICULTY_GROUPS: Record<string, ClipQueueDifficulty[]> = {
+  beginner: ["A1", "A2"],
+  intermediate: ["B1"],
+  advanced: ["B2", "C1", "C2"],
+};
+
+/** "beginner" or "A1,A2" → the levels; throws on anything else. */
+export function parseClipQueueDifficulties(value: string): ClipQueueDifficulty[] {
+  const levels = new Set<ClipQueueDifficulty>();
+  for (const part of value.split(",").map((s) => s.trim()).filter(Boolean)) {
+    const group = CLIP_QUEUE_DIFFICULTY_GROUPS[part.toLowerCase()];
+    if (group) group.forEach((level) => levels.add(level));
+    else levels.add(clipQueueDifficultySchema.parse(part.toUpperCase()));
+  }
+  if (levels.size === 0) throw new Error(`No difficulty in "${value}".`);
+  return [...levels];
+}
+
 export const clipQueueItemSchema = z.object({
   videoId: z.string().regex(YOUTUBE_ID_PATTERN),
   title: z.string(),
@@ -31,6 +60,10 @@ export const clipQueueItemSchema = z.object({
   status: clipQueueStatusSchema,
   /** Why it was skipped, or anything worth remembering. */
   note: z.string().optional(),
+  /** Soft difficulty hint (see CLIP_QUEUE_DIFFICULTIES); absent = unknown. */
+  difficulty: clipQueueDifficultySchema.optional(),
+  /** "video": the dump rated this video; "channel": the channel's usual level there. */
+  difficultyFrom: z.enum(["video", "channel"]).optional(),
   addedAt: z.string(),
   updatedAt: z.string(),
 });
@@ -65,6 +98,12 @@ export const QUEUE_MAX_SECONDS = 120;
 export const QUEUE_MIN_SECONDS = 20;
 
 const JAPANESE_CHAR = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
+
+/**
+ * Learner channels title their Shorts in English, so when picking by
+ * difficulty this warning doesn't hold a Short back.
+ */
+export const NO_JAPANESE_TITLE_FLAG = "No Japanese in title";
 /** Titles that usually mean singing, playing or sounds rather than talk. */
 const NO_TALK_TITLE =
   /歌ってみた|弾いてみた|叩いてみた|踊ってみた|cover|カバー|\bMV\b|music video|ASMR|咀嚼音|作業用|BGM/i;
@@ -80,7 +119,7 @@ export function clipQueueFlags(item: Pick<ClipQueueItem, "title" | "durationSec"
   else if (d < QUEUE_MIN_SECONDS) flags.push(`Under ${QUEUE_MIN_SECONDS} s`);
   else if (d < FEED_MIN_SECONDS) flags.push(`Under the feed’s ${FEED_MIN_SECONDS} s`);
   else if (d > FEED_MAX_SECONDS) flags.push(`Over the feed’s ${FEED_MAX_SECONDS} s`);
-  if (!JAPANESE_CHAR.test(item.title)) flags.push("No Japanese in title");
+  if (!JAPANESE_CHAR.test(item.title)) flags.push(NO_JAPANESE_TITLE_FLAG);
   if (NO_TALK_TITLE.test(item.title)) flags.push("Music / ASMR title");
   return flags;
 }

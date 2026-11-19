@@ -322,6 +322,15 @@ function QueueRow({ row, onTicket }: { row: ClipQueueRow; onTicket: (ticket: Cli
           <span>{row.channelName}</span>
           {row.channelDumpCount > 1 ? <span>· {row.channelDumpCount} in index</span> : null}
           <span>· {formatDuration(row.durationSec)}</span>
+          {row.difficulty ? (
+            <Badge
+              variant="secondary"
+              title={row.difficultyFrom === "channel" ? "Channel's usual level in the dump (soft hint)" : "Video's level in the dump (soft hint)"}
+            >
+              {row.difficulty}
+              {row.difficultyFrom === "channel" ? " · channel" : ""}
+            </Badge>
+          ) : null}
           {row.flags.map((flag) => (
             <Badge key={flag} variant="outline" className="border-orange-500/50 text-orange-600 dark:text-orange-400">
               {flag}

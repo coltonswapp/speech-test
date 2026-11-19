@@ -129,6 +129,25 @@ type ClipReport = {
   missing: string[];
   totals: { needsLook: Record<string, string[]>; [key: string]: unknown };
 };
+/** Same as parseClipQueueDifficulties in webapp/lib/experiments/clips/queue.ts. */
+const QUEUE_DIFFICULTIES = ["A1", "A2", "B1", "B2", "C1", "C2"];
+const QUEUE_DIFFICULTY_GROUPS: Record<string, string[]> = {
+  beginner: ["A1", "A2"],
+  intermediate: ["B1"],
+  advanced: ["B2", "C1", "C2"],
+};
+function parseClipQueueDifficulties(value: string): string[] {
+  const levels = new Set<string>();
+  for (const part of value.split(",").map((s) => s.trim()).filter(Boolean)) {
+    const group = QUEUE_DIFFICULTY_GROUPS[part.toLowerCase()];
+    if (group) group.forEach((l) => levels.add(l));
+    else if (QUEUE_DIFFICULTIES.includes(part.toUpperCase())) levels.add(part.toUpperCase());
+    else throw new Error(`Unknown difficulty "${part}": use beginner / intermediate / advanced or A1–C2.`);
+  }
+  if (levels.size === 0) throw new Error(`No difficulty in "${value}".`);
+  return [...levels];
+}
+
 type QueueRow = {
   videoId: string;
   title: string;
@@ -138,6 +157,8 @@ type QueueRow = {
   source: string;
   status: "queued" | "skipped";
   note?: string;
+  difficulty?: string;
+  difficultyFrom?: "video" | "channel";
   flags: string[];
   progress: "none" | "fetching" | "clipped";
   clipIds: string[];
@@ -952,8 +973,12 @@ export function registerClipTools(server: McpServer) {
     {
       title: "List clip queue",
       description:
-        "The Shorts queue clips are made from, best first (no warnings, then channels the competitor used most, then shorter). Each row: status (queued / skipped, with note), progress (none / fetching / clipped, with clip ids), warnings (no duration, under 20 s, outside the feed's length, no Japanese in title, music/ASMR title). Default shows To do: queued, not yet clipped. Also returns counts.",
+        "The Shorts queue clips are made from, best first (no warnings, then channels the competitor used most, then shorter). Each row: status (queued / skipped, with note), progress (none / fetching / clipped, with clip ids), warnings (no duration, under 20 s, outside the feed's length, no Japanese in title, music/ASMR title), difficulty (soft CEFR hint from the local dump: the video's own, or its channel's usual level; absent = unknown). Default shows To do: queued, not yet clipped. Also returns counts, including To do by difficulty.",
       inputSchema: {
+        difficulty: z
+          .string()
+          .optional()
+          .describe('Only these levels: "beginner" (A1, A2), "intermediate" (B1), "advanced" (B2+), or levels like "A1,A2".'),
         status: z.enum(["queued", "skipped", "any"]).default("queued"),
         progress: z.enum(["none", "fetching", "clipped", "any"]).default("none"),
         flagged: z.boolean().optional().describe("true = only rows with warnings; false = only clean rows."),
@@ -970,13 +995,21 @@ export function registerClipTools(server: McpServer) {
         );
         const ch = args.channel?.toLowerCase();
         const q = args.search?.toLowerCase();
+        const levels = args.difficulty ? parseClipQueueDifficulties(args.difficulty) : null;
         const filtered = rows
+          .filter((r) => !levels || (r.difficulty !== undefined && levels.includes(r.difficulty)))
           .filter((r) => args.status === "any" || r.status === args.status)
           .filter((r) => args.progress === "any" || r.progress === args.progress)
           .filter((r) => args.flagged === undefined || (r.flags.length > 0) === args.flagged)
           .filter((r) => !ch || r.channelName.toLowerCase().includes(ch) || (r.channelId ?? "").toLowerCase() === ch)
           .filter((r) => !q || r.title.toLowerCase().includes(q) || r.videoId.toLowerCase().includes(q));
         const count = (pred: (r: QueueRow) => boolean) => rows.filter(pred).length;
+        const toDoByDifficulty: Record<string, number> = {};
+        for (const r of rows) {
+          if (r.status !== "queued" || r.progress !== "none") continue;
+          const key = r.difficulty ?? "unknown";
+          toDoByDifficulty[key] = (toDoByDifficulty[key] ?? 0) + 1;
+        }
         return jsonResult({
           counts: {
             total: rows.length,
@@ -986,6 +1019,7 @@ export function registerClipTools(server: McpServer) {
             clipped: count((r) => r.progress === "clipped"),
             skipped: count((r) => r.status === "skipped"),
             channels,
+            toDoByDifficulty,
           },
           matched: filtered.length,
           rows: filtered.slice(args.offset, args.offset + args.limit).map((r) => ({
@@ -994,6 +1028,7 @@ export function registerClipTools(server: McpServer) {
             channel: r.channelName,
             channelId: r.channelId,
             durationSec: r.durationSec,
+            ...(r.difficulty ? { difficulty: r.difficulty, difficultyFrom: r.difficultyFrom } : {}),
             status: r.status,
             ...(r.note ? { note: r.note } : {}),
             progress: r.progress,
@@ -1042,25 +1077,34 @@ export function registerClipTools(server: McpServer) {
       title: "Make a batch of clips from the queue",
       description: [
         "Runs `pnpm clip:queue-batch` as a background job: picks the next Shorts in To do (no warnings, one per channel, untried channels first), fetches their audio on this machine (yt-dlp + ffmpeg), runs every step, and reports level, feed verdict, timing and cost. Shorts whose audio can't be fetched are skipped in the queue.",
-        "channel: take several from one channel instead (name substring or channel id; warnings don't hold them back, only length over 120 s). dryRun: only show the picks. resume: finish clips a stopped run left half-done (ignores count/channel).",
+        "channel: take several from one channel instead (name substring or channel id; warnings don't hold them back, only length over 120 s; feed-length Shorts first). dryRun: only show the picks. resume: finish clips a stopped run left half-done (ignores count/channel/difficulty).",
+        'difficulty: only Shorts with that soft difficulty hint: "beginner" (A1, A2), "intermediate" (B1), "advanced" (B2+), or levels like "A1,A2". Combines with channel. Shorts with no difficulty never match; the English-title warning doesn\'t hold them back. Run `pnpm clip:queue-difficulty <dump> --write` after adding Shorts so new ones get one.',
         "Takes minutes (about 1–2 min per clip at concurrency 5). Poll get_clip_job; the result has a structured report of the clips made.",
       ].join("\n"),
       inputSchema: {
         count: z.number().int().min(1).max(50).default(5),
         channel: z.string().optional(),
+        difficulty: z.string().optional(),
         dryRun: z.boolean().default(false),
         resume: z.boolean().default(false),
         concurrency: z.number().int().min(1).max(8).default(5),
         waitSeconds: waitSecondsSchema(0),
       },
     },
-    async ({ count, channel, dryRun, resume, concurrency, waitSeconds }) => {
+    async ({ count, channel, difficulty, dryRun, resume, concurrency, waitSeconds }) => {
       try {
+        // Fail here on a typo rather than inside the background job.
+        if (difficulty) parseClipQueueDifficulties(difficulty);
         const args = resume
           ? ["--resume"]
-          : [String(count), ...(channel ? ["--channel", channel] : []), ...(dryRun ? ["--dry-run"] : [])];
+          : [
+              String(count),
+              ...(channel ? ["--channel", channel] : []),
+              ...(difficulty ? ["--difficulty", difficulty] : []),
+              ...(dryRun ? ["--dry-run"] : []),
+            ];
         args.push("--concurrency", String(concurrency));
-        const job = startJob("batch", { count, channel, dryRun, resume, concurrency }, async (ctx) => {
+        const job = startJob("batch", { count, channel, difficulty, dryRun, resume, concurrency }, async (ctx) => {
           const reported: string[] = [];
           const picked: string[] = [];
           const code = await webappScript(ctx, "clip-queue-batch.ts", args, (line) => {

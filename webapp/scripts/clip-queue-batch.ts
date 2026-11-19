@@ -3,6 +3,7 @@
 //   pnpm clip:queue-batch 10              # pick 10, fetch audio, process, report
 //   pnpm clip:queue-batch 10 --dry-run    # just show which Shorts it would pick
 //   pnpm clip:queue-batch 7 --channel seju   # several from one channel (name or id contains "seju")
+//   pnpm clip:queue-batch 10 --difficulty beginner   # only Shorts the dump rated A1/A2 (or "A2,B1"; see queue.ts)
 //   pnpm clip:queue-batch --resume        # finish clips a stopped run left half-done
 //   pnpm clip:queue-batch --report short-abc,short-def
 //
@@ -22,7 +23,14 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { runCost } from "../lib/experiments/clips/usage-cost";
 import type { ClipDraft, ClipSummary, ClipUsageRun } from "../lib/experiments/clips/types";
-import { clipQueueClipId, type ClipQueueRow } from "../lib/experiments/clips/queue";
+import {
+  NO_JAPANESE_TITLE_FLAG,
+  clipQueueClipId,
+  parseClipQueueDifficulties,
+  type ClipQueueDifficulty,
+  type ClipQueueRow,
+} from "../lib/experiments/clips/queue";
+import { FEED_MIN_SECONDS } from "../lib/experiments/clips/feed";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(name);
@@ -65,22 +73,25 @@ function pickFromChannel(rows: ClipQueueRow[], count: number, match: string): Cl
   const needle = match.toLowerCase();
   // You asked for this channel, so warnings (a title that says ASMR, a long
   // Short) don't hold a Short back; only one that would be cut in two does.
-  return rows
-    .filter(
-      (r) =>
-        r.progress === "none" &&
-        r.status === "queued" &&
-        (r.channelName.toLowerCase().includes(needle) || (r.channelId ?? "").toLowerCase() === needle) &&
-        (r.durationSec ?? 0) <= SPLITS_AT_SECONDS
-    )
-    .slice(0, count);
+  // Ones long enough for the feed go first (the queue order is shortest first).
+  const feedLength = (r: ClipQueueRow) => (r.durationSec ?? 0) >= FEED_MIN_SECONDS;
+  const matches = rows.filter(
+    (r) =>
+      r.progress === "none" &&
+      r.status === "queued" &&
+      (r.channelName.toLowerCase().includes(needle) || (r.channelId ?? "").toLowerCase() === needle) &&
+      (r.durationSec ?? 0) <= SPLITS_AT_SECONDS
+  );
+  return [...matches.filter(feedLength), ...matches.filter((r) => !feedLength(r))].slice(0, count);
 }
 
-function pick(rows: ClipQueueRow[], count: number): ClipQueueRow[] {
+function pick(rows: ClipQueueRow[], count: number, byDifficulty: boolean): ClipQueueRow[] {
   const channel = (r: ClipQueueRow) => r.channelId ?? r.channelName;
   // A channel counts as tried once any of its Shorts was clipped or skipped.
   const tried = new Set(rows.filter((r) => r.progress !== "none" || r.status === "skipped").map(channel));
-  const todo = rows.filter((r) => r.progress === "none" && r.status === "queued" && r.flags.length === 0);
+  // Picking by difficulty mostly means learner channels, whose titles are in English.
+  const blocking = (r: ClipQueueRow) => (byDifficulty ? r.flags.filter((f) => f !== NO_JAPANESE_TITLE_FLAG) : r.flags);
+  const todo = rows.filter((r) => r.progress === "none" && r.status === "queued" && blocking(r).length === 0);
   const picked: ClipQueueRow[] = [];
   const used = new Set<string>();
   // Untried channels first, then channels already tried; never two from one channel in a batch.
@@ -245,12 +256,20 @@ async function main() {
   }
 
   const count = Number(args.find((a) => /^\d+$/.test(a)) ?? 5);
-  const { rows } = await api<{ rows: ClipQueueRow[] }>("/api/experiments/clip-queue");
+  const { rows: allRows } = await api<{ rows: ClipQueueRow[] }>("/api/experiments/clip-queue");
+  const difficultyOption = option("--difficulty");
+  const levels: ClipQueueDifficulty[] | null = difficultyOption ? parseClipQueueDifficulties(difficultyOption) : null;
+  // Unrated Shorts never match a difficulty.
+  const rows = levels ? allRows.filter((r) => r.difficulty && levels.includes(r.difficulty)) : allRows;
+  if (levels) console.log(`Difficulty ${levels.join(", ")}: ${rows.filter((r) => r.progress === "none" && r.status === "queued").length} in To do.`);
   const channelMatch = option("--channel");
-  const picked = channelMatch ? pickFromChannel(rows, count, channelMatch) : pick(rows, count);
+  const picked = channelMatch ? pickFromChannel(rows, count, channelMatch) : pick(rows, count, levels !== null);
   if (picked.length === 0) return console.log("Nothing left in To do.");
   console.log(`\nPicked ${picked.length}:`);
-  for (const r of picked) console.log(`  ${r.videoId}  ${r.channelName} · ${r.durationSec ?? "?"} s · ${r.title.slice(0, 50)}`);
+  for (const r of picked) {
+    const level = r.difficulty ? ` · ${r.difficulty}${r.difficultyFrom === "channel" ? " (channel)" : ""}` : "";
+    console.log(`  ${r.videoId}  ${r.channelName} · ${r.durationSec ?? "?"} s${level} · ${r.title.slice(0, 50)}`);
+  }
   if (flag("--dry-run")) return;
 
   console.log("\nSaving pending clips…");

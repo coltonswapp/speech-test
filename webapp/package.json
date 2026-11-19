@@ -24,6 +24,7 @@
     "clip:queue-seed": "dotenv -e .env.local -- tsx scripts/clip-queue-seed.ts",
     "clip:index-backfill": "dotenv -e .env.local -- tsx scripts/clip-index-backfill.ts",
     "clip:queue-batch": "dotenv -e .env.local -- tsx scripts/clip-queue-batch.ts",
+    "clip:queue-difficulty": "dotenv -e .env.local -- tsx scripts/clip-queue-difficulty.ts",
     "clip:asr-compare": "dotenv -e .env.local -- tsx scripts/clip-asr-compare.ts",
     "clip:tag": "dotenv -e .env.local -- tsx scripts/clip-tag.ts",
     "clip:video-info": "dotenv -e .env.local -- tsx scripts/clip-video-info.ts",

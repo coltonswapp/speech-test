@@ -14,6 +14,16 @@
 				<string>com.googleusercontent.apps.901877607381-p68cprt1aojdf39148eg4ktp9096pvre</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>com.Swappfunc.shizen.clips</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>shizen</string>
+			</array>
+		</dict>
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>

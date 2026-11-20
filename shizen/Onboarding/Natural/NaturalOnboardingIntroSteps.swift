@@ -14,9 +14,23 @@ import UIKit
 
 // MARK: - Hello
 
-final class NaturalIntroStepViewController: NaturalStepViewController {
+class NaturalIntroStepViewController: NaturalStepViewController {
 
     override var progressBeatCount: Int { 4 }
+
+    /// Hana's last set, after the level pick: what the next screen is about to show.
+    var ideaLines: [String] {
+        [
+            "Here's something most apps won't tell you.",
+            "The Japanese in textbooks isn't the Japanese people speak. Real speech is squashed, shortened, and fast.",
+            "That's why real conversations sound like noise at first. Let me show you.",
+        ]
+    }
+    var ideaCTA: String { "Show me" }
+    /// The level cards, in order.
+    var levelOptions: [(level: TutorLevel, title: String)] {
+        TutorLevel.allCases.map { ($0, $0.title) }
+    }
 
     private var chat: TutorChatView?
     private let composer = TutorNameComposer()
@@ -126,10 +140,10 @@ final class NaturalIntroStepViewController: NaturalStepViewController {
     }
 
     private func showLevelCards() {
-        let cards = TutorLevel.allCases.map { level in
+        let cards = levelOptions.map { option in
             let card = OnboardingSummaryCard()
-            card.text = level.title
-            card.tag = level.rawValue
+            card.text = option.title
+            card.tag = option.level.rawValue
             card.addTarget(self, action: #selector(levelCardTapped(_:)), for: .touchUpInside)
             return card
         }
@@ -151,17 +165,15 @@ final class NaturalIntroStepViewController: NaturalStepViewController {
         }
     }
 
-    /// Second set, from a clean slate: the setup for Textbooks vs. real life.
+    /// Second set, from a clean slate: by default the setup for Textbooks vs. real life.
     private func playIdea() {
         guard let chat else { return }
         advanceProgressBeat(to: 3)
+        let lines = ideaLines.map { TutorChatView.Message.tutorText($0) }
+        let cta = ideaCTA
         timeline.after(0.2) { [weak self] in
-            chat.play([
-                .tutorText("Here's something most apps won't tell you."),
-                .tutorText("The Japanese in textbooks isn't the Japanese people speak. Real speech is squashed, shortened, and fast."),
-                .tutorText("That's why real conversations sound like noise at first. Let me show you."),
-            ]) { [weak self] in
-                self?.revealCTA("Show me")
+            chat.play(lines) { [weak self] in
+                self?.revealCTA(cta)
             }
         }
     }

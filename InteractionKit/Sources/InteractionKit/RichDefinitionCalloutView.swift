@@ -56,11 +56,8 @@ public final class RichDefinitionCalloutView: UIControl {
     }
     private var longPressGesture: UILongPressGestureRecognizer?
 
-    private static let bubbleFill = UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? .tertiarySystemBackground
-            : .secondarySystemBackground
-    }
+    private static let bubbleFill = DefinitionCalloutOutline.bubbleFill
+    private let rimLayer = DefinitionCalloutOutline.makeRimLayer()
 
     private static let horizontalPad: CGFloat = 14
     private static let verticalPad: CGFloat = 12
@@ -397,6 +394,28 @@ public final class RichDefinitionCalloutView: UIControl {
     public override func layoutSubviews() {
         super.layoutSubviews()
         updateShadowPath()
+        updateRim()
+    }
+
+    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        rimLayer.strokeColor = DefinitionCalloutOutline.rimColor(for: traitCollection).cgColor
+    }
+
+    /// Hairline rim around box + pointer: light in dark mode, faint dark in light.
+    private func updateRim() {
+        if rimLayer.superlayer !== layer {
+            layer.addSublayer(rimLayer)
+        }
+        rimLayer.strokeColor = DefinitionCalloutOutline.rimColor(for: traitCollection).cgColor
+        rimLayer.frame = bounds
+        rimLayer.path = DefinitionCalloutOutline.path(
+            container: containerView.frame,
+            cornerRadius: cornerRadius,
+            arrowMidX: arrowView.frame.midX,
+            arrowSize: arrowSize,
+            arrowPointsDown: placement == .above
+        ).cgPath
     }
 
     private func setupUI() {

@@ -118,9 +118,19 @@ final class GameCategoryTabBar: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        // The section insets (which center the first and last tabs) and every offset come
+        // from the strip's width, but a flow layout doesn't re-ask for insets when only its
+        // bounds change: after a rotation or window resize, rebuild it before re-centering.
+        let width = collectionView.bounds.width
+        if abs(width - lastLayoutWidth) > 0.5 {
+            lastLayoutWidth = width
+            collectionView.collectionViewLayout.invalidateLayout()
+            collectionView.layoutIfNeeded()
+        }
         guard !isHoldMode else { return }
         syncScrollPositionToSelection(animated: false)
     }
+    private var lastLayoutWidth: CGFloat = 0
 
     func selectTab(at index: Int, animated: Bool, playHaptic: Bool = true) {
         guard index >= 0, index < titles.count else { return }

@@ -33,7 +33,9 @@ enum ClipAmbientSettings {
 
         var defaultValue: Bool {
             switch self {
-            case .enabled, .thumbnailHighlight: false
+            // The ambient backdrop shipped on; the thumbnail-tinted marker is still an experiment.
+            case .enabled: true
+            case .thumbnailHighlight: false
             }
         }
     }
@@ -44,6 +46,8 @@ enum ClipAmbientSettings {
         case overscan
         case reach
         case fadeLength
+        case sideReach
+        case sideFadeLength
         case opacity
         case highlightSaturation
         case highlightOpacity
@@ -55,6 +59,8 @@ enum ClipAmbientSettings {
             case .overscan: "Overscan"
             case .reach: "Reach below player (× player height)"
             case .fadeLength: "Fade length (× player height)"
+            case .sideReach: "Side by side: reach past player (× player width)"
+            case .sideFadeLength: "Side by side: fade length (× player width)"
             case .opacity: "Glow opacity"
             case .highlightSaturation: "Thumbnail highlight saturation"
             case .highlightOpacity: "Thumbnail highlight opacity"
@@ -68,6 +74,8 @@ enum ClipAmbientSettings {
             case .overscan: 1 ... 2.5
             case .reach: 0 ... 1.5
             case .fadeLength: 0 ... 1.5
+            case .sideReach: 0 ... 1
+            case .sideFadeLength: 0 ... 1.5
             case .opacity: 0 ... 1
             case .highlightSaturation: 0.2 ... 1
             case .highlightOpacity: 0.2 ... 0.9
@@ -82,6 +90,9 @@ enum ClipAmbientSettings {
             case .overscan: 1.25
             case .reach: 0
             case .fadeLength: 0.8
+            // Untuned: ends a little past the player's trailing edge, short of the transcript.
+            case .sideReach: 0.05
+            case .sideFadeLength: 0.85
             case .opacity: 1
             // Untuned starting point: about as strong as the yellow marker (0.55).
             case .highlightSaturation: 0.7
@@ -92,7 +103,7 @@ enum ClipAmbientSettings {
         func format(_ value: Float) -> String {
             switch self {
             case .blurRadius: String(format: "%.0f pt", value)
-            case .overscan, .reach, .fadeLength: String(format: "%.2f×", value)
+            case .overscan, .reach, .fadeLength, .sideReach, .sideFadeLength: String(format: "%.2f×", value)
             default: String(format: "%.0f%%", value * 100)
             }
         }
@@ -157,6 +168,9 @@ final class ClipAmbientBackdropView: UIView {
     private var thumbnailVideoID: String?
     private var thumbnailTask: Task<Void, Never>?
     private var lastSourceFrame: CGRect?
+    /// Side-by-side layout: the glow stays left of this x, fading out horizontally.
+    /// Nil: covers the full width and fades out vertically below the player.
+    private var lastCoverageMaxX: CGFloat?
 
     init() {
         super.init(frame: .zero)
@@ -187,7 +201,7 @@ final class ClipAmbientBackdropView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        if let lastSourceFrame { track(sourceFrame: lastSourceFrame) }
+        if let lastSourceFrame { track(sourceFrame: lastSourceFrame, coverageMaxX: lastCoverageMaxX) }
     }
 
     /// Re-reads `ClipAmbientSettings` (live while tuning).
@@ -197,7 +211,7 @@ final class ClipAmbientBackdropView: UIView {
         glow.alpha = CGFloat(ClipAmbientSettings[.opacity])
         wash.backgroundColor = ExperimentPalette.pageBackground
             .withAlphaComponent(CGFloat(ClipAmbientSettings[.washAlpha]))
-        if let lastSourceFrame { track(sourceFrame: lastSourceFrame) }
+        if let lastSourceFrame { track(sourceFrame: lastSourceFrame, coverageMaxX: lastCoverageMaxX) }
     }
 
     /// Glow runs from the top of the page to `reach` player-heights below the
@@ -207,7 +221,25 @@ final class ClipAmbientBackdropView: UIView {
         return min(bounds.height, max(sourceFrame.maxY + reach, 1))
     }
 
-    private func updateMask(sourceFrame: CGRect) {
+    /// Side by side: the glow runs from the leading edge to `sideReach` player-widths past
+    /// the player (never past `coverageMaxX`), fading over the last `sideFadeLength`
+    /// player-widths.
+    private func coveredWidth(for sourceFrame: CGRect, coverageMaxX: CGFloat?) -> CGFloat {
+        guard let coverageMaxX else { return bounds.width }
+        let reach = sourceFrame.width * CGFloat(ClipAmbientSettings[.sideReach])
+        return min(bounds.width, coverageMaxX, max(sourceFrame.maxX + reach, 1))
+    }
+
+    private func updateMask(sourceFrame: CGRect, coverageMaxX: CGFloat?) {
+        if coverageMaxX != nil {
+            let covered = coveredWidth(for: sourceFrame, coverageMaxX: coverageMaxX)
+            let fade = min(sourceFrame.width * CGFloat(ClipAmbientSettings[.sideFadeLength]), covered)
+            coverageMask.axis = .horizontal
+            coverageMask.frame = CGRect(x: 0, y: 0, width: covered, height: bounds.height)
+            coverageMask.setFade(start: Double((covered - fade) / covered))
+            return
+        }
+        coverageMask.axis = .vertical
         let covered = coveredHeight(for: sourceFrame)
         let fade = min(sourceFrame.height * CGFloat(ClipAmbientSettings[.fadeLength]), covered)
         coverageMask.frame = CGRect(x: 0, y: 0, width: bounds.width, height: covered)
@@ -247,13 +279,17 @@ final class ClipAmbientBackdropView: UIView {
 
     /// Centers the glow on the player and scales it until it covers the masked
     /// (top) part of the page. `sourceFrame` is in this view's coordinates.
-    func track(sourceFrame: CGRect) {
+    /// With `coverageMaxX` (side-by-side layout), the glow stays left of that x and
+    /// fades out horizontally instead of below the player.
+    func track(sourceFrame: CGRect, coverageMaxX: CGFloat? = nil) {
         lastSourceFrame = sourceFrame
+        lastCoverageMaxX = coverageMaxX
         guard sourceFrame.width > 0, sourceFrame.height > 0, bounds.width > 0, bounds.height > 0 else { return }
-        updateMask(sourceFrame: sourceFrame)
-        let coveredHeight = coveredHeight(for: sourceFrame)
+        updateMask(sourceFrame: sourceFrame, coverageMaxX: coverageMaxX)
+        let coveredWidth = coveredWidth(for: sourceFrame, coverageMaxX: coverageMaxX)
+        let coveredHeight = coverageMaxX == nil ? coveredHeight(for: sourceFrame) : bounds.height
         let center = CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)
-        let reachX = max(center.x, bounds.width - center.x) * 2
+        let reachX = max(center.x, coveredWidth - center.x) * 2
         let reachY = max(center.y, coveredHeight - center.y) * 2
         let scale = max(1, max(reachX / sourceFrame.width, reachY / sourceFrame.height))
             * CGFloat(ClipAmbientSettings[.overscan])
@@ -266,10 +302,23 @@ final class ClipAmbientBackdropView: UIView {
     }
 }
 
-/// Opaque at the top, fading to clear at the bottom edge.
+/// Opaque at the top (or leading edge), fading to clear at the bottom (or trailing) edge.
 private final class ClipAmbientGradientView: UIView {
+    enum Axis { case vertical, horizontal }
+
     override class var layerClass: AnyClass { CAGradientLayer.self }
     private var gradient: CAGradientLayer { layer as! CAGradientLayer }
+
+    var axis: Axis = .vertical {
+        didSet {
+            guard axis != oldValue else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            gradient.startPoint = axis == .vertical ? CGPoint(x: 0.5, y: 0) : CGPoint(x: 0, y: 0.5)
+            gradient.endPoint = axis == .vertical ? CGPoint(x: 0.5, y: 1) : CGPoint(x: 1, y: 0.5)
+            CATransaction.commit()
+        }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)

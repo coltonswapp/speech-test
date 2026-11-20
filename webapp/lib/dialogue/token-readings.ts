@@ -5,6 +5,8 @@
  */
 
 import { createHash } from "node:crypto";
+import { validatedTokens } from "@/lib/dialogue/japanese-segmentation";
+import type { TokenizedToken } from "@/lib/dialogue/types";
 
 /** app_settings key for a tokenized line; bump the version when the prompt changes. */
 export const TOKENIZE_CACHE_VERSION = 2;
@@ -65,4 +67,22 @@ export function readingsForSegments(
     if (covered.some((span) => !span.reading)) return undefined;
     return covered.map((span) => span.reading).join("");
   });
+}
+
+/**
+ * A model's raw tokens as the app stores them: validated segments (they must
+ * spell out the line; see validatedTokens) plus whichever readings survive the
+ * split/merge pass. null when the tokens don't fit the line.
+ */
+export function tokensWithReadings(raw: RawToken[], text: string): TokenizedToken[] | null {
+  const segments = validatedTokens(
+    raw.map((token) => token.text),
+    text
+  );
+  if (!segments || segments.length === 0) return null;
+  const readings = readingsForSegments(segments, rawTokenSpans(raw, text));
+  return segments.map((segment, i) => ({
+    text: segment.text,
+    ...(readings[i] ? { reading: readings[i] } : {}),
+  }));
 }

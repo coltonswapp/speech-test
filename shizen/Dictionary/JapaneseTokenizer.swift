@@ -3,6 +3,7 @@
 //  shizen
 //
 
+import Dictionary
 import Foundation
 import IPADic
 import Mecab_Swift
@@ -590,6 +591,14 @@ extension JapaneseTokenizer {
             let wordSurface = parent.map(\.base) ?? rubySurface
             let wordReading = parent?.reading ?? annotation.reading
             let wordDictionaryForm = parent?.dictionaryForm
+            // 〜方 after a verb stem is "way of doing" (上げ方, 読み方): always かた, never ほう.
+            if rubySurface == "方",
+               let previous = tokenAnnotations.last(where: { $0.range.upperBound <= annotation.range.lowerBound }),
+               previous.range.upperBound == annotation.range.lowerBound,
+               previous.partOfSpeech == .verb {
+                result.append(FuriganaAnnotation(reading: "かた", range: annotation.range))
+                continue
+            }
             let reading = JMDictStore.shared.preferredKanjiRubyReading(
                 wordSurface: wordSurface,
                 wordReading: wordReading,
@@ -604,6 +613,7 @@ extension JapaneseTokenizer {
                 : annotation
             result.append(contentsOf: splitMixedKanjiKanaRuby(resolved, in: text))
         }
+        result = applyNumeralCounterSoundChanges(result, in: text)
         furiganaAnnotationsCache.setObject(
             FuriganaAnnotationsBox(result.map { (reading: $0.reading, nsRange: NSRange($0.range, in: text)) }),
             forKey: cacheKey
@@ -683,9 +693,13 @@ extension JapaneseTokenizer {
         return index
     }
 
+    /// Only the last token may carry okurigana. A kana tail mid-run (上げ+方) would join
+    /// the kanji around it into an unrelated headword (上方/じょうほう) whose ruby then
+    /// spans the kana too.
     private static func isContiguousKanjiCompoundRun(_ run: [Annotation]) -> Bool {
         guard run.count >= 2 else { return false }
         guard run.allSatisfy({ !leadingKanjiBlock(in: $0.base).isEmpty }) else { return false }
+        guard run.dropLast().allSatisfy({ isKanjiOnlySurface($0.base) }) else { return false }
         for k in 1..<run.count where run[k - 1].range.upperBound != run[k].range.lowerBound {
             return false
         }
@@ -841,6 +855,77 @@ extension JapaneseTokenizer {
                 || (0xFF66...0xFF9D).contains(value)
                 || value == 0x30FC
         }
+    }
+
+    // MARK: - Numeral + counter sound changes
+
+    /// Numerals that shorten (いち → いっ) before a counter, and the counter rows that
+    /// trigger it: k/s/t/h for 一 八 十, k/h only for 六 百 (六歳 stays ろくさい).
+    private static let numeralSokuon: [Character: (plain: String, short: String, rows: String)] = [
+        "一": ("いち", "いっ", "kst h"),
+        "八": ("はち", "はっ", "kst h"),
+        "十": ("じゅう", "じゅっ", "kst h"),
+        "六": ("ろく", "ろっ", "k h"),
+        "百": ("ひゃく", "ひゃっ", "k h"),
+    ]
+
+    /// After 三 / 何 the counter voices, but not the same way for every counter
+    /// (三本 さんぼん, 三分 さんぷん, 三階 さんがい), so only these are changed.
+    private static let sanNanCounterReadings: [Character: (plain: String, changed: String)] = [
+        "本": ("ほん", "ぼん"), "匹": ("ひき", "びき"), "杯": ("はい", "ばい"),
+        "百": ("ひゃく", "びゃく"), "千": ("せん", "ぜん"), "階": ("かい", "がい"),
+        "軒": ("けん", "げん"), "足": ("そく", "ぞく"), "分": ("ふん", "ぷん"),
+        "泊": ("はく", "ぱく"), "歩": ("ほ", "ぽ"),
+    ]
+
+    private static let handakuten: [Character: Character] = ["は": "ぱ", "ひ": "ぴ", "ふ": "ぷ", "へ": "ぺ", "ほ": "ぽ"]
+
+    private static func kanaRow(_ kana: Character) -> Character? {
+        if "かきくけこ".contains(kana) { return "k" }
+        if "さしすせそ".contains(kana) { return "s" }
+        if "たちつてと".contains(kana) { return "t" }
+        if "はひふへほ".contains(kana) { return "h" }
+        return nil
+    }
+
+    /// MeCab reads a numeral and its counter as separate words (一/いち + 頭/とう), so the
+    /// ruby says いちとう where the word is いっとう. Fix the sound change when the two
+    /// rubies sit side by side: 一頭 いっとう, 八本 はっぽん, 六個 ろっこ, 三本 さんぼん.
+    /// Words MeCab already reads whole (十分, 一生) are one ruby and are left alone.
+    private static func applyNumeralCounterSoundChanges(
+        _ annotations: [FuriganaAnnotation],
+        in text: String
+    ) -> [FuriganaAnnotation] {
+        var out = annotations.sorted { $0.range.lowerBound < $1.range.lowerBound }
+        guard out.count > 1 else { return out }
+        for i in 0..<(out.count - 1) {
+            let numeral = out[i]
+            let counter = out[i + 1]
+            let numeralSurface = text[numeral.range]
+            guard numeralSurface.count == 1, let n = numeralSurface.first,
+                  numeral.range.upperBound == counter.range.lowerBound,
+                  let c = text[counter.range].first,
+                  let counterKana = counter.reading.first
+            else { continue }
+            // 十三 / 八十 are one number, not a numeral and its counter.
+            if "〇一二三四五六七八九十".contains(c) { continue }
+
+            if let rule = numeralSokuon[n], numeral.reading == rule.plain,
+               let row = kanaRow(counterKana), rule.rows.contains(row) {
+                out[i] = FuriganaAnnotation(reading: rule.short, range: numeral.range)
+                if row == "h", let p = handakuten[counterKana] {
+                    out[i + 1] = FuriganaAnnotation(
+                        reading: String(p) + counter.reading.dropFirst(),
+                        range: counter.range
+                    )
+                }
+            } else if (n == "三" && numeral.reading == "さん") || (n == "何" && numeral.reading == "なん"),
+                      text[counter.range].count == 1,
+                      let change = sanNanCounterReadings[c], counter.reading == change.plain {
+                out[i + 1] = FuriganaAnnotation(reading: change.changed, range: counter.range)
+            }
+        }
+        return out
     }
 
     private static func startsWithNumeral(_ s: String) -> Bool {

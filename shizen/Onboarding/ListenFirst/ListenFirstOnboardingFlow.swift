@@ -55,6 +55,10 @@ final class ListenFirstPaywallStepViewController: OnboardingViewController {
     override var locksOnboardingBack: Bool { true }
     override var hidesOnboardingProgress: Bool { true }
 
+    /// Access moves on to the next step instead of finishing setup (the immersion flow's
+    /// getting-ready screen comes after it).
+    var continuesToNextStep = false
+
     private let paywall = PaywallBoldHeroGlassViewController(
         provider: MockPaywallProvider(),
         headline: .compact,
@@ -67,7 +71,11 @@ final class ListenFirstPaywallStepViewController: OnboardingViewController {
             if !coordinator.isPreviewMode {
                 ProMembership.recordAccess(for: package)
             }
-            coordinator.finishSetup()
+            if self?.continuesToNextStep == true {
+                coordinator.next()
+            } else {
+                coordinator.finishSetup()
+            }
         }
         addChild(paywall)
         paywall.view.translatesAutoresizingMaskIntoConstraints = false

@@ -80,6 +80,13 @@ private struct LessonPathConfiguration: Equatable {
     fileprivate var bottomInset: CGFloat { 48 }
     fileprivate var horizontalInset: CGFloat { 22 }
 
+    /// The path's centered column within the collection view's `width`. Wide
+    /// windows (iPad) keep the path, headers and banners at phone-like proportions
+    /// instead of spreading them across the screen.
+    static func column(inWidth width: CGFloat) -> (minX: CGFloat, width: CGFloat) {
+        ContentColumn.column(inWidth: width, maxWidth: ContentColumn.lessonPathWidth)
+    }
+
     func corridorWidth(for width: CGFloat) -> CGFloat {
         width * corridorFraction
     }
@@ -364,9 +371,23 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
         ])
     }
 
+    private var lastLaidOutWidth: CGFloat = 0
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         updateHeaderBannerLayout()
+        // Rotation or a window resize moves the centered column: the stones' title
+        // widths and the open lesson card were measured against the old one.
+        let width = collectionView.bounds.width
+        if width > 0, abs(width - lastLaidOutWidth) > 0.5 {
+            let hadWidth = lastLaidOutWidth > 0
+            lastLaidOutWidth = width
+            if hadWidth {
+                collectionView.layoutIfNeeded()
+                reconfigureVisibleStones()
+                if isLessonTipPresented { updateLessonTipPosition() }
+            }
+        }
         let bottomInset = view.safeAreaInsets.bottom
         if managesContentInsets {
             let topInset = view.safeAreaInsets.top + 12
@@ -473,15 +494,16 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
     private func updateHeaderBannerLayout() {
         var shouldInvalidate = false
         if let headerBannerView, collectionView.bounds.width > 0 {
+            let column = LessonPathConfiguration.column(inWidth: collectionView.bounds.width)
             let inset: CGFloat = 16
-            let width = max(0, collectionView.bounds.width - inset * 2)
+            let width = max(0, column.width - inset * 2)
             let height = headerBannerView.systemLayoutSizeFitting(
                 CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
                 withHorizontalFittingPriority: .required,
                 verticalFittingPriority: .fittingSizeLevel
             ).height
             headerBannerView.layer.zPosition = 20
-            headerBannerView.frame = CGRect(x: inset, y: 16, width: width, height: height)
+            headerBannerView.frame = CGRect(x: column.minX + inset, y: 16, width: width, height: height)
             let bannerHeight = 16 + height + 24
             let cardBottomY = 16 + height
             if abs(sineLayout.bannerHeight - bannerHeight) >= 0.5 {
@@ -515,8 +537,9 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
             return true
         }
 
+        let column = LessonPathConfiguration.column(inWidth: collectionView.bounds.width)
         let inset: CGFloat = 16
-        let width = max(0, collectionView.bounds.width - inset * 2)
+        let width = max(0, column.width - inset * 2)
         let stripH = compactHeaderBannerView.systemLayoutSizeFitting(
             CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
             withHorizontalFittingPriority: .required,
@@ -532,7 +555,7 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
         let progress = sineLayout.compactStripProgress(pinY: pinY)
         compactHeaderBannerView.layer.zPosition = 40
         compactHeaderBannerView.frame = CGRect(
-            x: inset,
+            x: column.minX + inset,
             y: pinY - stripH + progress * stripH,
             width: width,
             height: stripH
@@ -569,7 +592,7 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
                 lessonIndex: indexPath.item
             ),
             padding: configuration.titleLeadingInset(),
-            trailingMaxX: configuration.titleColumnMaxX(width: collectionView.bounds.width),
+            trailingMaxX: titleColumnMaxX(),
             covered: selected,
             titleFontSize: configuration.titleFontSize,
             subtitleFontSize: configuration.subtitleFontSize
@@ -681,7 +704,8 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
             return
         }
 
-        let cardWidth = min(268, collectionView.bounds.width - 48)
+        let column = LessonPathConfiguration.column(inWidth: collectionView.bounds.width)
+        let cardWidth = min(268, column.width - 48)
         let tipSize = lessonTipView.systemLayoutSizeFitting(
             CGSize(width: cardWidth, height: UIView.layoutFittingCompressedSize.height),
             withHorizontalFittingPriority: .required,
@@ -705,7 +729,7 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
             ? stoneFrame.maxY + gap
             : stoneFrame.minY - tipSize.height - gap
         var originX = stoneFrame.midX - tipSize.width / 2
-        originX = min(max(20, originX), collectionView.bounds.width - tipSize.width - 20)
+        originX = min(max(column.minX + 20, originX), column.minX + column.width - tipSize.width - 20)
         let targetFrame = CGRect(origin: CGPoint(x: originX, y: originY), size: tipSize)
         let flipped = tipPlacedBelow != nil && tipPlacedBelow != placeBelow
         tipPlacedBelow = placeBelow
@@ -737,10 +761,15 @@ final class LanguageProgressSnakeExperimentViewController: UIViewController {
         restackLessonTip()
     }
 
+    /// Right edge of the lesson titles, in collection view coordinates.
+    private func titleColumnMaxX() -> CGFloat {
+        let column = LessonPathConfiguration.column(inWidth: collectionView.bounds.width)
+        return column.minX + configuration.titleColumnMaxX(width: column.width)
+    }
+
     private func updateTitleColumnLessonCardPosition(stoneFrame: CGRect) {
-        let width = collectionView.bounds.width
         let cardX = stoneFrame.maxX + configuration.titleLeadingInset()
-        let cardWidth = max(0, configuration.titleColumnMaxX(width: width) - cardX)
+        let cardWidth = max(0, titleColumnMaxX() - cardX)
         lessonTipView.setArrowEdge(.none)
         let tipSize = lessonTipView.systemLayoutSizeFitting(
             CGSize(width: cardWidth, height: UIView.layoutFittingCompressedSize.height),
@@ -1205,7 +1234,9 @@ private final class LessonSinePathLayout: UICollectionViewLayout {
 
     override func prepare() {
         guard let collectionView else { return }
-        let width = collectionView.bounds.width
+        let fullWidth = collectionView.bounds.width
+        let column = LessonPathConfiguration.column(inWidth: fullWidth)
+        let width = column.width
         let size = configuration.nodeSize
         let halo = LessonPathConfiguration.haloInset
         let cellSize = size + halo * 2
@@ -1227,7 +1258,7 @@ private final class LessonSinePathLayout: UICollectionViewLayout {
                 with: IndexPath(item: 0, section: section)
             )
             header.frame = CGRect(
-                x: 16,
+                x: column.minX + 16,
                 y: yCursor,
                 width: max(0, width - 32),
                 height: LessonPathConfiguration.headerHeight
@@ -1244,10 +1275,11 @@ private final class LessonSinePathLayout: UICollectionViewLayout {
                 let locked = lockedFlags[safe: globalIndex] ?? false
                 let visualSize = locked ? size * LessonPathConfiguration.lockedScale : size
                 let center = CGPoint(
-                    x: configuration.xCenter(for: CGFloat(globalIndex), width: width),
+                    x: column.minX + configuration.xCenter(for: CGFloat(globalIndex), width: width),
                     y: yCursor + size / 2
                 )
-                stoneCenters.append(center)
+                // The path view spans the column, so its points are column-relative.
+                stoneCenters.append(CGPoint(x: center.x - column.minX, y: center.y))
                 stoneRadii.append(visualSize / 2)
 
                 let attributes = UICollectionViewLayoutAttributes(forCellWith: IndexPath(item: item, section: section))
@@ -1279,7 +1311,7 @@ private final class LessonSinePathLayout: UICollectionViewLayout {
                     forDecorationViewOfKind: UnitDividerDecorationView.kind,
                     with: IndexPath(item: 0, section: section)
                 )
-                divider.frame = CGRect(x: 0, y: yCursor, width: width, height: gap)
+                divider.frame = CGRect(x: column.minX, y: yCursor, width: width, height: gap)
                 divider.zIndex = 0
                 dividerAttributes.append(divider)
                 yCursor += gap
@@ -1291,7 +1323,7 @@ private final class LessonSinePathLayout: UICollectionViewLayout {
             forDecorationViewOfKind: PathDecorationView.kind,
             with: IndexPath(item: 0, section: 0)
         )
-        path.frame = CGRect(x: 0, y: 0, width: width, height: contentHeight)
+        path.frame = CGRect(x: column.minX, y: 0, width: width, height: contentHeight)
         path.zIndex = 0
         path.stoneCenters = stoneCenters
         path.stoneRadii = stoneRadii
@@ -1300,7 +1332,7 @@ private final class LessonSinePathLayout: UICollectionViewLayout {
         path.configuration = configuration
         pathAttributes = path
 
-        contentSize = CGSize(width: width, height: contentHeight)
+        contentSize = CGSize(width: fullWidth, height: contentHeight)
         unitLengths = lengths
     }
 

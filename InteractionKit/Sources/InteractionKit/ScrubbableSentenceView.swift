@@ -550,7 +550,7 @@ public final class ScrubbableSentenceView: UIView, UIGestureRecognizerDelegate {
 
         let pointInTextView = g.location(in: sentenceTextView)
         if sentenceTextView.bounds.contains(pointInTextView),
-           sentenceTextView.tokenIndex(at: pointInTextView) != nil {
+           sentenceTextView.tokenIndex(at: pointInTextView, requiringHit: true) != nil {
             return
         }
         dismissCalloutOnly(animated: true)

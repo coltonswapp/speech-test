@@ -12,6 +12,7 @@
 //
 
 import InteractionKit
+import NNKit
 import QuartzCore
 import UIKit
 
@@ -60,7 +61,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     private static let detentRubberBand: CGFloat = 0.25
     /// Captions fade in over the last stretch of a drag toward the full detent.
     private static let captionFadeDistance: CGFloat = 80
-    /// The transcript follows a wrapping line once the marker passes this share of the visible height.
+    /// Share of the visible transcript height the spoken line can sit in before the view
+    /// scrolls: a new line that ends below it turns the page, and so does a wrapping line's marker.
     private static let wrapFollowThreshold: CGFloat = 0.6
     /// Wrap-following holds off this long after any auto-scroll so animations don't fight.
     private static let wrapFollowSettleSeconds: CFTimeInterval = 0.4
@@ -74,6 +76,34 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     private static let infoRowBottomPadding: CGFloat = 8
     /// Landscape: gap between the player's bottom edge and the top of the transcript.
     private static let landscapeGapBelowPlayer: CGFloat = 4
+    /// Windows at least this wide and wider than tall put the player beside the
+    /// transcript (see `wantsSideBySideLayout`).
+    private static let sideBySideMinWidth: CGFloat = 500
+    /// Share of the page width for the player's column: Shorts are narrow, so the
+    /// transcript gets more; a 16:9 player gets a bit less than half.
+    private static let sideBySidePortraitColumnFraction: CGFloat = 0.45
+    /// Side by side, a 16:9 player's column is resizable: the grabber in the gutter
+    /// snaps between these shares of the page width (the first is the default).
+    /// Wider stops drop out when the video would outgrow the column's height or
+    /// squeeze the transcript under `sideBySideMinTranscriptWidth`.
+    private static let sideBySideLandscapeColumnFractions: [CGFloat] = [0.44, 0.56, 0.68]
+    private static let sideBySideMinTranscriptWidth: CGFloat = 320
+    private static let sideBySideColumnKey = "clips.sideBySideLandscapeColumnFraction"
+    private static let sideBySideColumnDidChange = Notification.Name("ClipPlayer.sideBySideColumnDidChange")
+    /// The column grabber's band in the gutter, and how far its touch target reaches past it.
+    private static let columnHandleWidth: CGFloat = 22
+    /// Side by side: smallest gap between the player and the transport bar under it.
+    private static let sideBySideGapAbovePlayerBar: CGFloat = 12
+    /// Side by side: extra room between the player's column and the transcript, on top of
+    /// the column's own side inset and the transcript's leading inset.
+    private static let sideBySideColumnGap: CGFloat = 24
+    /// iPad: the floating line-breakdown and word-detail sheets.
+    private static let floatingSheetStyle = FloatingSheetStyle(
+        corner: .bottomRight,
+        width: 450,
+        topMargin: 24,
+        edgeMargin: 16
+    )
     /// Lines fade out over this band as they scroll up to the player; the first
     /// line rests just under it. Tall enough that a line dissolves gradually
     /// rather than reading as sliced off under the grabber.
@@ -103,13 +133,43 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     private static let pageTransitionResistance: CGFloat = 0.52
     private static let seamChevronSize: CGFloat = 52
     private static let seamChevronPointSize: CGFloat = 22
-    private static let playbackRates: [Double] = [0.5, 0.75, 1, 1.25]
+    private static let playbackRates: [Double] = [0.6, 0.8, 1, 1.2, 1.4]
+    /// Remembered across clips (and launches): every player starts at the last speed picked.
+    private static let playbackRateKey = "clipPlayer.playbackRate"
+    static var preferredPlaybackRate: Double {
+        get {
+            let stored = UserDefaults.standard.double(forKey: playbackRateKey)
+            return playbackRates.contains { abs($0 - stored) < 0.01 } ? stored : 1
+        }
+        set { UserDefaults.standard.set(newValue, forKey: playbackRateKey) }
+    }
     /// Remembered across clips. Off by default: our transport bar drives playback.
     private static let showsYouTubeControlsKey = "clipPlayer.showsYouTubeControls"
+
+    /// Tapping a word for its quick definition pauses the video (default), or lets it play on.
+    private static let wordTapPausesKey = "clipPlayer.wordTapPauses"
+    private static var wordTapPauses: Bool {
+        get { UserDefaults.standard.object(forKey: wordTapPausesKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: wordTapPausesKey) }
+    }
     private static var showsYouTubeControls: Bool {
         get { UserDefaults.standard.bool(forKey: showsYouTubeControlsKey) }
         set { UserDefaults.standard.set(newValue, forKey: showsYouTubeControlsKey) }
     }
+
+    /// Furigana and English lines: remembered across clips and launches, on by default.
+    /// Changing either updates every open player (feed neighbors included).
+    private static let showsFuriganaKey = "clipPlayer.showsFurigana"
+    private static let showsEnglishKey = "clipPlayer.showsEnglish"
+    private static var prefersFurigana: Bool {
+        get { UserDefaults.standard.object(forKey: showsFuriganaKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: showsFuriganaKey) }
+    }
+    private static var prefersEnglish: Bool {
+        get { UserDefaults.standard.object(forKey: showsEnglishKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: showsEnglishKey) }
+    }
+    private static let textDisplayDidChange = Notification.Name("ClipPlayer.textDisplayDidChange")
 
     /// Experiment (options menu): highlights open from a transport-bar button as a
     /// sheet instead of a second vertical page under the transcript.
@@ -129,6 +189,12 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     /// Set by `ClipFeedViewController` before the view loads: this screen is one page of
     /// a vertical feed, so highlights always open as a sheet (the feed owns vertical paging).
     var isInFeed = false
+    /// Off when reached from Explore, a search, or a tag's list (see
+    /// `ClipFeedViewController.allowsExploring`). Set before the view loads.
+    var allowsExploring = true
+    /// Line breakdowns open as a half-height sheet instead of a push. For hosts whose
+    /// navigation stack isn't the clip's own (e.g. the clip feed inside onboarding).
+    var presentsBreakdownAsSheet = false
     /// A feed page sits at an arbitrary offset in the feed's scroll view, so its own safe
     /// area wobbles mid-swipe; the feed passes its (stable) insets instead.
     var feedSafeAreaInsets: UIEdgeInsets? {
@@ -140,7 +206,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     private var safeInsets: UIEdgeInsets { feedSafeAreaInsets ?? view.safeAreaInsets }
     /// The transcript: the feed's scroll handoff drives this as the page's inner scroll view.
     var transcriptScrollView: UIScrollView { scrollView }
-    var navigationMenuItem: UIBarButtonItem? { navigationItem.rightBarButtonItem }
+    var navigationMenuItem: UIBarButtonItem? { navigationItem.rightBarButtonItems?.first }
 
     /// Vertical drag anywhere outside the transcript (video, info row, transport bar):
     /// the feed moves its pager with the finger.
@@ -149,6 +215,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
 
     /// Feed autoplay: starts now, or as soon as the embed is ready.
     func startPlayback() {
+        applyPreferredPlaybackRate()
         playerView.play()
     }
 
@@ -222,6 +289,18 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         glyphDimension: ClipPlayerViewController.transportGlyphPointSize + 4,
         accessibilityLabel: "Highlights"
     )
+    /// Bottom-left: shows the speed ("1×") and opens the speed picker.
+    private let speedButton: UIButton = {
+        var config = UIButton.Configuration.glass()
+        config.cornerStyle = .capsule
+        config.baseForegroundColor = .label
+        config.contentInsets = .zero
+        config.titleLineBreakMode = .byClipping
+        let button = UIButton(configuration: config)
+        button.showsMenuAsPrimaryAction = true
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
     private let elapsedLabel = UILabel()
     /// Outer vertical pager under the transport bar: transcript, then highlights.
     private let outerScrollView = UIScrollView()
@@ -255,6 +334,38 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     private var edgeBelowPlayer: NSLayoutConstraint!
     private var edgeBelowHandle: NSLayoutConstraint!
     private var isPortraitLayout = false
+    /// Wide windows (iPad landscape, an open foldable): the player sits in a left
+    /// column and the transcript scrolls beside it, full height.
+    private var isSideBySideLayout = false
+    /// Player above the transcript (phones, iPad portrait, narrow windows).
+    private var stackedLayoutConstraints: [NSLayoutConstraint] = []
+    /// Player in the left column, transcript in the right.
+    private var sideBySideLayoutConstraints: [NSLayoutConstraint] = []
+    /// Side by side: the left column's room for the player, between the nav bar and transport bar.
+    private let sideBySidePlayerArea = UILayoutGuide()
+    private var sideBySidePlayerAreaTop: NSLayoutConstraint!
+    private var sideBySideTranscriptTop: NSLayoutConstraint!
+    private var sideBySidePlayerWidth: NSLayoutConstraint!
+    private var sideBySidePlayerHeight: NSLayoutConstraint!
+    /// Side by side: the player column's width, set each layout pass from the column fraction.
+    private var sideBySideColumnWidth: NSLayoutConstraint!
+    /// Side by side, 16:9 only: drag left / right to widen or narrow the player's column.
+    private let columnResizeHandle = ClipPlayerResizeHandle(axis: .horizontal)
+    /// The 16:9 column's resting stop (remembered across clips and launches).
+    private var sideBySideLandscapeFraction: CGFloat = {
+        let stored = CGFloat(UserDefaults.standard.double(forKey: ClipPlayerViewController.sideBySideColumnKey))
+        return ClipPlayerViewController.sideBySideLandscapeColumnFractions.contains { abs($0 - stored) < 0.001 }
+            ? stored
+            : ClipPlayerViewController.sideBySideLandscapeColumnFractions[0]
+    }()
+    /// Live while the column grabber is dragged or springing; nil at rest.
+    private var draggedColumnFraction: CGFloat?
+    private var columnResizeStartFraction: CGFloat = 0
+    private var isDraggingColumn = false
+    /// Transcript stack's trailing pin; swapped for `frozenTranscriptWidth` during a column drag.
+    private var transcriptStackTrailing: NSLayoutConstraint!
+    /// Holds the transcript at its drag-start width so its lines don't re-wrap every frame.
+    private var frozenTranscriptWidth: NSLayoutConstraint?
     private var portraitDetent: PortraitDetent = {
         let stored = UserDefaults.standard.string(forKey: ClipPlayerViewController.portraitDetentKey)
         return stored.flatMap(PortraitDetent.init(rawValue:)) ?? .medium
@@ -301,8 +412,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     private let spinner = UIActivityIndicatorView(style: .medium)
 
     private let lyricFont = UIFont.systemFont(ofSize: 22, weight: .regular)
-    private var showsFurigana = true
-    private var showsEnglish = true
+    private var showsFurigana = ClipPlayerViewController.prefersFurigana
+    private var showsEnglish = ClipPlayerViewController.prefersEnglish
     private var loopsClip = true
     private var rows: [Row] = []
     private var timeline: [TimedToken] = []
@@ -357,6 +468,18 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             name: Self.portraitDetentDidChange,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(sideBySideColumnChangedElsewhere(_:)),
+            name: Self.sideBySideColumnDidChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(textDisplayChangedElsewhere),
+            name: Self.textDisplayDidChange,
+            object: nil
+        )
         if isInFeed {
             // The transcript hands off at its edges; everywhere else drags the feed directly.
             feedSwipePan.delegate = self
@@ -383,6 +506,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         loadedMedia = (videoID, startSec)
         ambientBackdrop?.loadThumbnail(videoID: videoID)
         updateKaraokeAccent()
+        playerView.preferredPlaybackRate = Self.preferredPlaybackRate
         playerView.load(videoID: videoID, startSeconds: startSec, showsControls: Self.showsYouTubeControls)
     }
 
@@ -431,6 +555,15 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         }
         infoEdgeContainer.addSubview(resizeHandle)
 
+        columnResizeHandle.translatesAutoresizingMaskIntoConstraints = false
+        columnResizeHandle.isHidden = true
+        columnResizeHandle.addGestureRecognizer(
+            UIPanGestureRecognizer(target: self, action: #selector(columnResizeHandlePanned(_:)))
+        )
+        columnResizeHandle.onAdjust = { [weak self] step in
+            self?.stepSideBySideColumn(by: Int(step))
+        }
+
         captionOverlay.translatesAutoresizingMaskIntoConstraints = false
         captionOverlay.alpha = 0
         captionOverlay.layer.cornerRadius = Self.playerCornerRadius
@@ -450,9 +583,10 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         // The feed doesn't show the clip facts row; the player sits right under the safe area.
         clipInfoLabel.isHidden = isInFeed
 
-        // Transcript starts at the player's bottom edge (under the Shorts grabber)
-        // and fades out there: lines never show beside or above the player, and
-        // a resize just moves the transcript's top with the player.
+        // Stacked, the transcript starts at the player's bottom edge (under the Shorts
+        // grabber) and fades out there: lines never show above the player, and a
+        // resize just moves the transcript's top with the player. Side by side, it
+        // fills the right column instead (`applyPlayerLayout`).
         configureInnerScrollView(scrollView)
         // The fade replaces the system top edge effect for the transcript.
         scrollView.topEdgeEffect.isHidden = true
@@ -461,6 +595,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         transcriptFadeView.addSubview(scrollView)
         transcriptPage.insertSubview(transcriptFadeView, at: 0)
         transcriptPage.addSubview(infoEdgeContainer)
+        // Over the transcript's leading edge, which it overlaps slightly.
+        transcriptPage.addSubview(columnResizeHandle)
         stack.axis = .vertical
         stack.spacing = 22
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -517,6 +653,9 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         topScrollEdgeInteraction.scrollView = scrollView
 
         playerTop = playerView.topAnchor.constraint(equalTo: transcriptPage.topAnchor)
+        transcriptStackTrailing = stack.trailingAnchor.constraint(
+            equalTo: scrollView.frameLayoutGuide.trailingAnchor, constant: -8
+        )
         let guide = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
             topScrollEdgeContainer.topAnchor.constraint(equalTo: view.topAnchor),
@@ -524,17 +663,12 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             topScrollEdgeContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             topScrollEdgeContainer.bottomAnchor.constraint(equalTo: guide.topAnchor),
 
-            playerTop,
-            playerView.centerXAnchor.constraint(equalTo: transcriptPage.centerXAnchor),
             playerView.widthAnchor.constraint(lessThanOrEqualTo: transcriptPage.widthAnchor),
 
             resizeHandle.topAnchor.constraint(equalTo: playerView.bottomAnchor),
             resizeHandle.centerXAnchor.constraint(equalTo: transcriptPage.centerXAnchor),
             resizeHandle.widthAnchor.constraint(equalToConstant: 120),
             resizeHandle.heightAnchor.constraint(equalToConstant: Self.resizeHandleHeight),
-
-            clipInfoLabel.leadingAnchor.constraint(equalTo: transcriptPage.leadingAnchor, constant: Self.horizontalInset),
-            clipInfoLabel.trailingAnchor.constraint(equalTo: transcriptPage.trailingAnchor, constant: -Self.horizontalInset),
 
             playerBorderView.topAnchor.constraint(equalTo: playerView.topAnchor),
             playerBorderView.bottomAnchor.constraint(equalTo: playerView.bottomAnchor),
@@ -561,11 +695,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             clipInfoLabel.bottomAnchor.constraint(equalTo: playerView.topAnchor, constant: -Self.infoRowBottomPadding),
 
             infoEdgeContainer.topAnchor.constraint(equalTo: clipInfoLabel.topAnchor, constant: -Self.infoRowTopPadding),
-            infoEdgeContainer.leadingAnchor.constraint(equalTo: transcriptPage.leadingAnchor),
-            infoEdgeContainer.trailingAnchor.constraint(equalTo: transcriptPage.trailingAnchor),
 
-            transcriptFadeView.topAnchor.constraint(equalTo: infoEdgeContainer.bottomAnchor),
-            transcriptFadeView.leadingAnchor.constraint(equalTo: transcriptPage.leadingAnchor),
             transcriptFadeView.trailingAnchor.constraint(equalTo: transcriptPage.trailingAnchor),
             transcriptFadeView.bottomAnchor.constraint(equalTo: transcriptPage.bottomAnchor),
 
@@ -577,7 +707,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             stack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 12),
             stack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -24),
             stack.leadingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.leadingAnchor, constant: Self.horizontalInset),
-            stack.trailingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.trailingAnchor, constant: -8),
+            transcriptStackTrailing,
 
             highlightsScrollView.topAnchor.constraint(equalTo: highlightsPage.topAnchor),
             highlightsScrollView.leadingAnchor.constraint(equalTo: highlightsPage.leadingAnchor),
@@ -614,7 +744,330 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             portraitPlayerHeight,
             playerView.widthAnchor.constraint(equalTo: playerView.heightAnchor, multiplier: 9.0 / 16.0),
         ]
-        NSLayoutConstraint.activate(landscapePlayerConstraints)
+
+        // Stacked: player centered under the nav bar, info row and transcript full width below it.
+        stackedLayoutConstraints = [
+            playerTop,
+            playerView.centerXAnchor.constraint(equalTo: transcriptPage.centerXAnchor),
+            clipInfoLabel.leadingAnchor.constraint(equalTo: transcriptPage.leadingAnchor, constant: Self.horizontalInset),
+            clipInfoLabel.trailingAnchor.constraint(equalTo: transcriptPage.trailingAnchor, constant: -Self.horizontalInset),
+            infoEdgeContainer.leadingAnchor.constraint(equalTo: transcriptPage.leadingAnchor),
+            infoEdgeContainer.trailingAnchor.constraint(equalTo: transcriptPage.trailingAnchor),
+            transcriptFadeView.topAnchor.constraint(equalTo: infoEdgeContainer.bottomAnchor),
+            transcriptFadeView.leadingAnchor.constraint(equalTo: transcriptPage.leadingAnchor),
+            recenterButton.centerXAnchor.constraint(equalTo: transportBar.centerXAnchor),
+            recenterButton.bottomAnchor.constraint(equalTo: transportBar.topAnchor, constant: -4),
+            speedButton.leadingAnchor.constraint(equalTo: transportBar.leadingAnchor, constant: Self.horizontalInset),
+            playPauseButton.trailingAnchor.constraint(equalTo: transportBar.trailingAnchor, constant: -Self.horizontalInset),
+            elapsedLabel.centerXAnchor.constraint(equalTo: transportBar.centerXAnchor),
+        ]
+
+        // Side by side: the player fits (keeping its shape) in the left column between the
+        // nav bar and the transport bar; the transcript runs full height on the right.
+        // The column's width is set each layout pass (`updateSideBySidePlayerSize`).
+        transcriptPage.addLayoutGuide(sideBySidePlayerArea)
+        sideBySidePlayerAreaTop = sideBySidePlayerArea.topAnchor.constraint(equalTo: transcriptPage.topAnchor)
+        sideBySideTranscriptTop = transcriptFadeView.topAnchor.constraint(equalTo: transcriptPage.topAnchor)
+        // Sized in code each layout pass (`updateSideBySidePlayerSize`), not by competing
+        // optional constraints, so it re-fits as the window is resized.
+        sideBySidePlayerWidth = playerView.widthAnchor.constraint(equalToConstant: 0)
+        sideBySidePlayerHeight = playerView.heightAnchor.constraint(equalToConstant: 0)
+        sideBySideColumnWidth = sideBySidePlayerArea.widthAnchor.constraint(equalToConstant: 0)
+        sideBySideLayoutConstraints = [
+            sideBySideColumnWidth,
+            // The column grabber sits midway across the gutter, level with the video.
+            columnResizeHandle.centerXAnchor.constraint(
+                equalTo: sideBySidePlayerArea.trailingAnchor,
+                constant: (Self.sideBySideColumnGap + Self.horizontalInset) / 2
+            ),
+            columnResizeHandle.centerYAnchor.constraint(equalTo: playerView.centerYAnchor),
+            columnResizeHandle.widthAnchor.constraint(equalToConstant: Self.columnHandleWidth),
+            columnResizeHandle.heightAnchor.constraint(equalToConstant: 120),
+            sideBySidePlayerAreaTop,
+            sideBySidePlayerArea.leadingAnchor.constraint(equalTo: transcriptPage.leadingAnchor, constant: Self.horizontalInset),
+            sideBySidePlayerArea.bottomAnchor.constraint(
+                equalTo: transportBar.topAnchor, constant: -Self.sideBySideGapAbovePlayerBar
+            ),
+            playerView.centerXAnchor.constraint(equalTo: sideBySidePlayerArea.centerXAnchor),
+            playerView.centerYAnchor.constraint(equalTo: sideBySidePlayerArea.centerYAnchor),
+            sideBySidePlayerWidth,
+            sideBySidePlayerHeight,
+            clipInfoLabel.leadingAnchor.constraint(equalTo: sideBySidePlayerArea.leadingAnchor),
+            clipInfoLabel.trailingAnchor.constraint(equalTo: sideBySidePlayerArea.trailingAnchor),
+            infoEdgeContainer.leadingAnchor.constraint(equalTo: sideBySidePlayerArea.leadingAnchor),
+            infoEdgeContainer.trailingAnchor.constraint(equalTo: sideBySidePlayerArea.trailingAnchor),
+            sideBySideTranscriptTop,
+            // Gutter: the column's side inset, this gap, then the transcript's own leading inset.
+            transcriptFadeView.leadingAnchor.constraint(
+                equalTo: sideBySidePlayerArea.trailingAnchor, constant: Self.sideBySideColumnGap
+            ),
+            recenterButton.centerXAnchor.constraint(equalTo: transcriptFadeView.centerXAnchor),
+            // The bar's center under the transcript is free here (the elapsed time sits
+            // under the video), so the recenter button drops into the controls' row.
+            recenterButton.centerYAnchor.constraint(equalTo: skipBackButton.centerYAnchor),
+            // Video controls sit under the video: speed's center on its leading edge and
+            // play/pause's center on its trailing edge (kept on screen when a 16:9 player
+            // fills the column).
+            {
+                let centerOnEdge = speedButton.centerXAnchor.constraint(equalTo: playerView.leadingAnchor)
+                centerOnEdge.priority = .defaultHigh
+                return centerOnEdge
+            }(),
+            speedButton.leadingAnchor.constraint(greaterThanOrEqualTo: transportBar.leadingAnchor, constant: 8),
+            playPauseButton.centerXAnchor.constraint(equalTo: playerView.trailingAnchor),
+            elapsedLabel.centerXAnchor.constraint(equalTo: sideBySidePlayerArea.centerXAnchor),
+        ]
+
+        NSLayoutConstraint.activate(stackedLayoutConstraints + landscapePlayerConstraints)
+    }
+
+    /// Activates the stacked or side-by-side constraints for the current window and clip shape.
+    private func applyPlayerLayout() {
+        let usesResizeHandle = isPortraitLayout && !isSideBySideLayout
+        NSLayoutConstraint.deactivate(
+            landscapePlayerConstraints + portraitPlayerConstraints
+                + stackedLayoutConstraints + sideBySideLayoutConstraints
+                + [edgeBelowPlayer!, edgeBelowHandle!]
+        )
+        if isSideBySideLayout {
+            updateSideBySidePlayerSize()
+            NSLayoutConstraint.activate(sideBySideLayoutConstraints)
+        } else {
+            if isPortraitLayout { updatePortraitPlayerHeight() }
+            NSLayoutConstraint.activate(
+                stackedLayoutConstraints + (isPortraitLayout ? portraitPlayerConstraints : landscapePlayerConstraints)
+            )
+        }
+        if usesResizeHandle {
+            edgeBelowHandle.isActive = true
+        } else {
+            edgeBelowPlayer.isActive = true
+        }
+        resizeHandle.isHidden = !usesResizeHandle
+        columnResizeHandle.isHidden = !(isSideBySideLayout && !isPortraitLayout)
+    }
+
+    /// Side by side: the largest player of the clip's shape that fits the left column
+    /// between the nav bar and the transport bar. Worked out from the page size (not the
+    /// layout guide, which isn't laid out yet mid-pass), so it follows window resizes.
+    private func updateSideBySidePlayerSize() {
+        guard isSideBySideLayout else { return }
+        let page = view.bounds.size
+        guard page.width > 0, page.height > 0 else { return }
+        let columnFraction = isPortraitLayout
+            ? Self.sideBySidePortraitColumnFraction
+            : draggedColumnFraction ?? restingLandscapeColumnFraction()
+        let areaWidth = max(page.width * columnFraction - Self.horizontalInset * 2, 0)
+        let areaHeight = sideBySidePlayerAreaHeight()
+        let aspect: CGFloat = isPortraitLayout ? 9.0 / 16.0 : 16.0 / 9.0
+        let width = floor(min(areaWidth, areaHeight * aspect))
+        let height = floor(width / aspect)
+        if abs(sideBySideColumnWidth.constant - areaWidth) > 0.5 { sideBySideColumnWidth.constant = areaWidth }
+        // Mid-drag, resizing the web player every frame is what stutters: keep its
+        // laid-out size and scale it instead (same shape, so it looks the same). The
+        // snap at the end applies the real size and springs the scale back to 1.
+        if isDraggingColumn, sideBySidePlayerWidth.constant > 0 {
+            setPlayerDragScale(width / sideBySidePlayerWidth.constant)
+            return
+        }
+        setPlayerDragScale(1)
+        if abs(sideBySidePlayerWidth.constant - width) > 0.5 { sideBySidePlayerWidth.constant = width }
+        if abs(sideBySidePlayerHeight.constant - height) > 0.5 { sideBySidePlayerHeight.constant = height }
+    }
+
+    /// Scales the player (and its border, pinned to the same frame) about its center.
+    private func setPlayerDragScale(_ scale: CGFloat) {
+        let transform = abs(scale - 1) < 0.001 ? .identity : CGAffineTransform(scaleX: scale, y: scale)
+        guard playerView.transform != transform else { return }
+        playerView.transform = transform
+        playerBorderView.transform = transform
+    }
+
+    /// Column drag: pins the transcript to its current width so the stack doesn't
+    /// re-wrap every line on every frame; it slides with the column edge (clipped by
+    /// the scroll view) and reflows once when the column lands.
+    private func freezeTranscriptWidth() {
+        guard frozenTranscriptWidth == nil else { return }
+        let width = stack.bounds.width
+        guard width > 0 else { return }
+        let frozen = stack.widthAnchor.constraint(equalToConstant: width)
+        transcriptStackTrailing.isActive = false
+        frozen.isActive = true
+        frozenTranscriptWidth = frozen
+    }
+
+    private func unfreezeTranscriptWidth() {
+        guard let frozen = frozenTranscriptWidth else { return }
+        frozen.isActive = false
+        transcriptStackTrailing.isActive = true
+        frozenTranscriptWidth = nil
+    }
+
+    /// Side by side: the left column's height for the player, between the info row and transport bar.
+    private func sideBySidePlayerAreaHeight() -> CGFloat {
+        let transportBarHeight = safeInsets.bottom + Self.transportBarVerticalPadding * 2 + Self.transportButtonSize
+        return max(
+            view.bounds.height - (safeInsets.top + infoRowHeight) - transportBarHeight - Self.sideBySideGapAbovePlayerBar,
+            0
+        )
+    }
+
+    // MARK: - Side-by-side column (16:9)
+
+    /// The 16:9 column stops that make sense for this window, ascending, each with the
+    /// configured fraction it stands for. A stop past the point where the video fills the
+    /// column's height, or that leaves the transcript too narrow, is pulled in to that
+    /// limit (and dropped when it lands on the stop before it).
+    private func sideBySideColumnStops() -> [(configured: CGFloat, value: CGFloat)] {
+        let all = Self.sideBySideLandscapeColumnFractions
+        let pageWidth = view.bounds.width
+        guard pageWidth > 0 else { return all.map { ($0, $0) } }
+        let fillsHeight = (sideBySidePlayerAreaHeight() * 16.0 / 9.0 + Self.horizontalInset * 2) / pageWidth
+        let keepsTranscript = (pageWidth - Self.sideBySideMinTranscriptWidth - Self.sideBySideColumnGap) / pageWidth
+        let cap = max(min(fillsHeight, keepsTranscript), all[0])
+        var stops: [(configured: CGFloat, value: CGFloat)] = []
+        for fraction in all {
+            let value = min(fraction, cap)
+            if let last = stops.last, value - last.value < 0.04 { continue }
+            stops.append((fraction, value))
+        }
+        return stops
+    }
+
+    /// The remembered stop, or the widest this window allows under it.
+    private func restingLandscapeColumnFraction() -> CGFloat {
+        let stops = sideBySideColumnStops()
+        return (stops.last { $0.configured <= sideBySideLandscapeFraction + 0.001 } ?? stops[0]).value
+    }
+
+    /// Re-sizes the column (dragged fraction, or the resting stop) and re-lays the page.
+    private func applySideBySideColumn() {
+        updateSideBySidePlayerSize()
+        transcriptPage.layoutIfNeeded()
+        updateInnerInsets()
+    }
+
+    @objc private func columnResizeHandlePanned(_ pan: UIPanGestureRecognizer) {
+        let pageWidth = view.bounds.width
+        guard pageWidth > 0 else { return }
+        let stops = sideBySideColumnStops()
+        switch pan.state {
+        case .began:
+            columnResizeStartFraction = draggedColumnFraction ?? restingLandscapeColumnFraction()
+            draggedColumnFraction = columnResizeStartFraction
+            isDraggingColumn = true
+            freezeTranscriptWidth()
+            detentCrossHaptic.prepare()
+            detentLandHaptic.prepare()
+            dismissCallout(animated: true)
+            columnResizeHandle.setActive(true)
+        case .changed:
+            let proposed = columnResizeStartFraction + pan.translation(in: view).x / pageWidth
+            let lower = stops[0].value, upper = stops[stops.count - 1].value
+            let fraction: CGFloat
+            if proposed > upper {
+                fraction = upper + (proposed - upper) * Self.detentRubberBand
+            } else if proposed < lower {
+                fraction = lower - (lower - proposed) * Self.detentRubberBand
+            } else {
+                fraction = proposed
+            }
+            let previous = draggedColumnFraction ?? fraction
+            if stops.contains(where: { (previous - $0.value) * (fraction - $0.value) < 0 }) {
+                detentCrossHaptic.selectionChanged()
+                detentCrossHaptic.prepare()
+            }
+            draggedColumnFraction = fraction
+            applySideBySideColumn()
+        case .ended, .cancelled, .failed:
+            columnResizeHandle.setActive(false)
+            isDraggingColumn = false
+            let velocity = pan.state == .ended ? pan.velocity(in: view).x / pageWidth : 0
+            let current = draggedColumnFraction ?? columnResizeStartFraction
+            let projected = current + velocity * Self.detentProjectionSeconds
+            guard let nearest = stops.min(by: { abs($0.value - projected) < abs($1.value - projected) }) else { return }
+            snapSideBySideColumn(to: nearest, velocity: velocity)
+        default:
+            break
+        }
+    }
+
+    /// Springs the column to `stop`; `velocity` (page widths per second) carries the drag in.
+    private func snapSideBySideColumn(to stop: (configured: CGFloat, value: CGFloat), velocity: CGFloat = 0) {
+        let current = draggedColumnFraction ?? restingLandscapeColumnFraction()
+        if stop.configured != sideBySideLandscapeFraction {
+            detentLandHaptic.impactOccurred()
+            sideBySideLandscapeFraction = stop.configured
+            UserDefaults.standard.set(Double(stop.configured), forKey: Self.sideBySideColumnKey)
+            // Other open players (feed neighbours) take the same column.
+            NotificationCenter.default.post(name: Self.sideBySideColumnDidChange, object: self)
+        }
+        let distance = stop.value - current
+        let relativeVelocity = abs(distance) > 0.001 ? velocity / distance : 0
+        draggedColumnFraction = stop.value
+        // The transcript re-wraps once, at the landing width, inside the spring.
+        unfreezeTranscriptWidth()
+        UIView.animate(
+            springDuration: 0.45,
+            bounce: 0.12,
+            initialSpringVelocity: relativeVelocity,
+            options: [.beginFromCurrentState, .allowUserInteraction]
+        ) {
+            self.applySideBySideColumn()
+        } completion: { _ in
+            // A new drag may have caught the spring; it owns the fraction now.
+            guard !self.isDraggingColumn else { return }
+            self.draggedColumnFraction = nil
+            if self.isFollowingPlayback, let activeSentence = self.activeSentence {
+                self.autoScroll(toRow: activeSentence, onlyIfNeeded: true)
+            }
+        }
+    }
+
+    /// VoiceOver adjustable: one stop wider (+1) or narrower (-1).
+    private func stepSideBySideColumn(by step: Int) {
+        let stops = sideBySideColumnStops()
+        let current = restingLandscapeColumnFraction()
+        guard let index = stops.firstIndex(where: { abs($0.value - current) < 0.001 }) else { return }
+        let next = min(max(index + step, 0), stops.count - 1)
+        guard next != index else { return }
+        dismissCallout(animated: true)
+        snapSideBySideColumn(to: stops[next])
+    }
+
+    /// Another player changed the remembered column: match it without animating.
+    @objc private func sideBySideColumnChangedElsewhere(_ notification: Notification) {
+        guard (notification.object as AnyObject?) !== self else { return }
+        let stored = CGFloat(UserDefaults.standard.double(forKey: Self.sideBySideColumnKey))
+        guard Self.sideBySideLandscapeColumnFractions.contains(where: { abs($0 - stored) < 0.001 }),
+              stored != sideBySideLandscapeFraction else { return }
+        sideBySideLandscapeFraction = stored
+        guard isViewLoaded, isSideBySideLayout, !isPortraitLayout else { return }
+        applySideBySideColumn()
+    }
+
+    /// Side by side once the window has room for two columns: any window at least
+    /// `sideBySideMinWidth` wide for a Short (a 9:16 player fits a narrow column, so tall
+    /// windows and iPad portrait qualify), and only wider-than-tall ones for 16:9, whose
+    /// player would get tiny in a portrait-shaped column. Nil before the view has a size.
+    private var wantsSideBySideLayout: Bool? {
+        let size = view.bounds.size
+        guard size.width > 0, size.height > 0 else { return nil }
+        guard size.width >= Self.sideBySideMinWidth else { return false }
+        // Landscape windows only: a portrait iPad stacks the player over the transcript.
+        return size.width > size.height
+    }
+
+    private func updateSideBySideLayoutIfNeeded() {
+        guard let wants = wantsSideBySideLayout, wants != isSideBySideLayout else { return }
+        isSideBySideLayout = wants
+        if !wants {
+            isDraggingColumn = false
+            unfreezeTranscriptWidth()
+            setPlayerDragScale(1)
+        }
+        applyPlayerLayout()
+        updateCaptionOverlayVisibility()
     }
 
     /// Swaps the player between the 16:9 full-width frame and the centered 9:16 Shorts frame.
@@ -629,7 +1082,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
               let detent = PortraitDetent(rawValue: stored),
               detent != portraitDetent else { return }
         portraitDetent = detent
-        guard isViewLoaded, isPortraitLayout else { return }
+        guard isViewLoaded, isPortraitLayout, !isSideBySideLayout else { return }
         updatePortraitPlayerHeight()
         transcriptPage.layoutIfNeeded()
         updateInnerInsets()
@@ -653,15 +1106,22 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             ])
             ambientBackdrop = backdrop
             transcriptPage.layoutIfNeeded()
-            backdrop.track(sourceFrame: playerView.frame)
+            backdrop.track(sourceFrame: playerView.frame, coverageMaxX: ambientCoverageMaxX)
         } else if wants, let backdrop = ambientBackdrop {
             // Tuning changed: re-read settings and re-fit.
             backdrop.applySettings()
-            backdrop.track(sourceFrame: playerView.frame)
+            backdrop.track(sourceFrame: playerView.frame, coverageMaxX: ambientCoverageMaxX)
         } else if !wants, let backdrop = ambientBackdrop {
             backdrop.removeFromSuperview()
             ambientBackdrop = nil
         }
+    }
+
+    /// Side by side, the ambient glow stays in the player's column (fading out into the
+    /// gutter before the transcript); stacked, it spans the page.
+    private var ambientCoverageMaxX: CGFloat? {
+        guard isSideBySideLayout else { return nil }
+        return sideBySidePlayerArea.layoutFrame.maxX + Self.horizontalInset
     }
 
     @objc private func ambientVideoChangedElsewhere(_ notification: Notification) {
@@ -714,7 +1174,10 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             payload: payload,
             onSelectClip: { [weak self] clip in self?.openClipFromSameVideo(clip) },
             onPlayAll: { [weak self] clips in self?.playVideoClipsInFeed(clips) },
-            onPlayFeed: { [weak self] clips, start in self?.playVideoClipsInFeed(clips, startingAt: start) }
+            // A tag's list is exploring: only offered where exploring is allowed.
+            onPlayFeed: allowsExploring
+                ? { [weak self] clips, start in self?.playVideoClipsInFeed(clips, startingAt: start, fromTagList: true) }
+                : nil
         )
         present(sheet, animated: true)
     }
@@ -724,6 +1187,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         dismiss(animated: true) { [weak self] in
             guard let self else { return }
             let player = ClipPlayerViewController(clipID: clip.clipID, preview: clip)
+            player.allowsExploring = self.allowsExploring
             if let navigationController = self.navigationController {
                 navigationController.pushViewController(player, animated: true)
             } else {
@@ -733,12 +1197,14 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     }
 
     /// "Play All" in Clip Details (the video's clips, in order), or clips picked from
-    /// a tag's list: closes the sheet and plays them as a feed.
-    private func playVideoClipsInFeed(_ clips: [ClipSummary], startingAt start: Int = 0) {
+    /// a tag's list: closes the sheet and plays them as a feed. A tag list's feed (or
+    /// any feed from here once exploring) offers no way to explore further.
+    private func playVideoClipsInFeed(_ clips: [ClipSummary], startingAt start: Int = 0, fromTagList: Bool = false) {
         dismiss(animated: true) { [weak self] in
             guard let self else { return }
             self.playerView.pause()
             let feed = ClipFeedViewController(clips: clips, startingAt: start)
+            feed.allowsExploring = self.allowsExploring && !fromTagList
             if let navigationController = self.navigationController {
                 navigationController.pushViewController(feed, animated: true)
             } else {
@@ -762,12 +1228,9 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     private func applyPlayerOrientation(portrait: Bool) {
         isPortraitLayout = portrait
         defer { updateAmbientVideo() }
-        if portrait { updatePortraitPlayerHeight() }
-        NSLayoutConstraint.deactivate(portrait ? landscapePlayerConstraints : portraitPlayerConstraints)
-        NSLayoutConstraint.activate(portrait ? portraitPlayerConstraints : landscapePlayerConstraints)
-        edgeBelowPlayer.isActive = !portrait
-        edgeBelowHandle.isActive = portrait
-        resizeHandle.isHidden = !portrait
+        // Whether two columns fit depends on the clip's shape too.
+        if let wants = wantsSideBySideLayout { isSideBySideLayout = wants }
+        applyPlayerLayout()
         // Both shapes are rounded cards inset from the page edges.
         playerView.layer.cornerRadius = Self.playerCornerRadius
         playerView.layer.cornerCurve = .continuous
@@ -867,7 +1330,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             self.isResizingPlayer = false
             // Keep the spoken line in view under the new player size.
             if self.isFollowingPlayback, let activeSentence = self.activeSentence {
-                self.autoScroll(toRow: activeSentence)
+                self.autoScroll(toRow: activeSentence, onlyIfNeeded: true)
             }
         }
     }
@@ -912,7 +1375,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     /// transcript has little room; they fade in over the last stretch of the drag.
     private func updateCaptionOverlayVisibility() {
         var alpha: CGFloat = 0
-        if isPortraitLayout, let full = portraitHeight(for: .full), full > 0 {
+        // Side by side, the transcript is always in view: no captions over the video.
+        if isPortraitLayout, !isSideBySideLayout, let full = portraitHeight(for: .full), full > 0 {
             let progress = (portraitPlayerHeight.constant - (full - Self.captionFadeDistance)) / Self.captionFadeDistance
             alpha = min(max(progress, 0), 1)
         }
@@ -1007,8 +1471,24 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        updateSideBySideLayoutIfNeeded()
+        keepOuterPagerOnPageAcrossResize()
         updateInnerInsets()
         updateSeamChevron()
+    }
+
+    private var lastOuterPagerHeight: CGFloat = 0
+
+    /// The outer offset is `page × height`, so a rotation or window resize on the
+    /// highlights page would leave it straddling the seam: put it back on its page.
+    private func keepOuterPagerOnPageAcrossResize() {
+        let height = outerScrollView.bounds.height
+        guard height > 0 else { return }
+        defer { lastOuterPagerHeight = height }
+        guard lastOuterPagerHeight > 0, abs(height - lastOuterPagerHeight) > 0.5,
+              handoffCoordinator?.isAnimatingPageSnap != true else { return }
+        outerScrollView.layoutIfNeeded()
+        handoffCoordinator?.settleOnPage(activePage)
     }
 
     /// Clip facts row between the nav bar and the player's top edge.
@@ -1024,12 +1504,20 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         if playerTop.constant != playerTopInset {
             playerTop.constant = playerTopInset
         }
-        if isPortraitLayout, !isResizingPlayer {
+        if sideBySidePlayerAreaTop.constant != playerTopInset {
+            sideBySidePlayerAreaTop.constant = playerTopInset
+        }
+        // Side by side, the transcript column starts under the nav bar.
+        if sideBySideTranscriptTop.constant != safeTop {
+            sideBySideTranscriptTop.constant = safeTop
+        }
+        updateSideBySidePlayerSize()
+        if isPortraitLayout, !isSideBySideLayout, !isResizingPlayer {
             updatePortraitPlayerHeight()
         }
         if let ambientBackdrop {
             transcriptPage.layoutIfNeeded()
-            ambientBackdrop.track(sourceFrame: playerView.frame)
+            ambientBackdrop.track(sourceFrame: playerView.frame, coverageMaxX: ambientCoverageMaxX)
         }
         let pairs: [(UIScrollView, UIEdgeInsets)] = [
             // Transcript's frame starts under the player; its first line rests just
@@ -1200,6 +1688,14 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         elapsedLabel.textColor = .secondaryLabel
         elapsedLabel.textAlignment = .center
 
+        speedButton.menu = UIMenu(children: [
+            UIDeferredMenuElement.uncached { [weak self] completion in
+                completion(self?.speedMenuElements() ?? [])
+            },
+        ])
+        updateSpeedButton()
+
+        transportBar.addSubview(speedButton)
         transportBar.addSubview(skipBackButton)
         transportBar.addSubview(elapsedLabel)
         transportBar.addSubview(playPauseButton)
@@ -1221,12 +1717,15 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             transportBar.trailingAnchor.constraint(equalTo: transcriptPage.trailingAnchor),
             transportBar.topAnchor.constraint(equalTo: skipBackButton.topAnchor, constant: -Self.transportBarVerticalPadding),
 
-            skipBackButton.leadingAnchor.constraint(equalTo: transportBar.leadingAnchor, constant: Self.horizontalInset),
+            speedButton.centerYAnchor.constraint(equalTo: skipBackButton.centerYAnchor),
+            speedButton.widthAnchor.constraint(equalToConstant: size),
+            speedButton.heightAnchor.constraint(equalToConstant: size),
+
+            skipBackButton.leadingAnchor.constraint(equalTo: speedButton.trailingAnchor, constant: 12),
             transportButtonsBottom,
             skipBackButton.widthAnchor.constraint(equalToConstant: size),
             skipBackButton.heightAnchor.constraint(equalToConstant: size),
 
-            playPauseButton.trailingAnchor.constraint(equalTo: transportBar.trailingAnchor, constant: -Self.horizontalInset),
             playPauseButton.centerYAnchor.constraint(equalTo: skipBackButton.centerYAnchor),
             playPauseButton.widthAnchor.constraint(equalToConstant: size),
             playPauseButton.heightAnchor.constraint(equalToConstant: size),
@@ -1236,17 +1735,15 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             highlightsButton.widthAnchor.constraint(equalToConstant: size),
             highlightsButton.heightAnchor.constraint(equalToConstant: size),
 
-            recenterButton.centerXAnchor.constraint(equalTo: transportBar.centerXAnchor),
-            recenterButton.bottomAnchor.constraint(equalTo: transportBar.topAnchor, constant: -4),
             recenterButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 40),
 
-            elapsedLabel.centerXAnchor.constraint(equalTo: transportBar.centerXAnchor),
             elapsedLabel.centerYAnchor.constraint(equalTo: skipBackButton.centerYAnchor),
         ])
     }
 
     private func setTransportEnabled(_ enabled: Bool) {
         skipBackButton.isEnabled = enabled
+        speedButton.isEnabled = enabled
         playPauseButton.isEnabled = enabled
     }
 
@@ -1267,29 +1764,15 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
                 completion(self?.optionsMenuElements() ?? [])
             },
         ])
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            image: UIImage(systemName: "ellipsis"),
-            menu: menu
-        )
-        navigationItem.rightBarButtonItem?.accessibilityLabel = "Options"
+        let options = UIBarButtonItem(image: UIImage(systemName: "ellipsis"), menu: menu)
+        options.accessibilityLabel = "Options"
+        // Feed pages hand only the menu to their host, which adds its own search button.
+        navigationItem.rightBarButtonItems = allowsExploring
+            ? [options, ClipExplorerViewController.searchBarItem(pushingFrom: self)]
+            : [options]
     }
 
     private func optionsMenuElements() -> [UIMenuElement] {
-        let currentRate = playerView.playbackRate
-        let speeds = Self.playbackRates.map { rate in
-            UIAction(
-                title: Self.rateTitle(rate),
-                state: abs(rate - currentRate) < 0.01 ? .on : .off
-            ) { [weak self] _ in
-                self?.playerView.setPlaybackRate(rate)
-            }
-        }
-        let speedMenu = UIMenu(
-            title: "Speed",
-            subtitle: Self.rateTitle(currentRate),
-            image: UIImage(systemName: "gauge.with.dots.needle.67percent"),
-            children: speeds
-        )
         let furigana = UIAction(
             title: "Furigana",
             image: UIImage(systemName: "textformat.size"),
@@ -1312,6 +1795,13 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         ) { [weak self] _ in
             self?.toggleEnglish()
         }
+        let wordTapPauses = UIAction(
+            title: "Pause on Word Tap",
+            image: UIImage(systemName: "hand.tap"),
+            state: Self.wordTapPauses ? .on : .off
+        ) { _ in
+            Self.wordTapPauses.toggle()
+        }
         let youTubeControls = UIAction(
             title: "YouTube controls",
             image: UIImage(systemName: "slider.horizontal.below.rectangle"),
@@ -1332,8 +1822,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             if let payload = self.payload { self.installHighlights(payload) }
         }
         var elements: [UIMenuElement] = [
-            speedMenu,
-            UIMenu(options: .displayInline, children: [furigana, english, loop, youTubeControls]),
+            UIMenu(options: .displayInline, children: [furigana, english, loop, wordTapPauses, youTubeControls]),
         ]
         let ambient = UIAction(
             title: "Ambient backdrop",
@@ -1349,28 +1838,92 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         ) { _ in
             ClipAmbientSettings.thumbnailHighlight.toggle()
         }
-        let tuneAmbient = UIAction(
+        // In the feed, highlights are always a sheet.
+        var experiments: [UIMenuElement] = (isInFeed ? [] : [highlightsSheet])
+            + [ambient, thumbnailHighlight]
+        #if DEBUG
+        experiments.append(UIAction(
             title: "Tune ambient…",
             image: UIImage(systemName: "slider.horizontal.3")
         ) { [weak self] _ in
             self?.presentAmbientTuning()
-        }
-        // In the feed, highlights are always a sheet.
-        let experiments: [UIMenuElement] = (isInFeed ? [] : [highlightsSheet])
-            + [ambient, thumbnailHighlight, tuneAmbient]
+        })
+        #endif
         elements.append(UIMenu(title: "Experiments", options: .displayInline, children: experiments))
+        // For a player that's stuck or blank (it also reloads itself when it can tell).
+        let reload = UIAction(title: "Reload Video", image: UIImage(systemName: "arrow.clockwise")) { [weak self] _ in
+            self?.reloadVideo()
+        }
+        var footer: [UIMenuElement] = [reload]
         if payload != nil {
             // Title, channel, and the Open in YouTube link live on the details sheet.
             let details = UIAction(title: "Clip Details", image: UIImage(systemName: "info.circle")) { [weak self] _ in
                 self?.presentClipDetails()
             }
-            elements.append(UIMenu(options: .displayInline, children: [details]))
+            footer.insert(details, at: 0)
         }
+        elements.append(UIMenu(options: .displayInline, children: footer))
         return elements
     }
 
     private static func rateTitle(_ rate: Double) -> String {
-        rate == 1 ? "Normal" : String(format: "%gx", rate)
+        rate == 1 ? "Normal" : String(format: "%.1f×", rate)
+    }
+
+    // MARK: - Speed
+
+    /// Fastest first, like the system's playback speed menus.
+    private func speedMenuElements() -> [UIMenuElement] {
+        let current = Self.preferredPlaybackRate
+        let speeds = Self.playbackRates.reversed().map { rate in
+            UIAction(
+                title: Self.rateTitle(rate),
+                state: abs(rate - current) < 0.01 ? .on : .off
+            ) { [weak self] _ in
+                self?.setPlaybackRate(rate)
+            }
+        }
+        return [UIMenu(title: "Playback Speed", options: .displayInline, children: speeds)]
+    }
+
+    private func setPlaybackRate(_ rate: Double) {
+        Self.preferredPlaybackRate = rate
+        playerView.setPlaybackRate(rate)
+        updateSpeedButton()
+    }
+
+    /// Feed pages built before the speed changed on another clip catch up when they play.
+    private func applyPreferredPlaybackRate() {
+        let rate = Self.preferredPlaybackRate
+        playerView.preferredPlaybackRate = rate
+        if playerView.isReady, abs(playerView.playbackRate - rate) > 0.01 {
+            playerView.setPlaybackRate(rate)
+        }
+        updateSpeedButton()
+    }
+
+    private func updateSpeedButton() {
+        let rate = Self.preferredPlaybackRate
+        let title = String(format: "%.1f×", rate)
+        speedButton.configuration?.attributedTitle = AttributedString(
+            title,
+            attributes: AttributeContainer([
+                .font: UIFont.monospacedDigitSystemFont(ofSize: 15, weight: .semibold),
+            ])
+        )
+        speedButton.accessibilityLabel = "Playback speed"
+        speedButton.accessibilityValue = Self.rateTitle(rate)
+    }
+
+    /// Clip menu → Reload Video. Refetches the clip too if it never loaded.
+    private func reloadVideo() {
+        guard payload != nil else {
+            load()
+            return
+        }
+        // Clears a YouTube error message; the reload reports again if it still fails.
+        statusLabel.text = nil
+        playerView.reload()
     }
 
     // MARK: - Loading
@@ -1508,12 +2061,24 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
                 textView.bottomAnchor.constraint(equalTo: textHost.bottomAnchor),
             ])
 
-            let textColumn = UIStackView(arrangedSubviews: [timeButton, textHost] + [englishLabel].compactMap { $0 })
+            // The column stretches its rows to full width; host the timestamp so only
+            // its text is tappable, not the empty space to the right of it.
+            let timeHost = UIView()
+            timeButton.translatesAutoresizingMaskIntoConstraints = false
+            timeHost.addSubview(timeButton)
+            NSLayoutConstraint.activate([
+                timeButton.leadingAnchor.constraint(equalTo: timeHost.leadingAnchor),
+                timeButton.trailingAnchor.constraint(lessThanOrEqualTo: timeHost.trailingAnchor),
+                timeButton.topAnchor.constraint(equalTo: timeHost.topAnchor),
+                timeButton.bottomAnchor.constraint(equalTo: timeHost.bottomAnchor),
+            ])
+
+            let textColumn = UIStackView(arrangedSubviews: [timeHost, textHost] + [englishLabel].compactMap { $0 })
             textColumn.axis = .vertical
             textColumn.alignment = .fill
             textColumn.spacing = 4
             // The timestamp's bottom padding already separates it from the line.
-            textColumn.setCustomSpacing(0, after: timeButton)
+            textColumn.setCustomSpacing(0, after: timeHost)
 
             let breakdownButton = UIButton(type: .system)
             var chevronConfig = UIButton.Configuration.plain()
@@ -1605,6 +2170,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
                 sentence: sentence?.textJP,
                 glossFraming: .word,
                 lineEnglish: sentence?.textEN,
+                ranksSenses: true,
                 from: sheet
             )
         }
@@ -1631,6 +2197,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             sentence: sentence?.textJP,
             glossFraming: .word,
             lineEnglish: sentence?.textEN,
+            ranksSenses: true,
             from: self
         )
     }
@@ -1818,7 +2385,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             activeSentence = nextSentence
             updateRowEmphasis()
             updateRecenterArrow()
-            if let nextSentence { autoScroll(toRow: nextSentence) }
+            if let nextSentence { autoScroll(toRow: nextSentence, onlyIfNeeded: true) }
         } else if tokenChanged, let nextToken {
             // Same line, next word: follow the marker as the line wraps.
             followKaraokeLine(row: nextToken.sentence)
@@ -1834,6 +2401,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
               handoffCoordinator?.isAnimatingPageSnap != true,
               !isUserScrolling,
               isFollowingPlayback,
+              // Same hold as `autoScroll(toRow:)`: the open callout keeps its word in place.
+              calloutToken == nil,
               CACurrentMediaTime() - lastAutoScrollTime > Self.wrapFollowSettleSeconds,
               let line = rows[index].textView.karaokeLineFragmentRectsInTextView().first else { return }
         let lineFrame = rows[index].textView.convert(line, to: scrollView)
@@ -1874,15 +2443,27 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     }
 
     /// Parks the active line just below the transport bar.
-    private func autoScroll(toRow index: Int) {
+    /// `onlyIfNeeded` (playback moving to a new line) leaves the transcript still while the line
+    /// sits fully in the upper part of the view, so a tall transcript (landscape iPad) turns a
+    /// page every few lines instead of moving on every one. Small views scroll about as before.
+    private func autoScroll(toRow index: Int, onlyIfNeeded: Bool = false) {
         guard rows.indices.contains(index),
               activePage == 0,
               handoffCoordinator?.isAnimatingPageSnap != true,
               !isUserScrolling,
-              isFollowingPlayback else { return }
+              isFollowingPlayback,
+              // Playing on under a word's definition: keep its line where the callout points.
+              calloutToken == nil else { return }
         view.layoutIfNeeded()
         let rowFrame = rows[index].container.convert(rows[index].container.bounds, to: scrollView)
         let inset = scrollView.adjustedContentInset
+        if onlyIfNeeded {
+            let visibleTop = scrollView.contentOffset.y + inset.top
+            let visibleHeight = scrollView.bounds.height - inset.top - inset.bottom
+            let comfortable = rowFrame.minY >= visibleTop
+                && rowFrame.maxY <= visibleTop + visibleHeight * Self.wrapFollowThreshold
+            if visibleHeight > 0, comfortable { return }
+        }
         let minY = -inset.top
         let maxY = max(minY, scrollView.contentSize.height - scrollView.bounds.height + inset.bottom)
         let target = min(maxY, max(minY, rowFrame.minY - inset.top - 12))
@@ -1978,22 +2559,48 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     }
 
     private func toggleFurigana() {
+        Self.prefersFurigana = !showsFurigana
+        applyFurigana(Self.prefersFurigana)
+        NotificationCenter.default.post(name: Self.textDisplayDidChange, object: self)
+    }
+
+    private func toggleEnglish() {
+        Self.prefersEnglish = !showsEnglish
+        applyEnglish(Self.prefersEnglish, animated: true)
+        NotificationCenter.default.post(name: Self.textDisplayDidChange, object: self)
+    }
+
+    /// Another player flipped furigana or English: match it without animating (this
+    /// page is offscreen or just peeking in during a feed swipe).
+    @objc private func textDisplayChangedElsewhere() {
+        applyFurigana(Self.prefersFurigana)
+        applyEnglish(Self.prefersEnglish, animated: false)
+    }
+
+    private func applyFurigana(_ shows: Bool) {
+        guard shows != showsFurigana else { return }
         dismissCallout(animated: false)
-        showsFurigana.toggle()
+        showsFurigana = shows
         rows.forEach(configureText)
         // Reconfiguring drops the karaoke marker; re-apply on the next tick.
         activeToken = nil
     }
 
-    private func toggleEnglish() {
-        showsEnglish.toggle()
+    private func applyEnglish(_ shows: Bool, animated: Bool) {
+        guard shows != showsEnglish else { return }
+        showsEnglish = shows
         updateCaptionOverlay()
-        UIView.animate(withDuration: 0.2) {
+        let changes = {
             for row in self.rows {
-                row.englishLabel?.isHidden = !self.showsEnglish
-                row.englishLabel?.alpha = self.showsEnglish ? 1 : 0
+                row.englishLabel?.isHidden = !shows
+                row.englishLabel?.alpha = shows ? 1 : 0
             }
             self.stack.layoutIfNeeded()
+        }
+        if animated {
+            UIView.animate(withDuration: 0.2, animations: changes)
+        } else {
+            changes()
         }
     }
 
@@ -2012,9 +2619,44 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             sentence: row.sentence.textJP,
             englishTranslation: row.sentence.textEN,
             dialogueContext: DialogueNuanceContext.around(lines: lines, focusedIndex: index),
-            tokens: row.japaneseTokens
+            tokens: row.japaneseTokens,
+            reportIssue: lineReportAction(for: row.sentence)
         )
-        navigationController?.pushViewController(scrub, animated: true)
+        if traitCollection.horizontalSizeClass == .regular {
+            // iPad: a floating, undimmed sheet, so the clip and transcript stay in view
+            // (and usable) beside it. Another line's breakdown replaces the open one.
+            HapticsHelper.lightHaptic()
+            let sheet = UINavigationController(rootViewController: scrub)
+            if let presented = presentedViewController {
+                presented.dismiss(animated: true) { [weak self] in
+                    self?.presentFloatingSheet(sheet, style: Self.floatingSheetStyle)
+                }
+            } else {
+                presentFloatingSheet(sheet, style: Self.floatingSheetStyle)
+            }
+        } else if presentsBreakdownAsSheet || navigationController == nil {
+            HapticsHelper.lightHaptic()
+            present(TutorBreakdownSheet(rootViewController: scrub), animated: true)
+        } else {
+            navigationController?.pushViewController(scrub, animated: true)
+        }
+    }
+
+    /// "Report an Issue" on the line breakdown screen, with this line attached.
+    /// Nil (hidden) until the payload is in, or when this learner can't send.
+    private func lineReportAction(for sentence: ClipPayload.Sentence) -> (() -> Void)? {
+        guard let payload, ClipFeedbackClient.canSend else { return nil }
+        let line = ClipLineSnapshot(
+            sentence: sentence,
+            tokens: payload.tokens.filter { $0.sentenceIndex == sentence.index }
+        )
+        let clipID = payload.clipID
+        return { [weak self] in
+            guard var top = self?.navigationController?.topViewController ?? self else { return }
+            // From the breakdown sheet when it's presented rather than pushed.
+            while let presented = top.presentedViewController { top = presented }
+            top.present(ClipIssueReportViewController.makeSheet(clipID: clipID, line: line), animated: true)
+        }
     }
 
     // MARK: - Definition callout
@@ -2028,7 +2670,9 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             dismissCallout(animated: true)
             return
         }
-        playerView.pause()
+        // "Pause on Word Tap" off: the video plays on under the definition (auto-scroll
+        // holds while it's open; see `autoScroll(toRow:)`).
+        if Self.wordTapPauses { playerView.pause() }
 
         let row = rows[rowIndex]
         let fragments = row.textView.mergedWordLineFragmentRectsInTextView(forTokenIndex: tokenIndex)
@@ -2077,19 +2721,35 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             rows[token.sentence].textView.setDefinitionSelectionHighlight(tokenIndex: nil)
         }
         DefinitionCalloutPresenter.shared.dismiss(animated: animated)
+        // Following held while the callout was open; catch up if playback moved on.
+        if isFollowingPlayback, let activeSentence, activeSentence != token.sentence {
+            autoScroll(toRow: activeSentence, onlyIfNeeded: true)
+        }
     }
 
     /// The sheet keeps the tapped token (聞きました) as the headword, names its form,
     /// and lists the dictionary form (聞く) under it.
     private func presentDictionary(surface: String, sentence: ClipPayload.Sentence) {
         playerView.pause()
-        WordDictionaryDetailSheetPresenter.present(
-            surface: surface,
-            sentence: sentence.textJP,
-            lineEnglish: sentence.textEN,
-            keepsTappedFormAsHeadword: true,
-            from: self
-        )
+        let present = { [weak self] in
+            guard let self else { return }
+            WordDictionaryDetailSheetPresenter.present(
+                surface: surface,
+                sentence: sentence.textJP,
+                lineEnglish: sentence.textEN,
+                keepsTappedFormAsHeadword: true,
+                ranksSenses: true,
+                floating: Self.floatingSheetStyle,
+                from: self
+            )
+        }
+        // iPad's floating sheets leave the transcript usable, so a word can be tapped while
+        // a breakdown or another word's sheet is open: that one makes way for this one.
+        if traitCollection.horizontalSizeClass == .regular, let presented = presentedViewController {
+            presented.dismiss(animated: true, completion: present)
+        } else {
+            present()
+        }
     }
 
     /// Taps on empty space close the callout; words and buttons handle their own taps.
@@ -2114,12 +2774,19 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         if gestureRecognizer === feedSwipePan {
             // The transcript scrolls itself (and hands off at its edges); the Shorts grabber resizes.
             guard let touched = touch.view else { return true }
-            return !touched.isDescendant(of: scrollView) && !touched.isDescendant(of: resizeHandle)
+            return !touched.isDescendant(of: scrollView)
+                && !touched.isDescendant(of: resizeHandle)
+                && !touched.isDescendant(of: columnResizeHandle)
         }
         guard calloutToken != nil else { return false }
         var view = touch.view
         while let current = view {
-            if current is LyricsInsetUnderlineTextView || current is UIControl { return false }
+            // Empty space beside a line's words dismisses like any other background.
+            if let textView = current as? LyricsInsetUnderlineTextView {
+                return textView.tokenIndex(at: touch.location(in: textView), requiringHit: true) == nil
+                    && !DefinitionCalloutPresenter.shared.isShowingCallout(at: touch.location(in: self.view), in: self.view)
+            }
+            if current is UIControl { return false }
             view = current.superview
         }
         return !DefinitionCalloutPresenter.shared.isShowingCallout(at: touch.location(in: self.view), in: self.view)
@@ -2163,14 +2830,19 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     }
 }
 
-/// Grabber under the Shorts player: drag between detents, or VoiceOver swipe up/down.
+/// Grabber under the Shorts player (`.vertical`: drag up / down between detents), or
+/// beside a side-by-side 16:9 player (`.horizontal`: drag left / right to resize its
+/// column). VoiceOver swipes up / down to step either one.
 private final class ClipPlayerResizeHandle: UIView {
-    /// +1 = taller, -1 = shorter (VoiceOver adjustable).
+    /// +1 = bigger, -1 = smaller (VoiceOver adjustable).
     var onAdjust: ((CGFloat) -> Void)?
+    private let axis: NSLayoutConstraint.Axis
     private let grabber = UIView()
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    /// `axis` is the direction of the drag.
+    init(axis: NSLayoutConstraint.Axis = .vertical) {
+        self.axis = axis
+        super.init(frame: .zero)
         grabber.translatesAutoresizingMaskIntoConstraints = false
         grabber.backgroundColor = .tertiaryLabel
         grabber.layer.cornerRadius = 2.5
@@ -2179,11 +2851,11 @@ private final class ClipPlayerResizeHandle: UIView {
         NSLayoutConstraint.activate([
             grabber.centerXAnchor.constraint(equalTo: centerXAnchor),
             grabber.centerYAnchor.constraint(equalTo: centerYAnchor),
-            grabber.widthAnchor.constraint(equalToConstant: 36),
-            grabber.heightAnchor.constraint(equalToConstant: 5),
+            grabber.widthAnchor.constraint(equalToConstant: axis == .vertical ? 36 : 5),
+            grabber.heightAnchor.constraint(equalToConstant: axis == .vertical ? 5 : 36),
         ])
         isAccessibilityElement = true
-        accessibilityLabel = "Resize video"
+        accessibilityLabel = axis == .vertical ? "Resize video" : "Resize video column"
         accessibilityTraits = .adjustable
     }
 
@@ -2194,16 +2866,20 @@ private final class ClipPlayerResizeHandle: UIView {
     func setActive(_ active: Bool) {
         UIView.animate(withDuration: 0.2) {
             self.grabber.backgroundColor = active ? .secondaryLabel : .tertiaryLabel
-            self.grabber.transform = active ? CGAffineTransform(scaleX: 1.25, y: 1.2) : .identity
+            self.grabber.transform = !active ? .identity
+                : self.axis == .vertical ? CGAffineTransform(scaleX: 1.25, y: 1.2)
+                : CGAffineTransform(scaleX: 1.2, y: 1.25)
         }
     }
 
     override func accessibilityIncrement() { onAdjust?(1) }
     override func accessibilityDecrement() { onAdjust?(-1) }
 
-    /// Taller touch target than the visible 22 pt band.
+    /// Bigger touch target than the visible 22 pt band.
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        bounds.insetBy(dx: 0, dy: -10).contains(point)
+        axis == .vertical
+            ? bounds.insetBy(dx: 0, dy: -10).contains(point)
+            : bounds.insetBy(dx: -8, dy: -10).contains(point)
     }
 }
 
@@ -2400,7 +3076,7 @@ private final class ClipPassthroughView: UIView {
 }
 
 /// With `delaysContentTouches = false`, UIKit's default refuses to cancel touches in
-/// `UIControl`s, so a drag that starts on a line's timestamp (a full-width button) or
+/// `UIControl`s, so a drag that starts on a line's timestamp or
 /// chevron finishes as a tap instead of scrolling. Let the scroll take those touches.
 private final class ClipTranscriptScrollView: UIScrollView {
     override func touchesShouldCancel(in view: UIView) -> Bool {

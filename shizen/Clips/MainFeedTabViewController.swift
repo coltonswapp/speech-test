@@ -3,10 +3,10 @@
 //  shizen
 //
 //  The clip feed as a main-screen tab. It starts as a page like the others, under the
-//  category tab bar, playing the current clip. After a few seconds on a clip it fades
-//  into the immersive feed: the tab bar fades out, side-swiping between tabs turns off,
-//  and the main navigation bar swaps dictionary/settings for ✕ and the clip menu.
-//  ✕ goes back.
+//  category tab bar, playing the current clip. After a few seconds on a clip (or right
+//  away, from the expand button in the main navigation bar) it fades into the full feed:
+//  the tab bar fades out, side-swiping between tabs turns off, and settings swaps for the
+//  clip menu. The collapse button comes back out.
 //
 //  The feed is built the first time the tab becomes active, so launch loads no players.
 //
@@ -61,6 +61,12 @@ final class MainFeedTabViewController: UIViewController {
 
     // MARK: - Immersive
 
+    /// The expand / collapse button in the main navigation bar.
+    func toggleImmersive() {
+        cancelImmersiveTimer()
+        setImmersive(!isImmersive, animated: true)
+    }
+
     private func scheduleImmersive() {
         cancelImmersiveTimer()
         guard isActive, !isImmersive else { return }
@@ -83,11 +89,6 @@ final class MainFeedTabViewController: UIViewController {
             return
         }
         setImmersive(true, animated: true)
-    }
-
-    /// ✕ in the main navigation bar.
-    func exitImmersive() {
-        setImmersive(false, animated: true)
     }
 
     private func setImmersive(_ immersive: Bool, animated: Bool) {
@@ -120,7 +121,7 @@ final class MainFeedTabViewController: UIViewController {
     private func installFeed() {
         let feed = ClipFeedViewController(learnerLevel: nil, presentation: .mainTab)
         feed.onClipChanged = { [weak self] in
-            // A new clip restarts the countdown (e.g. after ✕ took the viewer back to the tabs).
+            // A new clip restarts the countdown (e.g. after collapsing back to the tabs).
             self?.scheduleImmersive()
             self?.onClipMenuChanged?()
         }

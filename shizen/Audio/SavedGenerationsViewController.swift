@@ -109,7 +109,6 @@ final class SavedGenerationsViewController: UIViewController {
         case dialogueExperimentHarness
         case kanjiDecomposition
         case kanjiSpotlight
-        case swiftUIShaders
         case registerLadder
         case verbCombo
         case dialogueContentRecording
@@ -146,7 +145,6 @@ final class SavedGenerationsViewController: UIViewController {
             case .dialogueExperimentHarness: return "Dialogue lyrics harness"
             case .kanjiDecomposition: return "Kanji decomposition"
             case .kanjiSpotlight: return "Kanji spotlight"
-            case .swiftUIShaders: return "SwiftUI shaders"
             case .registerLadder: return "Register ladder"
             case .verbCombo: return "Verb combinations"
             case .dialogueContentRecording: return "Dialogue Replay"
@@ -185,7 +183,6 @@ final class SavedGenerationsViewController: UIViewController {
             case .dialogueExperimentHarness: return "Scenario audio · UIMenu clip switch · alignment QA"
             case .kanjiDecomposition: return "Full or 3-slide compound breakdown · export cards"
             case .kanjiSpotlight: return "One kanji · curated compounds & verbs · export cards"
-            case .swiftUIShaders: return "Kris Puckett Metal shaders · playground"
             case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
             case .verbCombo: return "5 stills · hook, rule, 3 examples · Gemini · export cards"
             case .dialogueContentRecording: return "TikTok stage · conversation, two-pass, or quiz"
@@ -224,7 +221,6 @@ final class SavedGenerationsViewController: UIViewController {
             case .dialogueExperimentHarness: return "waveform.path"
             case .kanjiDecomposition: return "puzzlepiece.extension"
             case .kanjiSpotlight: return "lightbulb"
-            case .swiftUIShaders: return "sparkles"
             case .registerLadder: return "text.badge.star"
             case .verbCombo: return "plus.forwardslash.minus"
             case .dialogueContentRecording: return "video"
@@ -721,11 +717,6 @@ final class SavedGenerationsViewController: UIViewController {
         case .kanjiSpotlight:
             navigationController?.pushViewController(
                 KanjiSpotlightListViewController(),
-                animated: true
-            )
-        case .swiftUIShaders:
-            navigationController?.pushViewController(
-                SwiftUIShadersPlaygroundViewController(),
                 animated: true
             )
         case .dialogueContentRecording:

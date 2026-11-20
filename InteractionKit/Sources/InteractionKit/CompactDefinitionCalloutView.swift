@@ -19,12 +19,8 @@ public final class CompactDefinitionCalloutView: UIControl {
 
     public var onDetailTapped: (() -> Void)?
 
-    /// Raised above page content; one step lighter than secondary in dark mode.
-    private static let bubbleFill = UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? .tertiarySystemBackground
-            : .secondarySystemBackground
-    }
+    private static let bubbleFill = DefinitionCalloutOutline.bubbleFill
+    private let rimLayer = DefinitionCalloutOutline.makeRimLayer()
 
     private let containerView: UIView = {
         let v = UIView()
@@ -174,6 +170,28 @@ public final class CompactDefinitionCalloutView: UIControl {
     public override func layoutSubviews() {
         super.layoutSubviews()
         updateShadowPath()
+        updateRim()
+    }
+
+    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        rimLayer.strokeColor = DefinitionCalloutOutline.rimColor(for: traitCollection).cgColor
+    }
+
+    /// Hairline rim around box + pointer: light in dark mode, faint dark in light.
+    private func updateRim() {
+        if rimLayer.superlayer !== layer {
+            layer.addSublayer(rimLayer)
+        }
+        rimLayer.strokeColor = DefinitionCalloutOutline.rimColor(for: traitCollection).cgColor
+        rimLayer.frame = bounds
+        rimLayer.path = DefinitionCalloutOutline.path(
+            container: containerView.frame,
+            cornerRadius: cornerRadius,
+            arrowMidX: arrowView.frame.midX,
+            arrowSize: arrowSize,
+            arrowPointsDown: placement == .above
+        ).cgPath
     }
 
     // MARK: - Setup

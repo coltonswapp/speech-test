@@ -242,6 +242,7 @@ final class JMDictStore {
         "いる": "居る",
         "ある": "有る",
         "なる": "成る",
+        "する": "為る",
     ]
 
     /// Grammar pieces whose "usually kana" reading belongs to an unrelated noun
@@ -683,6 +684,14 @@ final class JMDictStore {
                 )
             }
             guard !rows.isEmpty else { return nil }
+            // MeCab split this headword (広/ひろ + 背筋/せすじ), so its joined reading is not
+            // a reading of the compound. With one dictionary reading there is nothing to
+            // weigh: take it even when the word is rare (広背筋 → こうはいきん, score 0).
+            let readings = Set(rows.map { $0.displayReading.trimmingCharacters(in: .whitespacesAndNewlines) })
+                .subtracting([""])
+            if readings.count == 1, let only = readings.first {
+                return only
+            }
             return Self.preferredReadingAmongAlternates(
                 forExpression: surface,
                 mecabReading: mecabReading,
@@ -1264,6 +1273,29 @@ final class JMDictStore {
            ) {
             return kuru
         }
+        // A kana form of this lemma reads as written (しちゃった of 為る, not すった).
+        if !containsKanji(surface),
+           ConjugationForm.identify(
+            surface: surface,
+            lemma: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+           ) != nil {
+            return surface
+        }
+        // 食べちゃった / 座っちゃだめ: read the te-form, then put the ending back.
+        if let split = teAuxiliarySplit(surface, allowBareCha: true),
+           let teReading = contextualReadingFromLemma(
+            surface: split.teForm,
+            lemmaExpression: lemmaExpression,
+            lemmaReading: lemmaReading,
+            tags: tags
+           ) {
+            let tail = split.tail
+                .replacingOccurrences(of: "駄目", with: "だめ")
+                .replacingOccurrences(of: "ダメ", with: "だめ")
+            return (split.replacesTe ? String(teReading.dropLast()) : teReading) + tail
+        }
         if let progressive = progressiveReading(
             surface: surface,
             lemmaExpression: lemmaExpression,
@@ -1415,7 +1447,8 @@ final class JMDictStore {
         return nil
     }
 
-    /// Longest-first auxiliaries after て/で (います before た/る).
+    /// Longest-first auxiliaries after て/で (います before た/る). The おる rows are the
+    /// humble progressive (向かっております → 向かう).
     private static let progressiveAuxiliaries: [String] = [
         "いませんでした",
         "いました",
@@ -1424,7 +1457,57 @@ final class JMDictStore {
         "いない",
         "いた",
         "いる",
+        "おりませんでした",
+        "おりました",
+        "おりません",
+        "おります",
+        "おった",
+        "おり",
+        "おる",
     ]
+
+    // MARK: - てしまう / ちゃう / ちゃ
+
+    /// Endings kept after the te-form (食べて|しまった).
+    private static let shimauEndings: [String] = [
+        "しまいませんでした", "しまいました", "しまいません", "しまいます",
+        "しまったら", "しまった", "しまって", "しまわない", "しまおう", "しまえば", "しまう", "しまい",
+    ]
+    /// What follows ちゃ / じゃ when it is てしまう (食べちゃった, 死んじゃう).
+    private static let chauTails: [String] = [
+        "いませんでした", "いました", "いません", "います",
+        "ったら", "った", "って", "わない", "おう", "えば", "う",
+    ]
+    /// What follows ちゃ / じゃ when it is ては: "must not" (やっちゃだめ, 読んじゃいけない).
+    private static let prohibitionTails: [String] = ["いけません", "いけない", "いかん", "だめ", "ダメ", "駄目"]
+
+    /// Splits a てしまう / ちゃう / ちゃ form into its te-form and the rest:
+    /// 食べてしまった → (食べて, しまった), 座っちゃだめ → (座って, ちゃだめ), 死んじゃう → (死んで, じゃう).
+    /// `replacesTe`: the tail swallows the te-form's て / で (ちゃ = ては, ちゃう = てしまう).
+    /// Bare ちゃ / じゃ (座っちゃ) only with `allowBareCha`: めっちゃ and おもちゃ are words,
+    /// so callers try that after an exact match has missed.
+    private static func teAuxiliarySplit(
+        _ surface: String,
+        allowBareCha: Bool
+    ) -> (teForm: String, tail: String, replacesTe: Bool)? {
+        for ending in shimauEndings where surface.hasSuffix(ending) {
+            let te = String(surface.dropLast(ending.count))
+            guard te.count > 1, te.hasSuffix("て") || te.hasSuffix("で") else { continue }
+            return (te, ending, false)
+        }
+        for (contracted, teKana) in [("ちゃ", "て"), ("じゃ", "で")] {
+            var endings = chauTails.map { contracted + $0 } + prohibitionTails.map { contracted + $0 }
+            if allowBareCha { endings.append(contracted) }
+            for ending in endings where surface.hasSuffix(ending) {
+                let stem = String(surface.dropLast(ending.count))
+                guard !stem.isEmpty else { continue }
+                // で only follows ん or い (読んで, 泳いで); これじゃ / そうじゃ are not verbs.
+                if teKana == "で", !(stem.hasSuffix("ん") || stem.hasSuffix("い")) { continue }
+                return (stem + teKana, ending, true)
+            }
+        }
+        return nil
+    }
 
     /// 行ってみたい / 食べてみる: てみる "try doing".
     private static let teMiruAuxiliaries: [String] = [
@@ -2233,8 +2316,18 @@ final class JMDictStore {
                 continue
             }
             let expressionRows = rows.filter { $0.expression == g }
-            if !expressionRows.isEmpty {
+            // Kana なる / する headwords are a suffix and slang; the verbs are 成る / 為る,
+            // matched by reading. Keep those when only a verb will do (なって, しちゃった).
+            if !expressionRows.isEmpty,
+               !(mustBeVerb && !expressionRows.contains(where: Self.isVerbEntry)) {
                 rows = expressionRows
+            }
+            // Same pins as exact kana lookups: なって is 成る, not 生る; いました is 居る, not 射る.
+            if let pinned = Self.pinnedKanaHeadwords[g] {
+                let pinnedRows = rows.filter { $0.expression == pinned }
+                if !pinnedRows.isEmpty {
+                    rows = pinnedRows
+                }
             }
             if g == adjLemma {
                 let adjRows = rows.filter { Self.isIAdjectiveEntry($0) }
@@ -2317,11 +2410,13 @@ final class JMDictStore {
     private static func surfaceRequiresVerbLemma(_ surface: String) -> Bool {
         // うるさくて / 高くない look like they end in て / ない but are i-adjective inflections.
         if iAdjectiveLemmaCandidate(surface: surface) != nil { return false }
+        if teAuxiliarySplit(surface, allowBareCha: false) != nil { return true }
         let verbEndings = [
             "って", "んで", "いて", "いで", "して",
             "ました", "ます", "ません", "ましょう",
             "ています", "でいます", "ている", "でいる",
             "ていた", "でいた",
+            "ており", "でおり", "ておる", "でおる",
             "てみたい", "でみたい", "てみる", "でみる",
             "てみた", "でみた", "てみて", "でみて",
             "られなかった", "られなくて", "られない", "られて", "られた", "られる",
@@ -2591,12 +2686,23 @@ final class JMDictStore {
         return nil
     }
 
-    /// `includeTaraTari` adds たら / たり guesses. Pass it only after an exact match missed.
+    /// `includeTaraTari` adds たら / たり and bare ちゃ / じゃ guesses. Pass it only after an exact match missed.
     private static func buildInflectionLemmaCandidates(
         surface: String,
         treatAsRenyoStem: Bool = false,
         includeTaraTari: Bool = false
     ) -> [String] {
+        // 食べちゃった / やっちゃだめ / 食べてしまった: guess only from the te-form (recursing
+        // also covers 騙されてしまい). The rules below would read しちゃった as a た-form of
+        // しちゃく (試着). Bare ちゃ waits for the late pass so めっちゃ keeps its entry.
+        if let split = teAuxiliarySplit(surface, allowBareCha: includeTaraTari) {
+            // The te-form rules need a stem before して; bare しちゃう is する.
+            if split.teForm == "して" {
+                return ["する"]
+            }
+            return buildInflectionLemmaCandidates(surface: split.teForm)
+        }
+
         var out: [String] = []
         var seen = Set<String>()
         func add(_ s: String) {

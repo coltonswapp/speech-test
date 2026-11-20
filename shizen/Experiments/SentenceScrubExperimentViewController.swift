@@ -8,6 +8,7 @@
 import InteractionKit
 import Translation
 import UIKit
+import CSFeedbackKitUI
 
 /// Bundled or CDN dialogue-clip segment for sentence scrub play.
 struct DialogueLineAudioReference {
@@ -24,7 +25,7 @@ struct DialogueLineAudioReference {
     var tokenSync: DialogueTokenSync? = nil
 }
 
-final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQAPresenting {
+final class SentenceScrubExperimentViewController: UIViewController {
 
     /// Short labels for the menu; sentences exercise different particles, questions, and kanji density.
     private static let exampleSentences: [(title: String, text: String)] = [
@@ -60,6 +61,9 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
     private let script: SentenceScrubScript?
     /// False for a Common Uses example, which caps Common Uses at one level.
     private let allowsCommonUses: Bool
+    /// "Report an Issue" in the options menu, for the line this screen shows
+    /// (clips pass one that already knows the clip and line). Nil hides it.
+    private let reportIssue: (() -> Void)?
     private var analyticsVisit = SentenceBreakdownVisit()
 
     init(
@@ -73,10 +77,12 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
         tokenSync: DialogueTokenSync? = nil,
         showsListenControl: Bool = true,
         script: SentenceScrubScript? = nil,
-        allowsCommonUses: Bool = true
+        allowsCommonUses: Bool = true,
+        reportIssue: (() -> Void)? = nil
     ) {
         currentSentence = sentence
         self.script = script
+        self.reportIssue = reportIssue
         self.allowsCommonUses = allowsCommonUses
         let tokens = tokens ?? script?.tokens(in: sentence)
         let trimmedEnglish = englishTranslation?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -106,6 +112,7 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
         showsListenControl = true
         script = nil
         allowsCommonUses = true
+        reportIssue = nil
         super.init(coder: coder)
     }
 
@@ -219,16 +226,6 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
     }
 
     private func makeOptionsMenu() -> UIMenu {
-        let overlayToggle = UIAction(
-            title: "Show gloss overlay",
-            state: scrubbableSentenceView.showCalloutOnScrub ? .on : .off
-        ) { [weak self] _ in
-            guard let self else { return }
-            self.scrubbableSentenceView.showCalloutOnScrub.toggle()
-            ExperimentSettings.sentenceScrubGlossOverlayEnabled = self.scrubbableSentenceView.showCalloutOnScrub
-            self.refreshOptionsMenu()
-        }
-
         let repeatAfterMe = UIAction(
             title: "Repeat after me",
             image: UIImage(systemName: "person.wave.2")
@@ -243,7 +240,7 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
         }
         let examplesMenu = UIMenu(title: "Example sentence", children: exampleActions)
 
-        var children: [UIMenuElement] = [overlayToggle, repeatAfterMe, examplesMenu]
+        var children: [UIMenuElement] = [repeatAfterMe, examplesMenu]
         if lessonQAHost?.canPresentContentQANote == true {
             let note = UIAction(
                 title: "Note",
@@ -252,6 +249,15 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
                 self?.presentContentQANote()
             }
             children.insert(note, at: 0)
+        }
+        if let reportIssue {
+            let report = UIAction(
+                title: "Report an Issue",
+                image: UIImage(systemName: "exclamationmark.bubble")
+            ) { _ in
+                reportIssue()
+            }
+            children.insert(UIMenu(options: .displayInline, children: [report]), at: 0)
         }
         return UIMenu(children: children)
     }
@@ -263,14 +269,19 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
             .last
     }
 
-    func presentScreenshotQANote(from presenter: UIViewController) -> Bool {
-        guard lessonQAHost != nil else { return false }
-        presentContentQANote(from: presenter, forcesScreenshot: true)
-        return true
-    }
-
     private func presentContentQANote(from presenter: UIViewController? = nil, forcesScreenshot: Bool = false) {
         guard let host = lessonQAHost else { return }
+        let focus = contentQAFocus()
+        host.presentContentQANote(
+            focusTitle: focus.title,
+            focusDetailLines: focus.details,
+            presenter: presenter,
+            forcesScreenshot: forcesScreenshot
+        )
+    }
+
+    /// What this breakdown is showing, for the QA note and CSFeedbackKit.
+    fileprivate func contentQAFocus() -> (title: String, details: [String]) {
         var details = ["Japanese: \(currentSentence)"]
         if let english = qaEnglishLine() {
             details.append("English: \(english)")
@@ -292,12 +303,7 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
         } else {
             title = "Breakdown"
         }
-        host.presentContentQANote(
-            focusTitle: title,
-            focusDetailLines: details,
-            presenter: presenter,
-            forcesScreenshot: forcesScreenshot
-        )
+        return (title, details)
     }
 
     private func qaEnglishLine() -> String? {
@@ -371,12 +377,9 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
         navigationItem.largeTitleDisplayMode = .never
         if script == nil {
             title = "Breakdown"
-            navigationItem.rightBarButtonItem = UIBarButtonItem(
-                title: "Options",
-                image: nil,
-                primaryAction: nil,
-                menu: makeOptionsMenu()
-            )
+            let options = UIBarButtonItem(image: UIImage(systemName: "ellipsis"), menu: makeOptionsMenu())
+            options.accessibilityLabel = "Options"
+            navigationItem.rightBarButtonItem = options
         }
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -387,7 +390,8 @@ final class SentenceScrubExperimentViewController: UIViewController, ScreenshotQ
         contentStack.alignment = .fill
         contentStack.spacing = 16
 
-        scrubbableSentenceView.showCalloutOnScrub = ExperimentSettings.sentenceScrubGlossOverlayEnabled
+        // The breakdown never shows the gloss overlay while scrubbing; the word detail below covers it.
+        scrubbableSentenceView.showCalloutOnScrub = false
         scrubbableSentenceView.sentenceLineView.textAlignment = .natural
         scrubbableSentenceView.onSelectionChanged = { [weak self] index, surface in
             self?.handleSelectionChanged(index: index, surface: surface)
@@ -1419,5 +1423,16 @@ private final class SentenceScrubEmptyStateView: UIView {
                 completion: { _ in continuation.resume() }
             )
         }
+    }
+}
+
+// MARK: - CSFeedbackKit context
+
+/// The lesson scene from the host, with this breakdown as the focus.
+extension SentenceScrubExperimentViewController: FeedbackContextProvider {
+    func feedbackValues() -> FeedbackValues {
+        guard let host = lessonQAHost else { return [:] }
+        let focus = contentQAFocus()
+        return host.contentQAFeedbackValues(focusTitle: focus.title, focusDetailLines: focus.details)
     }
 }

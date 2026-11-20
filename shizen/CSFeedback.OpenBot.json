@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/coltonswapp/CSFeedbackKit/main/Schemas/csfeedbackkit.config.v1.schema.json",
+  "version": 1,
+  "storage": {
+    "type": "presigned",
+    "url": "${SHIZEN_CMS_BASE_URL}/api/client/feedback-uploads",
+    "auth": "staff"
+  },
+  "destinations": [
+    {
+      "id": "openbot",
+      "url": "${OPENBOT_WEBHOOK_URL}",
+      "format": "openbot",
+      "signing": { "scheme": "openbot", "secret": "${OPENBOT_WEBHOOK_SECRET}" },
+      "attachments": "link",
+      "maxBodyBytes": 65536,
+      "timeoutSeconds": 20
+    }
+  ]
+}

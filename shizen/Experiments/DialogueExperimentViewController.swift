@@ -184,9 +184,36 @@ class DialogueExperimentViewController: UIViewController {
     private var displayLineSpokenIndices: [Int?] = []
     private var tokenSync: DialogueTokenSync?
 
+    // MARK: Clip-style transcript (menu toggle)
+
+    private struct ClipStyleToken {
+        let range: NSRange
+        let surface: String
+    }
+
+    private struct ClipStyleTokenRef: Equatable {
+        let displayIndex: Int
+        let tokenIndex: Int
+    }
+
+    private var isClipStyleTranscript: Bool { ExperimentSettings.dialogueClipStyleTranscript }
+    /// Tappable words per display index, in the bubble label's string.
+    private var clipStyleTokens: [Int: [ClipStyleToken]] = [:]
+    private var clipStyleLabels: [Int: FuriganaTranscriptLabel] = [:]
+    /// Speaker labels that also carry the line's timestamp, refreshed once audio aligns.
+    private var clipStyleSpeakerLabels: [Int: UILabel] = [:]
+    /// Word whose definition callout is open.
+    private var clipStyleCalloutRef: ClipStyleTokenRef?
+    private lazy var clipStyleTokenizer = JapaneseTokenizer()
+
     private let scrollHeaderStack = UIStackView()
     private let sceneImageContainer = UIView()
     private let sceneImageView = UIImageView()
+    /// Widest the scene image gets (iPad); the ~92% pin below gives way to it.
+    private static let sceneImageMaxWidth: CGFloat = 520
+    private lazy var sceneImageMaxWidthConstraint = sceneImageContainer.widthAnchor.constraint(
+        lessThanOrEqualToConstant: Self.sceneImageMaxWidth
+    )
     /// Pins the scene image to ~92% of the header-stack width. Activated only
     /// once the container has been added to the stack (shared ancestor), else
     /// AutoLayout traps with a "no common ancestor" exception.
@@ -517,6 +544,7 @@ class DialogueExperimentViewController: UIViewController {
         if abs(contentStackTopConstraint.constant - topConstant) > 0.5 {
             contentStackTopConstraint.constant = topConstant
         }
+        applyContentColumnMargins()
         applyScrollContentInsets()
         updateBubbleMinWidths()
         applyRowStylesFromEmphasis()
@@ -525,6 +553,7 @@ class DialogueExperimentViewController: UIViewController {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         stopEmphasisAnimation()
+        dismissClipStyleCallout(animated: false)
         if presentationContext == .standalone {
             navigationController?.navigationBar.removeInteraction(topScrollEdgeInteraction)
         }
@@ -824,6 +853,7 @@ class DialogueExperimentViewController: UIViewController {
                 equalTo: sceneImageContainer.widthAnchor,
                 multiplier: aspectRatio
             ),
+            sceneImageMaxWidthConstraint,
         ])
         if sceneImageWidthConstraint == nil {
             sceneImageWidthConstraint = makeSceneImageWidthConstraint()
@@ -834,10 +864,13 @@ class DialogueExperimentViewController: UIViewController {
     /// speaker bubbles fit the viewport without scrolling; the other modes
     /// scroll, so they keep the wide image.
     private func makeSceneImageWidthConstraint() -> NSLayoutConstraint {
-        sceneImageContainer.widthAnchor.constraint(
+        let constraint = sceneImageContainer.widthAnchor.constraint(
             equalTo: scrollHeaderStack.widthAnchor,
             multiplier: transcriptDisplayMode == .listeningSpeakers ? 0.72 : 0.92
         )
+        // Below `sceneImageMaxWidthConstraint`, so wide windows cap the image.
+        constraint.priority = .required - 1
+        return constraint
     }
 
     private func updateSceneImageWidthForCurrentMode() {
@@ -892,6 +925,10 @@ class DialogueExperimentViewController: UIViewController {
         scrollView.delaysContentTouches = false
         scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.backgroundColor = .clear
+
+        // The definition callout floats over the view, not the transcript; close it
+        // when the transcript starts moving so it never points at the wrong word.
+        scrollView.panGestureRecognizer.addTarget(self, action: #selector(handleTranscriptPanForClipStyleCallout(_:)))
 
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         contentStack.axis = .vertical
@@ -998,8 +1035,22 @@ class DialogueExperimentViewController: UIViewController {
         let slotHuggingConstraint = trailingTransportSlot.widthAnchor.constraint(equalToConstant: 0)
         slotHuggingConstraint.priority = .defaultLow
 
+        // The bar's background spans the screen; its controls stay in the
+        // transcript's centered column on wide windows (iPad).
+        let controlsColumn = UILayoutGuide()
+        transportBarContainer.addLayoutGuide(controlsColumn)
+        let controlsColumnFill = controlsColumn.widthAnchor.constraint(equalTo: transportBarContainer.widthAnchor)
+        controlsColumnFill.priority = .required - 1
+
         NSLayoutConstraint.activate([
-            leftTransportControlsStack.leadingAnchor.constraint(equalTo: transportBarContainer.leadingAnchor, constant: horizontalInset),
+            controlsColumn.topAnchor.constraint(equalTo: transportBarContainer.topAnchor),
+            controlsColumn.bottomAnchor.constraint(equalTo: transportBarContainer.bottomAnchor),
+            controlsColumn.centerXAnchor.constraint(equalTo: transportBarContainer.centerXAnchor),
+            controlsColumn.widthAnchor.constraint(lessThanOrEqualTo: transportBarContainer.widthAnchor),
+            controlsColumn.widthAnchor.constraint(lessThanOrEqualToConstant: ContentColumn.readableWidth),
+            controlsColumnFill,
+
+            leftTransportControlsStack.leadingAnchor.constraint(equalTo: controlsColumn.leadingAnchor, constant: horizontalInset),
             leftTransportControlsStack.bottomAnchor.constraint(equalTo: transportBarContainer.safeAreaLayoutGuide.bottomAnchor, constant: -8),
 
             overflowButton.widthAnchor.constraint(equalToConstant: buttonSize),
@@ -1007,7 +1058,7 @@ class DialogueExperimentViewController: UIViewController {
             restartButton.widthAnchor.constraint(equalToConstant: buttonSize),
             restartButton.heightAnchor.constraint(equalToConstant: buttonSize),
 
-            trailingTransportSlot.trailingAnchor.constraint(equalTo: transportBarContainer.trailingAnchor, constant: -horizontalInset),
+            trailingTransportSlot.trailingAnchor.constraint(equalTo: controlsColumn.trailingAnchor, constant: -horizontalInset),
             trailingTransportSlot.centerYAnchor.constraint(equalTo: leftTransportControlsStack.centerYAnchor),
             trailingTransportSlot.heightAnchor.constraint(equalToConstant: buttonSize),
             // Wide enough for whichever button is wider, so Quiz stays tappable.
@@ -1032,8 +1083,8 @@ class DialogueExperimentViewController: UIViewController {
 
             // Full-width row above the floating buttons.
             lineScrubber.topAnchor.constraint(equalTo: transportBarContainer.topAnchor, constant: 8),
-            lineScrubber.leadingAnchor.constraint(equalTo: transportBarContainer.leadingAnchor, constant: horizontalInset),
-            lineScrubber.trailingAnchor.constraint(equalTo: transportBarContainer.trailingAnchor, constant: -horizontalInset),
+            lineScrubber.leadingAnchor.constraint(equalTo: controlsColumn.leadingAnchor, constant: horizontalInset),
+            lineScrubber.trailingAnchor.constraint(equalTo: controlsColumn.trailingAnchor, constant: -horizontalInset),
         ])
         refreshLineScrubber()
 
@@ -1104,8 +1155,30 @@ class DialogueExperimentViewController: UIViewController {
             children.append(makeTokenSyncMenuAction())
             children.append(makeTokenHighlightPreviewAction())
         }
+        children.append(makeClipStyleTranscriptMenuAction())
         children.append(rolePlay)
         return UIMenu(children: children)
+    }
+
+    func makeClipStyleTranscriptMenuAction() -> UIAction {
+        UIAction(
+            title: "Clip-style transcript",
+            subtitle: "Underlined words, tap for definitions",
+            image: UIImage(systemName: "underline"),
+            state: ExperimentSettings.dialogueClipStyleTranscript ? .on : .off
+        ) { [weak self] _ in
+            self?.toggleClipStyleTranscript()
+        }
+    }
+
+    func toggleClipStyleTranscript() {
+        ExperimentSettings.dialogueClipStyleTranscript.toggle()
+        dismissClipStyleCallout(animated: false)
+        rebuildTranscriptRows()
+        applyTokenSyncHighlightSetting()
+        if let activeLineIndex {
+            scrollLineIntoView(at: activeLineIndex, animated: false)
+        }
     }
 
     func makeTokenSyncMenuAction() -> UIAction {
@@ -1216,6 +1289,10 @@ class DialogueExperimentViewController: UIViewController {
 
     private func rebuildTranscriptRows() {
         setInlineQuestionFocus(nil, animated: false)
+        dismissClipStyleCallout(animated: false)
+        clipStyleTokens.removeAll()
+        clipStyleLabels.removeAll()
+        clipStyleSpeakerLabels.removeAll()
         for v in contentStack.arrangedSubviews {
             contentStack.removeArrangedSubview(v)
             v.removeFromSuperview()
@@ -1770,6 +1847,14 @@ class DialogueExperimentViewController: UIViewController {
             verticalPin: .bottom
         )
         speakerWrapper.isHidden = !line.showsSpeakerLabel
+        if isClipStyleTranscript, displayLineSpokenIndices.indices.contains(index),
+           displayLineSpokenIndices[index] != nil {
+            // Every line gets its timestamp right above the bubble, like clips;
+            // follow-on lines from the same speaker show only the time.
+            speakerWrapper.isHidden = false
+            clipStyleSpeakerLabels[index] = speakerLabel
+            applyClipStyleSpeakerText(to: speakerLabel, line: line, displayIndex: index)
+        }
 
         let japaneseFont = Self.dialogueJapaneseBaseFont
 
@@ -1805,6 +1890,9 @@ class DialogueExperimentViewController: UIViewController {
                 textColor: japaneseColor(forDisplayIndex: index, emphasis: 0)
             )
             DialogueContentLineWrap.applyOrphanGlue(to: japaneseLabel)
+            if isClipStyleTranscript {
+                installClipStyleTokens(on: japaneseLabel, line: line, displayIndex: index)
+            }
         }
 
         let japaneseBubble = DialogueJapaneseBubbleView(label: japaneseLabel)
@@ -1996,6 +2084,176 @@ class DialogueExperimentViewController: UIViewController {
         return lineContainer
     }
 
+    // MARK: - Clip-style transcript
+
+    /// Speaker name (when this line shows one) plus the line's start time in the
+    /// clips transcript's small monospaced style. Time appears once audio aligns.
+    private func applyClipStyleSpeakerText(to label: UILabel, line: DialogueLineDisplay, displayIndex: Int) {
+        let text = NSMutableAttributedString()
+        if line.showsSpeakerLabel {
+            text.append(NSAttributedString(
+                string: Self.speakerPrefix(for: line.speaker),
+                attributes: [.font: GrammarJapaneseTypography.scenarioSpeakerFont, .foregroundColor: UIColor.secondaryLabel]
+            ))
+        }
+        if let spoken = spokenIndex(forDisplayIndex: displayIndex),
+           alignedLines.indices.contains(spoken) {
+            if text.length > 0 {
+                text.append(NSAttributedString(string: "  "))
+            }
+            text.append(NSAttributedString(
+                string: Self.clipStyleTimestamp(alignedLines[spoken].timeRange.lowerBound),
+                attributes: [
+                    .font: UIFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
+                    .foregroundColor: UIColor.tertiaryLabel,
+                ]
+            ))
+        }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = line.speakerSide == .trailing ? .right : .left
+        text.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: text.length))
+        label.attributedText = text
+    }
+
+    /// "0:42", matching the clips transcript.
+    private static func clipStyleTimestamp(_ time: TimeInterval) -> String {
+        let total = Int(max(0, time))
+        return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    private func refreshClipStyleTimestamps() {
+        for (index, label) in clipStyleSpeakerLabels where displayLines.indices.contains(index) {
+            applyClipStyleSpeakerText(to: label, line: displayLines[index], displayIndex: index)
+        }
+    }
+
+    /// Underlines each word in the bubble. Authored token stamps win (they match the
+    /// karaoke highlight); otherwise the on-device tokenizer splits the line.
+    private func installClipStyleTokens(on label: FuriganaTranscriptLabel, line: DialogueLineDisplay, displayIndex: Int) {
+        guard let display = label.attributedText?.string, !display.isEmpty else { return }
+        var tokens: [ClipStyleToken] = []
+        func append(_ range: NSRange?, _ surface: String) {
+            guard let range, range.length > 0, !Self.isPunctuationOnly(surface) else { return }
+            tokens.append(ClipStyleToken(range: range, surface: surface))
+        }
+
+        if let tokenSync, let spoken = spokenIndex(forDisplayIndex: displayIndex),
+           tokenSync.lines.indices.contains(spoken) {
+            for (tokenIndex, token) in tokenSync.lines[spoken].tokens.enumerated() {
+                append(tokenSync.utf16Range(lineIndex: spoken, tokenIndex: tokenIndex, inDisplay: display), token.text)
+            }
+        }
+        if tokens.isEmpty {
+            let text = line.japanese
+            for token in clipStyleTokenizer.tokenize(text) {
+                let original = NSRange(token.range, in: text)
+                append(DialogueContentLineWrap.mapOriginalUTF16Range(original, onto: display), token.text)
+            }
+        }
+        guard !tokens.isEmpty, let attributed = label.attributedText else { return }
+
+        // Keep each word on one line: wraps fall only between underlined words.
+        let glued = DialogueContentLineWrap.gluingTokens(in: attributed, ranges: tokens.map(\.range))
+        label.attributedText = glued.attributed
+        tokens = zip(tokens, glued.ranges).map { ClipStyleToken(range: $1, surface: $0.surface) }
+
+        clipStyleTokens[displayIndex] = tokens
+        clipStyleLabels[displayIndex] = label
+        label.underlinedRanges = tokens.map(\.range)
+    }
+
+    private static func isPunctuationOnly(_ surface: String) -> Bool {
+        let skip = CharacterSet.punctuationCharacters
+            .union(.symbols)
+            .union(.whitespacesAndNewlines)
+        return surface.unicodeScalars.allSatisfy { skip.contains($0) }
+    }
+
+    /// Word → definition callout. Any other tap on a line closes an open callout
+    /// first; with none open, the line keeps its usual tap behavior.
+    private func handleClipStyleTap(_ gesture: UITapGestureRecognizer, atDisplayIndex index: Int) -> Bool {
+        guard isClipStyleTranscript else { return false }
+        if let label = clipStyleLabels[index], !label.isHidden, label.alpha > 0.01,
+           let tokenIndex = label.underlinedRangeIndex(at: gesture.location(in: label)) {
+            clipStyleWordTapped(displayIndex: index, tokenIndex: tokenIndex)
+            return true
+        }
+        if clipStyleCalloutRef != nil {
+            dismissClipStyleCallout(animated: true)
+            return true
+        }
+        return false
+    }
+
+    /// Same flow as clips: pause, mark the word, and show the rich callout over it.
+    /// Tapping the callout opens the full dictionary sheet.
+    private func clipStyleWordTapped(displayIndex: Int, tokenIndex: Int) {
+        guard let label = clipStyleLabels[displayIndex],
+              let tokens = clipStyleTokens[displayIndex],
+              tokens.indices.contains(tokenIndex),
+              displayLines.indices.contains(displayIndex) else { return }
+        let ref = ClipStyleTokenRef(displayIndex: displayIndex, tokenIndex: tokenIndex)
+        if clipStyleCalloutRef == ref {
+            dismissClipStyleCallout(animated: true)
+            return
+        }
+        if playbackPhase == .playing {
+            pausePlayback()
+        }
+
+        let line = displayLines[displayIndex]
+        let surface = tokens[tokenIndex].surface
+        let fragments = label.underlinedRangeFragments(at: tokenIndex)
+        guard !fragments.isEmpty else {
+            presentClipStyleDictionary(surface: surface, line: line)
+            return
+        }
+        if let previous = clipStyleCalloutRef, previous.displayIndex != displayIndex {
+            clipStyleLabels[previous.displayIndex]?.selectedUnderlineIndex = nil
+        }
+        clipStyleCalloutRef = ref
+        label.selectedUnderlineIndex = tokenIndex
+        UISelectionFeedbackGenerator().selectionChanged()
+
+        DefinitionCalloutPresenter.shared.presentOrUpdate(
+            content: .jmdict(surface: surface, sentence: line.japanese),
+            surface: surface,
+            lineFragments: fragments,
+            in: label,
+            gap: 6
+        ) { [weak self] surface in
+            guard let self else { return }
+            self.dismissClipStyleCallout(animated: true)
+            self.presentClipStyleDictionary(surface: surface, line: line)
+        }
+    }
+
+    private func presentClipStyleDictionary(surface: String, line: DialogueLineDisplay) {
+        if playbackPhase == .playing {
+            pausePlayback()
+        }
+        WordDictionaryDetailSheetPresenter.present(
+            surface: surface,
+            sentence: line.japanese,
+            lineEnglish: line.english,
+            keepsTappedFormAsHeadword: true,
+            ranksSenses: true,
+            from: self
+        )
+    }
+
+    private func dismissClipStyleCallout(animated: Bool) {
+        guard let ref = clipStyleCalloutRef else { return }
+        clipStyleCalloutRef = nil
+        clipStyleLabels[ref.displayIndex]?.selectedUnderlineIndex = nil
+        DefinitionCalloutPresenter.shared.dismiss(animated: animated)
+    }
+
+    @objc private func handleTranscriptPanForClipStyleCallout(_ pan: UIPanGestureRecognizer) {
+        guard pan.state == .began else { return }
+        dismissClipStyleCallout(animated: true)
+    }
+
     // MARK: - Audio
 
     private func resolveLessonAudio() {
@@ -2109,6 +2367,7 @@ class DialogueExperimentViewController: UIViewController {
         // token stamps approved later. Follow the stamps when they line up.
         applyTokenSyncLineWindows()
         refreshLineScrubber()
+        refreshClipStyleTimestamps()
 
         updateTransportControls()
         if presentationContext == .standalone {
@@ -3367,6 +3626,7 @@ class DialogueExperimentViewController: UIViewController {
     func presentSentenceFocus(forLineAt index: Int) {
         guard displayLines.indices.contains(index), displayLines[index].isSpokenLine else { return }
         let sentence = displayLines[index].japanese
+        dismissClipStyleCallout(animated: false)
 
         // Stop full-clip playback so sentence scrub owns audio while focused.
         if playbackPhase == .playing {
@@ -3432,6 +3692,7 @@ class DialogueExperimentViewController: UIViewController {
     @objc func handleLineTap(_ gesture: UITapGestureRecognizer) {
         guard let row = gesture.view else { return }
         let index = row.tag
+        if handleClipStyleTap(gesture, atDisplayIndex: index) { return }
         if displayLines.indices.contains(index), displayLines[index].isInlineQuestion {
             presentInlineQuestion(atDisplayIndex: index)
             return
@@ -3472,6 +3733,7 @@ class DialogueExperimentViewController: UIViewController {
 
         guard let player = makePlayer() else { return }
 
+        dismissClipStyleCallout(animated: true)
         cancelStageLineHold()
         cancelInlineQuestionHold()
         for index in 0...spokenIndex {
@@ -3818,6 +4080,7 @@ class DialogueExperimentViewController: UIViewController {
 
     func togglePlayPause() {
         guard !isResolvingLessonAudio else { return }
+        dismissClipStyleCallout(animated: true)
         switch playbackPhase {
         case .idle:
             startPlayback(fromBeginning: true)
@@ -3889,6 +4152,19 @@ class DialogueExperimentViewController: UIViewController {
     func dialogueContentStackTopConstant() -> CGFloat { 8 }
 
     func dialogueContentHorizontalInset() -> CGFloat { 24 }
+
+    /// Wide windows (iPad) grow the side margins so the transcript stays a
+    /// readable column instead of spanning the screen. Phones keep the 24 pt inset.
+    private func applyContentColumnMargins() {
+        let width = scrollView.bounds.width
+        guard width > 0 else { return }
+        let inset = ContentColumn.sideInset(forWidth: width, minimum: dialogueContentHorizontalInset())
+        guard abs(contentStack.layoutMargins.left - inset) > 0.5 else { return }
+        var margins = contentStack.layoutMargins
+        margins.left = inset
+        margins.right = inset
+        contentStack.layoutMargins = margins
+    }
 
     func dialogueShouldSyncActiveLineFromPlayback() -> Bool { true }
 

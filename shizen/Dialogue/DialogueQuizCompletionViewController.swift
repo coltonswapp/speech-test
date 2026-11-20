@@ -5,8 +5,6 @@
 //  Celebratory result after the last comprehension question.
 //
 
-import SwiftUI
-import SwiftUIShaders
 import UIKit
 
 final class DialogueQuizCompletionViewController: UIViewController {
@@ -28,9 +26,7 @@ final class DialogueQuizCompletionViewController: UIViewController {
 
     private let eyebrowLabel = UILabel()
     private let titleLabel = UILabel()
-    private let auroraHost = UIHostingController(
-        rootView: DialogueCompletionAuroraView(configuration: .production)
-    )
+    private let auroraView = DialogueCompletionAuroraView()
     private let starsView = DialogueCompletionStarsView()
     private let subtitleLabel = UILabel()
     private let scoreCard: DialogueScoreSummaryCardView
@@ -130,10 +126,7 @@ final class DialogueQuizCompletionViewController: UIViewController {
             self?.sendFeedbackIfNeeded()
             self?.dismiss(animated: true)
         }, for: .touchUpInside)
-
-        auroraHost.view.backgroundColor = .clear
-        auroraHost.view.isUserInteractionEnabled = false
-        auroraHost.view.translatesAutoresizingMaskIntoConstraints = false
+        auroraView.translatesAutoresizingMaskIntoConstraints = false
 
         exploreButton.primaryStyle = .yellow
         applyPrimaryButtonTitle()
@@ -172,9 +165,7 @@ final class DialogueQuizCompletionViewController: UIViewController {
             self?.nextSceneTapped()
         }, for: .touchUpInside)
 
-        addChild(auroraHost)
-        view.addSubview(auroraHost.view)
-        auroraHost.didMove(toParent: self)
+        view.addSubview(auroraView)
         view.addSubview(closeButton)
         view.addSubview(eyebrowLabel)
         view.addSubview(titleLabel)
@@ -216,10 +207,10 @@ final class DialogueQuizCompletionViewController: UIViewController {
             starsView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 14),
             starsView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
 
-            auroraHost.view.topAnchor.constraint(equalTo: view.topAnchor),
-            auroraHost.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            auroraHost.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            auroraHost.view.heightAnchor.constraint(
+            auroraView.topAnchor.constraint(equalTo: view.topAnchor),
+            auroraView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            auroraView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            auroraView.heightAnchor.constraint(
                 equalToConstant: DialogueAuroraConfiguration.production.height
             ),
 
@@ -473,8 +464,8 @@ final class DialogueQuizCompletionViewController: UIViewController {
         eyebrowLabel.alpha = 0
         titleLabel.alpha = 0
         titleLabel.transform = CGAffineTransform(translationX: 0, y: 8)
-        auroraHost.view.alpha = 0
-        auroraHost.view.transform = CGAffineTransform(scaleX: 0.72, y: 0.72)
+        auroraView.alpha = 0
+        auroraView.transform = CGAffineTransform(scaleX: 0.72, y: 0.72)
         starsView.prepareForAnimation()
         subtitleLabel.alpha = 0
         scoreCard.alpha = 0
@@ -498,8 +489,8 @@ final class DialogueQuizCompletionViewController: UIViewController {
             self.eyebrowLabel.alpha = 1
             self.titleLabel.alpha = 1
             self.titleLabel.transform = .identity
-            self.auroraHost.view.alpha = 1
-            self.auroraHost.view.transform = .identity
+            self.auroraView.alpha = 1
+            self.auroraView.transform = .identity
         }
 
         starsView.animateIn(earned: tally.starCount, delay: 0.18)
@@ -530,88 +521,6 @@ final class DialogueQuizCompletionViewController: UIViewController {
                 self.nextSceneButton.transform = .identity
             }
         }
-    }
-}
-
-struct DialogueAuroraConfiguration: Equatable {
-    var intensity: Float
-    var bands: Float
-    var speed: Float
-    var contrast: Double
-    var opacity: Double
-    var blur: CGFloat
-    var fadeLocation: CGFloat
-    var height: CGFloat
-
-    static let production = DialogueAuroraConfiguration(
-        intensity: 1,
-        bands: 4,
-        speed: 1.3,
-        contrast: 2.2,
-        opacity: 0.62,
-        blur: 8,
-        fadeLocation: 0.62,
-        height: 270
-    )
-}
-
-struct DialogueCompletionAuroraView: View {
-
-    let configuration: DialogueAuroraConfiguration
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        Group {
-            if reduceMotion {
-                staticGlow
-            } else {
-                animatedAurora
-            }
-        }
-        .mask {
-            LinearGradient(
-                stops: [
-                    .init(color: .white.opacity(0.86), location: 0),
-                    .init(color: .white.opacity(0.72), location: configuration.fadeLocation),
-                    .init(color: .clear, location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-        .opacity(configuration.opacity)
-        .blur(radius: configuration.blur)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private var animatedAurora: some View {
-        Color(red: 1.0, green: 0.78, blue: 0.05)
-            .mask {
-                Color.black
-                    .bcsAurora(
-                        intensity: configuration.intensity,
-                        bands: configuration.bands,
-                        speed: configuration.speed,
-                        colorShift: 0
-                    )
-                    .saturation(0)
-                    .contrast(configuration.contrast)
-                    .luminanceToAlpha()
-            }
-    }
-
-    private var staticGlow: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 1.0, green: 0.88, blue: 0.34).opacity(0.35),
-                Color(red: 1.0, green: 0.76, blue: 0.0).opacity(0.7),
-                Color(red: 1.0, green: 0.91, blue: 0.48).opacity(0.35),
-            ],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
     }
 }
 
@@ -801,9 +710,7 @@ final class DialogueLessonWrapUpViewController: UIViewController {
 
     private let wrapUp: DialogueLessonWrapUp
 
-    private let auroraHost = UIHostingController(
-        rootView: DialogueCompletionAuroraView(configuration: .production)
-    )
+    private let auroraView = DialogueCompletionAuroraView()
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
     private let thumbnailView = UIImageView()
@@ -913,10 +820,7 @@ final class DialogueLessonWrapUpViewController: UIViewController {
         closeButton.addAction(UIAction { [weak self] _ in
             self?.dismiss(animated: true)
         }, for: .touchUpInside)
-
-        auroraHost.view.backgroundColor = .clear
-        auroraHost.view.isUserInteractionEnabled = false
-        auroraHost.view.translatesAutoresizingMaskIntoConstraints = false
+        auroraView.translatesAutoresizingMaskIntoConstraints = false
 
         backButton.primaryStyle = .yellow
         backButton.setTitle("Back to lessons", for: .normal)
@@ -925,19 +829,17 @@ final class DialogueLessonWrapUpViewController: UIViewController {
             self?.backTapped()
         }, for: .touchUpInside)
 
-        addChild(auroraHost)
-        view.addSubview(auroraHost.view)
-        auroraHost.didMove(toParent: self)
+        view.addSubview(auroraView)
         view.addSubview(scrollView)
         view.addSubview(closeButton)
         view.addSubview(backButton)
 
         let contentGuide = scrollView.contentLayoutGuide
         NSLayoutConstraint.activate([
-            auroraHost.view.topAnchor.constraint(equalTo: view.topAnchor),
-            auroraHost.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            auroraHost.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            auroraHost.view.heightAnchor.constraint(
+            auroraView.topAnchor.constraint(equalTo: view.topAnchor),
+            auroraView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            auroraView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            auroraView.heightAnchor.constraint(
                 equalToConstant: DialogueAuroraConfiguration.production.height
             ),
 
@@ -1059,8 +961,8 @@ final class DialogueLessonWrapUpViewController: UIViewController {
 
     private func prepareEntranceAnimation() {
         guard !UIAccessibility.isReduceMotionEnabled else { return }
-        auroraHost.view.alpha = 0
-        auroraHost.view.transform = CGAffineTransform(scaleX: 0.72, y: 0.72)
+        auroraView.alpha = 0
+        auroraView.transform = CGAffineTransform(scaleX: 0.72, y: 0.72)
         thumbnailView.alpha = 0
         thumbnailView.transform = CGAffineTransform(scaleX: 0.82, y: 0.82)
         for label in [eyebrowLabel, titleLabel, subtitleLabel] {
@@ -1085,8 +987,8 @@ final class DialogueLessonWrapUpViewController: UIViewController {
             initialSpringVelocity: 0.4,
             options: [.curveEaseOut, .allowUserInteraction]
         ) {
-            self.auroraHost.view.alpha = 1
-            self.auroraHost.view.transform = .identity
+            self.auroraView.alpha = 1
+            self.auroraView.transform = .identity
             self.thumbnailView.alpha = 1
             self.thumbnailView.transform = .identity
         }

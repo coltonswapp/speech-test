@@ -18,6 +18,7 @@ final class WordDictionaryDetailViewController: UIViewController {
     private let lineEnglish: String?
     private let allowsCommonUses: Bool
     private let keepsTappedFormAsHeadword: Bool
+    private let ranksSenses: Bool
     private let scrollView = UIScrollView()
     private let detailView = WordDictionaryDetailView()
     private var detailTopConstraint: NSLayoutConstraint?
@@ -44,9 +45,11 @@ final class WordDictionaryDetailViewController: UIViewController {
         sourceTitle: String? = nil,
         lineEnglish: String? = nil,
         allowsCommonUses: Bool = true,
-        keepsTappedFormAsHeadword: Bool = false
+        keepsTappedFormAsHeadword: Bool = false,
+        ranksSenses: Bool = false
     ) {
         self.surface = surface
+        self.ranksSenses = ranksSenses
         self.allowsCommonUses = allowsCommonUses
         self.keepsTappedFormAsHeadword = keepsTappedFormAsHeadword
         self.sentence = sentence
@@ -118,6 +121,7 @@ final class WordDictionaryDetailViewController: UIViewController {
         }
         detailView.allowsCommonUses = allowsCommonUses
         detailView.keepsTappedFormAsHeadword = keepsTappedFormAsHeadword
+        detailView.showsSenseSuggestion = ranksSenses
         if allowsCommonUses {
             detailView.onSelectCommonUsesExample = { [weak self] example in
                 guard let self else { return }
@@ -244,6 +248,8 @@ enum WordDictionaryDetailSheetPresenter {
         lineEnglish: String? = nil,
         fullSheet: Bool = false,
         keepsTappedFormAsHeadword: Bool = false,
+        ranksSenses: Bool = false,
+        floating: FloatingSheetStyle? = nil,
         from viewController: UIViewController,
         animated: Bool = true
     ) {
@@ -260,8 +266,14 @@ enum WordDictionaryDetailSheetPresenter {
             storedContext: storedContext,
             sourceTitle: sourceTitle,
             lineEnglish: lineEnglish,
-            keepsTappedFormAsHeadword: keepsTappedFormAsHeadword
+            keepsTappedFormAsHeadword: keepsTappedFormAsHeadword,
+            ranksSenses: ranksSenses
         )
+        // iPad: a narrow, undimmed sheet pinned to a bottom corner (`presentFloatingSheet`).
+        if let floating, viewController.traitCollection.horizontalSizeClass == .regular {
+            viewController.presentFloatingSheet(sheet, style: floating, animated: animated)
+            return
+        }
         configureAsSheet(sheet, fullSheet: fullSheet)
         viewController.present(sheet, animated: animated)
     }

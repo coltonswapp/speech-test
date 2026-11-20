@@ -103,6 +103,52 @@ final class FuriganaTranscriptLabel: UILabel {
     private var tokenHighlightIsFullHeight = false
     private var tokenHighlightFillColor = tokenSyncHighlightColor
 
+    /// Tappable word ranges (UTF-16, in `attributedText`), each drawn with a thin
+    /// underline like the clips transcript. Empty draws nothing.
+    var underlinedRanges: [NSRange] = [] {
+        didSet {
+            guard underlinedRanges != oldValue else { return }
+            underlineSegmentCache = nil
+            setNeedsDisplay()
+        }
+    }
+
+    /// Index into `underlinedRanges` drawn as selected (tinted wash + underline),
+    /// e.g. while its definition callout is open.
+    var selectedUnderlineIndex: Int? {
+        didSet {
+            guard selectedUnderlineIndex != oldValue else { return }
+            setNeedsDisplay()
+        }
+    }
+
+    /// Light enough in light mode not to compete with the glyphs; stronger in dark,
+    /// where a faint line disappears into the glass bubble.
+    var underlineColor: UIColor = UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor.white.withAlphaComponent(0.4)
+            : UIColor.black.withAlphaComponent(0.16)
+    } {
+        didSet { setNeedsDisplay() }
+    }
+
+    private static let underlineWidth: CGFloat = 3
+    /// Round caps reach half the line width past each end, so this has to clear
+    /// them: (3.5 × 2) − 3 leaves a visible ~4pt gap between neighboring words.
+    private static let underlineHorizontalPadding: CGFloat = 3.5
+
+    /// Underline geometry only depends on string, ranges, and size; recolors reuse it.
+    private var underlineSegmentCache: (
+        key: UnderlineSegmentCacheKey,
+        segments: [[(rect: CGRect, baselineY: CGFloat)]]
+    )?
+
+    private struct UnderlineSegmentCacheKey: Equatable {
+        let string: String
+        let ranges: [NSRange]
+        let drawRect: CGRect
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         // Ruby like わたし on 私 paints a few points past the first glyph.
@@ -320,6 +366,7 @@ final class FuriganaTranscriptLabel: UILabel {
             return
         }
         drawTokenHighlight(in: drawRect)
+        drawTokenUnderlines(in: drawRect)
         if attributedTextHasRuby {
             // Do not ask Core Text to paint ruby. `NSAttributedString.draw`
             // stretches each kanji to the reading width (少々 / しょうしょう)
@@ -504,6 +551,151 @@ final class FuriganaTranscriptLabel: UILabel {
             )
             UIBezierPath(roundedRect: highlight, cornerRadius: radius).fill()
         }
+    }
+
+    // MARK: Word underlines
+
+    /// Index into `underlinedRanges` under `point` (label coordinates), with a few
+    /// points of slop so short words like は stay easy to hit.
+    func underlinedRangeIndex(at point: CGPoint) -> Int? {
+        let font = baseFont
+        var best: (index: Int, distance: CGFloat)?
+        for (index, segments) in underlineSegments(in: textDrawRect).enumerated() {
+            for segment in segments {
+                let hit = CGRect(
+                    x: segment.rect.minX - 4,
+                    y: segment.baselineY - font.pointSize - 6,
+                    width: segment.rect.width + 8,
+                    height: font.pointSize * 1.3 + 10
+                )
+                guard hit.contains(point) else { continue }
+                let distance = abs(point.x - segment.rect.midX)
+                if best == nil || distance < best!.distance {
+                    best = (index, distance)
+                }
+            }
+        }
+        return best?.index
+    }
+
+    /// Glyph boxes (one per wrapped line) for `underlinedRanges[index]`, in label
+    /// coordinates. For anchoring a definition callout over the word.
+    func underlinedRangeFragments(at index: Int) -> [CGRect] {
+        let all = underlineSegments(in: textDrawRect)
+        guard all.indices.contains(index) else { return [] }
+        let font = baseFont
+        return all[index].map { segment in
+            CGRect(
+                x: segment.rect.minX,
+                y: segment.baselineY - font.pointSize,
+                width: segment.rect.width,
+                height: font.pointSize * 1.2
+            )
+        }
+    }
+
+    private var baseFont: UIFont {
+        if let attributedText, attributedText.length > 0,
+           let font = attributedText.attribute(.font, at: 0, effectiveRange: nil) as? UIFont {
+            return font
+        }
+        return font ?? .systemFont(ofSize: 17)
+    }
+
+    private func drawTokenUnderlines(in drawRect: CGRect) {
+        guard !underlinedRanges.isEmpty else { return }
+        let all = underlineSegments(in: drawRect)
+        guard !all.isEmpty else { return }
+        let font = baseFont
+        let underlineY: (CGFloat) -> CGFloat = { baselineY in
+            // Just under the glyphs; deeper would drop into the next line's ruby.
+            baselineY + max(2, font.pointSize * 0.14)
+        }
+        let pad = Self.underlineHorizontalPadding
+
+        for (index, segments) in all.enumerated() {
+            let isSelected = index == selectedUnderlineIndex
+            if isSelected {
+                tintColor.withAlphaComponent(0.18).setFill()
+                for segment in segments {
+                    let wash = CGRect(
+                        x: segment.rect.minX - 2,
+                        y: segment.baselineY - font.pointSize * 0.95,
+                        width: segment.rect.width + 4,
+                        height: font.pointSize * 1.2
+                    )
+                    UIBezierPath(roundedRect: wash, cornerRadius: 5).fill()
+                }
+            }
+            let color = isSelected ? tintColor ?? .systemBlue : underlineColor
+            color.setStroke()
+            for segment in segments where segment.rect.width > pad * 2 {
+                let y = underlineY(segment.baselineY)
+                let path = UIBezierPath()
+                path.move(to: CGPoint(x: segment.rect.minX + pad, y: y))
+                path.addLine(to: CGPoint(x: segment.rect.maxX - pad, y: y))
+                path.lineWidth = isSelected ? Self.underlineWidth + 0.5 : Self.underlineWidth
+                path.lineCapStyle = .round
+                path.stroke()
+            }
+        }
+    }
+
+    /// One layout pass for every underlined range, cached until the string, ranges,
+    /// or size change (emphasis recolors redraw every frame).
+    private func underlineSegments(in drawRect: CGRect) -> [[(rect: CGRect, baselineY: CGFloat)]] {
+        guard let attributed = attributedText,
+              attributed.length > 0,
+              !underlinedRanges.isEmpty,
+              drawRect.width > 0,
+              drawRect.height > 0 else { return [] }
+        let key = UnderlineSegmentCacheKey(
+            string: attributed.string,
+            ranges: underlinedRanges,
+            drawRect: drawRect
+        )
+        if let cache = underlineSegmentCache, cache.key == key {
+            return cache.segments
+        }
+
+        let stripped = Self.attributedStringByRemovingRuby(attributed)
+        let storage = NSTextStorage(attributedString: stripped)
+        let manager = NSLayoutManager()
+        manager.usesFontLeading = true
+        let container = NSTextContainer(size: CGSize(width: drawRect.width, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        container.maximumNumberOfLines = 0
+        manager.addTextContainer(container)
+        storage.addLayoutManager(manager)
+
+        let segments = underlinedRanges.map { range -> [(rect: CGRect, baselineY: CGFloat)] in
+            guard range.location >= 0, range.length > 0, NSMaxRange(range) <= attributed.length else { return [] }
+            let glyphRange = manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            guard glyphRange.length > 0 else { return [] }
+            var result: [(rect: CGRect, baselineY: CGFloat)] = []
+            manager.enumerateLineFragments(forGlyphRange: glyphRange) { fragmentRect, _, _, lineGlyphRange, _ in
+                let intersection = NSIntersectionRange(lineGlyphRange, glyphRange)
+                guard intersection.length > 0 else { return }
+                var tokenRect = CGRect.null
+                manager.enumerateEnclosingRects(
+                    forGlyphRange: intersection,
+                    withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+                    in: container
+                ) { rect, _ in
+                    tokenRect = tokenRect.union(rect)
+                }
+                guard !tokenRect.isNull, tokenRect.width > 0 else { return }
+                let baseline = manager.location(forGlyphAt: intersection.location).y
+                result.append((
+                    CGRect(x: drawRect.minX + tokenRect.minX, y: drawRect.minY + tokenRect.minY,
+                           width: tokenRect.width, height: tokenRect.height),
+                    drawRect.minY + fragmentRect.minY + baseline
+                ))
+            }
+            return result
+        }
+        underlineSegmentCache = (key, segments)
+        return segments
     }
 
     /// Token geometry shared by the highlight and `baseTextSegments(for:)`.

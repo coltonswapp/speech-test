@@ -643,9 +643,31 @@ final class NaturalListeningStatView: UIView {
 // MARK: - Commit
 
 /// Hana won't help quitters: a slide-to-promise that the first lesson gets finished.
-final class NaturalCommitStepViewController: NaturalStepViewController {
+class NaturalCommitStepViewController: NaturalStepViewController {
 
     override var progressBeatCount: Int { 2 }
+
+    // MARK: Copy hooks
+
+    /// What the slider promises, shown above it.
+    var promiseCaption: String { "I'll finish Lesson 1, start to end." }
+    /// Hana's ask, before the slider comes in.
+    var askLines: [TutorLine] {
+        [
+            TutorLine("ちょっと待って。", "Hold on a sec."),
+            TutorLine("正直に言うね。途中でやめる人は手伝わないよ。", "I'll be honest: I don't help quitters."),
+            TutorLine("最初のレッスン、最後までやるって約束できる？", "Can you promise to finish your first lesson?"),
+        ]
+    }
+    /// Header subtitle once the promise is made.
+    var dealSubtitle: String { "Lesson 1, start to end." }
+    /// Hana's answer once the promise is made.
+    var dealLines: [TutorLine] {
+        [
+            TutorLine("約束だよ！", "It's a promise!"),
+            TutorLine("じゃあ、さっそく始めよう！", "Then let's get started!"),
+        ]
+    }
 
     private var chat: TutorChatView?
     private let sliderGroup = UIView()
@@ -695,7 +717,7 @@ final class NaturalCommitStepViewController: NaturalStepViewController {
         slider.onKnobMoved = { [weak self] in self?.lookAtKnob() }
         self.slider = slider
 
-        captionLabel.text = "I'll finish Lesson 1, start to end."
+        captionLabel.text = promiseCaption
         captionLabel.font = .preferredFont(forTextStyle: .footnote)
         captionLabel.textColor = .secondaryLabel
         captionLabel.textAlignment = .center
@@ -765,12 +787,9 @@ final class NaturalCommitStepViewController: NaturalStepViewController {
                 hana.transform = .identity
             }
         }
+        let ask = askLines.map { TutorChatView.Message.tutorJapanese($0) }
         timeline.after(0.35) { [weak self] in
-            self?.chat?.play([
-                .tutorJapanese(TutorLine("ちょっと待って。", "Hold on a sec.")),
-                .tutorJapanese(TutorLine("正直に言うね。途中でやめる人は手伝わないよ。", "I'll be honest: I don't help quitters.")),
-                .tutorJapanese(TutorLine("最初のレッスン、最後までやるって約束できる？", "Can you promise to finish your first lesson?")),
-            ]) { [weak self] in
+            self?.chat?.play(ask) { [weak self] in
                 guard let self else { return }
                 self.sliderGroup.isUserInteractionEnabled = true
                 self.slideIn([self.sliderGroup])
@@ -798,15 +817,13 @@ final class NaturalCommitStepViewController: NaturalStepViewController {
         advanceProgressBeat(to: 1)
         // Long enough to see the knob land and the burst start, then the slider is done.
         timeline.after(0.45) { [weak self] in self?.hideSlider() }
-        transitionHeader(title: "It's a deal.", subtitle: "Lesson 1, start to end.")
+        transitionHeader(title: "It's a deal.", subtitle: dealSubtitle)
         // The first three messages slide away, then Hana answers from a clean slate.
         // (Readings checked: 約束ね parses as 約+束ね, so these lines avoid it.)
+        let deal = dealLines.map { TutorChatView.Message.tutorJapanese($0) }
         timeline.after(0.5) { [weak self] in
             self?.chat?.clear { [weak self] in
-                self?.chat?.play([
-                    .tutorJapanese(TutorLine("約束だよ！", "It's a promise!")),
-                    .tutorJapanese(TutorLine("じゃあ、さっそく始めよう！", "Then let's get started!")),
-                ]) { [weak self] in
+                self?.chat?.play(deal) { [weak self] in
                     self?.revealCTA("Let's go")
                 }
             }

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://raw.githubusercontent.com/coltonswapp/CSFeedbackKit/main/Schemas/csfeedbackkit.config.v1.schema.json",
+  "version": 1,
+  "enabledIn": ["xcode"],
+  "enabledWhen": "staffAccess",
+  "fields": [
+    { "key": "agent", "value": "shohei", "visible": false },
+    { "key": "qaSource", "sources": ["screen"], "visible": false },
+    { "key": "focusTitle", "sources": ["screen"], "visible": false },
+    { "key": "sourceId", "sources": ["screen"], "visible": false },
+    { "key": "lessonId", "label": "Lesson", "sources": ["screen"] },
+    { "key": "lessonTitle", "label": "Lesson title", "sources": ["screen"] },
+    { "key": "sceneSlug", "label": "Scene", "sources": ["screen"] },
+    { "key": "sceneTitle", "label": "Scene title", "sources": ["screen"] },
+    { "key": "clipId", "label": "Clip", "sources": ["screen"] },
+    { "key": "videoId", "label": "Video", "sources": ["screen"] },
+    { "key": "videoTitle", "label": "Video title", "sources": ["screen"] },
+    { "key": "channelName", "label": "Channel", "sources": ["screen"] },
+    { "key": "channelURL", "label": "Channel link", "sources": ["screen"], "visible": false },
+    { "key": "youtubeLink", "label": "YouTube", "sources": ["screen"], "visible": false },
+    { "key": "studioLink", "label": "Studio", "sources": ["screen"] },
+    { "key": "focus", "label": "Looking at", "type": "stringArray", "sources": ["screen"] }
+  ],
+  "tags": [
+    { "id": "content" },
+    { "id": "bug" },
+    { "id": "local-prompt" },
+    { "id": "remote-agent" },
+    { "id": "ux" },
+    { "id": "quiz" },
+    { "id": "fyi" },
+    { "id": "question" }
+  ],
+  "destinations": [
+    {
+      "id": "studio-notes",
+      "url": "${SHIZEN_CMS_BASE_URL}/api/client/content-qa/notes",
+      "auth": "staff",
+      "format": "shizenNote",
+      "maxBodyBytes": 1450000,
+      "timeoutSeconds": 30
+    }
+  ],
+  "attachments": {
+    "screenshot": { "defaultOn": true },
+    "device": {},
+    "logs": { "enabled": false, "subsystems": ["com.swappfunc.shizen", "CSFeedbackKit"], "lastMinutes": 5, "maxBytes": 8000 }
+  },
+  "triggers": [
+    { "type": "screenshot", "prompt": "QA this screen?" }
+  ],
+  "copy": {
+    "composerTitle": "QA note",
+    "sendButton": "Send to agent",
+    "sentToast": "Sent",
+    "failedTitle": "Couldn’t send note"
+  }
+}

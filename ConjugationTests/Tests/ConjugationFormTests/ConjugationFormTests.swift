@@ -35,6 +35,55 @@ final class ConjugationFormTests: XCTestCase {
         XCTAssertEqual(name("聞かされる", lemma: "聞く", tags: tags), "Causative-passive")
     }
 
+    func testHumbleProgressive() {
+        let tags = "v5u intransitive verb"
+        XCTAssertEqual(name("向かっております", lemma: "向かう", tags: tags), "Humble progressive")
+        XCTAssertEqual(name("向かっておりました", lemma: "向かう", tags: tags), "Humble past progressive")
+        XCTAssertEqual(name("向かっておりません", lemma: "向かう", tags: tags), "Humble negative progressive")
+        XCTAssertEqual(name("向かっており", lemma: "向かう", tags: tags), "Formal progressive")
+        XCTAssertEqual(name("待っております", lemma: "待つ", tags: "v5t transitive verb"), "Humble progressive")
+        XCTAssertEqual(
+            ConjugationForm.reading(surface: "向かっております", lemma: "向かう", lemmaReading: "むかう", tags: tags),
+            "むかっております"
+        )
+    }
+
+    func testShimauAndContractions() {
+        let suwaru = "v5r intransitive verb"
+        XCTAssertEqual(name("座っちゃ", lemma: "座る", tags: suwaru), "Casual ては")
+        XCTAssertEqual(name("座っちゃだめ", lemma: "座る", tags: suwaru), "Must not")
+        XCTAssertEqual(name("座っちゃいけない", lemma: "座る", tags: suwaru), "Must not")
+        XCTAssertEqual(name("座っちゃう", lemma: "座る", tags: suwaru), "Ends up doing, casual")
+        XCTAssertEqual(name("座ってしまった", lemma: "座る", tags: suwaru), "Ended up doing")
+        // で contracts to じゃ.
+        let shinu = "v5n intransitive verb"
+        XCTAssertEqual(name("死んじゃう", lemma: "死ぬ", tags: shinu), "Ends up doing, casual")
+        XCTAssertEqual(name("死んじゃった", lemma: "死ぬ", tags: shinu), "Ended up doing, casual")
+        XCTAssertEqual(name("貸しちゃった", lemma: "貸す", tags: "v5s transitive verb"), "Ended up doing, casual")
+        XCTAssertEqual(name("食べちゃいました", lemma: "食べる", tags: "v1 transitive verb"), "Ended up doing, polite")
+        XCTAssertEqual(name("行っちゃいます", lemma: "行く", tags: "v5k-s intransitive verb"), "Ends up doing, polite")
+        XCTAssertEqual(name("知っちゃったら", lemma: "知る", tags: "v5r transitive verb"), "Ends up doing, conditional")
+        XCTAssertEqual(name("描いてしまう", lemma: "描く", tags: "v5k transitive verb"), "Ends up doing")
+        XCTAssertEqual(name("しちゃった", lemma: "する", tags: "vs-i"), "Ended up doing, casual")
+        XCTAssertEqual(name("来ちゃった", lemma: "来る", tags: "vk"), "Ended up doing, casual")
+        // 為る carries its class in the reading.
+        XCTAssertEqual(name("しちゃった", lemma: "為る", reading: "する", tags: "vs-i"), "Ended up doing, casual")
+        XCTAssertEqual(name("した", lemma: "為る", reading: "する", tags: "vs-i"), "Past")
+        // Passive + てしまう.
+        XCTAssertEqual(
+            name("騙されてしまい", lemma: "騙す", tags: "v5s transitive verb"),
+            "Passive, ends up doing, linking"
+        )
+        XCTAssertEqual(
+            ConjugationForm.reading(surface: "座っちゃだめ", lemma: "座る", lemmaReading: "すわる", tags: suwaru),
+            "すわっちゃだめ"
+        )
+        XCTAssertEqual(
+            ConjugationForm.reading(surface: "来ちゃった", lemma: "来る", lemmaReading: "くる", tags: "vk"),
+            "きちゃった"
+        )
+    }
+
     func testKanaSurfaceMatchesKanjiLemmaThroughReading() {
         XCTAssertEqual(name("ききました", lemma: "聞く", reading: "きく", tags: "v5k transitive verb"), "Polite past")
     }

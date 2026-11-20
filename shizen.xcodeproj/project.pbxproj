@@ -25,10 +25,10 @@
 		F6B950AF2FB582D0007030C7 /* StringTools in Frameworks */ = {isa = PBXBuildFile; productRef = F6B950AE2FB582D0007030C7 /* StringTools */; };
 		F6C0FM012FC0A00100000001 /* FoundationModels.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6C0FM022FC0A00100000002 /* FoundationModels.framework */; };
 		F6DE0FAD2F957A8600FFF413 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F6DE0FAC2F957A8600FFF412 /* GRDB */; };
+		F6FBK0102FCSFBKIT0010 /* CSFeedbackKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = F6FBK0022FCSFBKIT0002 /* CSFeedbackKitUI */; };
 		F6IK00102FINTERACT010 /* InteractionKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6IK00022FINTERACT002 /* InteractionKit */; };
 		F6PH00102FPOSTHOG010 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = F6PH00022FPOSTHOG002 /* PostHog */; };
 		F6SC00102FCONTENT010 /* GrammarContentKit in Frameworks */ = {isa = PBXBuildFile; productRef = F6SC00022FCONTENT002 /* GrammarContentKit */; };
-		F6SUIS01SHADERBF01 /* SwiftUIShaders in Frameworks */ = {isa = PBXBuildFile; productRef = F6SUIS01SHADERPD01 /* SwiftUIShaders */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -68,6 +68,7 @@
 				F6C0FM012FC0A00100000001 /* FoundationModels.framework in Frameworks */,
 				F629EE192FBBBB15006A3F68 /* TTSCore in Frameworks */,
 				F6IK00102FINTERACT010 /* InteractionKit in Frameworks */,
+				F6FBK0102FCSFBKIT0010 /* CSFeedbackKitUI in Frameworks */,
 				F6SC00102FCONTENT010 /* GrammarContentKit in Frameworks */,
 				F6713B1630019B3000A89257 /* NNKit in Frameworks */,
 				F6B950A92FB582D0007030C7 /* CharacterFilter in Frameworks */,
@@ -77,7 +78,6 @@
 				F65E7DFB300B104C0081F120 /* NNKit in Frameworks */,
 				F6B950AB2FB582D0007030C7 /* IPADic in Frameworks */,
 				F6713B1930019E0800A89257 /* NNKit in Frameworks */,
-				F6SUIS01SHADERBF01 /* SwiftUIShaders in Frameworks */,
 				E0280E61B483C508E50D95EF /* FirebaseCore in Frameworks */,
 				1F27064997E32C67FB393CE8 /* FirebaseAuth in Frameworks */,
 				520FC549F08F0DFFA057A2A8 /* FirebaseFirestore in Frameworks */,
@@ -150,6 +150,7 @@
 				F6DE0FAC2F957A8600FFF412 /* GRDB */,
 				F6AA00022F957A880FFF002 /* TTSCore */,
 				F6IK00022FINTERACT002 /* InteractionKit */,
+				F6FBK0022FCSFBKIT0002 /* CSFeedbackKitUI */,
 				F6SC00022FCONTENT002 /* GrammarContentKit */,
 				F6B950A82FB582D0007030C7 /* CharacterFilter */,
 				F6B950AA2FB582D0007030C7 /* IPADic */,
@@ -159,7 +160,6 @@
 				F6713B1830019E0800A89257 /* NNKit */,
 				F6713B1B30019EC800A89257 /* NNKit */,
 				F65E7DFA300B104C0081F120 /* NNKit */,
-				F6SUIS01SHADERPD01 /* SwiftUIShaders */,
 				093C795C8903F27CFA80A5E8 /* FirebaseCore */,
 				6EC826A41931DC31CC8F70BA /* FirebaseAuth */,
 				BA7462F3C516C97314BD16A9 /* FirebaseFirestore */,
@@ -200,13 +200,13 @@
 			packageReferences = (
 				F6DE0FAA2F957A8600FFF411 /* XCRemoteSwiftPackageReference "GRDB" */,
 				F6B950A72FB582D0007030C7 /* XCRemoteSwiftPackageReference "Mecab-Swift" */,
-				F6SUIS01SHADERREF01 /* XCRemoteSwiftPackageReference "SwiftUIShaders" */,
 				191AD9F6F922007EEF22F274 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				5B2C880540C9F0950AC0CBFC /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				A83E8D4506493F86DAA1F5E4 /* XCRemoteSwiftPackageReference "toast-swift" */,
 				F6PH00012FPOSTHOG001 /* XCRemoteSwiftPackageReference "posthog-ios" */,
 				F6AA00012F957A880FFF001 /* XCLocalSwiftPackageReference "TTSCore" */,
 				F6IK00012FINTERACT001 /* XCLocalSwiftPackageReference "InteractionKit" */,
+				F6FBK0012FCSFBKIT0001 /* XCRemoteSwiftPackageReference "CSFeedbackKit" */,
 				F6SC00012FCONTENT001 /* XCLocalSwiftPackageReference "GrammarContentKit" */,
 				F65E7DF9300B104C0081F120 /* XCLocalSwiftPackageReference "../cs-ios-style-guide" */,
 			);
@@ -297,7 +297,7 @@
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses Apple’s on-device speech recognition to transcribe what you say.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -334,7 +334,7 @@
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses Apple’s on-device speech recognition to transcribe what you say.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -558,20 +558,20 @@
 				minimumVersion = 6.0.0;
 			};
 		};
+		F6FBK0012FCSFBKIT0001 /* XCRemoteSwiftPackageReference "CSFeedbackKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/coltonswapp/CSFeedbackKit";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.1.1;
+			};
+		};
 		F6PH00012FPOSTHOG001 /* XCRemoteSwiftPackageReference "posthog-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/PostHog/posthog-ios";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 3.93.2;
-			};
-		};
-		F6SUIS01SHADERREF01 /* XCRemoteSwiftPackageReference "SwiftUIShaders" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/krispuckett/SwiftUIShaders.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.0.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -657,6 +657,11 @@
 			package = F6DE0FAA2F957A8600FFF411 /* XCRemoteSwiftPackageReference "GRDB" */;
 			productName = GRDB;
 		};
+		F6FBK0022FCSFBKIT0002 /* CSFeedbackKitUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F6FBK0012FCSFBKIT0001 /* XCRemoteSwiftPackageReference "CSFeedbackKit" */;
+			productName = CSFeedbackKitUI;
+		};
 		F6IK00022FINTERACT002 /* InteractionKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = InteractionKit;
@@ -669,11 +674,6 @@
 		F6SC00022FCONTENT002 /* GrammarContentKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GrammarContentKit;
-		};
-		F6SUIS01SHADERPD01 /* SwiftUIShaders */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = F6SUIS01SHADERREF01 /* XCRemoteSwiftPackageReference "SwiftUIShaders" */;
-			productName = SwiftUIShaders;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

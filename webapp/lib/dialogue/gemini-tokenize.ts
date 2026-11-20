@@ -11,15 +11,13 @@ import {
 import { db } from "@/lib/db/client";
 import { appSettings } from "@/lib/db/schema";
 import { DialogueGenerationError } from "@/lib/dialogue/gemini-generate";
-import { validatedTokens } from "@/lib/dialogue/japanese-segmentation";
 import {
   buildTokenizePrompt,
   TOKENIZE_THINKING_LEVEL,
 } from "@/lib/dialogue/tokenize-prompt";
 import {
-  rawTokenSpans,
-  readingsForSegments,
   tokenizeCacheKey,
+  tokensWithReadings,
   type RawToken,
 } from "@/lib/dialogue/token-readings";
 import type { TokenizedToken } from "@/lib/dialogue/types";
@@ -139,19 +137,8 @@ export async function requestTokenSurfaces(
   return parsed.data.tokens;
 }
 
-/** Validated segments plus whichever readings survive the split/merge pass. */
-export function tokensWithReadings(raw: RawToken[], text: string): TokenizedToken[] | null {
-  const segments = validatedTokens(
-    raw.map((token) => token.text),
-    text
-  );
-  if (!segments || segments.length === 0) return null;
-  const readings = readingsForSegments(segments, rawTokenSpans(raw, text));
-  return segments.map((segment, i) => ({
-    text: segment.text,
-    ...(readings[i] ? { reading: readings[i] } : {}),
-  }));
-}
+// Pure, so scripts (clip-tokenize-compare) apply exactly the same checks.
+export { tokensWithReadings } from "@/lib/dialogue/token-readings";
 
 async function readCachedLine(text: string): Promise<TokenizedToken[] | null> {
   try {

@@ -6,7 +6,6 @@
 //  "worth a second look" card of the learner's lines, then the next rep.
 //
 
-import SwiftUI
 import UIKit
 
 final class RolePlayCompletionViewController: UIViewController {
@@ -30,9 +29,7 @@ final class RolePlayCompletionViewController: UIViewController {
 
     private let recap: RolePlayRecap
 
-    private let auroraHost = UIHostingController(
-        rootView: DialogueCompletionAuroraView(configuration: .production)
-    )
+    private let auroraView = DialogueCompletionAuroraView()
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
     private let eyebrowLabel = UILabel()
@@ -148,10 +145,7 @@ final class RolePlayCompletionViewController: UIViewController {
         closeButton.addAction(UIAction { [weak self] _ in
             self?.commit { $0.onClose?() }
         }, for: .touchUpInside)
-
-        auroraHost.view.backgroundColor = .clear
-        auroraHost.view.isUserInteractionEnabled = false
-        auroraHost.view.translatesAutoresizingMaskIntoConstraints = false
+        auroraView.translatesAutoresizingMaskIntoConstraints = false
 
         // The other part is the natural next rep in a two-person scene.
         primaryButton.primaryStyle = .yellow
@@ -200,19 +194,17 @@ final class RolePlayCompletionViewController: UIViewController {
             actionsStack.addArrangedSubview(detailsButton)
         }
 
-        addChild(auroraHost)
-        view.addSubview(auroraHost.view)
-        auroraHost.didMove(toParent: self)
+        view.addSubview(auroraView)
         view.addSubview(scrollView)
         view.addSubview(closeButton)
         view.addSubview(actionsStack)
 
         let contentGuide = scrollView.contentLayoutGuide
         NSLayoutConstraint.activate([
-            auroraHost.view.topAnchor.constraint(equalTo: view.topAnchor),
-            auroraHost.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            auroraHost.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            auroraHost.view.heightAnchor.constraint(
+            auroraView.topAnchor.constraint(equalTo: view.topAnchor),
+            auroraView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            auroraView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            auroraView.heightAnchor.constraint(
                 equalToConstant: DialogueAuroraConfiguration.production.height
             ),
 
@@ -335,8 +327,8 @@ final class RolePlayCompletionViewController: UIViewController {
 
     private func prepareEntranceAnimation() {
         guard !UIAccessibility.isReduceMotionEnabled else { return }
-        auroraHost.view.alpha = 0
-        auroraHost.view.transform = CGAffineTransform(scaleX: 0.72, y: 0.72)
+        auroraView.alpha = 0
+        auroraView.transform = CGAffineTransform(scaleX: 0.72, y: 0.72)
         for label in [eyebrowLabel, titleLabel, subtitleLabel] {
             label.alpha = 0
             label.transform = CGAffineTransform(translationX: 0, y: 8)
@@ -359,8 +351,8 @@ final class RolePlayCompletionViewController: UIViewController {
             initialSpringVelocity: 0.4,
             options: [.curveEaseOut, .allowUserInteraction]
         ) {
-            self.auroraHost.view.alpha = 1
-            self.auroraHost.view.transform = .identity
+            self.auroraView.alpha = 1
+            self.auroraView.transform = .identity
         }
 
         UIView.animate(withDuration: 0.35, delay: 0.12, options: [.curveEaseOut, .allowUserInteraction]) {

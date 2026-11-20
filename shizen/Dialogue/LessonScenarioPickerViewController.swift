@@ -9,8 +9,9 @@
 //
 
 import UIKit
+import CSFeedbackKitUI
 
-final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDelegate, ScreenshotQAPresenting {
+final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDelegate {
 
     private let collectionID: String
     private let fallbackTitle: String?
@@ -57,6 +58,8 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
 
     private static let horizontalInset: CGFloat = 20
     private static let heroHeightRatio: CGFloat = 0.42
+    /// Tallest the hero gets; on iPad 42% of the screen crops the image to a sliver.
+    private static let heroMaxHeight: CGFloat = 440
     /// Scenes after the next playable one whose audio is fetched ahead on unmetered networks.
     private static let lookAheadSceneCount = 1
     private static let sceneTitlePlaceholder = "Some title of a scene"
@@ -285,6 +288,8 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
             constant: -120
         )
         contentBottomConstraint = bottom
+        let heroHeight = heroView.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: Self.heroHeightRatio)
+        heroHeight.priority = .required - 1
 
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -293,13 +298,16 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
             contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
-            contentStack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
-            contentStack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
             bottom,
-            contentStack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
 
-            heroView.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: Self.heroHeightRatio),
-        ])
+            heroHeight,
+            heroView.heightAnchor.constraint(lessThanOrEqualToConstant: Self.heroMaxHeight),
+        ] + ContentColumn.horizontalConstraints(
+            for: contentStack,
+            in: scrollView,
+            inset: 0,
+            maxWidth: ContentColumn.lessonDetailWidth
+        ))
     }
 
     private func configurePlayButton() {
@@ -312,7 +320,8 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
         NSLayoutConstraint.activate([
             playButton.widthAnchor.constraint(equalToConstant: 56),
             playButton.heightAnchor.constraint(equalToConstant: 56),
-            playButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            // Follows the content column's trailing edge on wide windows.
+            playButton.trailingAnchor.constraint(equalTo: contentStack.trailingAnchor, constant: -20),
             playButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
         ])
     }
@@ -661,17 +670,21 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
         ) { [weak self] _ in
             self?.presentContentQANote()
         }
+        // CSFeedbackKit composer (screenshots open it too), alongside the old note.
+        let newNote = UIAction(
+            title: "Note (new)",
+            subtitle: "CSFeedbackKit composer",
+            image: UIImage(systemName: "square.and.pencil.circle")
+        ) { [weak self] _ in
+            guard let self else { return }
+            Feedback.present(from: self)
+        }
         let qaMenu = UIMenu(
             title: "QA",
             image: UIImage(systemName: "checklist"),
-            children: [note]
+            children: Feedback.isActive ? [note, newNote] : [note]
         )
         return UIMenu(children: [qaMenu, unlock, resetMenu])
-    }
-
-    func presentScreenshotQANote(from presenter: UIViewController) -> Bool {
-        presentContentQANote(from: presenter, forcesScreenshot: true)
-        return true
     }
 
     private func presentContentQANote(from presenter: UIViewController? = nil, forcesScreenshot: Bool = false) {
@@ -856,6 +869,26 @@ final class LessonScenarioPickerViewController: UIViewController, UIScrollViewDe
     }
 }
 
+// MARK: - CSFeedbackKit context
+
+/// Same lesson context the old QA note sends, as declared fields (see CSFeedback.json).
+extension LessonScenarioPickerViewController: FeedbackContextProvider {
+    func feedbackValues() -> FeedbackValues {
+        let lessonTitle = lessonNavigationTitle
+            ?? fallbackTitle
+            ?? collection?.title
+            ?? collectionID
+        return [
+            "qaSource": .string("dialogue"),
+            "focusTitle": .string("Lesson"),
+            "lessonId": .string(collectionID),
+            "lessonTitle": .string(lessonTitle),
+            "studioLink": .string(ContentCMSClient.studioLessonEditorLink(collectionId: collectionID)),
+            "focus": .strings(lessonQAFocusDetailLines()),
+        ]
+    }
+}
+
 // MARK: - Hero
 
 private final class LessonHeroView: UIView {
@@ -865,6 +898,16 @@ private final class LessonHeroView: UIView {
     let imageView = UIImageView()
     private let fadeView = LessonHeroFadeView()
     private let imageLayer = CALayer()
+    /// Fades the image's left and right edges when the hero is narrower than the
+    /// window (iPad's centered column), so it melts into the page like the bottom does.
+    private let sideFadeMask: CAGradientLayer = {
+        let mask = CAGradientLayer()
+        mask.startPoint = CGPoint(x: 0, y: 0.5)
+        mask.endPoint = CGPoint(x: 1, y: 0.5)
+        mask.colors = [UIColor.clear, .black, .black, .clear].map(\.cgColor)
+        mask.locations = [0, 0.14, 0.86, 1]
+        return mask
+    }()
     private var pull: CGFloat = 0
     private var imageObservation: NSKeyValueObservation?
 
@@ -904,6 +947,12 @@ private final class LessonHeroView: UIView {
         positionImageLayer()
     }
 
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // The side fade depends on the window width.
+        positionImageLayer()
+    }
+
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         guard traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) else { return }
@@ -933,6 +982,9 @@ private final class LessonHeroView: UIView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         imageLayer.frame = CGRect(x: (baseWidth - width) / 2, y: -pull, width: width, height: height)
+        let fadesSides = baseWidth < (window?.bounds.width ?? baseWidth) - 1
+        imageLayer.mask = fadesSides ? sideFadeMask : nil
+        sideFadeMask.frame = imageLayer.bounds
         CATransaction.commit()
     }
 

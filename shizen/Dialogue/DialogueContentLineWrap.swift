@@ -141,6 +141,55 @@ enum DialogueContentLineWrap {
         return mutable
     }
 
+    /// Joins the characters inside each token (お|か|げ) so a wrap can only fall between
+    /// words, the way the clips transcript wraps. Returns the glued string and the token
+    /// ranges shifted onto it. Boundaries already joined (ruby runs, punctuation glue)
+    /// are left alone. Karaoke ranges still map because `mapOriginalUTF16Range` skips
+    /// every joiner.
+    static func gluingTokens(
+        in attributed: NSAttributedString,
+        ranges: [NSRange]
+    ) -> (attributed: NSAttributedString, ranges: [NSRange]) {
+        let ns = attributed.string as NSString
+        let rubyKey = NSAttributedString.Key(kCTRubyAnnotationAttributeName as String)
+        var locations: [Int] = []
+        for range in ranges where range.location >= 0 && NSMaxRange(range) <= ns.length {
+            var location = range.location
+            while location < NSMaxRange(range) {
+                let next = NSMaxRange(ns.rangeOfComposedCharacterSequence(at: location))
+                if next < NSMaxRange(range),
+                   ns.character(at: location) != wordJoinerUnit,
+                   ns.character(at: next) != wordJoinerUnit {
+                    locations.append(next)
+                }
+                location = next
+            }
+        }
+        guard !locations.isEmpty else { return (attributed, ranges) }
+        let sortedLocations = Array(Set(locations)).sorted()
+
+        let mutable = NSMutableAttributedString(attributedString: attributed)
+        for location in sortedLocations.reversed() {
+            var attrs = mutable.attributes(at: location - 1, effectiveRange: nil)
+            // A rubyless joiner inside a ruby run would split it and draw the reading twice.
+            if !sharesRubyAnnotation(mutable, before: location) {
+                attrs.removeValue(forKey: rubyKey)
+            }
+            mutable.insert(NSAttributedString(string: wordJoiner, attributes: attrs), at: location)
+        }
+
+        // Each joiner at `location` shifts everything at or after it by one unit.
+        func shifted(_ position: Int, includingAt: Bool) -> Int {
+            position + sortedLocations.filter { includingAt ? $0 <= position : $0 < position }.count
+        }
+        let newRanges = ranges.map { range -> NSRange in
+            let start = shifted(range.location, includingAt: false)
+            let end = shifted(NSMaxRange(range), includingAt: false)
+            return NSRange(location: start, length: max(0, end - start))
+        }
+        return (mutable, newRanges)
+    }
+
     /// True when the characters on both sides of `location` sit under the same ruby annotation.
     static func sharesRubyAnnotation(_ attributed: NSAttributedString, before location: Int) -> Bool {
         guard location > 0, location < attributed.length else { return false }

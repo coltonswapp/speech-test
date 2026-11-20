@@ -15,6 +15,11 @@ import WebKit
 
 final class YouTubeClipPlayerView: UIView {
 
+    /// After `play()`, how long the embed has to report playing or buffering before it's
+    /// treated as wedged and reloaded (e.g. back from a locked phone, the iframe can stop
+    /// answering without any error).
+    private static let playWatchdogDelay: TimeInterval = 4
+
     enum PlaybackState: Int {
         case unstarted = -1
         case ended = 0
@@ -36,6 +41,8 @@ final class YouTubeClipPlayerView: UIView {
     private(set) var isReady = false
     /// Last rate YouTube confirmed (it may round a requested rate).
     private(set) var playbackRate: Double = 1
+    /// Speed a fresh load starts at once the player is ready (a reload keeps its own rate).
+    var preferredPlaybackRate: Double = 1
     /// YouTube's own control bar (`controls` player var). Fixed per load, so
     /// changing it reloads the embed (`setShowsControls`).
     private(set) var showsControls = true
@@ -45,6 +52,10 @@ final class YouTubeClipPlayerView: UIView {
     private var pendingResume: (time: TimeInterval, play: Bool, rate: Double)?
     /// `play()` before the embed is ready starts as soon as it is (feed autoplay).
     private var playWhenReady = false
+    private var playWatchdog: Timer?
+    /// Reloads made on our own since playback last started; capped at one so a video
+    /// that can't play doesn't reload forever (the clip menu's Reload Video still works).
+    private var autoReloads = 0
 
     private let webView: WKWebView
     /// Video thumbnail over the embed until the player is ready, so loading shows
@@ -82,6 +93,13 @@ final class YouTubeClipPlayerView: UIView {
         configuration.userContentController.add(
             WeakScriptMessageHandler(self),
             name: Self.messageName
+        )
+        webView.navigationDelegate = self
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(willEnterForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
         )
         backgroundColor = .black
         webView.isOpaque = false
@@ -183,12 +201,74 @@ final class YouTubeClipPlayerView: UIView {
             playWhenReady = true
             return
         }
-        webView.evaluateJavaScript("player && player.playVideo();")
+        armPlayWatchdog()
+        webView.evaluateJavaScript("player && player.playVideo(); true;") { [weak self] _, error in
+            // The page is gone (web content process killed while locked): start over.
+            if error != nil { self?.recover(play: true) }
+        }
     }
 
     func pause() {
         playWhenReady = false
+        cancelPlayWatchdog()
         webView.evaluateJavaScript("player && player.pauseVideo();")
+    }
+
+    /// Loads the embed again where it was (time, rate, playing or not). For a player
+    /// that's stuck, blank, or errored.
+    func reload() {
+        autoReloads = 0
+        reloadInPlace(play: isPlaying || playWhenReady)
+    }
+
+    private func reloadInPlace(play: Bool) {
+        guard let videoID else { return }
+        cancelPlayWatchdog()
+        let time = currentTime
+        pendingResume = (time, play, playbackRate)
+        playWhenReady = false
+        // The old page may be blank (killed web process); the poster covers it until ready.
+        showPoster(videoID: videoID)
+        load(videoID: videoID, startSeconds: time, showsControls: showsControls)
+        onStateChange?(state)
+    }
+
+    /// An automatic reload, at most once until playback starts again.
+    private func recover(play: Bool) {
+        guard autoReloads < 1 else { return }
+        autoReloads += 1
+        reloadInPlace(play: play)
+    }
+
+    private func armPlayWatchdog() {
+        cancelPlayWatchdog()
+        playWatchdog = Timer.scheduledTimer(withTimeInterval: Self.playWatchdogDelay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.playWatchdog = nil
+                guard !self.isPlaying, self.window != nil else { return }
+                self.recover(play: true)
+            }
+        }
+    }
+
+    private func cancelPlayWatchdog() {
+        playWatchdog?.invalidate()
+        playWatchdog = nil
+    }
+
+    /// Back from the background: if the page no longer answers, reload it now (paused,
+    /// at the same spot) so the next play works.
+    @objc private func willEnterForeground() {
+        guard isReady else { return }
+        webView.evaluateJavaScript("player && player.getPlayerState ? player.getPlayerState() : -9") { [weak self] result, error in
+            guard let self else { return }
+            let state = result as? Int
+            if error != nil || state == nil || state == -9 {
+                self.autoReloads = 0
+                self.reloadInPlace(play: false)
+            }
+        }
     }
 
     func setPlaybackRate(_ rate: Double) {
@@ -221,6 +301,8 @@ final class YouTubeClipPlayerView: UIView {
                     seek(to: resume.time)
                     play()
                 }
+            } else if preferredPlaybackRate != 1 {
+                setPlaybackRate(preferredPlaybackRate)
             }
             if playWhenReady {
                 playWhenReady = false
@@ -230,10 +312,18 @@ final class YouTubeClipPlayerView: UIView {
         case "state":
             let raw = (body["state"] as? Int) ?? -1
             state = PlaybackState(rawValue: raw) ?? .unstarted
+            if state == .playing {
+                autoReloads = 0
+                cancelPlayWatchdog()
+            } else if state == .buffering {
+                // Loading counts as answering; the watchdog only catches silence.
+                cancelPlayWatchdog()
+            }
             onStateChange?(state)
         case "rate":
             if let rate = body["rate"] as? Double, rate > 0 { playbackRate = rate }
         case "error":
+            cancelPlayWatchdog()
             hidePoster()
             onError?((body["code"] as? Int) ?? -1)
         default:
@@ -295,6 +385,15 @@ final class YouTubeClipPlayerView: UIView {
         </body>
         </html>
         """
+    }
+}
+
+extension YouTubeClipPlayerView: WKNavigationDelegate {
+    /// iOS kills a backgrounded web view's content process under memory pressure, leaving a
+    /// blank player that ignores every call. Reload in place, playing only if it was.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        autoReloads = 0
+        reloadInPlace(play: isPlaying || playWhenReady)
     }
 }
 

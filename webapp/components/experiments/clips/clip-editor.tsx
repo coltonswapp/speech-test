@@ -412,6 +412,15 @@ export function ClipEditor({ clipId }: { clipId: string }) {
           >
             · All clips from this video
           </Link>
+          {aligned ? (
+            <a
+              href={`shizen://clip/${draft.id}`}
+              className="hover:text-foreground"
+              title="Opens this clip in the Shizen app (on a phone with a build that handles shizen:// links)"
+            >
+              · Open in app
+            </a>
+          ) : null}
           <span>
             {formatTimecode(draft.startSec)}–{formatTimecode(draft.endSec)} (
             {draft.durationSec.toFixed(1)} s)

@@ -53,8 +53,11 @@ enum ConjugationForm {
     ) -> Match? {
         let surface = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         let lemma = lemma.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 為る is tagged vs-i but is not spelled 〜する; its reading する carries the class.
+        let readingSpelling = lemmaReading?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !surface.isEmpty, !lemma.isEmpty,
               let wordClass = wordClass(lemma: lemma, tags: tags)
+                ?? readingSpelling.flatMap({ wordClass(lemma: $0, tags: tags) })
         else { return nil }
 
         var spellings = [lemma]
@@ -351,6 +354,32 @@ enum ConjugationForm {
             form(v.ta + "ら", "Conditional", "If or when … (〜たら)."),
             form(v.conditional, "Conditional", "If … (〜ば)."),
         ]
+        // てしまう "ends up doing" and its casual ちゃう; ちゃ is ては (〜ちゃだめ "must not").
+        // 読んで → 読んじゃう: で contracts to じゃ.
+        let cha = String(v.te.dropLast()) + (v.te.hasSuffix("で") ? "じゃ" : "ちゃ")
+        let ending = String(cha.suffix(2))
+        let endsUp = "Does it completely, or ends up doing it, often with regret"
+        let endedUp = "Did it completely, or ended up doing it, often with regret"
+        out += [
+            form(v.te + "しまう", "Ends up doing", "\(endsUp) (〜てしまう)."),
+            form(v.te + "しまった", "Ended up doing", "\(endedUp) (〜てしまった)."),
+            form(v.te + "しまって", "Ends up doing, te-form", "\(endsUp), and … (〜てしまって)."),
+            form(v.te + "しまい", "Ends up doing, linking", "\(endsUp); joins what follows in formal speech or writing (〜てしまい)."),
+            form(v.te + "しまいます", "Ends up doing, polite", "\(endsUp), said politely (〜てしまいます)."),
+            form(v.te + "しまいました", "Ended up doing, polite", "\(endedUp), said politely (〜てしまいました)."),
+            form(cha + "う", "Ends up doing, casual", "\(endsUp). Casual 〜てしまう (〜\(ending)う)."),
+            form(cha + "った", "Ended up doing, casual", "\(endedUp). Casual 〜てしまった (〜\(ending)った)."),
+            form(cha + "って", "Ends up doing, casual te-form", "\(endsUp), and … Casual 〜てしまって (〜\(ending)って)."),
+            form(cha + "ったら", "Ends up doing, conditional", "If or once it ends up done. Casual 〜てしまったら (〜\(ending)ったら)."),
+            form(cha + "います", "Ends up doing, polite", "\(endsUp), said politely (〜\(ending)います)."),
+            form(cha + "いました", "Ended up doing, polite", "\(endedUp), said politely (〜\(ending)いました)."),
+            form(cha, "Casual ては", "If you do …; before だめ or いけない it means \"must not\" (〜\(ending) = 〜\(v.te.suffix(1))は)."),
+            form(cha + "だめ", "Must not", "Must not do, casual (〜\(ending)だめ)."),
+            form(cha + "ダメ", "Must not", "Must not do, casual (〜\(ending)ダメ)."),
+            form(cha + "駄目", "Must not", "Must not do, casual (〜\(ending)駄目)."),
+            form(cha + "いけない", "Must not", "Must not do (〜\(ending)いけない)."),
+            form(cha + "いけません", "Must not, polite", "Must not do, said politely (〜\(ending)いけません)."),
+        ]
         guard extended else { return out }
         out += [
             form(v.masuStem + "ましょう", "Polite volitional", "\"Let's …\" or \"Shall I …?\", said politely (〜ましょう)."),
@@ -362,6 +391,10 @@ enum ConjugationForm {
             form(v.te + "いない", "Negative progressive", "Is not doing, or hasn't yet (〜ていない)."),
             form(v.te + "ない", "Negative progressive", "Is not doing, or hasn't yet, casual (〜てない)."),
             form(v.te + "いません", "Polite negative progressive", "Is not doing, or hasn't yet, said politely (〜ていません)."),
+            form(v.te + "おります", "Humble progressive", "Ongoing action or state, said humbly about yourself (〜ております)."),
+            form(v.te + "おりました", "Humble past progressive", "Was doing, said humbly about yourself (〜ておりました)."),
+            form(v.te + "おりません", "Humble negative progressive", "Is not doing, or hasn't yet, said humbly (〜ておりません)."),
+            form(v.te + "おり", "Formal progressive", "Ongoing action or state, linking to what follows in formal speech or writing (〜ており)."),
             form(v.masuStem + "たい", "Want to", "Want to do (〜たい)."),
             form(v.masuStem + "たくない", "Don't want to", "Don't want to do (〜たくない)."),
             form(v.masuStem + "たかった", "Wanted to", "Wanted to do (〜たかった)."),

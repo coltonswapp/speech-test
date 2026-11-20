@@ -716,23 +716,11 @@ final class DialogueQuizQuestionPageViewController: UIViewController {
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
             questionView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
-            questionView.leadingAnchor.constraint(
-                equalTo: scrollView.contentLayoutGuide.leadingAnchor,
-                constant: horizontalInset
-            ),
-            questionView.trailingAnchor.constraint(
-                equalTo: scrollView.contentLayoutGuide.trailingAnchor,
-                constant: -horizontalInset
-            ),
             questionView.bottomAnchor.constraint(
                 equalTo: scrollView.contentLayoutGuide.bottomAnchor,
                 constant: -32
             ),
-            questionView.widthAnchor.constraint(
-                equalTo: scrollView.frameLayoutGuide.widthAnchor,
-                constant: -horizontalInset * 2
-            ),
-        ])
+        ] + ContentColumn.horizontalConstraints(for: questionView, in: scrollView, inset: horizontalInset))
 
         questionView.hostScrollView = scrollView
     }

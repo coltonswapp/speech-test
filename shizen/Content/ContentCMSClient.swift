@@ -74,10 +74,18 @@ enum ContentCMSClient {
         return baseURL.appendingPathComponent("content/dialogues/\(collectionId)/\(slug)").absoluteString
     }
 
+    /// Studio clip editor URL (`webapp/app/(studio)/experiments/clips/[id]`), keyed by the
+    /// payload's `clip_id`. Path-only when no CMS base URL is set.
+    static func studioClipEditorLink(clipID: String) -> String {
+        let path = "/experiments/clips/\(clipID)"
+        guard let baseURL else { return path }
+        return baseURL.appendingPathComponent("experiments/clips/\(clipID)").absoluteString
+    }
+
     enum QANoteSource: String, Encodable {
         case dialogue
         case quiz
-        /// A screen with no lesson. Used by the debug screenshot shortcut.
+        /// A screen with no lesson.
         case screen
     }
 

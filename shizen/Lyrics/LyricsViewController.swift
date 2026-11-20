@@ -14,7 +14,6 @@
 //
 
 import NaturalLanguage
-import SwiftUI
 import Translation
 import TTSCore
 import UIKit
@@ -45,13 +44,15 @@ final class LyricsViewController: UIViewController {
   /// while the lyrics screen is layered on top.
   private weak var previousDelegate: TextToSpeechServiceDelegate?
 
-  /// Runs SwiftUI `.translationTask` so `translate(_:)` uses the same session pipeline as
-  /// `SentenceScrubExperimentViewController` (UIKit `TranslationSession(installedSource:)`
-  /// alone does not behave the same).
-  private var translationBatchHost: UIHostingController<LyricsTranslationRunnerView>?
-  /// Ignores completions from superseded translation runs.
+  /// On-device sessions by "source>target" (installed languages only), reused across runs.
+  private var translationSessions: [String: TranslationSession] = [:]
+  /// The batch in flight; a newer one cancels it.
+  private var translationTask: Task<Void, Never>?
+  /// Numbers each translation run.
   private var translationRequestSerial = 0
-  /// `translationTask` may not run until the VC is in a window (modal first layout).
+  /// The latest run asked to translate each line; an older run's result for it is dropped.
+  private var latestTranslationRequest: [Int: Int] = [:]
+  /// Translations run again once the screen is on screen (lines may have filled in since load).
   private var didRerunTranslationAfterAppear = false
 
   // MARK: - Init
@@ -111,7 +112,8 @@ final class LyricsViewController: UIViewController {
   override func viewDidDisappear(_ animated: Bool) {
     super.viewDidDisappear(animated)
     if isBeingDismissed || isMovingFromParent {
-      removeTranslationBatchHost()
+      translationTask?.cancel()
+      translationTask = nil
       if tts.delegate === self {
         tts.delegate = previousDelegate
       }
@@ -334,81 +336,63 @@ final class LyricsViewController: UIViewController {
   }
 
   private func runTranslations(for items: [(Int, String)]) {
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      await Task.yield()
+    translationRequestSerial += 1
+    let requestID = translationRequestSerial
 
-      self.translationRequestSerial += 1
-      let requestID = self.translationRequestSerial
-      let batchID = UUID()
-
-      for (idx, _) in items {
-        guard self.translationLabels.indices.contains(idx) else { continue }
-        self.translationLabels[idx].isHidden = false
-        self.translationLabels[idx].text = "…"
-      }
-
-      let indicesNeedingSubtitle = items.compactMap { pair -> Int? in
-        lyricsTranslationRoute(for: pair.1) != nil ? pair.0 : nil
-      }
-
-      #if targetEnvironment(simulator)
-      self.applyTranslationResults(
-        requestID: requestID,
-        outgoing: [:],
-        hideIndices: Set(indicesNeedingSubtitle)
-      )
-      return
-      #endif
-
-      guard !indicesNeedingSubtitle.isEmpty else {
-        self.applyTranslationResults(
-          requestID: requestID,
-          outgoing: [:],
-          hideIndices: Set(items.map(\.0))
-        )
-        return
-      }
-
-      let runner = LyricsTranslationRunnerView(
-        batchID: batchID,
-        items: items,
-        requestID: requestID
-      ) { [weak self] rid, outgoing, hideIndices in
-        self?.applyTranslationResults(
-          requestID: rid,
-          outgoing: outgoing,
-          hideIndices: hideIndices
-        )
-      }
-
-      if let host = self.translationBatchHost {
-        host.rootView = runner
-      } else {
-        let host = UIHostingController(rootView: runner)
-        self.translationBatchHost = host
-        host.view.backgroundColor = .clear
-        host.view.isUserInteractionEnabled = false
-        self.addChild(host)
-        self.view.addSubview(host.view)
-        host.view.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-          host.view.widthAnchor.constraint(equalToConstant: 1),
-          host.view.heightAnchor.constraint(equalToConstant: 1),
-          host.view.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
-          host.view.topAnchor.constraint(equalTo: self.view.topAnchor),
-        ])
-        host.didMove(toParent: self)
-      }
+    for (idx, _) in items {
+      latestTranslationRequest[idx] = requestID
+      guard translationLabels.indices.contains(idx) else { continue }
+      translationLabels[idx].isHidden = false
+      translationLabels[idx].text = "…"
     }
+
+    let routed = items.compactMap { idx, text in
+      lyricsTranslationRoute(for: text).map { (idx, text, $0) }
+    }
+    let unrouted = Set(items.map(\.0)).subtracting(routed.map(\.0))
+
+    #if targetEnvironment(simulator)
+    applyTranslationResults(requestID: requestID, outgoing: [:], hideIndices: Set(items.map(\.0)))
+    return
+    #else
+    guard !routed.isEmpty else {
+      applyTranslationResults(requestID: requestID, outgoing: [:], hideIndices: unrouted)
+      return
+    }
+
+    // A full run replaces the last one; a single line runs alongside it.
+    if items.count > 1 { translationTask?.cancel() }
+    let task = Task { @MainActor [weak self] in
+      var outgoing: [Int: String] = [:]
+      var hideIndices = unrouted
+      for (idx, text, route) in routed {
+        guard !Task.isCancelled, let self else { return }
+        guard let session = await self.translationSession(for: route) else {
+          hideIndices.insert(idx)
+          continue
+        }
+        outgoing[idx] = (try? await session.translate(text))?.targetText ?? ""
+      }
+      guard !Task.isCancelled, let self else { return }
+      self.applyTranslationResults(requestID: requestID, outgoing: outgoing, hideIndices: hideIndices)
+    }
+    if items.count > 1 { translationTask = task }
+    #endif
   }
 
-  private func removeTranslationBatchHost() {
-    guard let host = translationBatchHost else { return }
-    host.willMove(toParent: nil)
-    host.view.removeFromSuperview()
-    host.removeFromParent()
-    translationBatchHost = nil
+  /// A session for the route, or nil when its languages aren't downloaded on the
+  /// device (Settings → General → Language & Region → Translation Languages).
+  private func translationSession(
+    for route: (source: Locale.Language, target: Locale.Language)
+  ) async -> TranslationSession? {
+    let key = "\(route.source.minimalIdentifier)>\(route.target.minimalIdentifier)"
+    if let session = translationSessions[key] { return session }
+    let status = await LanguageAvailability().status(from: route.source, to: route.target)
+    guard status == .installed else { return nil }
+    if let session = translationSessions[key] { return session }
+    let session = TranslationSession(installedSource: route.source, target: route.target)
+    translationSessions[key] = session
+    return session
   }
 
   private func applyTranslationResults(
@@ -416,13 +400,13 @@ final class LyricsViewController: UIViewController {
     outgoing: [Int: String],
     hideIndices: Set<Int>
   ) {
-    guard requestID == translationRequestSerial else { return }
-    for idx in hideIndices {
+    let isCurrent = { (idx: Int) in self.latestTranslationRequest[idx] == requestID }
+    for idx in hideIndices where isCurrent(idx) {
       guard translationLabels.indices.contains(idx) else { continue }
       translationLabels[idx].text = ""
       translationLabels[idx].isHidden = true
     }
-    for (idx, translated) in outgoing {
+    for (idx, translated) in outgoing where isCurrent(idx) {
       guard translationLabels.indices.contains(idx) else { continue }
       if translated.isEmpty {
         translationLabels[idx].text = ""
@@ -685,75 +669,6 @@ extension LyricsViewController: TextToSpeechServiceDelegate {
   }
 }
 
-// MARK: - SwiftUI translation batch (same pathway as Sentence scrub)
-
-/// Sentence scrub uses `translationTask` + `session.translate`; lyrics uses that here too.
-private struct LyricsTranslationRunnerView: View {
-  let batchID: UUID
-  let items: [(Int, String)]
-  let requestID: Int
-  let onFinish: @MainActor (Int, [Int: String], Set<Int>) -> Void
-
-  var body: some View {
-    Color.clear
-      .frame(width: 1, height: 1)
-      .accessibilityHidden(true)
-      .id(batchID)
-      .translationTask(
-        source: Locale.Language(identifier: "ja"),
-        target: Locale.Language(identifier: "en")
-      ) { session in
-        await Self.perform(
-          items: items,
-          jaEnSession: session,
-          requestID: requestID,
-          onFinish: onFinish
-        )
-      }
-  }
-
-  private static func perform(
-    items: [(Int, String)],
-    jaEnSession: TranslationSession,
-    requestID: Int,
-    onFinish: @MainActor @escaping (Int, [Int: String], Set<Int>) -> Void
-  ) async {
-    do {
-      try await jaEnSession.prepareTranslation()
-    } catch {}
-
-    var outgoing: [Int: String] = [:]
-    var hideIndices: Set<Int> = []
-
-    for (idx, text) in items {
-      guard let route = lyricsTranslationRoute(for: text) else {
-        hideIndices.insert(idx)
-        continue
-      }
-      if lyricsRouteUsesJapaneseEnglishSession(route) {
-        do {
-          let response = try await jaEnSession.translate(text)
-          outgoing[idx] = response.targetText
-        } catch {
-          outgoing[idx] = ""
-        }
-      } else {
-        do {
-          let s = try TranslationSession(installedSource: route.source, target: route.target)
-          let response = try await s.translate(text)
-          outgoing[idx] = response.targetText
-        } catch {
-          outgoing[idx] = ""
-        }
-      }
-    }
-
-    await MainActor.run {
-      onFinish(requestID, outgoing, hideIndices)
-    }
-  }
-}
-
 /// When this returns `nil`, English copy is not shown (e.g. line is already English).
 fileprivate func lyricsTranslationRoute(for text: String) -> (
   source: Locale.Language, target: Locale.Language
@@ -774,17 +689,4 @@ fileprivate func lyricsTranslationRoute(for text: String) -> (
   let target = Locale.Language(identifier: "en")
   if source.languageCode == target.languageCode { return nil }
   return (source, target)
-}
-
-fileprivate func lyricsRouteUsesJapaneseEnglishSession(
-  _ route: (source: Locale.Language, target: Locale.Language)
-) -> Bool {
-  let target = route.target
-  guard target.languageCode == .english || target.minimalIdentifier.hasPrefix("en") else {
-    return false
-  }
-  let source = route.source
-  if source.languageCode == .japanese { return true }
-  if source.minimalIdentifier.hasPrefix("ja") { return true }
-  return false
 }

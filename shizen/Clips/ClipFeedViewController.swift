@@ -11,21 +11,32 @@
 //  when the viewer gets near the end. Only the current clip and its neighbours have a
 //  live player, so a long feed doesn't hold a web view per clip.
 //
+//  When the clips run out, one more page follows the last clip: the end of the feed,
+//  with a way back to the start and into Explore Clips.
+//
 
 import UIKit
 
 /// Hands out clips a batch at a time, paging through the server's feed list
 /// (`?limit=&cursor=`) as the viewer nears the end of what's loaded.
+///
+/// The server feed is shuffled by a seed picked per feed, so every launch
+/// opens on different clips, and clips this device has already watched
+/// (`ClipSeenStore`) are held back until the unwatched ones run out.
 @MainActor
 private final class ClipFeedSource {
-    /// Clips per server request; a few batches' worth, so most top-ups are local.
-    private static let pageSize = 10
+    /// Clips per server request. Enough that a mostly-watched catalog (whose
+    /// pages are mostly held back) takes a few requests, not dozens.
+    private static let pageSize = 25
 
     private let learnerLevel: Int?
+    private let shuffleSeed = String(UInt64.random(in: .min ... .max), radix: 36)
     private var buffer: [ClipSummary] = []
+    /// Already-watched clips, in feed order, shown after everything else.
+    private var watchedBacklog: [ClipSummary] = []
     private var cursor: String?
     private var reachedEnd = false
-    private var seen = Set<String>()
+    private var fetchedIDs = Set<String>()
 
     init(learnerLevel: Int?) {
         self.learnerLevel = learnerLevel
@@ -36,7 +47,11 @@ private final class ClipFeedSource {
         learnerLevel = nil
         buffer = clips
         reachedEnd = true
+        isFixedList = true
     }
+
+    /// A list handed in up front, rather than the server's feed.
+    private(set) var isFixedList = false
 
     var hasMore: Bool { !buffer.isEmpty || !reachedEnd }
 
@@ -45,13 +60,24 @@ private final class ClipFeedSource {
             let page = try await ContentCMSClient.fetchClipPage(
                 learnerLevel: learnerLevel,
                 feedOnly: true,
+                shuffleSeed: shuffleSeed,
                 limit: Self.pageSize,
                 cursor: cursor
             )
             // A clip re-saved between pages can't show up twice.
-            buffer.append(contentsOf: page.clips.filter { seen.insert($0.clipID).inserted })
+            for clip in page.clips where fetchedIDs.insert(clip.clipID).inserted {
+                if ClipSeenStore.contains(clip.clipID) {
+                    watchedBacklog.append(clip)
+                } else {
+                    buffer.append(clip)
+                }
+            }
             cursor = page.nextCursor
             reachedEnd = page.nextCursor == nil
+            if reachedEnd {
+                buffer.append(contentsOf: watchedBacklog)
+                watchedBacklog = []
+            }
         }
         let batch = Array(buffer.prefix(count))
         buffer.removeFirst(batch.count)
@@ -84,12 +110,18 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
     private var clips: [ClipSummary] = []
     private var currentIndex = 0
     private var isFetching = false
+    /// Marks the current clip watched once it has been on screen long enough.
+    private var watchTimer: Task<Void, Never>?
 
     private let pagerScrollView = UIScrollView()
     private var pages: [Int: ClipPlayerViewController] = [:]
     /// Stand-ins for pages without a live player, so inner scroll views line up with page indices.
     private var placeholders: [Int: UIScrollView] = [:]
     private var coordinator: NestedVerticalScrollHandoffCoordinator?
+    /// The page after the last clip, once the source has run dry.
+    private var endPage: ClipFeedEndPage?
+    /// Clips, plus the end page when it's showing.
+    private var pageCount: Int { clips.count + (endPage == nil ? 0 : 1) }
     private let spinner = UIActivityIndicatorView(style: .large)
     private let statusLabel = UILabel()
     private let presentation: Presentation
@@ -98,6 +130,13 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
     var hasClips: Bool { !clips.isEmpty }
     /// Main tab: the viewer moved to another clip.
     var onClipChanged: (() -> Void)?
+    /// Off for a feed reached from Explore, a search, or a tag's list: no search button,
+    /// no Explore on the end page, and Clip Details tags don't link. To explore again
+    /// the learner goes back to the root. Set before the feed loads.
+    var allowsExploring = true
+    /// Line breakdowns open as sheets (`ClipPlayerViewController.presentsBreakdownAsSheet`).
+    /// Set before the feed loads.
+    var presentsBreakdownAsSheet = false
     /// The current clip's options menu, for a host that shows it in its own navigation bar.
     var currentClipMenu: UIMenu? { pages[currentIndex]?.navigationMenuItem?.menu }
 
@@ -181,6 +220,21 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
         } else {
             pages[currentIndex]?.pausePlayback()
         }
+        restartWatchTimer()
+    }
+
+    /// Counts the current clip as watched (`ClipSeenStore`) after it has been on
+    /// screen for `ClipSeenStore.watchedAfter`; moving on sooner doesn't count.
+    private func restartWatchTimer() {
+        watchTimer?.cancel()
+        watchTimer = nil
+        guard isActive, view.window != nil, clips.indices.contains(currentIndex) else { return }
+        let clipID = clips[currentIndex].clipID
+        watchTimer = Task {
+            try? await Task.sleep(for: ClipSeenStore.watchedAfter)
+            guard !Task.isCancelled else { return }
+            ClipSeenStore.markSeen(clipID)
+        }
     }
 
 
@@ -200,6 +254,7 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
             spinner.stopAnimating()
             guard !batch.isEmpty else {
                 if clips.isEmpty { statusLabel.text = "No aligned clips yet." }
+                installEndPageIfFinished()
                 return
             }
             statusLabel.text = nil
@@ -210,7 +265,9 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
                 navigationItem.title = nil
             }
             syncPages()
+            installEndPageIfFinished()
             if isFirstBatch, isActive { pages[currentIndex]?.startPlayback() }
+            if isFirstBatch { restartWatchTimer() }
         } catch {
             spinner.stopAnimating()
             if clips.isEmpty { statusLabel.text = "Couldn’t load clips. \(error.localizedDescription)" }
@@ -234,6 +291,37 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
 
     private func innerScrollViews() -> [UIScrollView] {
         clips.indices.map { pages[$0]?.transcriptScrollView ?? placeholder(for: $0) }
+            + [endPage].compactMap { $0 }
+    }
+
+    /// Adds the end page after the last clip once there are no more to fetch.
+    private func installEndPageIfFinished() {
+        guard endPage == nil, !clips.isEmpty, !source.hasMore else { return }
+        let endPage = ClipFeedEndPage(isFixedList: source.isFixedList, offersExplore: allowsExploring)
+        endPage.onStartOver = { [weak self] in self?.returnToStart() }
+        endPage.onExplore = { [weak self] in
+            guard let self else { return }
+            ClipExplorerViewController.open(from: self)
+        }
+        self.endPage = endPage
+        pagerScrollView.addSubview(endPage)
+        layoutPages()
+        // The end page scrolls like a transcript, so pulling it down hands back to the last clip.
+        coordinator?.replaceInnerScrollViews(innerScrollViews())
+    }
+
+    /// Back to the first clip. A long feed jumps there (behind a crossfade) rather than
+    /// scrolling through every clip on the way.
+    private func returnToStart() {
+        guard currentIndex != 0 else { return }
+        UIView.transition(
+            with: pagerScrollView,
+            duration: 0.3,
+            options: [.transitionCrossDissolve, .allowUserInteraction]
+        ) { [self] in
+            pageDidChange(to: 0)
+            coordinator?.settleOnPage(0)
+        }
     }
 
     private func installCoordinator() {
@@ -271,6 +359,8 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
             let clip = clips[index]
             let page = ClipPlayerViewController(clipID: clip.clipID, preview: clip)
             page.isInFeed = true
+            page.allowsExploring = allowsExploring
+            page.presentsBreakdownAsSheet = presentsBreakdownAsSheet
             page.onFeedPan = { [weak self] pan in
                 self?.handleFeedPan(pan)
             }
@@ -292,7 +382,7 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
         let bounds = view.bounds
         guard bounds.height > 0 else { return }
         pagerScrollView.frame = bounds
-        let contentHeight = bounds.height * CGFloat(max(clips.count, 1))
+        let contentHeight = bounds.height * CGFloat(max(pageCount, 1))
         if pagerScrollView.contentSize != CGSize(width: bounds.width, height: contentHeight) {
             pagerScrollView.contentSize = CGSize(width: bounds.width, height: contentHeight)
         }
@@ -301,11 +391,26 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
             let frame = CGRect(x: 0, y: CGFloat(index) * bounds.height, width: bounds.width, height: bounds.height)
             if page.view.frame != frame { page.view.frame = frame }
         }
+        if let endPage {
+            let frame = CGRect(x: 0, y: CGFloat(clips.count) * bounds.height, width: bounds.width, height: bounds.height)
+            if endPage.frame != frame { endPage.frame = frame }
+        }
+        // The offset is `clip × height`, so a rotation or window resize would leave the
+        // pager between two clips: put it back on the current one.
+        if lastLayoutHeight > 0, abs(bounds.height - lastLayoutHeight) > 0.5 {
+            if let coordinator {
+                coordinator.settleOnPage(currentIndex)
+            } else {
+                pagerScrollView.contentOffset.y = CGFloat(currentIndex) * bounds.height
+            }
+        }
+        lastLayoutHeight = bounds.height
     }
+    private var lastLayoutHeight: CGFloat = 0
 
     // MARK: - Direct drag (outside the transcript)
 
-    /// Past the first or last clip, the pager moves this much per point dragged.
+    /// Past the first clip or the last page, the pager moves this much per point dragged.
     private static let edgeRubberBand: CGFloat = 0.3
     /// Release past this share of a page, or faster than `flickVelocity`, to change clips.
     private static let dragCommitFraction: CGFloat = 0.35
@@ -324,7 +429,7 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
             pagerScrollView.layer.removeAllAnimations()
             dragStartOffsetY = pagerScrollView.contentOffset.y
         case .changed:
-            let maxY = CGFloat(clips.count - 1) * pageHeight
+            let maxY = CGFloat(pageCount - 1) * pageHeight
             var y = dragStartOffsetY - translation
             if y < 0 {
                 y *= Self.edgeRubberBand
@@ -341,7 +446,7 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
             } else if progress < -Self.dragCommitFraction || (progress < 0 && velocity > Self.flickVelocity) {
                 target -= 1
             }
-            target = min(max(target, 0), clips.count - 1)
+            target = min(max(target, 0), pageCount - 1)
             coordinator?.snapToPage(target)
         default:
             break
@@ -349,11 +454,12 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
     }
 
     private func pageDidChange(to page: Int) {
-        guard page != currentIndex, clips.indices.contains(page) else { return }
+        guard page != currentIndex, page >= 0, page < pageCount else { return }
         pages[currentIndex]?.pausePlayback()
         currentIndex = page
         syncPages()
         if isActive { pages[page]?.startPlayback() }
+        restartWatchTimer()
         topUpIfNeeded()
         onClipChanged?()
     }
@@ -362,18 +468,24 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
     /// main screen's bar reads `currentClipMenu` instead).
     private func syncNavigationItem() {
         guard presentation == .pushed else { return }
-        navigationItem.rightBarButtonItem = pages[currentIndex]?.navigationMenuItem
+        navigationItem.rightBarButtonItems = [
+            pages[currentIndex]?.navigationMenuItem,
+            allowsExploring ? ClipExplorerViewController.searchBarItem(pushingFrom: self) : nil,
+        ].compactMap { $0 }
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         pages[currentIndex]?.pausePlayback()
+        watchTimer?.cancel()
+        watchTimer = nil
     }
 
     /// Main tab: back from a pushed screen (Settings) with the feed still on screen.
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         if presentation == .mainTab, isActive { pages[currentIndex]?.startPlayback() }
+        restartWatchTimer()
     }
 
     // MARK: - Scroll forwarding (the coordinator is every transcript's delegate)
@@ -396,5 +508,102 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         page(owning: scrollView)?.scrollViewDidEndDecelerating(scrollView)
+    }
+}
+
+/// The page after the last clip: says the feed is finished and offers a way on.
+/// A scroll view, so the feed's handoff treats it like a clip's transcript: pull it
+/// down to go back to the last clip.
+private final class ClipFeedEndPage: UIScrollView {
+    var onStartOver: (() -> Void)?
+    var onExplore: (() -> Void)?
+
+    /// `offersExplore`: false drops the Explore Clips button (a feed reached from Explore).
+    init(isFixedList: Bool, offersExplore: Bool) {
+        super.init(frame: .zero)
+        alwaysBounceVertical = true
+        showsVerticalScrollIndicator = false
+        contentInsetAdjustmentBehavior = .never
+
+        let icon = UIImageView(image: UIImage(
+            systemName: "checkmark.circle",
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 44, weight: .light)
+        ))
+        icon.tintColor = .secondaryLabel
+        icon.contentMode = .scaleAspectFit
+
+        let title = UILabel()
+        title.text = isFixedList ? "That’s Every Clip" : "You’re All Caught Up"
+        let titleStyle = UIFont.preferredFont(forTextStyle: .title2).fontDescriptor
+        title.font = UIFont(descriptor: titleStyle.withSymbolicTraits(.traitBold) ?? titleStyle, size: 0)
+        title.textAlignment = .center
+        title.numberOfLines = 0
+        title.accessibilityTraits = .header
+
+        let message = UILabel()
+        message.text = isFixedList
+            ? "You’ve reached the end of this list."
+            : "You’ve watched every clip in the feed for now. New clips are added often. Until then, explore clips by level and tag."
+        message.font = .preferredFont(forTextStyle: .body)
+        message.adjustsFontForContentSizeCategory = true
+        message.textColor = .secondaryLabel
+        message.textAlignment = .center
+        message.numberOfLines = 0
+
+        let explore = Self.makeButton(
+            title: "Explore Clips",
+            systemImage: "magnifyingglass",
+            prominent: !isFixedList
+        ) { [weak self] in self?.onExplore?() }
+        let startOver = Self.makeButton(
+            title: isFixedList ? "Watch Again" : "Back to First Clip",
+            systemImage: isFixedList ? "arrow.counterclockwise" : "arrow.up",
+            prominent: isFixedList
+        ) { [weak self] in self?.onStartOver?() }
+        let buttons = UIStackView(arrangedSubviews: !offersExplore ? [startOver] : isFixedList ? [startOver, explore] : [explore, startOver])
+        buttons.axis = .vertical
+        buttons.spacing = 12
+        buttons.alignment = .fill
+
+        let stack = UIStackView(arrangedSubviews: [icon, title, message, buttons])
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 12
+        stack.setCustomSpacing(16, after: icon)
+        stack.setCustomSpacing(28, after: message)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            // One screen tall, so it never scrolls on its own: any drag is a handoff.
+            contentLayoutGuide.widthAnchor.constraint(equalTo: frameLayoutGuide.widthAnchor),
+            contentLayoutGuide.heightAnchor.constraint(equalTo: frameLayoutGuide.heightAnchor),
+            stack.centerYAnchor.constraint(equalTo: contentLayoutGuide.centerYAnchor),
+            stack.leadingAnchor.constraint(equalTo: contentLayoutGuide.leadingAnchor, constant: 40),
+            stack.trailingAnchor.constraint(equalTo: contentLayoutGuide.trailingAnchor, constant: -40),
+            buttons.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            title.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            message.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private static func makeButton(
+        title: String,
+        systemImage: String,
+        prominent: Bool,
+        action: @escaping () -> Void
+    ) -> UIButton {
+        var config: UIButton.Configuration = prominent ? .prominentGlass() : .glass()
+        config.title = title
+        config.image = UIImage(systemName: systemImage)
+        config.imagePadding = 8
+        config.buttonSize = .large
+        config.cornerStyle = .capsule
+        return UIButton(configuration: config, primaryAction: UIAction { _ in action() })
     }
 }

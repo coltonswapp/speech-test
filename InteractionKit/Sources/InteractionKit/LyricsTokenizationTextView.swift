@@ -166,6 +166,27 @@ public final class LyricsInsetUnderlineTextView: UITextView {
 
   private var furiganaLayout: FuriganaTextLayout?
 
+  /// Last line wrap, keyed by the visible text and width. Sizing (`sizeThatFits`,
+  /// `intrinsicContentSize`) and layout each asked for the same wrap, so one layout
+  /// pass ran Core Text up to three times per line; resizes and drags paid it per frame.
+  private var wrapCache: (
+    text: NSAttributedString,
+    width: CGFloat,
+    result: (lines: [CTLine], baselines: [CGFloat], height: CGFloat)
+  )?
+
+  private func wrappedFuriganaLinesCached(
+    for visible: NSAttributedString,
+    width: CGFloat
+  ) -> (lines: [CTLine], baselines: [CGFloat], height: CGFloat) {
+    if let wrapCache, wrapCache.text === visible, wrapCache.width == width {
+      return wrapCache.result
+    }
+    let result = Self.wrappedFuriganaLines(for: visible, width: width)
+    wrapCache = (visible, width, result)
+    return result
+  }
+
   private let tap = UITapGestureRecognizer()
 
   public override var attributedText: NSAttributedString! {
@@ -195,6 +216,11 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     // so underlines and selection are not cut off. Lyrics rows keep `clipsToBounds` false.
     textContainerInset = .zero
     clipsToBounds = false
+    // `draw(_:)` paints the text itself, so the default `.scaleToFill` stretched the
+    // old bitmap to the new width on rotation (wider in landscape, squeezed in
+    // portrait). Pin it unscaled at the top left and redraw on every bounds change.
+    contentMode = .topLeft
+    layer.needsDisplayOnBoundsChange = true
     textContainer.lineFragmentPadding = 0
     textContainer.widthTracksTextView = true
     textContainer.heightTracksTextView = false
@@ -262,7 +288,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     guard let visible = visibleAttributedText, visible.length > 0 else { return 0 }
     let width = furiganaTextWidth(forViewWidth: viewWidth)
     guard width > 0 else { return 0 }
-    return Self.wrappedFuriganaLines(for: visible, width: width).height
+    return wrappedFuriganaLinesCached(for: visible, width: width).height
   }
 
   @discardableResult
@@ -275,7 +301,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     let textWidth = furiganaTextWidth(forViewWidth: width)
     guard textWidth > 0 else { return furiganaLayout }
 
-    let wrapped = Self.wrappedFuriganaLines(for: visible, width: textWidth)
+    let wrapped = wrappedFuriganaLinesCached(for: visible, width: textWidth)
     let flush = Self.flushFactor(for: visible)
     let origins = zip(wrapped.lines, wrapped.baselines).map { line, baseline in
       CGPoint(
@@ -599,6 +625,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   private func applyVisibleAttributedText(_ visible: NSAttributedString) {
     visibleAttributedText = visible
     furiganaLayout = nil
+    wrapCache = nil
     attributedText = showsFurigana ? Self.layoutOnlyAttributedText(from: visible) : visible
   }
 
@@ -609,16 +636,38 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     return m
   }
 
+  /// How far past a line's first or last glyph a tap still counts as on that line.
+  private static let tapHorizontalSlop: CGFloat = 8
+
   /// Maps a point in this view’s bounds to a token index (same logic as tap).
-  public func tokenIndex(at pointInView: CGPoint) -> Int? {
+  /// By default a point beside a line snaps to its nearest token, which a drag wants.
+  /// With `requiringHit`, a point left or right of a line's text returns nil, so a
+  /// tap in the empty space past a short line is not read as its last word.
+  public func tokenIndex(at pointInView: CGPoint, requiringHit: Bool = false) -> Int? {
     if showsFurigana, let layout = furiganaLayout ?? rebuildFuriganaLayoutIfNeeded(),
       let visible = visibleAttributedText {
-      return tokenIndexFromCoreText(at: pointInView, layout: layout, in: visible)
+      return tokenIndexFromCoreText(at: pointInView, layout: layout, in: visible, requiringHit: requiringHit)
     }
     guard let pos = closestPosition(to: pointInView) else { return nil }
     let idx = offset(from: beginningOfDocument, to: pos)
     guard let a = attributedText, a.length > 0, idx >= 0, idx < a.length else { return nil }
+    if requiringHit, !textKitLineContainsHorizontally(pointInView, nearCharacter: idx) { return nil }
     return tokenIndexResolving(near: idx, in: a)
+  }
+
+  /// Whether `point` falls within the used width (plus slop) of the line holding `character`.
+  private func textKitLineContainsHorizontally(_ point: CGPoint, nearCharacter character: Int) -> Bool {
+    let lm = layoutManager
+    let glyphCount = lm.numberOfGlyphs
+    guard glyphCount > 0 else { return false }
+    let glyph = min(lm.glyphIndexForCharacter(at: character), glyphCount - 1)
+    var lineRange = NSRange()
+    _ = lm.lineFragmentRect(forGlyphAt: glyph, effectiveRange: &lineRange)
+    var used = lm.boundingRect(forGlyphRange: lineRange, in: textContainer)
+    guard !used.isNull, !used.isEmpty else { return false }
+    used.origin.x += textContainerInset.left - contentOffset.x
+    let slop = Self.tapHorizontalSlop
+    return point.x >= used.minX - slop && point.x <= used.maxX + slop
   }
 
   public func tokenSurface(at index: Int) -> String? {
@@ -1459,11 +1508,13 @@ public final class LyricsInsetUnderlineTextView: UITextView {
   private func tokenIndexFromCoreText(
     at point: CGPoint,
     layout: FuriganaTextLayout,
-    in attributed: NSAttributedString
+    in attributed: NSAttributedString,
+    requiringHit: Bool = false
   ) -> Int? {
     let localX = point.x - layout.textOrigin.x
     let localY = point.y - layout.textOrigin.y
-    guard localX >= 0, localY >= 0 else { return nil }
+    let slop = requiringHit ? Self.tapHorizontalSlop : 0
+    guard localX >= -slop, localY >= 0 else { return nil }
 
     let lines = layout.lines
     guard !lines.isEmpty else { return nil }
@@ -1479,6 +1530,11 @@ public final class LyricsInsetUnderlineTextView: UITextView {
       let lineBottom = lineTop + ascent + descent + leading
       guard point.y >= lineTop - 4, point.y <= lineBottom + underlineVerticalGap + 8 else { continue }
       let lineX = localX - origin.x
+      if requiringHit {
+        let inkWidth = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+          - CGFloat(CTLineGetTrailingWhitespaceWidth(line))
+        guard lineX >= -slop, lineX <= inkWidth + slop else { continue }
+      }
       var idx = CTLineGetStringIndexForPosition(line, CGPoint(x: lineX, y: 0))
       guard idx != kCFNotFound else { continue }
       // That call returns the nearest caret boundary, so a tap on the right
@@ -1684,7 +1740,7 @@ public final class LyricsInsetUnderlineTextView: UITextView {
     // Same hit test as scrub. With furigana on, glyphs come from the Core Text
     // layout; UITextView's own TextKit layout (closestPosition) wraps and
     // spaces lines differently, so it can resolve to a neighboring token.
-    guard let tIdx = tokenIndex(at: p) else { return }
+    guard let tIdx = tokenIndex(at: p, requiringHit: true) else { return }
     let surface = tokenLookupSurfaces.indices.contains(tIdx) ? tokenLookupSurfaces[tIdx] : tokens[tIdx].text
     let rect = mergedWordBoundsInTextView(forTokenIndex: tIdx) ?? .zero
     onWordTapped?(surface, rect, tIdx)

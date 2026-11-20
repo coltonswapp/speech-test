@@ -5,6 +5,7 @@
 //  Settings menu. Debug tools live behind their own list screens.
 //
 
+import CSFeedbackKitUI
 import StoreKit
 import UIKit
 
@@ -53,6 +54,7 @@ final class SettingsViewController: UIViewController {
 
     private nonisolated enum DebugLink: Int, CaseIterable, Hashable, Sendable {
         case aiUsage
+        case feedbackQueue
         case tokenization
         case kana
         case lessons
@@ -65,6 +67,7 @@ final class SettingsViewController: UIViewController {
         var title: String {
             switch self {
             case .aiUsage: return "AI usage"
+            case .feedbackQueue: return "Feedback queue"
             case .tokenization: return "Tokenization"
             case .kana: return "Kana"
             case .lessons: return "Lessons"
@@ -79,6 +82,7 @@ final class SettingsViewController: UIViewController {
         var symbolName: String {
             switch self {
             case .aiUsage: return "chart.bar.doc.horizontal"
+            case .feedbackQueue: return "tray.full"
             case .tokenization: return "character.book.closed"
             case .kana: return "textformat.characters"
             case .lessons: return "rectangle.grid.2x2"
@@ -105,6 +109,7 @@ final class SettingsViewController: UIViewController {
     private nonisolated enum DebugDestination: Int, CaseIterable, Hashable, Sendable {
         case onboarding
         case listenFirstOnboarding
+        case immersionOnboarding
         case textToSpeech
         case kanaLearningFlow
         case kanaProgressPath
@@ -135,7 +140,6 @@ final class SettingsViewController: UIViewController {
         case dialogueExperimentHarness
         case kanjiDecomposition
         case kanjiSpotlight
-        case swiftUIShaders
         case registerLadder
         case verbCombo
         case slideComponents
@@ -154,6 +158,7 @@ final class SettingsViewController: UIViewController {
             switch self {
             case .onboarding: return "Auth + onboarding"
             case .listenFirstOnboarding: return "Listening-first onboarding v2"
+            case .immersionOnboarding: return "Immersion-first onboarding"
             case .textToSpeech: return "Text to Speech"
             case .kanaLearningFlow: return "Kana learning flow"
             case .kanaProgressPath: return "Kana progress path"
@@ -184,7 +189,6 @@ final class SettingsViewController: UIViewController {
             case .dialogueExperimentHarness: return "Dialogue lyrics harness"
             case .kanjiDecomposition: return "Kanji decomposition"
             case .kanjiSpotlight: return "Kanji spotlight"
-            case .swiftUIShaders: return "SwiftUI shaders"
             case .registerLadder: return "Register ladder"
             case .verbCombo: return "Verb combinations"
             case .slideComponents: return "Slide components"
@@ -205,6 +209,7 @@ final class SettingsViewController: UIViewController {
             switch self {
             case .onboarding: return "Landing stubs · survey / slider / listening quiz · placeholder demos"
             case .listenFirstOnboarding: return "Payoff first · one shared conversation · unsquash · tap to skip · resumes"
+            case .immersionOnboarding: return "Krashen pitch · lessons + clips · daily minutes · promise · paywall · welcome"
             case .textToSpeech: return "Stream OpenAI TTS · sentence chunks · lyrics"
             case .kanaLearningFlow: return "Progress tiles · hiragana & katakana lessons · SRS"
             case .kanaProgressPath: return "Row-by-row hiragana lessons · SRS · chart"
@@ -235,7 +240,6 @@ final class SettingsViewController: UIViewController {
             case .dialogueExperimentHarness: return "Scenario audio · UIMenu clip switch · alignment QA"
             case .kanjiDecomposition: return "Full or 3-slide compound breakdown · export cards"
             case .kanjiSpotlight: return "One kanji · curated compounds & verbs · export cards"
-            case .swiftUIShaders: return "Kris Puckett Metal shaders · playground"
             case .registerLadder: return "One sentence, 3 registers · Gemini · export cards"
             case .verbCombo: return "5 stills · hook, rule, 3 examples · Gemini · export cards"
             case .slideComponents: return "Every slideshow card & building block · sample data · export"
@@ -256,6 +260,7 @@ final class SettingsViewController: UIViewController {
             switch self {
             case .onboarding: return "person.crop.circle.badge.checkmark"
             case .listenFirstOnboarding: return "ear.badge.waveform"
+            case .immersionOnboarding: return "play.rectangle.on.rectangle"
             case .textToSpeech: return "waveform"
             case .kanaLearningFlow: return "square.grid.2x2"
             case .kanaProgressPath: return "point.topleft.down.curvedto.point.bottomright.up"
@@ -286,7 +291,6 @@ final class SettingsViewController: UIViewController {
             case .dialogueExperimentHarness: return "waveform.path"
             case .kanjiDecomposition: return "puzzlepiece.extension"
             case .kanjiSpotlight: return "lightbulb"
-            case .swiftUIShaders: return "sparkles"
             case .registerLadder: return "text.badge.star"
             case .verbCombo: return "plus.forwardslash.minus"
             case .slideComponents: return "square.grid.2x2"
@@ -574,6 +578,8 @@ final class SettingsViewController: UIViewController {
         switch link {
         case .aiUsage:
             return aiUsageSubtitle()
+        case .feedbackQueue:
+            return "QA notes waiting, failed, or sent; resend by hand"
         case .tokenization:
             return tokenizerSubtitle()
         case .kana:
@@ -656,6 +662,8 @@ final class SettingsViewController: UIViewController {
         switch link {
         case .aiUsage:
             navigationController?.pushViewController(GeminiUsageHistoryViewController(), animated: true)
+        case .feedbackQueue:
+            navigationController?.pushViewController(Feedback.makeQueueViewController(), animated: true)
         case .tokenization:
             pushDetailList(title: link.title) { [weak self] in
                 self?.tokenizationItems() ?? []
@@ -704,6 +712,12 @@ final class SettingsViewController: UIViewController {
                         symbolName: "list.bullet.rectangle"
                     ),
                     SettingsMenuItem(
+                        id: "clip-link",
+                        title: "Open clip link",
+                        subtitle: "Paste a Studio / YouTube URL, clip id, or search · recents",
+                        symbolName: "link"
+                    ),
+                    SettingsMenuItem(
                         id: "clip-explorer",
                         title: "Explore clips",
                         subtitle: "Search · filter by tag · play results as a feed",
@@ -741,6 +755,7 @@ final class SettingsViewController: UIViewController {
                 self?.debugItems([
                     .onboarding,
                     .listenFirstOnboarding,
+                    .immersionOnboarding,
                     .stageLayouts,
                     .pillField,
                     .spanHighlight,
@@ -751,7 +766,6 @@ final class SettingsViewController: UIViewController {
                     .emojiStickers,
                     .explosions,
                     .feedbackSounds,
-                    .swiftUIShaders,
                     .dialogueLessonWrapUp,
                 ]) ?? []
             }
@@ -872,6 +886,8 @@ final class SettingsViewController: UIViewController {
             navigationController?.pushViewController(ClipListViewController(), animated: true)
         case "clip-explorer":
             navigationController?.pushViewController(ClipExplorerViewController(), animated: true)
+        case "clip-link":
+            navigationController?.pushViewController(ClipLinkViewController(), animated: true)
         default:
             guard item.id.hasPrefix("debug-"),
                   let raw = Int(item.id.dropFirst("debug-".count)),
@@ -971,6 +987,8 @@ final class SettingsViewController: UIViewController {
             presentOnboardingPlayground()
         case .listenFirstOnboarding:
             present(ListenFirstOnboardingHostController(), animated: true)
+        case .immersionOnboarding:
+            present(ImmersionOnboardingHostController(), animated: true)
         case .textToSpeech:
             navigationController?.pushViewController(
                 TextToSpeechExperimentViewController(),
@@ -1077,11 +1095,6 @@ final class SettingsViewController: UIViewController {
         case .kanjiSpotlight:
             navigationController?.pushViewController(
                 KanjiSpotlightListViewController(),
-                animated: true
-            )
-        case .swiftUIShaders:
-            navigationController?.pushViewController(
-                SwiftUIShadersPlaygroundViewController(),
                 animated: true
             )
         case .dialogueContentRecording:

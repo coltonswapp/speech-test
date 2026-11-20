@@ -59,6 +59,9 @@ final class MainViewController: UIViewController {
     private var isUpdatingFromScroll = false
     private var lastPagerHapticPageIndex = MainSection.dialogue.rawValue
     private var didApplyDefaultTabSelection = false
+    /// The tab to hold while a rotation or window resize changes the pager's width.
+    private var pageIndexAcrossResize: Int?
+    private var lastPagerLayoutWidth: CGFloat = 0
     private var lastAppliedMainTabTopInset: CGFloat = -1
     private var trackedVerticalScrollPageIndex = 0
     private var lastObservedVerticalOffset: CGFloat = 0
@@ -67,6 +70,8 @@ final class MainViewController: UIViewController {
     private var isPresentingAuthGate = false
     /// The clip menu button while the feed is immersive; nil otherwise.
     private var feedOptionsItem: UIBarButtonItem?
+    /// The feed tab is the nearest page, so the bar shows its expand button.
+    private var isFeedPageActive = false
     /// Immersive feed only: a progressive blur from the top of the screen that thins out
     /// and ends `feedTopBlurFade` points below the navigation bar.
     private let feedTopBlur = ProgressiveBlurView(style: .systemUltraThinMaterial, steps: 4)
@@ -115,6 +120,42 @@ final class MainViewController: UIViewController {
         super.viewDidLayoutSubviews()
         applyMainTabScrollInsetsToPagesIfNeeded()
         applyDefaultTabSelectionIfNeeded()
+        keepPagerOnPageAcrossResize()
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        // Read the page while the offset still matches the old width.
+        pageIndexAcrossResize = activePageIndex
+        isUpdatingFromScroll = true
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: { [weak self] _ in
+            self?.keepPagerOnPageAcrossResize()
+        }, completion: { [weak self] _ in
+            guard let self else { return }
+            self.keepPagerOnPageAcrossResize(force: true)
+            self.pageIndexAcrossResize = nil
+            self.isUpdatingFromScroll = false
+        })
+    }
+
+    /// The pager's offset is `page × width`, so a rotation or window resize leaves it
+    /// between two tabs. Snap it back onto the page it was showing.
+    private func keepPagerOnPageAcrossResize(force: Bool = false) {
+        let width = pagingScrollView.bounds.width
+        guard width > 0, didApplyDefaultTabSelection else { return }
+        defer { lastPagerLayoutWidth = width }
+        guard force || (lastPagerLayoutWidth > 0 && abs(width - lastPagerLayoutWidth) > 0.5) else { return }
+        guard !pagingScrollView.isDragging, !pagingScrollView.isDecelerating else { return }
+
+        let page = max(0, min(pageIndexAcrossResize ?? lastPagerHapticPageIndex, pageViewControllers.count - 1))
+        let wasUpdatingFromScroll = isUpdatingFromScroll
+        isUpdatingFromScroll = true
+        pagingScrollView.layoutIfNeeded()
+        pagingScrollView.contentOffset = CGPoint(x: width * CGFloat(page), y: 0)
+        isUpdatingFromScroll = wasUpdatingFromScroll
+        lastPagerHapticPageIndex = page
+        tabBar.setPageProgress(CGFloat(page), animated: false)
+        tabBar.syncScrollPositionToSelection(animated: false)
     }
 
     private func applyDefaultTabSelectionIfNeeded() {
@@ -133,19 +174,48 @@ final class MainViewController: UIViewController {
 
     // MARK: - Navigation
 
-    private func setupNavigationBar() {
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
+    /// Sets whole item arrays: the feed puts several items on the right, and assigning
+    /// `rightBarButtonItem` would only replace the first (leaving the others behind).
+    private func setupNavigationBar(animated: Bool = false) {
+        let settings = UIBarButtonItem(
             image: UIImage(systemName: "gearshape"),
             style: .plain,
             target: self,
             action: #selector(openSettings)
         )
-        navigationItem.leftBarButtonItem = UIBarButtonItem(
+        var right = [settings]
+        if isFeedPageActive, let feed = feedPage {
+            right.append(feedModeItem(feed: feed, immersive: false))
+        }
+        navigationItem.setRightBarButtonItems(right, animated: animated)
+        navigationItem.setLeftBarButtonItems([makeDictionaryItem()], animated: animated)
+    }
+
+    private func makeDictionaryItem() -> UIBarButtonItem {
+        UIBarButtonItem(
             image: UIImage(systemName: "character.book.closed"),
             style: .plain,
             target: self,
             action: #selector(openDictionary)
         )
+    }
+
+    /// Expands into the full feed, or (when `immersive`) collapses back out of it.
+    private func feedModeItem(feed: MainFeedTabViewController, immersive: Bool) -> UIBarButtonItem {
+        let item = UIBarButtonItem(
+            image: UIImage(systemName: immersive
+                ? "arrow.down.forward.and.arrow.up.backward"
+                : "arrow.up.backward.and.arrow.down.forward"),
+            primaryAction: UIAction { [weak feed] _ in feed?.toggleImmersive() }
+        )
+        item.accessibilityLabel = immersive ? "Exit full feed" : "Full feed"
+        // Its own glass capsule, apart from the settings / clip-menu group beside it.
+        item.sharesBackground = false
+        return item
+    }
+
+    private var feedPage: MainFeedTabViewController? {
+        pageViewControllers.lazy.compactMap { $0 as? MainFeedTabViewController }.first
     }
 
     @objc private func openDictionary() {
@@ -319,6 +389,8 @@ final class MainViewController: UIViewController {
                 feed.onClipMenuChanged = { [weak self, weak feed] in
                     guard let self, let feed, self.feedOptionsItem != nil else { return }
                     self.feedOptionsItem?.menu = feed.currentClipMenu
+                    // No clip menu on the end-of-feed page.
+                    self.feedOptionsItem?.isEnabled = feed.currentClipMenu != nil
                 }
             }
             embed(child, in: pageContainer)
@@ -459,13 +531,23 @@ final class MainViewController: UIViewController {
     /// The feed plays only while it's the nearest page: past halfway out, it pauses.
     private func updateFeedActivity() {
         let active = activePageIndex
+        var feedActive = false
         for (index, child) in pageViewControllers.enumerated() {
-            (child as? MainFeedTabViewController)?.setActive(index == active)
+            guard let feed = child as? MainFeedTabViewController else { continue }
+            feed.setActive(index == active)
+            feedActive = feedActive || index == active
+        }
+        // Leaving the feed already collapsed it (inside `setActive`), so the regular bar
+        // is up; only the expand button comes and goes here.
+        if feedActive != isFeedPageActive {
+            isFeedPageActive = feedActive
+            if feedOptionsItem == nil { setupNavigationBar(animated: true) }
         }
     }
 
     /// Immersive feed: the tab bar fades out and side-swiping between tabs stops, and the
-    /// navigation bar trades dictionary/settings for ✕ and the clip's menu. Runs inside
+    /// navigation bar trades settings for the clip's menu, with the expand button turned
+    /// into collapse. Dictionary stays, so words can be looked up mid-feed. Runs inside
     /// the feed's fade animation.
     private func setFeedImmersiveChrome(_ immersive: Bool, feed: MainFeedTabViewController) {
         tabBar.alpha = immersive ? 0 : 1
@@ -476,21 +558,20 @@ final class MainViewController: UIViewController {
         pagingScrollView.topEdgeEffect.isHidden = immersive
         feedTopBlur.alpha = immersive ? Self.feedTopBlurOpacity : 0
         if immersive {
-            let close = UIBarButtonItem(
-                systemItem: .close,
-                primaryAction: UIAction { [weak feed] _ in feed?.exitImmersive() }
-            )
             // The clip's own menu (it rebuilds itself each time it opens); swapped
             // for the next clip's in `onClipMenuChanged`.
             let options = UIBarButtonItem(image: UIImage(systemName: "ellipsis"), menu: feed.currentClipMenu)
             options.accessibilityLabel = "Options"
+            options.isEnabled = feed.currentClipMenu != nil
             feedOptionsItem = options
-            navigationItem.setLeftBarButton(close, animated: true)
-            navigationItem.setRightBarButton(options, animated: true)
+            navigationItem.setLeftBarButtonItems([makeDictionaryItem()], animated: true)
+            let collapse = feedModeItem(feed: feed, immersive: true)
+            let search = ClipExplorerViewController.searchBarItem(pushingFrom: self)
+            navigationItem.setRightBarButtonItems([options, collapse, search], animated: true)
             navigationItem.title = "Feed"
         } else {
             feedOptionsItem = nil
-            setupNavigationBar()
+            setupNavigationBar(animated: true)
             navigationItem.title = title
         }
     }

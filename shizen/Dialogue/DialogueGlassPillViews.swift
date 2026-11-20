@@ -407,12 +407,22 @@ final class GlassTagControl: UIControl {
     private let selectedFillView = UIView()
     private let titleLabel = UILabel()
     private let selectionHaptic = UISelectionFeedbackGenerator()
+    private let title: String
+    /// Quieter text after the title (e.g. a count), in the secondary color.
+    private var detail: String?
+    /// The widest detail shown so far: the pill keeps that width, so a changing
+    /// count never reflows the row.
+    private var widestDetail: String?
 
-    init(title: String) {
+    init(title: String, detail: String? = nil) {
         glassView = LiquidGlassEffectView.makeLightPillContainer()
+        self.title = title
+        self.detail = detail
+        widestDetail = detail
         super.init(frame: .zero)
         isAccessibilityElement = true
         accessibilityLabel = title
+        accessibilityValue = detail
 
         LiquidGlassEffectView.applyPillStyle(to: glassView, cornerRadius: Self.cornerRadius)
         glassView.isUserInteractionEnabled = false
@@ -424,7 +434,6 @@ final class GlassTagControl: UIControl {
         selectedFillView.isUserInteractionEnabled = false
         selectedFillView.alpha = 0
 
-        titleLabel.text = title
         titleLabel.textAlignment = .center
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -469,6 +478,32 @@ final class GlassTagControl: UIControl {
         }
     }
 
+    /// Disabled pills fade back (e.g. a tag no clips at the chosen level carry).
+    override var isEnabled: Bool {
+        didSet {
+            guard oldValue != isEnabled else { return }
+            applySelectionAppearance(animated: window != nil)
+        }
+    }
+
+    /// Changes the quieter text after the title (e.g. the count at another level).
+    /// The pill keeps the width of its widest detail so far.
+    func setDetail(_ detail: String?, animated: Bool) {
+        guard detail != self.detail else { return }
+        self.detail = detail
+        accessibilityValue = detail
+        if let detail, widestDetail.map({ Self.width(of: $0) < Self.width(of: detail) }) ?? true {
+            widestDetail = detail
+            invalidateIntrinsicContentSize()
+            superview?.setNeedsLayout()
+        }
+        applySelectionAppearance(animated: animated && window != nil)
+    }
+
+    private static func width(of detail: String) -> CGFloat {
+        (" " + detail as NSString).size(withAttributes: [.font: selectedFont]).width
+    }
+
     override func didMoveToWindow() {
         super.didMoveToWindow()
         guard window != nil else { return }
@@ -489,8 +524,9 @@ final class GlassTagControl: UIControl {
     }
 
     private func applySelectionAppearance(animated: Bool) {
-        accessibilityTraits = isSelected ? [.button, .selected] : .button
-        titleLabel.font = isSelected ? Self.selectedFont : Self.regularFont
+        var traits: UIAccessibilityTraits = isSelected ? [.button, .selected] : .button
+        if !isEnabled { traits.insert(.notEnabled) }
+        accessibilityTraits = traits
 
         let fillAlpha: CGFloat
         if #available(iOS 26.0, *) {
@@ -505,10 +541,10 @@ final class GlassTagControl: UIControl {
             fillAlpha = isSelected ? 1 : 0
         }
 
+        let text = labelText(selected: isSelected)
         let updates = { [self] in
             selectedFillView.alpha = fillAlpha
-            titleLabel.textColor = isSelected ? .white : .label
-            glassView.layer.borderColor = isSelected
+            glassView.layer.borderColor = isSelected || !isEnabled
                 ? UIColor.clear.cgColor
                 : UIColor.white.withAlphaComponent(0.22).cgColor
         }
@@ -520,8 +556,17 @@ final class GlassTagControl: UIControl {
                 options: [.allowUserInteraction, .beginFromCurrentState],
                 animations: updates
             )
+            // Text colors don't animate; crossfade the label instead.
+            UIView.transition(
+                with: titleLabel,
+                duration: 0.2,
+                options: [.transitionCrossDissolve, .allowUserInteraction, .beginFromCurrentState]
+            ) {
+                self.titleLabel.attributedText = text
+            }
         } else {
             updates()
+            titleLabel.attributedText = text
         }
     }
 
@@ -537,10 +582,29 @@ final class GlassTagControl: UIControl {
         }
     }
 
-    override func sizeThatFits(_ size: CGSize) -> CGSize {
-        let titleWidth = ceil(
-            (titleLabel.text ?? "").size(withAttributes: [.font: Self.selectedFont]).width
+    private func labelText(selected: Bool, detail: String? = nil) -> NSAttributedString {
+        let font = selected ? Self.selectedFont : Self.regularFont
+        let titleColor: UIColor = selected ? .white : isEnabled ? .label : .tertiaryLabel
+        let detailColor: UIColor = selected
+            ? UIColor.white.withAlphaComponent(0.7)
+            : isEnabled ? .secondaryLabel : .quaternaryLabel
+        let text = NSMutableAttributedString(
+            string: title,
+            attributes: [.font: font, .foregroundColor: titleColor]
         )
+        if let detail = detail ?? self.detail {
+            text.append(NSAttributedString(
+                string: " \(detail)",
+                attributes: [.font: font, .foregroundColor: detailColor]
+            ))
+        }
+        return text
+    }
+
+    override func sizeThatFits(_ size: CGSize) -> CGSize {
+        // Sized for the bold (selected) text so selecting doesn't resize the pill,
+        // and for the widest detail so a changing count doesn't either.
+        let titleWidth = ceil(labelText(selected: true, detail: widestDetail).size().width)
         return CGSize(
             width: titleWidth + Self.contentInsets.left + Self.contentInsets.right,
             height: Self.fixedHeight
@@ -578,6 +642,20 @@ enum GlassPillFlowLayout {
         }
 
         return (frames, sizes.isEmpty ? 0 : y + rowHeight)
+    }
+
+    /// Shifts each row (frames sharing a y) so it sits centered in `width`.
+    static func centered(_ frames: [CGRect], in width: CGFloat) -> [CGRect] {
+        var result = frames
+        var rowStart = 0
+        while rowStart < frames.count {
+            var rowEnd = rowStart
+            while rowEnd + 1 < frames.count, frames[rowEnd + 1].minY == frames[rowStart].minY { rowEnd += 1 }
+            let shift = max(0, (width - frames[rowEnd].maxX) / 2).rounded(.down)
+            for index in rowStart...rowEnd { result[index].origin.x += shift }
+            rowStart = rowEnd + 1
+        }
+        return result
     }
 
     /// Same left-aligned rows as `frames`, but break points are chosen so leftover
@@ -659,6 +737,13 @@ private extension UIView {
 final class GlassTagFlowView: UIView {
 
     private var tagViews: [GlassTagControl] = []
+    /// Center each row instead of starting it at the leading edge.
+    var centersRows = false {
+        didSet {
+            guard oldValue != centersRows else { return }
+            setNeedsLayout()
+        }
+    }
     private var laidOutHeight: CGFloat = 0
 
     func setTags(_ tags: [GlassTagControl]) {
@@ -700,7 +785,8 @@ final class GlassTagFlowView: UIView {
 
     private func flowLayout(in width: CGFloat) -> (frames: [CGRect], height: CGFloat) {
         let sizes = tagViews.map { $0.sizeThatFits(.zero) }
-        return GlassPillFlowLayout.balancedFrames(for: sizes, in: width)
+        let layout = GlassPillFlowLayout.balancedFrames(for: sizes, in: width)
+        return centersRows ? (GlassPillFlowLayout.centered(layout.frames, in: width), layout.height) : layout
     }
 }
 

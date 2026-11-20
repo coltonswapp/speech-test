@@ -102,6 +102,8 @@ nonisolated struct ClipSummary: Decodable, Hashable, Sendable {
     let jlptLevel: Int?
     /// The video's YouTube title and channel. Nil until Studio has fetched them.
     let title: String?
+    /// The title in English, hashtags left out. Nil when there is none.
+    let titleEN: String?
     let channelName: String?
     /// Whether Studio put the clip in the feed. Nil from servers that predate
     /// the feed check, where every listed clip is in the feed.
@@ -124,6 +126,7 @@ nonisolated struct ClipSummary: Decodable, Hashable, Sendable {
         case orientation
         case jlptLevel = "jlpt_level"
         case title
+        case titleEN = "title_en"
         case channelName = "channel_name"
         case inFeed = "in_feed"
         case tags
@@ -141,6 +144,7 @@ nonisolated struct ClipSummary: Decodable, Hashable, Sendable {
         orientation = try container.decodeIfPresent(ClipOrientation.self, forKey: .orientation)
         jlptLevel = try container.decodeIfPresent(Int.self, forKey: .jlptLevel)
         title = try container.decodeIfPresent(String.self, forKey: .title)
+        titleEN = try? container.decodeIfPresent(String.self, forKey: .titleEN)
         channelName = try container.decodeIfPresent(String.self, forKey: .channelName)
         inFeed = try container.decodeIfPresent(Bool.self, forKey: .inFeed)
         // Extras must never drop a clip from the list.
@@ -230,6 +234,8 @@ nonisolated struct ClipPayload: Decodable, Sendable {
         let orientation: ClipOrientation?
         /// The video's YouTube title and channel. Nil until Studio has fetched them.
         let title: String?
+        /// The title in English, hashtags left out. Nil when there is none.
+        let titleEN: String?
         let channelName: String?
         let channelURL: String?
         let thumbnailURL: String?
@@ -243,6 +249,7 @@ nonisolated struct ClipPayload: Decodable, Sendable {
             case endSec = "end_sec"
             case orientation
             case title
+            case titleEN = "title_en"
             case channelName = "channel_name"
             case channelURL = "channel_url"
             case thumbnailURL = "thumbnail_url"
@@ -385,14 +392,18 @@ extension ContentCMSClient {
     /// ignore it and return every clip.
     /// One page of the clip list, newest first: pass `nextCursor` back for the
     /// next page; nil means this was the last one. Filters as `fetchClipList`.
+    /// `shuffleSeed`: a stable shuffled order instead of newest first (same seed,
+    /// same order, so paging works). Servers that predate it ignore it.
     static func fetchClipPage(
         learnerLevel: Int?,
         feedOnly: Bool,
+        shuffleSeed: String? = nil,
         limit: Int,
         cursor: String?
     ) async throws -> (clips: [ClipSummary], nextCursor: String?) {
         var query = learnerLevel.map { [URLQueryItem(name: "level", value: String($0))] } ?? []
         if feedOnly { query.append(URLQueryItem(name: "feed", value: "1")) }
+        if let shuffleSeed { query.append(URLQueryItem(name: "seed", value: shuffleSeed)) }
         query.append(URLQueryItem(name: "limit", value: String(limit)))
         if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
         let data = try await fetchPublicClipData(path: ["clips"], query: query)
@@ -400,13 +411,17 @@ extension ContentCMSClient {
         return (response.clips, response.nextCursor)
     }
 
+    /// `jlptLevel`: only clips rated exactly that level (5 = N5 … 1 = N1).
+    /// Servers that predate it ignore it, so callers filter again locally.
     static func fetchClipList(
         learnerLevel: Int? = nil,
+        jlptLevel: Int? = nil,
         feedOnly: Bool = false,
         filters: [ClipTagFilter] = [],
         search: String? = nil
     ) async throws -> [ClipSummary] {
         var query = learnerLevel.map { [URLQueryItem(name: "level", value: String($0))] } ?? []
+        if let jlptLevel { query.append(URLQueryItem(name: "jlpt", value: String(jlptLevel))) }
         if feedOnly { query.append(URLQueryItem(name: "feed", value: "1")) }
         query += tagQuery(filters)
         if let search = search?.trimmingCharacters(in: .whitespacesAndNewlines), !search.isEmpty {
@@ -446,8 +461,16 @@ extension ContentCMSClient {
     }
 
     /// Tag values in use across listed clips, with how many clips carry each, most first.
-    static func fetchClipFacets() async throws -> [ClipTagFilter.Facet: [ClipFacetValue]] {
-        let data = try await fetchPublicClipData(path: ["clips", "facets"])
+    /// `feedOnly`: count feed clips only. `jlptLevel`: count only clips rated exactly
+    /// that level (servers that predate it count every level).
+    static func fetchClipFacets(
+        feedOnly: Bool = false,
+        jlptLevel: Int? = nil
+    ) async throws -> [ClipTagFilter.Facet: [ClipFacetValue]] {
+        var query: [URLQueryItem] = []
+        if feedOnly { query.append(URLQueryItem(name: "feed", value: "1")) }
+        if let jlptLevel { query.append(URLQueryItem(name: "jlpt", value: String(jlptLevel))) }
+        let data = try await fetchPublicClipData(path: ["clips", "facets"], query: query)
         let raw = try JSONDecoder().decode(ClipFacetsResponse.self, from: data).facets
         var facets: [ClipTagFilter.Facet: [ClipFacetValue]] = [:]
         for (key, values) in raw {

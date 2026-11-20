@@ -7,12 +7,14 @@ final class OnboardingCoordinator: NSObject {
     enum Flow: String {
         case original = "onboarding_config"
         case listenFirst = "onboarding_listen_first"
+        case immersion = "onboarding_immersion"
 
         /// The `flow` property on onboarding analytics events.
         var analyticsName: String {
             switch self {
             case .original: return "original"
             case .listenFirst: return "listen_first"
+            case .immersion: return "immersion"
             }
         }
     }
@@ -164,8 +166,8 @@ final class OnboardingCoordinator: NSObject {
             return
         }
 
-        // Listen-first completes only with access, so the debug skip can't walk past the paywall.
-        guard flow != .listenFirst || ProMembership.hasAccess else { return }
+        // The paywalled flows complete only with access, so the debug skip can't walk past the paywall.
+        guard (flow != .listenFirst && flow != .immersion) || ProMembership.hasAccess else { return }
 
         OnboardingStore.save(userInfo)
         guard AuthService.shared.hasSignedInUserId else {

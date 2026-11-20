@@ -8,6 +8,11 @@
 //  blur view's backdrop layer, driven by a gradient mask image. Class, selector and
 //  filter names are stored reversed and resolved at runtime.
 //
+//  The blur view rebuilds its backdrop and material layers whenever its traits change,
+//  which drops the filter and brings the tint back as a solid, hard-edged band. iOS
+//  changes traits when the app goes to the background (it snapshots the app in light
+//  and dark), so the filter is put back after every trait change and on foreground.
+//
 //  Fallback (if the private filter isn't there): `steps` ultra-thin material layers
 //  stacked, each masked to reach a little less far down than the one before.
 //
@@ -26,6 +31,7 @@ final class ProgressiveBlurView: UIView {
     private var variableBlurView: UIVisualEffectView?
     private var variableBlurFilter: NSObject?
     private var lastMaskSize: CGSize = .zero
+    private var maskImage: CGImage?
     private var stackedLayers: [(view: UIVisualEffectView, mask: CAGradientLayer)] = []
 
     init(style: UIBlurEffect.Style = .systemUltraThinMaterial, steps: Int = 4) {
@@ -33,7 +39,19 @@ final class ProgressiveBlurView: UIView {
         self.steps = max(1, steps)
         super.init(frame: .zero)
         isUserInteractionEnabled = false
-        if !installVariableBlur() {
+        if installVariableBlur() {
+            registerForTraitChanges(UITraitCollection.systemTraitsAffectingColorAppearance) { (self: Self, _: UITraitCollection) in
+                self.reassertVariableBlurSoon()
+            }
+            for name in [UIApplication.willEnterForegroundNotification, UIApplication.didBecomeActiveNotification] {
+                NotificationCenter.default.addObserver(
+                    self,
+                    selector: #selector(reassertVariableBlurSoon),
+                    name: name,
+                    object: nil
+                )
+            }
+        } else {
             installStackedBlur()
         }
     }
@@ -45,7 +63,7 @@ final class ProgressiveBlurView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         if variableBlurFilter != nil {
-            if bounds.size != lastMaskSize { applyVariableBlur() }
+            if bounds.size != lastMaskSize { applyVariableBlur() } else { reassertVariableBlur() }
         } else {
             layoutStackedMasks()
         }
@@ -79,17 +97,41 @@ final class ProgressiveBlurView: UIView {
     }
 
     private func applyVariableBlur() {
-        guard let blurView = variableBlurView, let filter = variableBlurFilter,
+        guard variableBlurFilter != nil,
               bounds.width > 0, bounds.height > 0,
               let mask = Self.topToBottomMask(size: bounds.size)
         else { return }
         lastMaskSize = bounds.size
-        filter.setValue(maxRadius, forKey: "inputRadius")
-        filter.setValue(mask, forKey: "inputMaskImage")
-        filter.setValue(true, forKey: "inputNormalizeEdges")
-        blurView.subviews.first?.layer.filters = [filter]
-        for overlay in blurView.subviews.dropFirst() {
+        maskImage = mask
+        reassertVariableBlur(force: true)
+    }
+
+    /// Puts the filter back on the backdrop and hides the material layers, if the blur
+    /// view replaced or reset them. Looks the subviews up each time: they can be new ones.
+    private func reassertVariableBlur(force: Bool = false) {
+        guard let blurView = variableBlurView, let filter = variableBlurFilter, let maskImage,
+              let backdrop = blurView.subviews.first
+        else { return }
+        // Core Animation may hold a copy, so match by the filter's name, not identity.
+        let filterName = Self.reversed("rulBelbairav")
+        let hasFilter = (backdrop.layer.filters as? [NSObject])?.contains {
+            $0 === filter || ($0.responds(to: NSSelectorFromString("name")) && $0.value(forKey: "name") as? String == filterName)
+        } == true
+        if force || !hasFilter {
+            filter.setValue(maxRadius, forKey: "inputRadius")
+            filter.setValue(maskImage, forKey: "inputMaskImage")
+            filter.setValue(true, forKey: "inputNormalizeEdges")
+            backdrop.layer.filters = [filter]
+        }
+        for overlay in blurView.subviews.dropFirst() where overlay.alpha != 0 {
             overlay.alpha = 0
+        }
+    }
+
+    /// After the blur view has rebuilt itself for the new traits (it updates after us).
+    @objc private func reassertVariableBlurSoon() {
+        DispatchQueue.main.async { [weak self] in
+            self?.reassertVariableBlur()
         }
     }
 

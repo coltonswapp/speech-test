@@ -7,10 +7,11 @@
 //
 
 import UIKit
+import CSFeedbackKitUI
 
 // MARK: - DialogueNestedPagingExperimentViewController
 
-final class DialogueNestedPagingExperimentViewController: UIViewController, ScreenshotQAPresenting {
+final class DialogueNestedPagingExperimentViewController: UIViewController {
 
     private static let boundaryEpsilon: CGFloat = 0.5
     /// Fraction of a page the outer pager must travel (without a strong flick) before committing.
@@ -953,10 +954,28 @@ final class DialogueNestedPagingExperimentViewController: UIViewController, Scre
         contentQAContext != nil
     }
 
-    func presentScreenshotQANote(from presenter: UIViewController) -> Bool {
-        guard canPresentContentQANote else { return false }
-        presentContentQANote(presenter: presenter, forcesScreenshot: true)
-        return true
+    /// The same context the QA note sends, as CSFeedbackKit fields (see CSFeedback.json).
+    /// Pass a focus override when the note is about a pushed surface such as sentence scrub.
+    func contentQAFeedbackValues(focusTitle: String? = nil, focusDetailLines: [String]? = nil) -> FeedbackValues {
+        guard let context = contentQAContext else { return [:] }
+        var sourceId = "\(context.scene.collectionId)/\(context.scene.slug)"
+        if let number = context.focus.quizQuestionNumber {
+            sourceId += "#q\(number)"
+        }
+        return [
+            "qaSource": .string(context.focus.source.rawValue),
+            "sourceId": .string(sourceId),
+            "focusTitle": .string(focusTitle ?? context.focus.title),
+            "focus": .strings(focusDetailLines ?? context.focus.detailLines),
+            "lessonId": .string(context.scene.lessonID),
+            "lessonTitle": .string(context.scene.lessonTitle),
+            "sceneSlug": .string(context.scene.slug),
+            "sceneTitle": .string(context.scene.sceneTitle),
+            "studioLink": .string(ContentCMSClient.studioScenarioEditorLink(
+                collectionId: context.scene.collectionId,
+                slug: context.scene.slug
+            )),
+        ]
     }
 
     /// Presents the shared QA note sheet. Scene identity, source, and Studio link
@@ -1413,9 +1432,24 @@ final class DialogueNestedPagingExperimentViewController: UIViewController, Scre
         bottomScrollEdgeContainer.addSubview(quizContinueButton)
         bottomScrollEdgeContainer.addSubview(nextSceneButton)
 
+        // Wide windows: keep the buttons at the edges of the quiz's centered column,
+        // not the screen's.
+        let quizButtonColumn = UILayoutGuide()
+        bottomScrollEdgeContainer.addLayoutGuide(quizButtonColumn)
+        let columnFill = quizButtonColumn.widthAnchor.constraint(equalTo: bottomScrollEdgeContainer.widthAnchor)
+        columnFill.priority = .required - 1
+        NSLayoutConstraint.activate([
+            quizButtonColumn.topAnchor.constraint(equalTo: bottomScrollEdgeContainer.topAnchor),
+            quizButtonColumn.bottomAnchor.constraint(equalTo: bottomScrollEdgeContainer.bottomAnchor),
+            quizButtonColumn.centerXAnchor.constraint(equalTo: bottomScrollEdgeContainer.centerXAnchor),
+            quizButtonColumn.widthAnchor.constraint(lessThanOrEqualTo: bottomScrollEdgeContainer.widthAnchor),
+            quizButtonColumn.widthAnchor.constraint(lessThanOrEqualToConstant: ContentColumn.readableWidth),
+            columnFill,
+        ])
+
         NSLayoutConstraint.activate([
             quizPlayButton.leadingAnchor.constraint(
-                equalTo: bottomScrollEdgeContainer.leadingAnchor,
+                equalTo: quizButtonColumn.leadingAnchor,
                 constant: Self.quizCheckButtonHorizontalInset
             ),
             quizPlayButton.topAnchor.constraint(
@@ -1432,7 +1466,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController, Scre
             quizNextButton.topAnchor.constraint(equalTo: quizPlayButton.topAnchor),
             quizNextButton.bottomAnchor.constraint(equalTo: quizPlayButton.bottomAnchor),
             quizNextButton.trailingAnchor.constraint(
-                equalTo: bottomScrollEdgeContainer.trailingAnchor,
+                equalTo: quizButtonColumn.trailingAnchor,
                 constant: -Self.quizCheckButtonHorizontalInset
             ),
             quizNextButton.widthAnchor.constraint(equalToConstant: Self.quizCheckButtonHeight),
@@ -1441,7 +1475,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController, Scre
             quizContinueButton.topAnchor.constraint(equalTo: quizPlayButton.topAnchor),
             quizContinueButton.bottomAnchor.constraint(equalTo: quizPlayButton.bottomAnchor),
             quizContinueButton.trailingAnchor.constraint(
-                equalTo: bottomScrollEdgeContainer.trailingAnchor,
+                equalTo: quizButtonColumn.trailingAnchor,
                 constant: -Self.quizCheckButtonHorizontalInset
             ),
             quizContinueButton.leadingAnchor.constraint(
@@ -1452,7 +1486,7 @@ final class DialogueNestedPagingExperimentViewController: UIViewController, Scre
             nextSceneButton.topAnchor.constraint(equalTo: quizPlayButton.topAnchor),
             nextSceneButton.bottomAnchor.constraint(equalTo: quizPlayButton.bottomAnchor),
             nextSceneButton.trailingAnchor.constraint(
-                equalTo: bottomScrollEdgeContainer.trailingAnchor,
+                equalTo: quizButtonColumn.trailingAnchor,
                 constant: -Self.quizCheckButtonHorizontalInset
             ),
             nextSceneButton.leadingAnchor.constraint(
@@ -2661,5 +2695,13 @@ extension DialogueNestedPagingExperimentViewController: UISheetPresentationContr
     func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
         guard committedTally != nil, sessionMode != .viewLesson, !suppressViewLessonOnSheetDismiss else { return }
         enterViewLesson(snapToHighlights: false)
+    }
+}
+
+// MARK: - CSFeedbackKit context
+
+extension DialogueNestedPagingExperimentViewController: FeedbackContextProvider {
+    func feedbackValues() -> FeedbackValues {
+        contentQAFeedbackValues()
     }
 }

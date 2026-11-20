@@ -32,11 +32,17 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             ToastManager.shared.showBanner(symbol: "hand.draw.fill", text: "Multi-select")
         }
         ExperimentSettings.applySpanHighlightStyle()
-        ScreenshotQAShortcut.start()
+        // QA notes: CSFeedbackKit. A screenshot offers the composer (CSFeedback.json "triggers").
+        CSFeedbackSetup.start()
+        // Cold launch from a shizen://clip/<id> link.
+        for context in connectionOptions.urlContexts {
+            ClipLinkOpener.handleOpenURL(context.url, in: window)
+        }
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         for context in URLContexts {
+            if ClipLinkOpener.handleOpenURL(context.url, in: window) { continue }
             _ = AuthService.shared.handleOpenURL(context.url)
         }
     }

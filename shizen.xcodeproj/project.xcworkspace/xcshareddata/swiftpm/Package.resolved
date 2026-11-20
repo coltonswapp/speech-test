@@ -1,6 +1,15 @@
 {
-  "originHash" : "e4db6126fde43314a748124c5cd1cb9bef001ae00c83159787fb1fcb65fb7042",
+  "originHash" : "75b2de19e1d40900fefaec537f6d4204bd4fb0786a856f840ff008fb421c1c93",
   "pins" : [
+    {
+      "identity" : "csfeedbackkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/coltonswapp/CSFeedbackKit",
+      "state" : {
+        "revision" : "6d658691f26dacd72332561b5fb86546c010a4f0",
+        "version" : "0.1.1"
+      }
+    },
     {
       "identity" : "abseil-cpp-binary",
       "kind" : "remoteSourceControl",
@@ -170,15 +179,6 @@
       "state" : {
         "revision" : "f4a19a3c313dc2616c70bb49d29a799fb16be837",
         "version" : "2.4.1"
-      }
-    },
-    {
-      "identity" : "swiftuishaders",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/krispuckett/SwiftUIShaders.git",
-      "state" : {
-        "revision" : "aa8eb4d260a47ff4c78dbdc26020a5cdf95b594f",
-        "version" : "1.0.0"
       }
     },
     {

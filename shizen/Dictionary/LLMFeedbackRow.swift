@@ -111,7 +111,25 @@ enum LLMFeedbackPrompt {
     }
 }
 
-/// Glass thumbs for one LLM result. Hidden until `present`. A tap is pending until they fade.
+/// What one set of thumbs rates, and where the vote goes. Gloss thumbs build this
+/// from an `LLMFeedbackReceipt`; clips build their own (see `ClipFeedback`).
+struct FeedbackThumbsSubject {
+    struct Reason {
+        let id: String
+        let title: String
+    }
+
+    /// Re-presenting the same id while visible is a no-op.
+    let id: String
+    var reasonPrompt = "What was off?"
+    /// Offered after a thumbs-down. Empty skips the sheet.
+    let reasons: [Reason]
+    /// Called once, when the thumbs fade. The reason id is only set for a thumbs-down.
+    let send: (LLMFeedbackRating, String?) -> Void
+}
+
+/// Glass thumbs for one LLM result (or any `FeedbackThumbsSubject`). Hidden until
+/// `present`. A tap is pending until they fade.
 final class LLMFeedbackRow: UIView {
 
     static let diameter: CGFloat = 36
@@ -131,9 +149,9 @@ final class LLMFeedbackRow: UIView {
     private let downButton = UIButton(type: .system)
     private let upButton = UIButton(type: .system)
 
-    private var receipt: LLMFeedbackReceipt?
+    private var subject: FeedbackThumbsSubject?
     private var pendingRating: LLMFeedbackRating?
-    private var pendingReason: LLMFeedbackReason?
+    private var pendingReason: String?
     private var commitTask: Task<Void, Never>?
     private var isCommitting = false
     private var isReasonSheetPresented = false
@@ -166,7 +184,12 @@ final class LLMFeedbackRow: UIView {
             if !isHidden { dismiss() }
             return
         }
-        if self.receipt?.requestId == receipt.requestId, !isHidden, alpha > 0.9 {
+        present(subject: Self.subject(for: receipt))
+    }
+
+    /// Shows the thumbs for any subject. No cadence: the caller decides when to ask.
+    func present(subject: FeedbackThumbsSubject) {
+        if self.subject?.id == subject.id, !isHidden, alpha > 0.9 {
             return
         }
         commitTask?.cancel()
@@ -176,7 +199,7 @@ final class LLMFeedbackRow: UIView {
         pendingRating = nil
         pendingReason = nil
         isCommitting = false
-        self.receipt = receipt
+        self.subject = subject
         alpha = 1
         isHidden = false
         downButton.isUserInteractionEnabled = true
@@ -209,7 +232,7 @@ final class LLMFeedbackRow: UIView {
         pendingRating = nil
         pendingReason = nil
         isCommitting = false
-        receipt = nil
+        subject = nil
         alpha = 1
         thumbsSeparated = false
         downGlass.alpha = 1
@@ -319,13 +342,13 @@ final class LLMFeedbackRow: UIView {
     }
 
     private func choose(_ rating: LLMFeedbackRating) {
-        guard receipt != nil, !isCommitting else { return }
+        guard let subject, !isCommitting else { return }
         pendingRating = rating
         if rating == .up {
             pendingReason = nil
         }
         applySelectionStyles()
-        if rating == .down, !hasAskedReason {
+        if rating == .down, !hasAskedReason, !subject.reasons.isEmpty {
             commitTask?.cancel()
             presentReasonSheet()
             return
@@ -341,24 +364,26 @@ final class LLMFeedbackRow: UIView {
     }
 
     private func presentReasonSheet() {
-        guard let presenter = presentingController() else {
+        guard let subject, let presenter = presentingController() else {
             finishReasonPrompt(reason: nil)
             return
         }
         isReasonSheetPresented = true
-        let requestId = receipt?.requestId
-        let picker = LLMFeedbackReasonSheetController()
+        let subjectID = subject.id
+        let picker = LLMFeedbackReasonSheetController(prompt: subject.reasonPrompt, reasons: subject.reasons)
         picker.onFinish = { [weak self] reason in
-            guard let self, self.receipt?.requestId == requestId else { return }
+            guard let self, self.subject?.id == subjectID else { return }
             self.finishReasonPrompt(reason: reason)
         }
+        // 292 fits the three gloss reasons; longer lists grow the sheet.
+        let sheetHeight = max(292, CGFloat(100 + subject.reasons.count * 62))
         let nav = UINavigationController(rootViewController: picker)
         nav.modalPresentationStyle = .pageSheet
         nav.modalTransitionStyle = .coverVertical
         nav.presentationController?.delegate = picker
         if let sheet = nav.sheetPresentationController {
             sheet.detents = [
-                .custom(identifier: UISheetPresentationController.Detent.Identifier("llmReason")) { _ in 292 },
+                .custom(identifier: UISheetPresentationController.Detent.Identifier("llmReason")) { _ in sheetHeight },
             ]
             sheet.prefersGrabberVisible = true
             sheet.prefersScrollingExpandsWhenScrolledToEdge = false
@@ -367,7 +392,7 @@ final class LLMFeedbackRow: UIView {
         presenter.present(nav, animated: true)
     }
 
-    private func finishReasonPrompt(reason: LLMFeedbackReason?) {
+    private func finishReasonPrompt(reason: String?) {
         guard isReasonSheetPresented || !hasAskedReason else { return }
         isReasonSheetPresented = false
         hasAskedReason = true
@@ -394,7 +419,7 @@ final class LLMFeedbackRow: UIView {
         isCommitting = true
         upButton.isUserInteractionEnabled = false
         downButton.isUserInteractionEnabled = false
-        send(rating: rating, reason: rating == .down ? pendingReason : nil)
+        subject?.send(rating, rating == .down ? pendingReason : nil)
         nearestViewController()?.showToast(text: "Thanks for the feedback")
         fadeOut()
     }
@@ -409,14 +434,20 @@ final class LLMFeedbackRow: UIView {
         }
     }
 
-    private func send(rating: LLMFeedbackRating, reason: LLMFeedbackReason?) {
-        guard let receipt else { return }
-        LLMFeedbackPrompt.markVoted(receipt)
-        var properties: [String: Any] = ["feature": receipt.feature, "rating": rating.rawValue]
-        properties["reason"] = reason?.rawValue
-        Analytics.track(.llmFeedback, properties)
-        Task {
-            await LLMGatewayClient.postFeedback(receipt, rating: rating, reason: reason)
+    /// Gloss thumbs: the gateway feedback path, unchanged.
+    private static func subject(for receipt: LLMFeedbackReceipt) -> FeedbackThumbsSubject {
+        FeedbackThumbsSubject(
+            id: receipt.requestId,
+            reasons: LLMFeedbackReason.allCases.map { .init(id: $0.rawValue, title: $0.title) }
+        ) { rating, reasonID in
+            let reason = reasonID.flatMap(LLMFeedbackReason.init(rawValue:))
+            LLMFeedbackPrompt.markVoted(receipt)
+            var properties: [String: Any] = ["feature": receipt.feature, "rating": rating.rawValue]
+            properties["reason"] = reason?.rawValue
+            Analytics.track(.llmFeedback, properties)
+            Task {
+                await LLMGatewayClient.postFeedback(receipt, rating: rating, reason: reason)
+            }
         }
     }
 
@@ -441,12 +472,25 @@ final class LLMFeedbackRow: UIView {
 }
 
 private final class LLMFeedbackReasonSheetController: UIViewController, UIAdaptivePresentationControllerDelegate {
-    var onFinish: ((LLMFeedbackReason?) -> Void)?
+    var onFinish: ((String?) -> Void)?
     private var didFinish = false
+    private let prompt: String
+    private let reasons: [FeedbackThumbsSubject.Reason]
+
+    init(prompt: String, reasons: [FeedbackThumbsSubject.Reason]) {
+        self.prompt = prompt
+        self.reasons = reasons
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "What was off?"
+        title = prompt
         view.backgroundColor = .systemBackground
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .close,
@@ -458,7 +502,7 @@ private final class LLMFeedbackReasonSheetController: UIViewController, UIAdapti
         stack.axis = .vertical
         stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
-        for reason in LLMFeedbackReason.allCases {
+        for reason in reasons {
             var config = UIButton.Configuration.gray()
             config.title = reason.title
             config.cornerStyle = .large
@@ -470,7 +514,7 @@ private final class LLMFeedbackReasonSheetController: UIViewController, UIAdapti
             }
             let button = UIButton(configuration: config)
             button.addAction(UIAction { [weak self] _ in
-                self?.pick(reason)
+                self?.pick(reason.id)
             }, for: .touchUpInside)
             stack.addArrangedSubview(button)
         }
@@ -499,12 +543,12 @@ private final class LLMFeedbackReasonSheetController: UIViewController, UIAdapti
         dismiss(animated: true)
     }
 
-    private func pick(_ reason: LLMFeedbackReason) {
+    private func pick(_ reason: String) {
         finish(reason)
         dismiss(animated: true)
     }
 
-    private func finish(_ reason: LLMFeedbackReason?) {
+    private func finish(_ reason: String?) {
         guard !didFinish else { return }
         didFinish = true
         onFinish?(reason)

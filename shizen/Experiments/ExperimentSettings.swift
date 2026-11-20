@@ -181,7 +181,6 @@ enum DialogueTokenSyncHighlightStyle: String, CaseIterable {
 
 enum ExperimentSettings {
     private static let soundsEnabledKey = "ExperimentSoundsEnabled"
-    private static let sentenceScrubGlossOverlayEnabledKey = "ExperimentSentenceScrubGlossOverlayEnabled"
     private static let repeatAfterMeReplyLimitKey = "ExperimentRepeatAfterMeReplyLimit"
     private static let repeatAfterMeHarshModeKey = "ExperimentRepeatAfterMeHarshMode"
     private static let rolePlaySpeechRecognizerBackendKey = "ExperimentRolePlaySpeechRecognizerBackend"
@@ -192,6 +191,7 @@ enum ExperimentSettings {
     private static let dialogueContentDelaysStageLinesKey = "ExperimentDialogueContentDelaysStageLines"
     private static let dialogueStageLinePauseKey = "ExperimentDialogueStageLinePause"
     private static let dialogueShowsTokenSyncKey = "ExperimentDialogueShowsTokenSync"
+    private static let dialogueClipStyleTranscriptKey = "ExperimentDialogueClipStyleTranscript"
     private static let dialogueTokenSyncHighlightStyleKey = "ExperimentDialogueTokenSyncHighlightStyle"
     private static let dialogueHighlightLeadingColorKey = "ExperimentDialogueHighlightLeadingColor"
     private static let dialogueHighlightTrailingColorKey = "ExperimentDialogueHighlightTrailingColor"
@@ -243,14 +243,6 @@ enum ExperimentSettings {
         set { UserDefaults.standard.set(newValue, forKey: soundsEnabledKey) }
     }
 
-    /// Gloss callout shown while panning across the sentence scrub experiment.
-    static var sentenceScrubGlossOverlayEnabled: Bool {
-        get {
-            if UserDefaults.standard.object(forKey: sentenceScrubGlossOverlayEnabledKey) == nil { return true }
-            return UserDefaults.standard.bool(forKey: sentenceScrubGlossOverlayEnabledKey)
-        }
-        set { UserDefaults.standard.set(newValue, forKey: sentenceScrubGlossOverlayEnabledKey) }
-    }
 
     /// How many tutor replies before Repeat After Me ends the session.
     static var repeatAfterMeReplyLimit: RepeatAfterMeReplyLimit {
@@ -351,6 +343,13 @@ enum ExperimentSettings {
             return UserDefaults.standard.bool(forKey: dialogueShowsTokenSyncKey)
         }
         set { UserDefaults.standard.set(newValue, forKey: dialogueShowsTokenSyncKey) }
+    }
+
+    /// Clips-style dialogue transcript: words underlined, a timestamp above each line,
+    /// and tapping a word opens its definition callout in place. Off by default.
+    static var dialogueClipStyleTranscript: Bool {
+        get { UserDefaults.standard.bool(forKey: dialogueClipStyleTranscriptKey) }
+        set { UserDefaults.standard.set(newValue, forKey: dialogueClipStyleTranscriptKey) }
     }
 
     /// Full glyph-box highlight vs a small baseline marker.

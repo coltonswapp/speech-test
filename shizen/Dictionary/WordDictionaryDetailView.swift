@@ -108,6 +108,8 @@ final class WordDictionaryDetailView: UIView {
     private var senseFitTask: Task<Void, Never>?
     private var senseFitGeneration = 0
     private var senseFitRows: [DefinitionSenseFitRow] = []
+    /// Slides up from the bottom of the host scroll view when the suggested sense is below the fold.
+    private lazy var senseSuggestionScrollHint = SenseSuggestionScrollHint()
     private var contextualRequestID = UUID()
     private var commonUsesRequestID = UUID()
     private var breakDownRequestID = UUID()
@@ -166,7 +168,7 @@ final class WordDictionaryDetailView: UIView {
 #endif
 
     /// Pulses the dictionary sense that best fits the surrounding sentence.
-    /// Only the sentence-scrub experiment turns this on.
+    /// The sentence-scrub experiment and the clip player's word sheet turn this on.
     var showsSenseSuggestion = false {
         didSet {
             guard showsSenseSuggestion != oldValue, !lastConfiguredSurface.isEmpty else { return }
@@ -424,6 +426,11 @@ final class WordDictionaryDetailView: UIView {
         // Candidates go in the note only when the definitions list below is not showing them.
         setLookupNote(lookupNote?.text(listsCandidates: displayedEntries.isEmpty))
         let otherEntriesTitle = lookup.preferredKanaSequence == nil ? nil : "Other words read \(trimmedSurface)"
+        setDefinitionsTitle(form: contextSensitive ? nil : Self.definitionsTitleForm(
+            displayHeadword: displayHeadword,
+            lookup: lookup,
+            displayedEntries: displayedEntries
+        ))
         rebuildDefinitionContent(
             entries: displayedEntries,
             suppressEmptyState: hideDictionarySection,
@@ -488,7 +495,10 @@ final class WordDictionaryDetailView: UIView {
         } else {
             clearUnsolicitedGloss()
         }
-        if allowsSavedEntryContext {
+        // The bonus button holds one action. Context wins when the line comes from a saved card
+        // (the word is being looked up away from that line). Otherwise the line is already on screen,
+        // so Common Uses keeps the button.
+        if allowsSavedEntryContext, entryContext != nil || !commonUsesEnabled {
             installContextButton(stored: displayContext)
         }
 
@@ -832,6 +842,7 @@ final class WordDictionaryDetailView: UIView {
         rebuildKanjiChips(surface: surface)
         rebuildCompoundContent(surface: surface)
         rebuildDefinitionContent(entries: [], suppressEmptyState: true)
+        setDefinitionsTitle(form: nil)
 
         dividerAfterWord.isHidden = false
         definitionsSectionTitle.isHidden = true
@@ -1465,6 +1476,7 @@ final class WordDictionaryDetailView: UIView {
 
     /// Restores the DEFINITIONS empty state when a no-match contextual gloss fails.
     private func showDictionaryMissFallback() {
+        setDefinitionsTitle(form: nil)
         definitionsSectionTitle.isHidden = false
         definitionStack.isHidden = false
         dividerBeforeDefinitions.isHidden = kanjiSectionStack.isHidden
@@ -1679,6 +1691,8 @@ final class WordDictionaryDetailView: UIView {
         guard !entries.isEmpty else { return }
 
         let surface = lastConfiguredSurface.trimmingCharacters(in: .whitespacesAndNewlines)
+        // `entries` are exact matches for `trimmed`, so naming it is safe.
+        setDefinitionsTitle(form: trimmed != surface ? trimmed : nil)
         definitionsSectionTitle.isHidden = false
         definitionStack.isHidden = false
         dividerBeforeDefinitions.isHidden = kanjiSectionStack.isHidden
@@ -1733,6 +1747,47 @@ final class WordDictionaryDetailView: UIView {
             text.append(NSAttributedString(string: "  \(romaji)", attributes: secondary))
         }
         return text
+    }
+
+    /// "DEFINITIONS · 破く" when the listed entries belong to a headword other than the one
+    /// shown at the top (破かない); plain "DEFINITIONS" otherwise. Callers pass a form only
+    /// after checking every listed entry is that exact expression.
+    private func setDefinitionsTitle(form: String?) {
+        let trimmed = form?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else {
+            definitionsSectionTitle.attributedText = nil
+            definitionsSectionTitle.text = "DEFINITIONS"
+            definitionsSectionTitle.accessibilityLabel = nil
+            return
+        }
+        let font = definitionsSectionTitle.font ?? .preferredFont(forTextStyle: .footnote)
+        let text = NSMutableAttributedString(
+            string: "DEFINITIONS · ",
+            attributes: [.font: font, .foregroundColor: UIColor.secondaryLabel]
+        )
+        text.append(NSAttributedString(
+            string: trimmed,
+            attributes: [.font: font, .foregroundColor: UIColor.label]
+        ))
+        definitionsSectionTitle.attributedText = text
+        definitionsSectionTitle.accessibilityLabel = "Definitions for \(trimmed)"
+    }
+
+    /// The form to name in the DEFINITIONS header, or nil when the header needs no form:
+    /// the headword already is that form, the lookup only guessed (tail trim, prefix), or the
+    /// list mixes headwords (ここ: 此処 and 個々).
+    private static func definitionsTitleForm(
+        displayHeadword: String,
+        lookup: JMDictLookupResult,
+        displayedEntries: [JMDictEntry]
+    ) -> String? {
+        guard !displayedEntries.isEmpty,
+              lookup.matchKind == .lemmaGuess || lookup.matchKind == .exact || lookup.matchKind == .honorificStem,
+              let form = lookup.dictionaryForm,
+              form != displayHeadword.trimmingCharacters(in: .whitespacesAndNewlines),
+              displayedEntries.allSatisfy({ $0.expression.trimmingCharacters(in: .whitespacesAndNewlines) == form })
+        else { return nil }
+        return form
     }
 
     /// "Polite past — Past tense, said politely (〜ました)." The name is set in the label color.
@@ -2236,6 +2291,7 @@ final class WordDictionaryDetailView: UIView {
         definitionsSectionTitle.text = "DEFINITIONS"
         definitionsSectionTitle.font = sectionHeaderFont
         definitionsSectionTitle.textColor = .secondaryLabel
+        definitionsSectionTitle.numberOfLines = 0
 
         definitionStack.axis = .vertical
         definitionStack.alignment = .fill
@@ -2298,6 +2354,13 @@ final class WordDictionaryDetailView: UIView {
         definitionsSectionTitle.isHidden = true
         dividerBeforeCompounds.isHidden = true
         compoundsSectionStack.isHidden = true
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil {
+            senseSuggestionScrollHint.stopTracking()
+        }
     }
 
     override func layoutSubviews() {
@@ -2705,6 +2768,7 @@ final class WordDictionaryDetailView: UIView {
         senseFitTask?.cancel()
         senseFitGeneration += 1
         senseFitRows = []
+        senseSuggestionScrollHint.stopTracking()
     }
 
     /// Asks which listed gloss fits the sentence, then pulses that row.
@@ -2722,6 +2786,9 @@ final class WordDictionaryDetailView: UIView {
             guard !Task.isCancelled, let self, self.senseFitGeneration == generation else { return }
             guard let index, rows.indices.contains(index) else { return }
             rows[index].setSuggested(true)
+            if let scrollView = self.glossLayoutHost as? UIScrollView {
+                self.senseSuggestionScrollHint.track(rows[index], in: scrollView)
+            }
             self.rankedFlashcardDefinition = VocabSenseList.flashcardLine(fromGlossary: rows[index].glossaryText)
             self.applyFlashcardDefinitionToDraft()
         }

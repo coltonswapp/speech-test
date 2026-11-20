@@ -103,10 +103,7 @@ final class PracticeHomeViewController: UIViewController, MainTabScrollable {
 
             contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 16),
             contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -24),
-            contentStack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: inset),
-            contentStack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -inset),
-            contentStack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor, constant: -inset * 2),
-        ])
+        ] + ContentColumn.horizontalConstraints(for: contentStack, in: scrollView, inset: inset))
     }
 
     private func makeSectionHeader(title: String, subtitleLabel: UILabel) -> UIStackView {

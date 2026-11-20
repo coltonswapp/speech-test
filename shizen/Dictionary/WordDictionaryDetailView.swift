@@ -357,8 +357,13 @@ final class WordDictionaryDetailView: UIView {
             readingForRomaji = JMDictStore.shared.kanaReadingForDisplay(surface: surface, matching: primary)
             romaji = JMDictStore.shared.romajiForDisplay(surface: surface, matching: primary)
         }
-        romajiLabel.isHidden = romaji.isEmpty
-        romajiLabel.text = romaji.isEmpty ? nil : romaji
+        setReadingLine(
+            kana: readingForRomaji.isEmpty && showingLemmaAsHeadword
+                ? (lookup.dictionaryFormReading ?? displayHeadword)
+                : readingForRomaji,
+            romaji: romaji,
+            headword: displayHeadword
+        )
 
         if !contextSensitive, let dictionaryForm = lookup.dictionaryForm, !showingLemmaAsHeadword {
             let reading = lookup.dictionaryFormReading ?? dictionaryForm
@@ -366,6 +371,7 @@ final class WordDictionaryDetailView: UIView {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             dictionaryFormLabel.attributedText = Self.prominentDictionaryFormText(
                 dictionaryForm,
+                kana: reading,
                 romaji: lemmaRomaji,
                 baseFont: dictionaryFormLabel.font ?? .preferredFont(forTextStyle: .subheadline)
             )
@@ -711,8 +717,34 @@ final class WordDictionaryDetailView: UIView {
             let value = JMDictStore.shared.romajiForDisplay(surface: piece, matching: nil)
             return value.isEmpty ? nil : value
         }.joined(separator: " ")
-        romajiLabel.isHidden = romaji.isEmpty
-        romajiLabel.text = romaji.isEmpty ? nil : romaji
+        let kana = pieces
+            .map { JMDictStore.shared.kanaReadingForDisplay(surface: $0, matching: nil) }
+            .joined()
+        setReadingLine(kana: kana, romaji: romaji, headword: pieces.joined())
+    }
+
+    /// "かしてた · kashiteta" under the headword: hiragana first, then romaji. The kana is
+    /// left out when it would just repeat the headword (する) or still holds kanji.
+    private func setReadingLine(kana: String, romaji: String, headword: String) {
+        let line = Self.readingLine(kana: kana, romaji: romaji, headword: headword)
+        romajiLabel.isHidden = line.isEmpty
+        romajiLabel.text = line.isEmpty ? nil : line
+    }
+
+    private static func readingLine(kana: String, romaji: String, headword: String) -> String {
+        let kana = displayableKana(kana, headword: headword)
+        let romaji = romaji.trimmingCharacters(in: .whitespacesAndNewlines)
+        return [kana, romaji].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    private static func displayableKana(_ kana: String, headword: String) -> String {
+        let kana = kana.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !kana.isEmpty,
+              kana != headword.trimmingCharacters(in: .whitespacesAndNewlines) else { return "" }
+        let hasKanji = kana.unicodeScalars.contains {
+            (0x3400...0x4DBF).contains($0.value) || (0x4E00...0x9FFF).contains($0.value)
+        }
+        return hasKanji ? "" : kana
     }
 
     private func applySelectedWordHeadline(_ attributed: NSAttributedString, maxLines: Int) {
@@ -810,8 +842,7 @@ final class WordDictionaryDetailView: UIView {
 
         let reading = JMDictStore.shared.kanaReadingForDisplay(surface: surface, matching: nil)
         let romaji = JMDictStore.shared.romajiForDisplay(surface: surface, matching: nil)
-        romajiLabel.isHidden = romaji.isEmpty
-        romajiLabel.text = romaji.isEmpty ? nil : romaji
+        setReadingLine(kana: reading, romaji: romaji, headword: surface)
         dictionaryFormLabel.text = nil
         dictionaryFormLabel.isHidden = true
         setLookupNote(nil)
@@ -1718,19 +1749,21 @@ final class WordDictionaryDetailView: UIView {
             let reading = JMDictStore.shared.kanaReadingForDisplay(surface: trimmed, matching: primary)
             let romaji = HiraganaRomaji.romanize(reading)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            if romaji.isEmpty {
+            let line = Self.readingLine(kana: reading, romaji: romaji, headword: trimmed)
+            if line.isEmpty {
                 dictionaryFormLabel.text = "Dictionary form: \(trimmed)"
             } else {
-                dictionaryFormLabel.text = "Dictionary form: \(trimmed) · \(romaji)"
+                dictionaryFormLabel.text = "Dictionary form: \(trimmed) · \(line)"
             }
             dictionaryFormLabel.isHidden = false
         }
     }
 
-    /// "Dictionary form  来る · kuru" with the word itself in a larger semibold label color,
+    /// "Dictionary form  来る  くる · kuru" with the word itself in a larger semibold label color,
     /// so the lemma reads as the second anchor under the tapped headword.
     private static func prominentDictionaryFormText(
         _ dictionaryForm: String,
+        kana: String,
         romaji: String,
         baseFont: UIFont
     ) -> NSAttributedString {
@@ -1743,8 +1776,9 @@ final class WordDictionaryDetailView: UIView {
             .font: UIFont.preferredFont(forTextStyle: .title3).semibold(),
             .foregroundColor: UIColor.label,
         ]))
-        if !romaji.isEmpty {
-            text.append(NSAttributedString(string: "  \(romaji)", attributes: secondary))
+        let reading = Self.readingLine(kana: kana, romaji: romaji, headword: dictionaryForm)
+        if !reading.isEmpty {
+            text.append(NSAttributedString(string: "  \(reading)", attributes: secondary))
         }
         return text
     }

@@ -41,7 +41,7 @@ function pendingReview(collectionId: string, slug: string) {
  * For the primary “mark scene reviewed / checked off” action, prefer
  * POST …/check-off — see docs/studio-content-qa-review.md §3.0.
  *
- * Auth (when Studio auth is enforced): Google session, `STUDIO_AGENT_TOKEN`,
+ * Auth (when Studio auth is enforced): Google session, `STUDIO_AGENT_TOKEN` (named per-agent or env),
  * or `CONTENT_QA_CLIENT_TOKEN` Bearer. Not a public unauthenticated write.
  */
 export async function GET(request: NextRequest, ctx: RouteCtx) {

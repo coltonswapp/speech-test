@@ -51,9 +51,21 @@ export async function isStudioRequestAllowed(request: NextRequest): Promise<bool
   const { pathname } = request.nextUrl;
   const authorization = request.headers.get("authorization");
 
-  if (studioAgentBearerMatches(authorization)) return true;
+  if (await studioAgentBearerMatches(authorization)) return true;
   if (pathname.startsWith("/api/cron/") && cronSecretMatches(authorization)) return true;
   return hasVerifiedStudioSession(request);
+}
+
+/**
+ * Settings that mint or revoke credentials: a verified allowlisted Google
+ * session only. Agent bearers can use Studio APIs but cannot issue more tokens.
+ */
+export async function requireSignedInStudioAdmin(
+  request: NextRequest,
+): Promise<NextResponse | null> {
+  if (!authIsEnforced()) return null;
+  if (await hasVerifiedStudioSession(request)) return null;
+  return unauthorized();
 }
 
 /**
@@ -67,7 +79,7 @@ export async function requireGenerateAccess(
   if (!authIsEnforced()) return null;
 
   const authorization = request.headers.get("authorization");
-  if (studioAgentBearerMatches(authorization)) return null;
+  if (await studioAgentBearerMatches(authorization)) return null;
   if (contentQaClientTokenMatches(authorization)) return forbidden();
   if (await hasVerifiedStudioSession(request)) return null;
   return unauthorized();

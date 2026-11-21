@@ -11,7 +11,7 @@ export default function SettingsLayout({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
           <p className="text-sm text-muted-foreground">
-            Studio configuration — provider keys and Gemini TTS voice casting.
+            Studio configuration — agents, API tokens, provider keys, and Gemini TTS voice casting.
           </p>
         </div>
         <SettingsSubnav />

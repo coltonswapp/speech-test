@@ -5,7 +5,7 @@ Published iOS JSON (`/api/public/*`) stays open. Everything else goes through on
 | Credential | Where it works |
 |---|---|
 | Google session (next-auth JWT, decrypted with `NEXTAUTH_SECRET`, email on `STUDIO_ALLOWED_EMAILS`) | Everywhere |
-| `STUDIO_AGENT_TOKEN` bearer | Everywhere |
+| `STUDIO_AGENT_TOKEN` env bearer, or a named per-agent token from Settings → Agent tokens | Everywhere |
 | `CRON_SECRET` bearer | `/api/cron/*` only |
 | `CONTENT_QA_CLIENT_TOKEN` bearer (DEBUG iOS builds only) | `/api/client/*` only |
 | Firebase ID token with the `staff: true` claim (Release iOS) | `/api/client/*` only |
@@ -31,7 +31,9 @@ Off-list Google accounts get AccessDenied.
 
 ## Agents / MCP
 
-Set `STUDIO_AGENT_TOKEN` on Vercel and in the Studio MCP env. Requests send `Authorization: Bearer …`.
+Create a named token per bot at **Settings → Agent tokens** (`/settings/agent-tokens`). Put that value in the bot's env as `STUDIO_AGENT_TOKEN` and send `Authorization: Bearer …`. Rotating or revoking one token does not lock the others out.
+
+The shared Vercel env `STUDIO_AGENT_TOKEN` is still accepted during migration. Do not put a per-agent token in Vercel env unless you want every bot to share it. Studio stores only a SHA-256 of named tokens (plaintext is shown once at creation).
 
 ## Learner-client content QA writes
 
@@ -58,7 +60,7 @@ Auth is checked before the body is read. Errors are plain text (`401` bad token,
 
 ## Cron
 
-`GET /api/cron/slides` drafts the next unused spotlight and decomposition decks. Vercel Cron should send `Authorization: Bearer $CRON_SECRET` (also accepted: `STUDIO_AGENT_TOKEN`).
+`GET /api/cron/slides` drafts the next unused spotlight and decomposition decks. Vercel Cron should send `Authorization: Bearer $CRON_SECRET` (also accepted: the env `STUDIO_AGENT_TOKEN` or a named per-agent token).
 
 ## Local
 

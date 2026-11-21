@@ -1,5 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 
+type StoredAgentTokenLookup = (token: string) => Promise<boolean>;
+
 export function isPublicPath(pathname: string): boolean {
   return (
     pathname === "/login" ||
@@ -76,9 +78,14 @@ export function authIsEnforced(): boolean {
   );
 }
 
+function bearerToken(header: string | null): string {
+  if (!header?.startsWith("Bearer ")) return "";
+  return header.slice(7).trim();
+}
+
 function bearerEquals(header: string | null, expected: string | undefined): boolean {
-  if (!expected || !header) return false;
-  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  if (!expected) return false;
+  const token = bearerToken(header);
   if (!token) return false;
   const a = Buffer.from(token);
   const b = Buffer.from(expected);
@@ -86,9 +93,35 @@ function bearerEquals(header: string | null, expected: string | undefined): bool
   return timingSafeEqual(a, b);
 }
 
-/** Studio MCP / agent token. Does not accept cron or learner QA tokens. */
-export function studioAgentBearerMatches(header: string | null): boolean {
-  return bearerEquals(header, process.env.STUDIO_AGENT_TOKEN?.trim());
+/**
+ * Stored-token lookup used when the env STUDIO_AGENT_TOKEN does not match.
+ * Node's test runner never hits Neon (NODE_TEST_CONTEXT). Callers can pass a
+ * lookup in tests; production uses the hashed rows in studio_agent_token.
+ */
+async function defaultStoredAgentTokenMatches(token: string): Promise<boolean> {
+  if (process.env.NODE_TEST_CONTEXT) return false;
+  if (!process.env.DATABASE_URL) return false;
+  try {
+    const { storedStudioAgentTokenMatches } = await import("./studio-agent-tokens-db");
+    return await storedStudioAgentTokenMatches(token);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Studio MCP / agent token: the env STUDIO_AGENT_TOKEN, or any active
+ * unrevoked per-agent token from Settings → Agent tokens.
+ * Does not accept cron or learner QA tokens.
+ */
+export async function studioAgentBearerMatches(
+  header: string | null,
+  storedTokenMatches: StoredAgentTokenLookup = defaultStoredAgentTokenMatches,
+): Promise<boolean> {
+  if (bearerEquals(header, process.env.STUDIO_AGENT_TOKEN?.trim())) return true;
+  const token = bearerToken(header);
+  if (!token) return false;
+  return storedTokenMatches(token);
 }
 
 /** Vercel Cron secret. Only valid on `/api/cron/*` (see proxy). */
@@ -97,8 +130,8 @@ export function cronSecretMatches(header: string | null): boolean {
 }
 
 /** Studio agent token or cron secret. */
-export function bearerMatches(header: string | null): boolean {
-  return studioAgentBearerMatches(header) || cronSecretMatches(header);
+export async function bearerMatches(header: string | null): Promise<boolean> {
+  return (await studioAgentBearerMatches(header)) || cronSecretMatches(header);
 }
 
 /** Learner-client write token for content QA (parallel to Studio agent bearer). */

@@ -100,7 +100,7 @@ export async function isClientQaAuthorized(request: NextRequest): Promise<boolea
   if (!authIsEnforced()) return true;
   const authorization = request.headers.get("authorization");
   if (contentQaClientTokenMatches(authorization)) return true;
-  if (studioAgentBearerMatches(authorization)) return true;
+  if (await studioAgentBearerMatches(authorization)) return true;
   if (await firebaseStaffTokenMatches(authorization)) return true;
   return hasVerifiedStudioSession(request);
 }

@@ -625,3 +625,25 @@ export const clipAgentAttempt = pgTable(
     index("clip_agent_attempt_status_idx").on(t.status),
   ]
 );
+
+// Named Studio API tokens for bots (Settings → Agent tokens). Only the SHA-256
+// is stored; plaintext is shown once at creation. The env STUDIO_AGENT_TOKEN
+// remains valid during migration.
+export const studioAgentToken = pgTable(
+  "studio_agent_token",
+  {
+    id: text("id").primaryKey(), // atk_<random>
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    prefix: text("prefix").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("studio_agent_token_hash_idx").on(t.tokenHash),
+    uniqueIndex("studio_agent_token_active_name_idx")
+      .on(t.name)
+      .where(sql`${t.revokedAt} IS NULL`),
+  ]
+);

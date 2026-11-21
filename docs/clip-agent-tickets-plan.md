@@ -89,5 +89,5 @@ One section per report reason, plus rules. `claim` returns it and the webhook pa
 ## Setup outside the repo
 
 1. Vercel env: the four `CLIP_AGENT_*` vars.
-2. The Cursor automation and the OpenBot routine. Each prompt says to call `claim_clip_feedback` with the payload's `feedbackId` and its own run URL, follow the playbook, then call `finish_clip_feedback`. Both need `STUDIO_BASE_URL` and `STUDIO_AGENT_TOKEN`.
+2. The Cursor automation and the OpenBot routine. Each prompt says to call `claim_clip_feedback` with the payload's `feedbackId` and its own run URL, follow the playbook, then call `finish_clip_feedback`. Both need `STUDIO_BASE_URL` and a Studio agent token (`STUDIO_AGENT_TOKEN`): a named per-agent token from Settings → Agent tokens, or the shared env token during migration.
 3. Create the table before merging, because merging deploys prod: `pnpm exec dotenv -e .env.local -- tsx scripts/clip-agent-attempt-table.ts --write`.

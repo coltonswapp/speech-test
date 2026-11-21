@@ -19,6 +19,8 @@ import type { ClipRatingCounts } from "@/lib/clip-feedback/admin";
 import type { ClipFeedbackWithAttempts } from "@/lib/clip-agent/store";
 import { resolvedNoteFor, type ClipAgentTarget } from "@/lib/clip-agent/schema";
 import {
+  clipFeedbackReasonLabels,
+  clipFeedbackStatusLabels,
   type ClipFeedbackReason,
   type ClipFeedbackStatus,
 } from "@/lib/clip-feedback/schema";
@@ -26,23 +28,6 @@ import { cn } from "@/lib/utils";
 
 // Learner feedback from the app (POST /api/client/clips/[id]/feedback): thumbs
 // and "Report an issue". Content Issues links back to individual clips.
-
-/** Same wording as the app's report screen (ClipFeedback.swift). */
-const REASON_LABELS: Record<ClipFeedbackReason, string> = {
-  translation: "Bad translation",
-  tokenization: "Words split wrong",
-  reading: "Wrong reading",
-  timing: "Subtitles out of sync",
-  video: "Video problem",
-  other: "Something else",
-};
-
-const STATUS_LABELS: Record<ClipFeedbackStatus, string> = {
-  open: "Open",
-  resolved: "Resolved",
-  wontfix: "Won’t fix",
-  duplicate: "Duplicate",
-};
 
 type StatusFilter = ClipFeedbackStatus | "issues" | "all";
 
@@ -86,7 +71,7 @@ function useSetStatus() {
     mutationFn: ({ id, status, note }: { id: string; status: ClipFeedbackStatus; note?: string }) =>
       feedbackApi.setStatus(id, status, note),
     onSuccess: (_, { status }) => {
-      toast.success(status === "open" ? "Reopened" : `Marked ${STATUS_LABELS[status].toLowerCase()}`);
+      toast.success(status === "open" ? "Reopened" : `Marked ${clipFeedbackStatusLabels[status].toLowerCase()}`);
       void queryClient.invalidateQueries({ queryKey: ["clip-feedback"] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Couldn’t update"),
@@ -143,13 +128,13 @@ function LineQuote({ row }: { row: ClipFeedbackRow }) {
   );
 }
 
-export function FeedbackItem({
+function FeedbackItem({
   row,
-  showClip,
+  detail = false,
   agentTargets,
 }: {
   row: ClipFeedbackRow;
-  showClip: boolean;
+  detail?: boolean;
   agentTargets: ClipAgentTarget[];
 }) {
   const setStatus = useSetStatus();
@@ -170,14 +155,14 @@ export function FeedbackItem({
         ) : null}
         <Link className="font-medium hover:underline" href={`/content/issues/clip-${encodeURIComponent(row.id)}`}>
           {row.reason
-            ? REASON_LABELS[row.reason]
+            ? clipFeedbackReasonLabels[row.reason]
             : row.rating === "up"
               ? "Good clip"
               : "Not a good clip"}
         </Link>
         {row.status ? (
           <Badge variant={row.status === "open" ? "destructive" : "secondary"}>
-            {STATUS_LABELS[row.status]}
+            {clipFeedbackStatusLabels[row.status]}
           </Badge>
         ) : null}
         {review ? <Badge className="bg-amber-500 text-white">Needs review</Badge> : null}
@@ -186,20 +171,6 @@ export function FeedbackItem({
           {formatDate(row.createdAt)}
         </span>
       </div>
-
-      {showClip ? (
-        <Link
-          href={`/experiments/clips/${row.clipId}`}
-          className="text-sm underline-offset-2 hover:underline"
-        >
-          {row.clipTitle ?? row.clipId}{" "}
-          <span className="text-xs text-muted-foreground">{row.clipId}</span>
-        </Link>
-      ) : null}
-
-      <LineQuote row={row} />
-
-      {row.note ? <p className="whitespace-pre-wrap text-sm">“{row.note}”</p> : null}
 
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span title={row.userId}>From {row.userId.slice(0, 8)}</span>
@@ -210,77 +181,84 @@ export function FeedbackItem({
           </span>
         ) : null}
         {row.resolvedAt ? <span>· Closed {formatDate(row.resolvedAt)}</span> : null}
-        {isIssue ? (
-          <span className="ml-auto flex gap-1">
-            {row.status === "open" ? (
-              <>
-                {review ? (
-                  <Button
-                    size="sm"
-                    disabled={busy}
-                    onClick={() =>
-                      setStatus.mutate({
-                        id: row.id,
-                        status: "resolved",
-                        note: `Accepted: ${resolvedNoteFor(review.agent, review.id, review.summary ?? "")}`,
-                      })
-                    }
-                  >
-                    Accept fix
-                  </Button>
-                ) : null}
-                <SendToAgentButton
-                  feedbackId={row.id}
-                  targets={agentTargets}
-                  disabled={busy || agentBusy}
-                />
+      </div>
+      {detail && <h2 className="text-sm font-medium">Learner evidence</h2>}
+      <LineQuote row={row} />
+
+      {row.note ? <p className="whitespace-pre-wrap text-sm">“{row.note}”</p> : null}
+
+      {detail && <h2 className="border-t border-border/60 pt-2 text-sm font-medium">Actions</h2>}
+      {isIssue ? (
+        <div className="flex flex-wrap gap-1">
+          {row.status === "open" ? (
+            <>
+              {review ? (
                 <Button
                   size="sm"
-                  variant="outline"
                   disabled={busy}
-                  onClick={() => setStatus.mutate({ id: row.id, status: "resolved" })}
+                  onClick={() =>
+                    setStatus.mutate({
+                      id: row.id,
+                      status: "resolved",
+                      note: `Accepted: ${resolvedNoteFor(review.agent, review.id, review.summary ?? "")}`,
+                    })
+                  }
                 >
-                  {busy ? <Loader2Icon className="animate-spin" /> : null}
-                  Resolve
+                  Accept fix
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => setStatus.mutate({ id: row.id, status: "wontfix" })}
-                >
-                  Won’t fix
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => setStatus.mutate({ id: row.id, status: "duplicate" })}
-                >
-                  Duplicate
-                </Button>
-              </>
-            ) : (
+              ) : null}
+              <SendToAgentButton
+                feedbackId={row.id}
+                targets={agentTargets}
+                disabled={busy || agentBusy}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => setStatus.mutate({ id: row.id, status: "resolved" })}
+              >
+                {busy ? <Loader2Icon className="animate-spin" /> : null}
+                Resolve
+              </Button>
               <Button
                 size="sm"
                 variant="ghost"
                 disabled={busy}
-                onClick={() => setStatus.mutate({ id: row.id, status: "open" })}
+                onClick={() => setStatus.mutate({ id: row.id, status: "wontfix" })}
               >
-                Reopen
+                Won’t fix
               </Button>
-            )}
-          </span>
-        ) : null}
-      </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => setStatus.mutate({ id: row.id, status: "duplicate" })}
+              >
+                Duplicate
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => setStatus.mutate({ id: row.id, status: "open" })}
+            >
+              Reopen
+            </Button>
+          )}
+        </div>
+      ) : null}
 
+      {detail && <h2 className="border-t border-border/60 pt-2 text-sm font-medium">Attempts</h2>}
       {row.attempts.length > 0 ? (
         <div className="flex flex-col gap-1.5">
           {row.attempts.map((attempt) => (
             <AttemptCard key={attempt.id} attempt={attempt} />
           ))}
         </div>
-      ) : null}
+      ) : detail ? <p className="text-sm text-muted-foreground">No attempts yet.</p> : null}
     </li>
   );
 }
@@ -337,7 +315,6 @@ export function ClipFeedbackSection({ clipId }: { clipId: string }) {
                 <FeedbackItem
                   key={row.id}
                   row={row}
-                  showClip={false}
                   agentTargets={query.data?.agentTargets ?? []}
                 />
               ))}
@@ -362,7 +339,7 @@ export function ClipIssueDetail({id}:{id:string}) {
   const row = query.data.rows[0];
   const active = row?.attempts.find(a => a.status === "dispatched" || a.status === "working");
   if (!row) return <p>Report not found.</p>;
-  return <><ul><FeedbackItem row={row} showClip agentTargets={query.data.agentTargets}/></ul>
+  return <><ul><FeedbackItem row={row} detail agentTargets={query.data.agentTargets}/></ul>
     {active && <RecoverIssueAttempt issueId={"clip-" + id} attemptId={active.id} onChange={() => void query.refetch()}/>}
     {row.status === "open" && !query.data.agentTargets.length && <Link href="/settings/agents" className="underline">Configure dispatch agents</Link>}
     {row.resolvedNote && <p>{row.resolvedNote}</p>}</>;

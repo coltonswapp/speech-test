@@ -119,3 +119,20 @@ CREATE INDEX IF NOT EXISTS clip_feedback_clip_idx ON clip_feedback (clip_id);
 CREATE INDEX IF NOT EXISTS clip_feedback_user_idx ON clip_feedback (user_id, created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS clip_feedback_rating_uniq ON clip_feedback (clip_id, user_id) WHERE kind = 'rating';
 `;
+
+/** Same wording as the app's report screen (ClipFeedback.swift). */
+export const clipFeedbackReasonLabels: Record<ClipFeedbackReason, string> = {
+  translation: "Bad translation",
+  tokenization: "Words split wrong",
+  reading: "Wrong reading",
+  timing: "Subtitles out of sync",
+  video: "Video problem",
+  other: "Something else",
+};
+
+export const clipFeedbackStatusLabels: Record<ClipFeedbackStatus, string> = {
+  open: "Open",
+  resolved: "Resolved",
+  wontfix: "Won’t fix",
+  duplicate: "Duplicate",
+};

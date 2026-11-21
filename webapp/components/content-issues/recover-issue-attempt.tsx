@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export function RecoverIssueAttempt({ issueId, attemptId, onChange }: {
   issueId: string;
@@ -33,13 +36,13 @@ export function RecoverIssueAttempt({ issueId, attemptId, onChange }: {
     }
   }
 
-  return <details className="rounded border p-3">
+  return <details className="rounded-lg border border-border/60 px-4 py-3 text-sm">
     <summary className="cursor-pointer">Recover a stalled attempt</summary>
     <form onSubmit={recover} className="mt-2 space-y-2">
-      <p>Confirm the dispatch or agent run has stopped before releasing this issue.</p>
-      <label className="block">Reason <input name="reason" required maxLength={500} className="rounded border p-1" /></label>
-      <button type="submit" disabled={busy} className="rounded border px-3 py-1">Stop attempt and release issue</button>
-      {error && <p role="alert">{error}</p>}
+      <p className="text-muted-foreground">Confirm the dispatch or agent run has stopped before releasing this issue.</p>
+      <Label>Reason <Input name="reason" required maxLength={500} /></Label>
+      <Button type="submit" variant="destructive" size="sm" disabled={busy}>Stop attempt and release issue</Button>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     </form>
   </details>;
 }

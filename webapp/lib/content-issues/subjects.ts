@@ -8,3 +8,11 @@ export function parseIssueId(value: string): { subject: IssueSubject; key: strin
   const key = value.slice(separator + 1);
   return subject && /^[a-zA-Z0-9_-]{1,128}$/.test(key) ? { subject, key } : null;
 }
+
+export function clipEditorHref(clipId: string) {
+  return "/experiments/clips/" + encodeURIComponent(clipId);
+}
+
+export function sceneEditorHref(collectionId: string, scenarioId: string) {
+  return "/content/dialogues/" + encodeURIComponent(collectionId) + "/" + encodeURIComponent(scenarioId);
+}

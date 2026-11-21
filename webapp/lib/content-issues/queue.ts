@@ -1,6 +1,6 @@
 import { FieldPath, Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
-import { issueSubjects } from "./subjects";
+import { clipEditorHref, issueSubjects, sceneEditorHref } from "./subjects";
 import { listClipFeedback } from "@/lib/clip-feedback/admin";
 import { getFirebaseAdminStatus, getUsageFirestore } from "@/lib/usage/firebase-admin";
 import { parseLessonReportEntry } from "@/lib/lesson-reports/types";
@@ -49,9 +49,14 @@ async function listScenes(q: z.output<typeof issueQuery>) {
     const time = doc.get("createdAt") as Timestamp;
     const timestamp = new Date(time.seconds * 1000).toISOString().slice(0, 19) +
       "." + String(time.nanoseconds).padStart(9, "0") + "Z";
+    const collectionId = doc.get("collectionId");
+    const scenarioId = doc.get("scenarioId");
+    const sceneKey = doc.get("sceneKey");
     return {
+      editorHref: typeof collectionId === "string" && collectionId && typeof scenarioId === "string" && scenarioId
+        ? sceneEditorHref(collectionId, scenarioId) : null,
       key: doc.id, timestamp, id: "scene-" + doc.id, subject: "scene" as const,
-      title: String(doc.get("sceneKey")), location: row.focusTitle, reasons: row.categories,
+      title: typeof sceneKey === "string" ? sceneKey : "Lesson scene", location: row.focusTitle, reasons: row.categories,
       status: row.status, note: row.note, createdAt: row.createdAt ?? "",
     };
   });
@@ -86,6 +91,7 @@ export async function listIssues(q: z.output<typeof issueQuery>) {
   ]);
   const merged = [...clips.map(row => ({
     key: row.id, timestamp: row.cursorTimestamp, id: "clip-" + row.id, subject: "clip" as const,
+    editorHref: clipEditorHref(row.clipId),
     title: row.clipTitle ?? row.clipId, location: row.line?.textJP ?? null,
     reasons: row.reason ? [row.reason] : [], status: row.status, note: row.note, createdAt: row.createdAt,
   })), ...scenes.rows].sort((a, b) =>

@@ -73,6 +73,32 @@ export async function readScenarioReports(
   return { stats, recent, recentError };
 }
 
+/** Apply a status transition and its counter delta in the caller's transaction. */
+export function setReportStatusInTransaction(
+  tx: FirebaseFirestore.Transaction,
+  report: FirebaseFirestore.DocumentSnapshot,
+  status: LessonReportStatus,
+) {
+  const previous = report.get("status");
+  if (previous === status) return;
+  const wasOpen = !isLessonReportStatus(previous) || previous === "open";
+  const isOpen = status === "open";
+  tx.update(report.ref, { status, statusUpdatedAt: FieldValue.serverTimestamp() });
+  const sceneKey = report.get("sceneKey");
+  const collectionId = report.get("collectionId");
+  const scenarioId = report.get("scenarioId");
+  const validSegment = (value: unknown): value is string =>
+    typeof value === "string" && /^[A-Za-z0-9._-]{1,120}$/.test(value) &&
+    !value.includes("__") && value !== "." && value !== "..";
+  if (wasOpen !== isOpen && validSegment(collectionId) && validSegment(scenarioId) &&
+      sceneKey === lessonSceneKey(collectionId, scenarioId)) {
+    tx.set(report.ref.firestore.collection("lessonReportStats").doc(sceneKey), {
+      open: FieldValue.increment(isOpen ? 1 : -1),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+}
+
 /** Moves a report between statuses and keeps the scene's `open` counter in step. */
 export async function updateReportStatus(
   reportId: string,
@@ -88,24 +114,7 @@ export async function updateReportStatus(
       if (!snap.exists) {
         throw new LessonReportsFirestoreError("report not found", "not_found");
       }
-      const previous = snap.get("status");
-      const wasOpen = !isLessonReportStatus(previous) || previous === "open";
-      const isOpen = status === "open";
-      tx.update(reportRef, {
-        status,
-        statusUpdatedAt: FieldValue.serverTimestamp(),
-      });
-      const sceneKey = snap.get("sceneKey");
-      if (wasOpen !== isOpen && typeof sceneKey === "string") {
-        tx.set(
-          db.collection("lessonReportStats").doc(sceneKey),
-          {
-            open: FieldValue.increment(isOpen ? 1 : -1),
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
-      }
+      setReportStatusInTransaction(tx, snap, status);
     });
   } catch (err) {
     if (err instanceof LessonReportsFirestoreError) throw err;

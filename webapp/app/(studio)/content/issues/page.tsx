@@ -21,6 +21,6 @@ export default async function IssuesPage({searchParams}:{searchParams:Promise<Re
       <p className="line-clamp-2 text-sm">{i.note || i.location}</p>
     </Link></li>)}</ul>
     {!issues.length && <p>No matching issues.</p>}
-    {next && <Link className="underline" href={"?"+new URLSearchParams(Object.entries(next).map(([k,v])=>[k,String(v)]))}>Older issues</Link>}
+    {next && <Link className="underline" href={"?"+new URLSearchParams(Object.entries(next).filter(([,v]) => v !== undefined).map(([k,v])=>[k,String(v)]))}>Older issues</Link>}
   </main>;
 }

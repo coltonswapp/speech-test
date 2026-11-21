@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { RecoverIssueAttempt } from "./recover-issue-attempt";
 import type { sceneDetail } from "@/lib/content-issues/scenes";
 
 export function SceneIssue({report,configured}:{report:Awaited<ReturnType<typeof sceneDetail>>,configured:boolean}) {
@@ -30,7 +31,8 @@ export function SceneIssue({report,configured}:{report:Awaited<ReturnType<typeof
     {report.reportedContentHash && <p className="break-all">Reported revision · {report.reportedContentHash}</p>}
     <p><Link className="underline" href={`/content/dialogues/${encodeURIComponent(report.collectionId)}/${encodeURIComponent(report.scenarioId)}`}>Open scene editor</Link></p>
     <Link className="underline" href={"/api/content/issues/scene-"+report.id+"?published=1"}>Inspect learner-visible scene and revision</Link>
-    {report.status === "open" && <div>{configured ? <button className="rounded border px-3 py-2" disabled={busy || history.some(a=>["dispatched","working"].includes(a.status))} onClick={dispatch}>Send to Hana</button> : <Link className="underline" href="/settings/agents">Configure Hana</Link>}</div>}
+    {report.status === "open" && <div>{configured ? <button className="rounded border px-3 py-2" disabled={busy || Boolean(report.activeAttempt)} onClick={dispatch}>Send to Hana</button> : <Link className="underline" href="/settings/agents">Configure Hana</Link>}</div>}
+    {report.activeAttempt && <RecoverIssueAttempt issueId={"scene-" + report.id} attemptId={report.activeAttempt} onChange={() => router.refresh()}/>}
     {error && <p role="alert">{error}</p>}
     <h2 className="font-semibold">Attempts</h2>{history.length === 0 && <p>No attempts yet.</p>}
     {history.map(a=><article className="rounded border p-3" key={a.id}><p>{a.agent} · {a.status} · {a.createdAt}</p><strong>{a.outcome}</strong><p className="whitespace-pre-wrap">{a.summary}</p>{a.revision && <code className="break-all">{a.revision}</code>}</article>)}

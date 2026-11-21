@@ -2,7 +2,8 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { getFirebaseAdminStatus, getUsageFirestore } from "@/lib/usage/firebase-admin";
-import { parseLessonReportEntry } from "@/lib/lesson-reports/types";
+import { setReportStatusInTransaction } from "@/lib/lesson-reports/firestore";
+import { parseLessonReportEntry, isLessonReportStatus } from "@/lib/lesson-reports/types";
 import { getPublicDialogueCollectionFile } from "@/lib/dialogue/public-api";
 import { AttemptError } from "@/lib/clip-agent/store";
 import { outcomeResolvesReport, type ClipAgentOutcome } from "@/lib/clip-agent/schema";
@@ -36,6 +37,7 @@ export async function sceneDetail(id: string) {
     pickedWord: typeof data.pickedWord === "string" ? data.pickedWord : null,
     playbackSeconds: typeof data.playbackSeconds === "number" && Number.isFinite(data.playbackSeconds) ? data.playbackSeconds : null,
     reportedContentHash: data.publishedContentHash ?? null,
+    activeAttempt: typeof data.activeAttempt === "string" ? data.activeAttempt : null,
     attempts: history.docs.map(doc => ({ ...doc.data(), id: doc.id }) as SceneAttempt),
   };
 }
@@ -114,7 +116,9 @@ export async function finishScene(id: string, attemptId: string, outcome: ClipAg
     current.get("status") === "done" && current.get("outcome") === outcome &&
     current.get("summary") === summary && (current.get("revision") ?? null) === (revision ?? null);
 
-  if (sameFinish(await attempt.get())) return {attemptId, outcome};
+  const initial = await attempt.get();
+  if (sameFinish(initial)) return {attemptId, outcome};
+  if (initial.get("status") !== "working") throw new AttemptError("Attempt is not active", 409);
   const verified = outcome === "fixed" && revision
     ? (await publishedScene(id)).revision
     : null;
@@ -129,18 +133,35 @@ export async function finishScene(id: string, attemptId: string, outcome: ClipAg
     if (outcome === "fixed" && (!baseline || !verified || verified !== revision || verified === baseline)) {
       throw new AttemptError("Publish a correction and verify the changed learner export before marking fixed. Use needs_review for a draft.", 409);
     }
-    const closesReport = report.get("status") === "open" && outcomeResolvesReport(outcome);
     tx.update(attempt, {
       status: "done", outcome, summary, revision: revision ?? null, finishedAt: new Date().toISOString(),
     });
-    tx.update(ref, {
-      activeAttempt: FieldValue.delete(),
-      ...(closesReport ? { status: "resolved", statusUpdatedAt: FieldValue.serverTimestamp() } : {}),
-    });
-    if (closesReport) {
-      const stats = getUsageFirestore().collection("lessonReportStats").doc(report.get("sceneKey"));
-      tx.set(stats, { open: FieldValue.increment(-1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    tx.update(ref, { activeAttempt: FieldValue.delete() });
+    const status = report.get("status");
+    if ((!isLessonReportStatus(status) || status === "open") && outcomeResolvesReport(outcome)) {
+      setReportStatusInTransaction(tx, report, "resolved");
     }
     return {attemptId, outcome};
+  });
+}
+
+export async function recoverSceneAttempt(id: string, attemptId: string, requester: string, reason: string) {
+  const ref = reference(id);
+  const attempt = ref.collection("attempts").doc(attemptId);
+  return ref.firestore.runTransaction(async tx => {
+    const [report, current] = await Promise.all([tx.get(ref), tx.get(attempt)]);
+    if (!report.exists) throw new AttemptError("Scene report not found", 404);
+    if (report.get("activeAttempt") !== attemptId ||
+        (current.exists && !["working", "dispatched"].includes(current.get("status")))) {
+      throw new AttemptError("Attempt is no longer active", 409);
+    }
+    const now = new Date().toISOString();
+    tx.set(attempt, {
+      ...(!current.exists ? { agent: "hana", createdAt: now, startedAt: null } : {}),
+      status: "failed", outcome: "could_not_fix", finishedAt: now,
+      summary: `Stopped by ${requester}: ${reason}`,
+    }, { merge: true });
+    tx.update(ref, { activeAttempt: FieldValue.delete() });
+    return { attemptId, status: "failed" };
   });
 }

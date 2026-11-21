@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { listClipFeedback } from "@/lib/clip-feedback/admin";
-import { AttemptError, claimAttempt, finishAttempt, withAttempts } from "@/lib/clip-agent/store";
+import { AttemptError, claimAttempt, finishAttempt, recoverClipAttempt, withAttempts } from "@/lib/clip-agent/store";
 import { attemptErrorResponse, studioRequester } from "@/lib/clip-agent/route-helpers";
 import { CLIP_AGENT_OUTCOMES } from "@/lib/clip-agent/schema";
-import { finishScene, publishedScene, sceneDetail, startScene } from "@/lib/content-issues/scenes";
+import { finishScene, publishedScene, recoverSceneAttempt, sceneDetail, startScene } from "@/lib/content-issues/scenes";
 import { parseIssueId, type IssueSubject } from "@/lib/content-issues/subjects";
 
 type Context = { params: Promise<{ id: string }> };
@@ -12,9 +12,10 @@ const attemptId = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/);
 const actionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("claim"), agent: z.string().trim().min(1).max(40),
-    attemptId: attemptId.optional(), runUrl: z.string().url().optional(),
+    attemptId: attemptId.optional(), takeOver: z.boolean().optional(), runUrl: z.string().url().optional(),
   }),
   z.object({ action: z.literal("dispatch"), agent: z.literal("hana") }),
+  z.object({ action: z.literal("recover"), attemptId, reason: z.string().trim().min(1).max(500) }),
   z.object({
     action: z.literal("finish"), attemptId, outcome: z.enum(CLIP_AGENT_OUTCOMES),
     summary: z.string().trim().min(1).max(4000), revision: z.string().max(128).optional(),
@@ -38,17 +39,15 @@ const handlers: Record<IssueSubject, {
     get: clipDetail,
     async act(id, body, requester) {
       if (body.action === "dispatch") throw new AttemptError("Use clip dispatch", 400);
+      if (body.action === "recover") return recoverClipAttempt(id, body.attemptId, requester, body.reason);
       if (body.action === "claim") {
+        if (body.takeOver && !body.attemptId) throw new AttemptError("Takeover requires the current attempt ID", 400);
         return claimAttempt({
           feedbackId: id, agent: body.agent, claimedBy: requester,
-          runUrl: body.runUrl ?? null, takeOver: false, expectedAttempt: body.attemptId,
+          runUrl: body.runUrl ?? null, takeOver: body.takeOver ?? false, expectedAttempt: body.attemptId,
         });
       }
-      const report = await clipDetail(id);
-      if (!report.attempts.some(attempt => attempt.id === body.attemptId)) {
-        throw new AttemptError("Attempt not found on issue", 404);
-      }
-      return finishAttempt(body);
+      return finishAttempt({ ...body, feedbackId: id });
     },
   },
   scene: {
@@ -57,6 +56,8 @@ const handlers: Record<IssueSubject, {
       if (body.action === "finish") {
         return finishScene(id, body.attemptId, body.outcome, body.summary, body.revision);
       }
+      if (body.action === "recover") return recoverSceneAttempt(id, body.attemptId, requester, body.reason);
+      if (body.action === "claim" && body.takeOver) throw new AttemptError("Recover the scene attempt before claiming again", 400);
       return startScene(id, body.action === "dispatch", body.agent, requester,
         body.action === "claim" ? body.attemptId : undefined);
     },

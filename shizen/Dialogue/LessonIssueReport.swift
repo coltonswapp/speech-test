@@ -85,6 +85,15 @@ struct LessonIssueContext {
     }
 }
 
+/// Match the gateway's UTF-16 budget while keeping composed characters intact.
+func lessonIssueWordPrefix(_ word: String) -> String {
+    var used = 0
+    return String(word.prefix(while: { character in
+        used += String(character).utf16.count
+        return used <= 100
+    }))
+}
+
 extension LLMGatewayClient {
 
     private struct LessonReportBody: Encodable {
@@ -129,7 +138,7 @@ extension LLMGatewayClient {
             focusDetails: context.focusDetails.prefix(20).map { String($0.prefix(300)) },
             sessionMode: context.sessionMode,
             quizQuestionNumber: context.quizQuestionNumber,
-            pickedWord: context.pickedWord.map { String($0.prefix(100)) },
+            pickedWord: context.pickedWord.map { lessonIssueWordPrefix($0) },
             playbackSeconds: context.playbackSeconds,
             categories: categories.map(\.rawValue),
             note: trimmedNote.isEmpty ? nil : String(trimmedNote.prefix(2000)),

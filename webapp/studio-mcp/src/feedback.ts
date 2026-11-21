@@ -88,8 +88,8 @@ export function registerFeedbackTools(server: McpServer) {
     } catch (error) { return errorResult(error); }
   }
   server.registerTool("list_content_issues", {
-    title: "List content issues", description: "List learner reports. Use the returned next offsets to continue.",
-    inputSchema: {subject:z.enum(["all","clip","scene"]).optional(), status:z.enum(["all","open","resolved","wontfix","duplicate"]).optional(), clips:z.number().int().nonnegative().optional(), scenes:z.number().int().nonnegative().optional()},
+    title: "List content issues", description: "List learner reports. Pass the returned next filters and cursors to continue.",
+    inputSchema: {subject:z.enum(["all","clip","scene"]).optional(), status:z.enum(["all","open","resolved","wontfix","duplicate"]).optional(), cursor:z.string().optional()},
   }, async (args) => callIssue("?" + new URLSearchParams(Object.entries(args).map(([k,v]): [string,string] => [k,String(v)]))));
   server.registerTool("get_content_issue", {
     title: "Read a content issue", description: "Read report evidence and history. For a scene, published=true returns its learner-visible export and verification revision.",
@@ -97,8 +97,13 @@ export function registerFeedbackTools(server: McpServer) {
   }, async ({issueId,published}) => callIssue("/"+issueId+(published ? "?published=1" : "")));
   server.registerTool("claim_content_issue", {
     title: "Claim a content issue", description: "Claim before editing. Supply the attemptId when responding to a dispatch.",
-    inputSchema: {issueId, agent:z.string().min(1).max(40), attemptId:z.string().optional(), runUrl:z.string().url().optional()},
+    inputSchema: {issueId, agent:z.string().min(1).max(40), attemptId:z.string().optional(), takeOver:z.boolean().optional().describe("For clips only, replace the specified active attempt"), runUrl:z.string().url().optional()},
   }, async ({issueId,...args}) => callIssue("/"+issueId,{action:"claim",...args}));
+  server.registerTool("recover_content_issue_attempt", {
+    title: "Stop a stalled attempt",
+    description: "Operator recovery for a dead dispatch or run. Stops only the specified attempt and records why. Confirm the run has stopped before using this.",
+    inputSchema: {issueId, attemptId:z.string(), reason:z.string().trim().min(1).max(500)},
+  }, async ({issueId,...args}) => callIssue("/"+issueId,{action:"recover",...args}));
   server.registerTool("finish_content_issue_attempt", {
     title: "Finish a content issue attempt", description: "Use needs_review for a draft. Before reporting a scene fixed, inspect the learner export, verify the correction, and supply its revision.",
     inputSchema: {issueId, attemptId:z.string(), outcome:z.enum(OUTCOMES), summary:z.string().min(1).max(4000), revision:z.string().optional()},

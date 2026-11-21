@@ -274,6 +274,34 @@ export async function dispatchAttempt(input: {
   return toView(row, null);
 }
 
+function matchingAgent(provided: string, assigned: string) {
+  return provided.toLowerCase() === assigned.toLowerCase() ||
+    provided.toLowerCase() === agentLabel(assigned).toLowerCase();
+}
+
+async function abandonClipAttempt(
+  tx: AttemptTransaction, attempt: AttemptRow, requester: string, reason: string,
+) {
+  const now = new Date();
+  await tx.update(clipAgentAttempt).set({
+    status: "failed",
+    outcome: "could_not_fix",
+    summary: `Stopped by ${requester}: ${reason}`,
+    finishedAt: now,
+    updatedAt: now,
+  }).where(eq(clipAgentAttempt.id, attempt.id));
+}
+
+export async function recoverClipAttempt(feedbackId: string, attemptId: string, requester: string, reason: string) {
+  return db.transaction(async tx => {
+    await lockReport(tx, feedbackId);
+    const active = (await openAttempts(tx, feedbackId)).find(attempt => attempt.id === attemptId);
+    if (!active) throw new AttemptError("Attempt is no longer active", 409);
+    await abandonClipAttempt(tx, active, requester, reason);
+    return { attemptId, status: "failed" };
+  });
+}
+
 /**
  * An agent takes a report: picks up its dispatched attempt (webhook path) or
  * opens a new one (asked in chat), and snapshots the clip as `before`.
@@ -304,38 +332,35 @@ export async function claimAttempt(input: {
   return db.transaction(async tx => {
     if (await lockReport(tx, report.id) !== "open") throw new AttemptError("Issue is closed.", 409);
     const open = await openAttempts(tx, input.feedbackId);
-    if (input.expectedAttempt && !open.some(a => a.id === input.expectedAttempt && a.agent === input.agent)) throw new AttemptError("Dispatch is no longer active for this agent", 409);
-    const working = open.filter((a) => a.status === "working");
-    if (working.length > 0 && !input.takeOver) {
-      const a = working[0];
-      if (input.expectedAttempt === a.id && input.agent === a.agent) return claimed(a);
-      throw new AttemptError(
-        `${agentLabel(a.agent)} is already working on this report (${a.id}, since ${a.startedAt?.toISOString() ?? "?"}). Pass takeOver: true if that run is dead.`,
-        409,
-      );
+    const expected = open.find(attempt => attempt.id === input.expectedAttempt);
+    if (input.expectedAttempt && (!expected || (!input.takeOver &&
+        (!input.agent || !matchingAgent(input.agent, expected.agent))))) {
+      throw new AttemptError("Dispatch is no longer active for this agent", 409);
+    }
+    const working = open.find(attempt => attempt.status === "working");
+    if (working && !input.takeOver) {
+      if (expected?.id === working.id) return claimed(working);
+      throw new AttemptError(`${agentLabel(working.agent)} is already working on this report.`, 409);
+    }
+
+    // Legacy takeover without an ID applies to a working run only. Replacing a
+    // dispatch requires its ID so a stale request cannot cancel a newer run.
+    const replacement = input.takeOver ? expected ?? working : undefined;
+    if (replacement) {
+      await abandonClipAttempt(tx, replacement, input.claimedBy,
+        `Taken over by ${input.agent ?? input.claimedBy}.`);
+    }
+    const remaining = open.filter(attempt => attempt.id !== replacement?.id);
+    if (remaining.some(attempt => attempt.status === "working")) {
+      throw new AttemptError("Another attempt is already working on this issue", 409);
     }
 
     const now = new Date();
-    for (const a of working) {
-      await tx
-        .update(clipAgentAttempt)
-        .set({
-          status: "done",
-          outcome: "could_not_fix",
-          summary: `Abandoned: taken over by ${input.agent ?? input.claimedBy}.`,
-          after: snapshotClip(draft, now),
-          runs: runsSince(draft, a.startedAt),
-          finishedAt: now,
-          updatedAt: now,
-        })
-        .where(eq(clipAgentAttempt.id, a.id));
-    }
-
     const before = snapshotClip(draft, now);
-    const dispatched = open.find((a) => a.status === "dispatched");
+    const dispatched = remaining.find(attempt => attempt.status === "dispatched");
     let row: AttemptRow;
     if (dispatched) {
-      if (input.agent && input.agent !== dispatched.agent && !input.takeOver) {
+      if (input.agent && !matchingAgent(input.agent, dispatched.agent)) {
         throw new AttemptError("This issue is dispatched to another agent.", 409);
       }
       [row] = await tx
@@ -376,27 +401,33 @@ export async function claimAttempt(input: {
 /** Closes a working attempt: `after` snapshot, the runs since the claim, and the report's status. */
 export async function finishAttempt(input: {
   attemptId: string;
+  feedbackId?: string;
   outcome: ClipAgentOutcome;
   summary: string;
 }): Promise<{ attempt: ClipAgentAttemptView; reportResolved: boolean }> {
-  const [initial] = await db.select().from(clipAgentAttempt).where(eq(clipAgentAttempt.id, input.attemptId));
-  if (!initial) throw new AttemptError("No such attempt.", 404);
-  const draft = initial.status === "working" ? await readClipDraft(initial.clipId) : null;
+  const [initial] = await db.select({ feedbackId: clipAgentAttempt.feedbackId })
+    .from(clipAgentAttempt).where(eq(clipAgentAttempt.id, input.attemptId));
+  if (!initial || (input.feedbackId && initial.feedbackId !== input.feedbackId)) {
+    throw new AttemptError("Attempt not found on issue", 404);
+  }
   return db.transaction(async tx => {
     const status = await lockReport(tx, initial.feedbackId);
     const [row] = await tx.select().from(clipAgentAttempt)
       .where(eq(clipAgentAttempt.id, input.attemptId)).for("update");
+    if (!row || row.feedbackId !== initial.feedbackId) throw new AttemptError("Attempt not found on issue", 404);
     if (row.status === "done" && row.outcome === input.outcome && row.summary === input.summary) {
       return { attempt: toView(row, null), reportResolved: status === "resolved" };
     }
     if (row.status !== "working") throw new AttemptError(`Attempt ${row.id} is ${row.status}, not working.`, 409);
 
+    const draft = await readClipDraft(row.clipId);
+    if (!draft) throw new AttemptError("The clip is gone. Recover the attempt to release the issue.", 409);
     const now = new Date();
     const [done] = await tx.update(clipAgentAttempt).set({
       status: "done",
       outcome: input.outcome,
       summary: input.summary,
-      after: draft ? snapshotClip(draft, now) : null,
+      after: snapshotClip(draft, now),
       runs: runsSince(draft, row.startedAt),
       finishedAt: now,
       updatedAt: now,
@@ -411,6 +442,6 @@ export async function finishAttempt(input: {
         updatedAt: now,
       }).where(eq(clipFeedback.id, row.feedbackId));
     }
-    return { attempt: toView(done, null), reportResolved };
+    return { attempt: toView(done, null), reportResolved: reportResolved || status === "resolved" };
   });
 }

@@ -209,7 +209,7 @@ function parseLessonReport(body: unknown): ParsedLessonReport {
     focusDetails: (rawDetails as string[]).map((line) => line.trim()).filter(Boolean),
     sessionMode: optionalField(body, "sessionMode", 64),
     quizQuestionNumber,
-    pickedWord: optionalField(body, "pickedWord", 100),
+    pickedWord: pickedWordEvidence(body.pickedWord),
     playbackSeconds,
     categories,
     note,
@@ -217,6 +217,15 @@ function parseLessonReport(body: unknown): ParsedLessonReport {
     osVersion: optionalField(body, "osVersion", 32),
     deviceId,
   };
+}
+
+// Older clients measured characters instead of UTF-16 units. Optional evidence
+// must never make an otherwise valid report fail.
+function pickedWordEvidence(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  let prefix = value.trim().slice(0, 100);
+  if (/[\uD800-\uDBFF]$/.test(prefix)) prefix = prefix.slice(0, -1);
+  return prefix || undefined;
 }
 
 function invalid(detail: string): FeedbackError {

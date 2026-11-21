@@ -28,6 +28,7 @@ export type ClipFeedbackRow = {
   resolvedNote: string | null;
   createdAt: string;
   updatedAt: string;
+  cursorTimestamp: string;
 };
 
 export type ClipFeedbackQuery = {
@@ -37,7 +38,7 @@ export type ClipFeedbackQuery = {
   /** "issues": anything with a status (flags, reasoned thumbs-downs). "all": ratings too. */
   status?: ClipFeedbackStatus | "issues" | "all";
   reason?: ClipFeedbackReason | null;
-  offset?: number;
+  before?: { timestamp: string; id?: string; inclusive?: boolean };
   limit?: number;
 };
 
@@ -50,19 +51,31 @@ export async function listClipFeedback(q: ClipFeedbackQuery): Promise<ClipFeedba
   else if (status !== "all") where.push(eq(clipFeedback.status, status));
   if (q.reason) where.push(eq(clipFeedback.reason, q.reason));
 
+  if (q.before) {
+    const { timestamp, id, inclusive } = q.before;
+    const comparison = inclusive ? sql`<=` : sql`<`;
+    where.push(id === undefined
+      ? sql`${clipFeedback.createdAt} ${comparison} ${timestamp}::timestamptz`
+      : sql`(${clipFeedback.createdAt}, ${clipFeedback.id}) < (${timestamp}::timestamptz, ${id})`);
+  }
+
   const rows = await db
-    .select({ feedback: clipFeedback, summary: clipIndex.summary })
+    .select({
+      feedback: clipFeedback,
+      summary: clipIndex.summary,
+      cursorTimestamp: sql<string>`to_char(${clipFeedback.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"000Z"')`,
+    })
     .from(clipFeedback)
     .leftJoin(clipIndex, eq(clipIndex.id, clipFeedback.clipId))
     .where(where.length ? and(...where) : undefined)
     .orderBy(desc(clipFeedback.createdAt), desc(clipFeedback.id))
-    .offset(q.offset ?? 0)
     .limit(Math.min(q.limit ?? 200, 500));
 
-  return rows.map(({ feedback: f, summary }) => {
+  return rows.map(({ feedback: f, summary, cursorTimestamp }) => {
     const s = summary as ClipSummary | null;
     return {
       id: f.id,
+      cursorTimestamp,
       clipId: f.clipId,
       videoId: s?.videoId ?? null,
       videoStartSec: s?.startSec ?? 0,

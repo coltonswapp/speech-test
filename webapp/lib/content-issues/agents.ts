@@ -14,11 +14,22 @@ export const routingSchema = z.object({
 });
 export type Routing = z.infer<typeof routingSchema>;
 
+const storedRouting = z.object({
+  enabled: z.array(z.unknown()).optional().catch(undefined),
+  clip: routingSchema.shape.clip.optional().catch(null),
+  scene: routingSchema.shape.scene.optional().catch(null),
+});
+
 export async function agentSettings() {
   const connected = [...configuredAgentTargets(), ...(process.env.HANA_ISSUES_WEBHOOK_URL && process.env.HANA_ISSUES_WEBHOOK_SECRET ? ["hana" as const] : [])];
   const [row] = await db.select().from(appSettings).where(eq(appSettings.key, key));
-  const routing: Routing = row ? routingSchema.parse(row.value) : {
-    enabled: [...CLIP_AGENT_TARGETS, "hana"], clip: configuredAgentTargets()[0] ?? null, scene: "hana",
+  const saved = storedRouting.safeParse(row?.value).data;
+  const known = [...CLIP_AGENT_TARGETS, "hana"] as const;
+  const enabled = saved?.enabled;
+  const routing: Routing = {
+    enabled: enabled ? known.filter(agent => enabled.includes(agent)) : [...known],
+    clip: saved?.clip === undefined ? configuredAgentTargets()[0] ?? null : saved.clip,
+    scene: saved?.scene === undefined ? "hana" : saved.scene,
   };
   const clips = configuredAgentTargets().filter(agent => routing.enabled.includes(agent));
   clips.sort((a,b) => Number(b === routing.clip) - Number(a === routing.clip));

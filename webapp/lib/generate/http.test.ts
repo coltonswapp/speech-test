@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { encode } from "next-auth/jwt";
-import { isStudioRequestAllowed, requireGenerateAccess } from "./access";
+import { isStudioRequestAllowed, requireGenerateAccess, requireSignedInStudioAdmin } from "./access";
 
 const QA = "qa-learner-token-aaaaaaaa";
 const STUDIO = "studio-agent-token-bbbbbbbb";
@@ -149,6 +149,18 @@ describe("requireGenerateAccess", () => {
   it("proxy gate limits the cron secret to /api/cron/*", async () => {
     assert.equal(await isStudioRequestAllowed(request("http://localhost/api/cron/slides", { token: CRON })), true);
     assert.equal(await isStudioRequestAllowed(request("http://localhost/api/content/units", { token: CRON })), false);
+  });
+
+  it("token minting requires a signed-in admin, not an agent bearer", async () => {
+    const agent = await requireSignedInStudioAdmin(
+      request("http://localhost/api/settings/agent-tokens", { token: STUDIO }),
+    );
+    assert.equal(agent?.status, 401);
+    const cookie = await sessionCookie(EMAIL, 60 * 60);
+    assert.equal(
+      await requireSignedInStudioAdmin(request("http://localhost/api/settings/agent-tokens", { cookie })),
+      null,
+    );
   });
 });
 

@@ -6,6 +6,11 @@ import { cn } from "@/lib/utils";
 
 const SETTINGS_LINKS = [
   { href: "/settings/agents", label: "Agents", match: (path: string) => path === "/settings/agents" },
+  {
+    href: "/settings/agent-tokens",
+    label: "Agent tokens",
+    match: (path: string) => path === "/settings/agent-tokens",
+  },
   { href: "/settings", label: "Keys", match: (path: string) => path === "/settings" },
   {
     href: "/settings/voices",

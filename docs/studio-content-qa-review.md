@@ -21,7 +21,7 @@ POST /api/client/content-qa/dialogues/:collectionId/scenarios/:slug/check-off
 | | |
 |---|---|
 | **Method** | `POST` |
-| **Auth** | `Authorization: Bearer $CONTENT_QA_CLIENT_TOKEN` (required when Studio auth is enforced). Also accepts `STUDIO_AGENT_TOKEN` or a Studio Google session for demos. **Not** a public/unauthenticated write. |
+| **Auth** | `Authorization: Bearer $CONTENT_QA_CLIENT_TOKEN` (required when Studio auth is enforced). Also accepts a Studio agent token (`STUDIO_AGENT_TOKEN`: a named per-agent token from Settings → Agent tokens, or the shared env token during migration) or a Studio Google session for demos. **Not** a public/unauthenticated write. |
 | **Scope** | One **scene** (`collectionId` + `slug` → `dialogue_scenario.id`) |
 | **Idempotent** | Yes — calling again when already checked off returns `200` with `alreadyCheckedOff: true` and does not change first-reviewed timestamps |
 | **Effect** | Sets **both** `dialogueReviewed` and `quizReviewed` (see §1). Studio `qa` chip → `qa ✓` |
@@ -77,7 +77,7 @@ POST /api/client/content-qa/dialogues/:collectionId/scenarios/:slug/check-off
 ### Curl (copy/paste)
 
 ```bash
-export CONTENT_QA_CLIENT_TOKEN=…   # or STUDIO_AGENT_TOKEN
+export CONTENT_QA_CLIENT_TOKEN=…   # or a Studio agent token (Settings → Agent tokens, or env STUDIO_AGENT_TOKEN)
 export BASE=https://shizen-studio.vercel.app
 
 curl -sS -X POST \
@@ -154,7 +154,7 @@ When Studio auth is enforced (Google / agent / passphrase / content-QA token con
 | Caller | How |
 |---|---|
 | Future learner/staff client | `Authorization: Bearer $CONTENT_QA_CLIENT_TOKEN` |
-| Studio MCP / curl demos | `Authorization: Bearer $STUDIO_AGENT_TOKEN` |
+| Studio MCP / curl demos | `Authorization: Bearer $STUDIO_AGENT_TOKEN` (named token from Settings → Agent tokens, or the shared env token during migration) |
 | Logged-in Studio human | Google session cookie (or Studio-side upsert route) |
 
 Env: set `CONTENT_QA_CLIENT_TOKEN` on Vercel and in the client. See `webapp/AUTH.md`.

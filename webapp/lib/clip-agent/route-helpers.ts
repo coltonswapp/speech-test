@@ -8,7 +8,7 @@ import { AttemptError } from "@/lib/clip-agent/store";
 
 /** Who made a Studio request: the session email, `agent-token`, or `studio` (auth off locally). */
 export async function studioRequester(request: NextRequest): Promise<string> {
-  if (studioAgentBearerMatches(request.headers.get("authorization"))) return "agent-token";
+  if (await studioAgentBearerMatches(request.headers.get("authorization"))) return "agent-token";
   try {
     const token = await getToken({ req: request, secret: authSecret() });
     if (typeof token?.email === "string") return token.email;

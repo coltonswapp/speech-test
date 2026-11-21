@@ -250,7 +250,7 @@ export async function dispatchAttempt(input: {
     instructions: input.instructions,
     playbook: clipFeedbackPlaybook(report.reason),
     next: [
-      `Use the shizen-studio MCP against ${studioPublicBaseUrl()} (STUDIO_BASE_URL, STUDIO_AGENT_TOKEN).`,
+      `Use the shizen-studio MCP against ${studioPublicBaseUrl()} (STUDIO_BASE_URL, STUDIO_AGENT_TOKEN from Settings → Agent tokens).`,
       `1. claim_content_issue { issueId: "clip-${report.id}", agent: "${input.agent}", attemptId: "${id}", runUrl: <this run's link> }.`,
       "2. Follow the playbook.",
       `3. finish_content_issue_attempt { issueId: "clip-${report.id}", attemptId: "${id}", outcome, summary }. Always finish, also when you couldn't fix it.`,

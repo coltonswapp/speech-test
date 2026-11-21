@@ -176,6 +176,13 @@
       "when": 1791100000000,
       "tag": "0024_clip_feedback_cursor",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791200000000,
+      "tag": "0025_studio_agent_tokens",
+      "breakpoints": true
     }
   ]
 }

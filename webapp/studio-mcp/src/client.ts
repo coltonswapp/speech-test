@@ -45,6 +45,7 @@ export async function studioFetch<T>(
   if (rest.body && !headers.has("Content-Type") && !(rest.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
+  // Named per-agent token from Settings → Agent tokens, or the shared env token.
   const agentToken = process.env.STUDIO_AGENT_TOKEN?.trim();
   if (agentToken && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${agentToken}`);

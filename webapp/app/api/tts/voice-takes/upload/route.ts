@@ -7,7 +7,7 @@ import { r2VoiceTakeStore } from "@/lib/tts/voice-takes-gemini";
 
 // Auth: proxy.ts gates every non-public /api route (verified Google
 // session or Studio agent bearer), same as generate. Scripts send
-// `Authorization: Bearer $STUDIO_AGENT_TOKEN`. The learner-app content-QA
+// `Authorization: Bearer $STUDIO_AGENT_TOKEN` (named per-agent token or env). The learner-app content-QA
 // token is limited to /api/client/* by proxy.ts; refused here as well.
 
 // A take is ~300 KB; well under Vercel's request body limit.
@@ -21,7 +21,7 @@ const MAX_BYTES = 4_000_000;
  */
 export async function POST(request: NextRequest) {
   const authorization = request.headers.get("authorization");
-  if (contentQaClientTokenMatches(authorization) && !bearerMatches(authorization)) {
+  if (contentQaClientTokenMatches(authorization) && !(await bearerMatches(authorization))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

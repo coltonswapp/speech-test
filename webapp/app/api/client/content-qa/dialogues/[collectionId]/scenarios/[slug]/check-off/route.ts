@@ -19,7 +19,7 @@ type RouteCtx = {
  *
  * Marks the scene as fully reviewed (dialogue + quiz). Idempotent.
  * Auth: requireClientQaAccess (Firebase staff token, CONTENT_QA_CLIENT_TOKEN,
- * STUDIO_AGENT_TOKEN, or Studio session).
+ * STUDIO_AGENT_TOKEN (named per-agent or env), or Studio session).
  * Contract: docs/studio-content-qa-review.md §3.0
  */
 export async function POST(request: NextRequest, ctx: RouteCtx) {

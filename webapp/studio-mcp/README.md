@@ -32,7 +32,7 @@ Read
 - clip_report: feed / level / channel counts, why clips are out of the feed, `needsLook` buckets of clip ids, cost by step / model / day (`since`)
 
 Edit
-- patch_clip: transcript, English, one line's tokens, clearFlags, highlights, jlptLevel, feedEligible, deprecated, shiftSec, orientation. Returns the new checks and what to re-run
+- patch_clip: transcript, split/merge at token boundaries (keeps tokens and alignment), English, one line's tokens, clearFlags, highlights, jlptLevel, feedEligible, deprecated, shiftSec, orientation. Returns the new checks and what to re-run
 - delete_clip (`confirm: true`; prefer `deprecated` for clips that have been live)
 
 Pipeline and jobs

@@ -5,6 +5,7 @@ import { clipTagPickSchema } from "@/lib/experiments/clips/tags";
 import { highlightsSchema } from "@/lib/dialogue/types";
 import { clipErrorResponse, loadClipOr404 } from "@/lib/experiments/clips/route-helpers";
 import { clipAudioUrl, deleteClip, writeClipDraft } from "@/lib/experiments/clips/store";
+import { applyClipMerge, applyClipSplit, clipMergeSchema, clipSplitSchema } from "@/lib/experiments/clips/sentence-edits";
 import {
   applySentenceEdits,
   clipJlptLevelSchema,
@@ -55,6 +56,13 @@ export async function DELETE(
 const patchSchema = z.object({
   /** Full transcript, one sentence per entry. */
   sentences: z.array(z.string()).max(200).optional(),
+  /**
+   * Break one line at token boundaries. Keeps tokens, timings, alignment and
+   * the feed verdict; punctuation between tokens stays on the left.
+   */
+  split: clipSplitSchema.optional(),
+  /** Join a line with the following `count` lines (default 1). Same preservation as split. */
+  merge: clipMergeSchema.optional(),
   shiftSec: z.number().min(-2).max(2).optional(),
   /** Portrait = 9:16 Short (taller player in the app). */
   orientation: clipOrientationSchema.optional(),
@@ -107,6 +115,16 @@ export async function PATCH(
         const feed = draft.feed?.manual ? { manual: draft.feed.manual } : undefined;
         draft = { ...draft, sentences, alignment: undefined, feed };
       }
+    }
+    if (parsed.data.split) {
+      const split = applyClipSplit(draft, parsed.data.split);
+      if ("error" in split) return NextResponse.json({ error: split.error }, { status: 400 });
+      draft = split.draft;
+    }
+    if (parsed.data.merge) {
+      const merged = applyClipMerge(draft, parsed.data.merge);
+      if ("error" in merged) return NextResponse.json({ error: merged.error }, { status: 400 });
+      draft = merged.draft;
     }
     if (parsed.data.english) {
       const english = parsed.data.english;

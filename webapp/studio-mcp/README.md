@@ -67,6 +67,11 @@ Agents work the reports learners send from the app, one at a time. Each take is 
 
 Studio's **Send to agent** posts the same report to Grok Bot or OpenBot by webhook; the bot then calls claim and finish like anyone else.
 
+## Speech audio (`src/audio.ts`)
+
+- generate_audio: say a line with Studio's Gemini TTS (`POST /api/generate`) and download the MP3s. Arguments: `text`, `voice`, optional `delivery` ("Casual, like asking a friend a quick question" or `[whispering]`-style tags), `takes` (1 by default, up to 5), `title`, `save` (keeps the generations in Studio's Generate library past their ~24 h expiry), and `outputDir` (default `<tmp>/shizen-audio`)
+- list_tts_voices: the Gemini voice catalog (73 ja-JP Tokyo library voices with casting names, plus 30 prebuilt voices), filtered by `language`, `gender` or `search`
+
 ## Thumbnails (Hana)
 
 Lesson = collection card art. Scene overrides the lesson for that scenario only; clearing the scene restores the lesson fallback.

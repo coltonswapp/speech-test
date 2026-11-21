@@ -81,6 +81,29 @@ function brief(row: FeedbackRow) {
 }
 
 export function registerFeedbackTools(server: McpServer) {
+  const issueId = z.string().regex(/^(clip|scene)-[a-zA-Z0-9_-]+$/);
+  async function callIssue(path: string, body?: unknown) {
+    try {
+      return jsonResult(await studioFetch("/api/content/issues" + path, body ? {method:"POST", body:JSON.stringify(body)} : {}));
+    } catch (error) { return errorResult(error); }
+  }
+  server.registerTool("list_content_issues", {
+    title: "List content issues", description: "List learner reports. Use the returned next offsets to continue.",
+    inputSchema: {subject:z.enum(["all","clip","scene"]).optional(), status:z.enum(["all","open","resolved","wontfix","duplicate"]).optional(), clips:z.number().int().nonnegative().optional(), scenes:z.number().int().nonnegative().optional()},
+  }, async (args) => callIssue("?" + new URLSearchParams(Object.entries(args).map(([k,v]): [string,string] => [k,String(v)]))));
+  server.registerTool("get_content_issue", {
+    title: "Read a content issue", description: "Read report evidence and history. For a scene, published=true returns its learner-visible export and verification revision.",
+    inputSchema: {issueId, published:z.boolean().optional()},
+  }, async ({issueId,published}) => callIssue("/"+issueId+(published ? "?published=1" : "")));
+  server.registerTool("claim_content_issue", {
+    title: "Claim a content issue", description: "Claim before editing. Supply the attemptId when responding to a dispatch.",
+    inputSchema: {issueId, agent:z.string().min(1).max(40), attemptId:z.string().optional(), runUrl:z.string().url().optional()},
+  }, async ({issueId,...args}) => callIssue("/"+issueId,{action:"claim",...args}));
+  server.registerTool("finish_content_issue_attempt", {
+    title: "Finish a content issue attempt", description: "Use needs_review for a draft. Before reporting a scene fixed, inspect the learner export, verify the correction, and supply its revision.",
+    inputSchema: {issueId, attemptId:z.string(), outcome:z.enum(OUTCOMES), summary:z.string().min(1).max(4000), revision:z.string().optional()},
+  }, async ({issueId,...args}) => callIssue("/"+issueId,{action:"finish",...args}));
+
   server.registerTool(
     "list_clip_feedback",
     {

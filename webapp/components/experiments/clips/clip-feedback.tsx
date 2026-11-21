@@ -112,7 +112,7 @@ function LineQuote({ row }: { row: ClipFeedbackRow }) {
   const picked = row.tokenPosition;
   return (
     <blockquote className="flex flex-col gap-0.5 border-l-2 border-border pl-3">
-      <span className="text-xs text-muted-foreground">Line {line.index + 1}</span>
+      <span className="text-xs text-muted-foreground">Line {line.index + 1} · {line.startSec.toFixed(2)} s</span>
       <span className="text-base" lang="ja">
         {picked != null && tokens.length > 0
           ? tokens.map((token) => (
@@ -145,7 +145,7 @@ function LineQuote({ row }: { row: ClipFeedbackRow }) {
   );
 }
 
-function FeedbackItem({
+export function FeedbackItem({
   row,
   showClip,
   agentTargets,
@@ -170,13 +170,13 @@ function FeedbackItem({
             <ThumbsDownIcon className="size-4 text-destructive" aria-label="Thumbs down" />
           )
         ) : null}
-        <span className="font-medium">
+        <Link className="font-medium hover:underline" href={`/content/issues/clip-${encodeURIComponent(row.id)}`}>
           {row.reason
             ? REASON_LABELS[row.reason]
             : row.rating === "up"
               ? "Good clip"
               : "Not a good clip"}
-        </span>
+        </Link>
         {row.status ? (
           <Badge variant={row.status === "open" ? "destructive" : "secondary"}>
             {STATUS_LABELS[row.status]}
@@ -444,4 +444,16 @@ export function ClipFeedbackInbox() {
       )}
     </div>
   );
+}
+
+/** Uses the same cache as the editor so triage and attempt actions refresh the detail. */
+export function ClipIssueDetail({id}:{id:string}) {
+  const query = useQuery({queryKey:["clip-feedback","detail",id],queryFn:()=>request<FeedbackResponse>("/api/experiments/clip-feedback?id="+encodeURIComponent(id))});
+  if (query.isPending) return <Skeleton className="h-28"/>;
+  if (query.isError) return <p role="alert">{query.error.message}</p>;
+  const row = query.data.rows[0];
+  if (!row) return <p>Report not found.</p>;
+  return <><ul><FeedbackItem row={row} showClip agentTargets={query.data.agentTargets}/></ul>
+    {row.status === "open" && !query.data.agentTargets.length && <Link href="/settings/agents" className="underline">Configure dispatch agents</Link>}
+    {row.resolvedNote && <p>{row.resolvedNote}</p>}</>;
 }

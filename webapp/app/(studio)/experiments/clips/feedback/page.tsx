@@ -1,5 +1,5 @@
-import { ClipFeedbackInbox } from "@/components/experiments/clips/clip-feedback";
+import { redirect } from "next/navigation";
 
 export default function ClipFeedbackPage() {
-  return <ClipFeedbackInbox />;
+  redirect("/content/issues?subject=clip");
 }

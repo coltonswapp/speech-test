@@ -61,6 +61,7 @@ function ReportRow({
         <span className="text-xs text-muted-foreground">
           {formatWhen(entry.createdAt)}
         </span>
+        <a className="underline" href={`/content/issues/scene-${entry.id}`}>View issue</a>
         {entry.categories.map((category) => (
           <Badge key={category} variant="secondary">
             {lessonReportCategoryLabels[category]}

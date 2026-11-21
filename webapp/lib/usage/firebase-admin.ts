@@ -78,6 +78,9 @@ function splitCredential(): {
 
 export function getFirebaseAdminStatus(): FirebaseAdminStatus {
   const id = projectId();
+  if (process.env.FIRESTORE_EMULATOR_HOST?.trim()) {
+    return { ok: true, projectId: id, credentialSource: "Firestore emulator" };
+  }
   if (parseServiceAccountJson()) {
     return { ok: true, projectId: id, credentialSource: "FIREBASE_SERVICE_ACCOUNT_JSON" };
   }

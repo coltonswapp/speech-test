@@ -11,6 +11,8 @@ export type ClipFeedbackRow = {
   clipId: string;
   /** From the clip index; null when the clip is gone from it. */
   clipTitle: string | null;
+  videoId: string | null;
+  videoStartSec: number;
   userId: string;
   kind: "rating" | "flag";
   rating: "up" | "down" | null;
@@ -35,6 +37,7 @@ export type ClipFeedbackQuery = {
   /** "issues": anything with a status (flags, reasoned thumbs-downs). "all": ratings too. */
   status?: ClipFeedbackStatus | "issues" | "all";
   reason?: ClipFeedbackReason | null;
+  offset?: number;
   limit?: number;
 };
 
@@ -52,7 +55,8 @@ export async function listClipFeedback(q: ClipFeedbackQuery): Promise<ClipFeedba
     .from(clipFeedback)
     .leftJoin(clipIndex, eq(clipIndex.id, clipFeedback.clipId))
     .where(where.length ? and(...where) : undefined)
-    .orderBy(desc(clipFeedback.createdAt))
+    .orderBy(desc(clipFeedback.createdAt), desc(clipFeedback.id))
+    .offset(q.offset ?? 0)
     .limit(Math.min(q.limit ?? 200, 500));
 
   return rows.map(({ feedback: f, summary }) => {
@@ -60,6 +64,8 @@ export async function listClipFeedback(q: ClipFeedbackQuery): Promise<ClipFeedba
     return {
       id: f.id,
       clipId: f.clipId,
+      videoId: s?.videoId ?? null,
+      videoStartSec: s?.startSec ?? 0,
       clipTitle: s ? (s.videoTitleEn ?? s.videoTitle) : null,
       userId: f.userId,
       kind: f.kind as ClipFeedbackRow["kind"],

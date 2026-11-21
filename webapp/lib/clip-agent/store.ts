@@ -2,8 +2,8 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { clipAgentAttempt } from "@/lib/db/schema";
-import { listClipFeedback, setClipFeedbackStatus, type ClipFeedbackRow } from "@/lib/clip-feedback/admin";
+import { clipAgentAttempt, clipFeedback } from "@/lib/db/schema";
+import { listClipFeedback, type ClipFeedbackRow } from "@/lib/clip-feedback/admin";
 import { readClipDraft } from "@/lib/experiments/clips/store";
 import { runCost } from "@/lib/experiments/clips/usage-cost";
 import type { ClipDraft } from "@/lib/experiments/clips/types";
@@ -19,6 +19,7 @@ import {
   type ClipAgentTarget,
 } from "@/lib/clip-agent/schema";
 import { deliverAttemptWebhook, type AttemptDelivery } from "@/lib/clip-agent/dispatch";
+import { agentSettings } from "@/lib/content-issues/agents";
 import { studioPublicBaseUrl } from "@/lib/dialogue/auto-stamp-review-webhook";
 
 /** A pipeline run on the clip while an attempt was open (from the clip's usage log). */
@@ -151,8 +152,17 @@ async function openReport(feedbackId: string): Promise<ClipFeedbackRow> {
   return row;
 }
 
-async function openAttempts(feedbackId: string): Promise<AttemptRow[]> {
-  return db
+type AttemptTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function lockReport(tx: AttemptTransaction, feedbackId: string) {
+  const [report] = await tx.select({ status: clipFeedback.status })
+    .from(clipFeedback).where(eq(clipFeedback.id, feedbackId)).for("update");
+  if (!report?.status) throw new AttemptError("Issue not found.", 404);
+  return report.status;
+}
+
+async function openAttempts(tx: AttemptTransaction, feedbackId: string): Promise<AttemptRow[]> {
+  return tx
     .select()
     .from(clipAgentAttempt)
     .where(
@@ -207,27 +217,28 @@ export async function dispatchAttempt(input: {
   instructions: string | null;
   dispatchedBy: string;
 }): Promise<ClipAgentAttemptView> {
+  if (!(await agentSettings()).clips.includes(input.agent)) throw new AttemptError("Agent unavailable for clip dispatch.", 409);
   const report = await openReport(input.feedbackId);
-  const open = await openAttempts(input.feedbackId);
-  if (open.length > 0) {
-    const a = open[0];
-    throw new AttemptError(`${agentLabel(a.agent)} already has this report (${a.id}, ${a.status}).`, 409);
-  }
   const draft = await readClipDraft(report.clipId);
   if (!draft) throw new AttemptError("The clip is gone.", 404);
 
   const id = newAttemptId();
   const now = new Date();
-  await db.insert(clipAgentAttempt).values({
-    id,
-    feedbackId: report.id,
-    clipId: report.clipId,
-    agent: input.agent,
-    dispatchedBy: input.dispatchedBy,
-    instructions: input.instructions,
-    status: "dispatched",
-    createdAt: now,
-    updatedAt: now,
+  await db.transaction(async tx => {
+    if (await lockReport(tx, report.id) !== "open") throw new AttemptError("Issue is closed.", 409);
+    const [active] = await openAttempts(tx, report.id);
+    if (active) throw new AttemptError(`${agentLabel(active.agent)} already has this report (${active.id}, ${active.status}).`, 409);
+    await tx.insert(clipAgentAttempt).values({
+      id,
+      feedbackId: report.id,
+      clipId: report.clipId,
+      agent: input.agent,
+      dispatchedBy: input.dispatchedBy,
+      instructions: input.instructions,
+      status: "dispatched",
+      createdAt: now,
+      updatedAt: now,
+    });
   });
 
   const delivery = await deliverAttemptWebhook(input.agent, {
@@ -240,20 +251,24 @@ export async function dispatchAttempt(input: {
     playbook: clipFeedbackPlaybook(report.reason),
     next: [
       `Use the shizen-studio MCP against ${studioPublicBaseUrl()} (STUDIO_BASE_URL, STUDIO_AGENT_TOKEN).`,
-      `1. claim_clip_feedback { feedbackId: "${report.id}", runUrl: <this run's link> }.`,
+      `1. claim_content_issue { issueId: "clip-${report.id}", agent: "${input.agent}", attemptId: "${id}", runUrl: <this run's link> }.`,
       "2. Follow the playbook.",
-      `3. finish_clip_feedback { attemptId: "${id}", outcome, summary }. Always finish, also when you couldn't fix it.`,
+      `3. finish_content_issue_attempt { issueId: "clip-${report.id}", attemptId: "${id}", outcome, summary }. Always finish, also when you couldn't fix it.`,
     ].join("\n"),
   });
 
-  const [row] = await db
-    .update(clipAgentAttempt)
+  const [failed] = delivery.ok ? [] : await db.update(clipAgentAttempt)
     .set({
       delivery,
-      status: delivery.ok ? "dispatched" : "failed",
-      ...(delivery.ok ? {} : { finishedAt: new Date(), summary: `Webhook failed: ${delivery.error ?? `HTTP ${delivery.status}`}` }),
+      status: "failed",
+      finishedAt: new Date(),
+      summary: `Webhook failed: ${delivery.error ?? `HTTP ${delivery.status}`}`,
       updatedAt: new Date(),
     })
+    .where(and(eq(clipAgentAttempt.id, id), eq(clipAgentAttempt.status, "dispatched")))
+    .returning();
+  const [row] = failed ? [failed] : await db.update(clipAgentAttempt)
+    .set({ delivery, updatedAt: new Date() })
     .where(eq(clipAgentAttempt.id, id))
     .returning();
   return toView(row, null);
@@ -270,71 +285,13 @@ export async function claimAttempt(input: {
   runUrl: string | null;
   claimedBy: string;
   takeOver: boolean;
+  expectedAttempt?: string;
 }) {
   const report = await openReport(input.feedbackId);
-  const open = await openAttempts(input.feedbackId);
-  const working = open.filter((a) => a.status === "working");
-  if (working.length > 0 && !input.takeOver) {
-    const a = working[0];
-    throw new AttemptError(
-      `${agentLabel(a.agent)} is already working on this report (${a.id}, since ${a.startedAt?.toISOString() ?? "?"}). Pass takeOver: true if that run is dead.`,
-      409,
-    );
-  }
   const draft = await readClipDraft(report.clipId);
   if (!draft) throw new AttemptError("The clip is gone.", 404);
 
-  const now = new Date();
-  for (const a of working) {
-    await db
-      .update(clipAgentAttempt)
-      .set({
-        status: "done",
-        outcome: "could_not_fix",
-        summary: `Abandoned: taken over by ${input.agent ?? input.claimedBy}.`,
-        after: snapshotClip(draft, now),
-        runs: runsSince(draft, a.startedAt),
-        finishedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(clipAgentAttempt.id, a.id));
-  }
-
-  const before = snapshotClip(draft, now);
-  const dispatched = open.find((a) => a.status === "dispatched");
-  let row: AttemptRow;
-  if (dispatched) {
-    [row] = await db
-      .update(clipAgentAttempt)
-      .set({
-        status: "working",
-        before,
-        runUrl: input.runUrl ?? dispatched.runUrl,
-        startedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(clipAgentAttempt.id, dispatched.id))
-      .returning();
-  } else {
-    [row] = await db
-      .insert(clipAgentAttempt)
-      .values({
-        id: newAttemptId(),
-        feedbackId: report.id,
-        clipId: report.clipId,
-        agent: input.agent ?? "agent",
-        dispatchedBy: input.claimedBy,
-        status: "working",
-        before,
-        runUrl: input.runUrl,
-        createdAt: now,
-        startedAt: now,
-        updatedAt: now,
-      })
-      .returning();
-  }
-
-  return {
+  const claimed = (row: AttemptRow) => ({
     attemptId: row.id,
     agent: agentLabel(row.agent),
     instructions: row.instructions,
@@ -342,7 +299,78 @@ export async function claimAttempt(input: {
     clip: clipBrief(draft),
     playbook: clipFeedbackPlaybook(report.reason),
     finish: `When done: finish_clip_feedback { attemptId: "${row.id}", outcome: fixed | no_change_needed | needs_review | could_not_fix, summary }.`,
-  };
+  });
+
+  return db.transaction(async tx => {
+    if (await lockReport(tx, report.id) !== "open") throw new AttemptError("Issue is closed.", 409);
+    const open = await openAttempts(tx, input.feedbackId);
+    if (input.expectedAttempt && !open.some(a => a.id === input.expectedAttempt && a.agent === input.agent)) throw new AttemptError("Dispatch is no longer active for this agent", 409);
+    const working = open.filter((a) => a.status === "working");
+    if (working.length > 0 && !input.takeOver) {
+      const a = working[0];
+      if (input.expectedAttempt === a.id && input.agent === a.agent) return claimed(a);
+      throw new AttemptError(
+        `${agentLabel(a.agent)} is already working on this report (${a.id}, since ${a.startedAt?.toISOString() ?? "?"}). Pass takeOver: true if that run is dead.`,
+        409,
+      );
+    }
+
+    const now = new Date();
+    for (const a of working) {
+      await tx
+        .update(clipAgentAttempt)
+        .set({
+          status: "done",
+          outcome: "could_not_fix",
+          summary: `Abandoned: taken over by ${input.agent ?? input.claimedBy}.`,
+          after: snapshotClip(draft, now),
+          runs: runsSince(draft, a.startedAt),
+          finishedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(clipAgentAttempt.id, a.id));
+    }
+
+    const before = snapshotClip(draft, now);
+    const dispatched = open.find((a) => a.status === "dispatched");
+    let row: AttemptRow;
+    if (dispatched) {
+      if (input.agent && input.agent !== dispatched.agent && !input.takeOver) {
+        throw new AttemptError("This issue is dispatched to another agent.", 409);
+      }
+      [row] = await tx
+        .update(clipAgentAttempt)
+        .set({
+          status: "working",
+          before,
+          runUrl: input.runUrl ?? dispatched.runUrl,
+          startedAt: now,
+          updatedAt: now,
+        })
+        .where(and(eq(clipAgentAttempt.id, dispatched.id), eq(clipAgentAttempt.status, "dispatched")))
+        .returning();
+      if (!row) throw new AttemptError("Dispatch has already been claimed", 409);
+    } else {
+      [row] = await tx
+        .insert(clipAgentAttempt)
+        .values({
+          id: newAttemptId(),
+          feedbackId: report.id,
+          clipId: report.clipId,
+          agent: input.agent ?? "agent",
+          dispatchedBy: input.claimedBy,
+          status: "working",
+          before,
+          runUrl: input.runUrl,
+          createdAt: now,
+          startedAt: now,
+          updatedAt: now,
+        })
+        .returning();
+    }
+
+    return claimed(row);
+  });
 }
 
 /** Closes a working attempt: `after` snapshot, the runs since the claim, and the report's status. */
@@ -351,16 +379,20 @@ export async function finishAttempt(input: {
   outcome: ClipAgentOutcome;
   summary: string;
 }): Promise<{ attempt: ClipAgentAttemptView; reportResolved: boolean }> {
-  const [row] = await db.select().from(clipAgentAttempt).where(eq(clipAgentAttempt.id, input.attemptId)).limit(1);
-  if (!row) throw new AttemptError("No such attempt.", 404);
-  if (row.status !== "working") {
-    throw new AttemptError(`Attempt ${row.id} is ${row.status}, not working (claim it first, or it was taken over).`, 409);
-  }
-  const draft = await readClipDraft(row.clipId);
-  const now = new Date();
-  const [done] = await db
-    .update(clipAgentAttempt)
-    .set({
+  const [initial] = await db.select().from(clipAgentAttempt).where(eq(clipAgentAttempt.id, input.attemptId));
+  if (!initial) throw new AttemptError("No such attempt.", 404);
+  const draft = initial.status === "working" ? await readClipDraft(initial.clipId) : null;
+  return db.transaction(async tx => {
+    const status = await lockReport(tx, initial.feedbackId);
+    const [row] = await tx.select().from(clipAgentAttempt)
+      .where(eq(clipAgentAttempt.id, input.attemptId)).for("update");
+    if (row.status === "done" && row.outcome === input.outcome && row.summary === input.summary) {
+      return { attempt: toView(row, null), reportResolved: status === "resolved" };
+    }
+    if (row.status !== "working") throw new AttemptError(`Attempt ${row.id} is ${row.status}, not working.`, 409);
+
+    const now = new Date();
+    const [done] = await tx.update(clipAgentAttempt).set({
       status: "done",
       outcome: input.outcome,
       summary: input.summary,
@@ -368,21 +400,17 @@ export async function finishAttempt(input: {
       runs: runsSince(draft, row.startedAt),
       finishedAt: now,
       updatedAt: now,
-    })
-    .where(and(eq(clipAgentAttempt.id, row.id), eq(clipAgentAttempt.status, "working")))
-    .returning();
-  if (!done) throw new AttemptError(`Attempt ${row.id} changed while finishing; read it again.`, 409);
+    }).where(eq(clipAgentAttempt.id, row.id)).returning();
 
-  let reportResolved = false;
-  if (outcomeResolvesReport(input.outcome)) {
-    const [report] = await listClipFeedback({ id: row.feedbackId });
-    if (report?.status === "open") {
-      reportResolved = await setClipFeedbackStatus(
-        row.feedbackId,
-        "resolved",
-        resolvedNoteFor(row.agent, row.id, input.summary),
-      );
+    const reportResolved = status === "open" && outcomeResolvesReport(input.outcome);
+    if (reportResolved) {
+      await tx.update(clipFeedback).set({
+        status: "resolved",
+        resolvedAt: now,
+        resolvedNote: resolvedNoteFor(row.agent, row.id, input.summary),
+        updatedAt: now,
+      }).where(eq(clipFeedback.id, row.feedbackId));
     }
-  }
-  return { attempt: toView(done, null), reportResolved };
+    return { attempt: toView(done, null), reportResolved };
+  });
 }

@@ -13,6 +13,7 @@ export type StudioNavItem = {
 
 /** Content sections that are not the Grammar catalog at `/content`. */
 export const CONTENT_SECTIONS = [
+  "/content/issues",
   "/content/dialogues",
   "/content/curriculum",
   "/content/patterns",
@@ -32,6 +33,7 @@ export const STUDIO_NAV_ITEMS: readonly StudioNavItem[] = [
   { href: "/tts", label: "TTS Studio", group: "more" },
   { href: "/usage", label: "Usage", group: "more" },
   { href: "/experiments", label: "Experiments", group: "more" },
+  { href: "/content/issues", label: "Content Issues", group: "more" },
   { href: "/settings", label: "Settings", group: "more" },
 ] as const;
 

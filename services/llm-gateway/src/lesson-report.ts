@@ -41,6 +41,8 @@ type ParsedLessonReport = {
   focusDetails: string[];
   sessionMode?: string;
   quizQuestionNumber?: number;
+  pickedWord?: string;
+  playbackSeconds?: number;
   categories: LessonReportCategory[];
   note?: string;
   appVersion?: string;
@@ -85,6 +87,8 @@ export async function recordLessonReport(uid: string, body: unknown, retentionDa
     if (report.note) payload.note = report.note;
     if (report.sessionMode) payload.sessionMode = report.sessionMode;
     if (report.quizQuestionNumber !== undefined) payload.quizQuestionNumber = report.quizQuestionNumber;
+    if (report.pickedWord) payload.pickedWord = report.pickedWord;
+    if (report.playbackSeconds !== undefined) payload.playbackSeconds = report.playbackSeconds;
     if (report.publishedVariantId) payload.publishedVariantId = report.publishedVariantId;
     if (report.publishedContentHash) payload.publishedContentHash = report.publishedContentHash;
     if (report.appVersion) payload.appVersion = report.appVersion;
@@ -180,6 +184,12 @@ function parseLessonReport(body: unknown): ParsedLessonReport {
     quizQuestionNumber = value as number;
   }
 
+  const playbackSeconds = body.playbackSeconds ?? undefined;
+  if (playbackSeconds !== undefined &&
+      (typeof playbackSeconds !== "number" || !Number.isFinite(playbackSeconds) || playbackSeconds < 0)) {
+    throw invalid("playbackSeconds must be a finite nonnegative number");
+  }
+
   let deviceId: string | undefined;
   if (body.deviceId !== undefined && body.deviceId !== null) {
     if (typeof body.deviceId !== "string" || !DEVICE_RE.test(body.deviceId)) {
@@ -199,6 +209,8 @@ function parseLessonReport(body: unknown): ParsedLessonReport {
     focusDetails: (rawDetails as string[]).map((line) => line.trim()).filter(Boolean),
     sessionMode: optionalField(body, "sessionMode", 64),
     quizQuestionNumber,
+    pickedWord: optionalField(body, "pickedWord", 100),
+    playbackSeconds,
     categories,
     note,
     appVersion: optionalField(body, "appVersion", 32),

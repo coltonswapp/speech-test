@@ -653,9 +653,14 @@ extension JapaneseTokenizer {
                 let surface = run.map { leadingKanjiBlock(in: $0.base) }.joined()
                 guard surface.count >= 2 else { continue }
                 if startsWithNumeral(surface), !numeralJukujikunCompounds.contains(surface) { continue }
-                guard let reading = JMDictStore.shared.compoundMergedReading(
+                let mecabReading = run.map(\.reading).joined()
+                guard let reading = okuriganaHeadwordKanjiReading(
+                    kanjiSurface: surface,
+                    lastTokenBase: run[run.count - 1].base,
+                    mecabReading: mecabReading
+                ) ?? JMDictStore.shared.compoundMergedReading(
                     forSurface: surface,
-                    mecabReading: run.map(\.reading).joined()
+                    mecabReading: mecabReading
                 ) else { continue }
                 let kanjiEnd = kanjiBlockEnd(in: run[run.count - 1], text: text)
                 guard kanjiEnd > run[0].range.lowerBound else { continue }
@@ -671,6 +676,28 @@ extension JapaneseTokenizer {
             }
         }
         return out
+    }
+
+    /// The kanji run may belong to a longer headword that keeps the last token's okurigana:
+    /// 大 + 食い is 大食い (おおぐい), not 大食 (たいしょく); 上 + 手い is 上手い (うまい).
+    /// Tries the kana after the kanji, longest first, and returns the headword's reading
+    /// minus that kana, so the ruby covers only the kanji (大食 → おおぐ).
+    private static func okuriganaHeadwordKanjiReading(
+        kanjiSurface: String,
+        lastTokenBase: String,
+        mecabReading: String
+    ) -> String? {
+        let tail = lastTokenBase.drop { isKanjiOnlySurface(String($0)) }
+        guard !tail.isEmpty, tail.allSatisfy({ isKanaSurface(String($0)) }) else { return nil }
+        for length in stride(from: tail.count, through: 1, by: -1) {
+            let okurigana = String(tail.prefix(length))
+            guard let reading = JMDictStore.shared.compoundMergedReading(
+                forSurface: kanjiSurface + okurigana,
+                mecabReading: mecabReading
+            ), reading.hasSuffix(okurigana), reading.count > okurigana.count else { continue }
+            return String(reading.dropLast(okurigana.count))
+        }
+        return nil
     }
 
     /// Kanji at the start of a MeCab token (e.g. 食 in 食っ).

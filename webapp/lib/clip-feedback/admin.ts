@@ -29,6 +29,8 @@ export type ClipFeedbackRow = {
 };
 
 export type ClipFeedbackQuery = {
+  /** One report by id (any status). */
+  id?: string | null;
   clipId?: string | null;
   /** "issues": anything with a status (flags, reasoned thumbs-downs). "all": ratings too. */
   status?: ClipFeedbackStatus | "issues" | "all";
@@ -38,8 +40,9 @@ export type ClipFeedbackQuery = {
 
 export async function listClipFeedback(q: ClipFeedbackQuery): Promise<ClipFeedbackRow[]> {
   const where: SQL[] = [];
+  if (q.id) where.push(eq(clipFeedback.id, q.id));
   if (q.clipId) where.push(eq(clipFeedback.clipId, q.clipId));
-  const status = q.status ?? "issues";
+  const status = q.status ?? (q.id ? "all" : "issues");
   if (status === "issues") where.push(isNotNull(clipFeedback.status));
   else if (status !== "all") where.push(eq(clipFeedback.status, status));
   if (q.reason) where.push(eq(clipFeedback.reason, q.reason));

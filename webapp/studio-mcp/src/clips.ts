@@ -1174,17 +1174,43 @@ export function registerClipTools(server: McpServer) {
     {
       title: "Compare speech-to-text models on clips",
       description:
-        "Runs `pnpm clip:asr-compare`: transcribes clips' stored audio with several models and shows where they disagree with the saved transcript and each other (lines every model agrees on are probably right; disagreements are what to listen to). Either ids, or find (text to search saved transcripts for, optionally within clip ids starting with prefix). models: comma list; gemini-* go to Gemini, others to OpenAI. Costs money per clip and model.",
+        [
+          "Transcribes clips' stored audio with several models and shows where they disagree with the saved transcript and each other (lines every model agrees on are probably right; disagreements are what to listen to). Costs money per clip and model.",
+          "Two ways to run: locally via `pnpm clip:asr-compare` (needs webapp/.env.local; ids or find, optionally within clip ids starting with prefix; models gemini-* go to Gemini, others to OpenAI), or on the Studio server (ids only; Gemini models from the step list, default gemini-3.1-pro-preview + gemini-3.8-flash).",
+          "server: default true when STUDIO_BASE_URL isn't localhost (cloud agents have no .env.local). Server results list, per model, its lines and `vsSaved` stretches: `[x → ∅]` = the model didn't hear x, `[∅ → y]` = the saved transcript lacks y.",
+        ].join("\n"),
       inputSchema: {
         ids: z.array(z.string().regex(CLIP_ID)).max(20).optional(),
         find: z.string().optional(),
         prefix: z.string().optional(),
         models: z.array(z.string()).optional(),
+        server: z.boolean().optional(),
         waitSeconds: waitSecondsSchema(50),
       },
     },
-    async ({ ids, find, prefix, models, waitSeconds }) => {
+    async ({ ids, find, prefix, models, server: onServer, waitSeconds }) => {
       if (!ids?.length && !find) return errorResult("Pass ids or find.");
+      const useServer = onServer ?? !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(studioBaseUrl());
+      if (useServer) {
+        if (!ids?.length) return errorResult("On the server, pass ids (find needs the local script).");
+        const job = startJob("asr", { ids, models, server: true }, async (ctx) => {
+          const results = [];
+          for (const id of ids) {
+            ctx.checkCancelled();
+            ctx.log(`${id}: transcribing with ${models?.join(", ") ?? "default models"}…`);
+            results.push(
+              await studioFetch(`/api/experiments/clips/${encodeURIComponent(id)}/asr-compare`, {
+                method: "POST",
+                body: JSON.stringify(models?.length ? { models } : {}),
+                timeoutMs: 300_000,
+              })
+            );
+          }
+          return results;
+        });
+        await waitForJob(job, waitSeconds);
+        return jsonResult(jobView(job, 20));
+      }
       const args = [
         ...(ids ?? []),
         ...(find ? ["--find", find] : []),

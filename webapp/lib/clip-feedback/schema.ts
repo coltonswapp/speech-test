@@ -112,6 +112,8 @@ CREATE TABLE IF NOT EXISTS clip_feedback (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS clip_feedback_status_cursor_idx ON clip_feedback (status, created_at, id);
+CREATE INDEX IF NOT EXISTS clip_feedback_issue_cursor_idx ON clip_feedback (created_at, id) WHERE status IS NOT NULL;
 CREATE INDEX IF NOT EXISTS clip_feedback_status_idx ON clip_feedback (status, created_at);
 CREATE INDEX IF NOT EXISTS clip_feedback_clip_idx ON clip_feedback (clip_id);
 CREATE INDEX IF NOT EXISTS clip_feedback_user_idx ON clip_feedback (user_id, created_at);

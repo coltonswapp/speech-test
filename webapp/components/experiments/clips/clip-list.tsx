@@ -98,7 +98,7 @@ export function ClipList() {
             clip queue
           </Link>
           . What learners reported from the app is in{" "}
-          <Link href="/experiments/clips/feedback" className="underline underline-offset-2">
+          <Link href="/content/issues?subject=clip" className="underline underline-offset-2">
             clip feedback
           </Link>
           .

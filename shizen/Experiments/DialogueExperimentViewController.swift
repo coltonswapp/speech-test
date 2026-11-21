@@ -4788,6 +4788,13 @@ extension DialogueExperimentViewController {
 // MARK: - Content QA
 
 extension DialogueExperimentViewController {
+    var lessonIssuePickedWord: String? {
+        guard let ref = clipStyleCalloutRef,
+              let tokens = clipStyleTokens[ref.displayIndex],
+              tokens.indices.contains(ref.tokenIndex) else { return nil }
+        return tokens[ref.tokenIndex].surface
+    }
+
     func contentQAFocus(sessionModeLabel: String) -> (title: String, details: [String]) {
         var details = [
             "Session: \(sessionModeLabel)",

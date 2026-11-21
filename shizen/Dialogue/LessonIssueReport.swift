@@ -52,6 +52,8 @@ struct LessonIssueContext {
     let focusDetails: [String]
     let sessionMode: String
     let quizQuestionNumber: Int?
+    let pickedWord: String?
+    let playbackSeconds: Double?
     let tone: LessonIssueTone
 
     init(
@@ -64,6 +66,8 @@ struct LessonIssueContext {
         focusDetails: [String],
         sessionMode: String,
         quizQuestionNumber: Int?,
+        pickedWord: String? = nil,
+        playbackSeconds: Double? = nil,
         tone: LessonIssueTone = .reportProblem
     ) {
         self.collectionId = collectionId
@@ -75,8 +79,19 @@ struct LessonIssueContext {
         self.focusDetails = focusDetails
         self.sessionMode = sessionMode
         self.quizQuestionNumber = quizQuestionNumber
+        self.pickedWord = pickedWord
+        self.playbackSeconds = playbackSeconds
         self.tone = tone
     }
+}
+
+/// Match the gateway's UTF-16 budget while keeping composed characters intact.
+func lessonIssueWordPrefix(_ word: String) -> String {
+    var used = 0
+    return String(word.prefix(while: { character in
+        used += String(character).utf16.count
+        return used <= 100
+    }))
 }
 
 extension LLMGatewayClient {
@@ -92,6 +107,8 @@ extension LLMGatewayClient {
         let focusDetails: [String]
         let sessionMode: String
         let quizQuestionNumber: Int?
+        let pickedWord: String?
+        let playbackSeconds: Double?
         let categories: [String]
         let note: String?
         let appVersion: String?
@@ -121,6 +138,8 @@ extension LLMGatewayClient {
             focusDetails: context.focusDetails.prefix(20).map { String($0.prefix(300)) },
             sessionMode: context.sessionMode,
             quizQuestionNumber: context.quizQuestionNumber,
+            pickedWord: context.pickedWord.map { lessonIssueWordPrefix($0) },
+            playbackSeconds: context.playbackSeconds,
             categories: categories.map(\.rawValue),
             note: trimmedNote.isEmpty ? nil : String(trimmedNote.prefix(2000)),
             appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,

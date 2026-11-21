@@ -576,6 +576,8 @@ export const clipFeedback = pgTable(
   },
   (t) => [
     index("clip_feedback_status_idx").on(t.status, t.createdAt),
+    index("clip_feedback_status_cursor_idx").on(t.status, t.createdAt, t.id),
+    index("clip_feedback_issue_cursor_idx").on(t.createdAt, t.id).where(sql`${t.status} IS NOT NULL`),
     index("clip_feedback_clip_idx").on(t.clipId),
     index("clip_feedback_user_idx").on(t.userId, t.createdAt),
     // One thumbs rating per learner per clip; flags can repeat.

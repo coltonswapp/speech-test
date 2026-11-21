@@ -8,7 +8,7 @@ import {
   setClipFeedbackStatus,
 } from "@/lib/clip-feedback/admin";
 import { CLIP_FEEDBACK_REASONS, CLIP_FEEDBACK_STATUSES } from "@/lib/clip-feedback/schema";
-import { configuredAgentTargets } from "@/lib/clip-agent/dispatch";
+import { agentSettings } from "@/lib/content-issues/agents";
 import { withAttempts } from "@/lib/clip-agent/store";
 
 const listQuery = z.object({
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       openClipIssueCount(),
     ]);
     return NextResponse.json(
-      { rows, counts, openIssues, agentTargets: configuredAgentTargets() },
+      { rows, counts, openIssues, agentTargets: (await agentSettings()).clips },
       { headers: { "Cache-Control": "private, no-store" } },
     );
   } catch (error) {

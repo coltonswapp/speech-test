@@ -1012,6 +1012,8 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
 
     private func presentLessonIssueReport() {
         guard let scene = contentQASceneContext, let item = currentScenarioItem else { return }
+        let pickedWord = activePageIndex == 0 ? dialogueViewController.lessonIssuePickedWord : nil
+        let playbackSeconds = activePageIndex == 0 ? dialogueViewController.dialoguePlayerCurrentTime : nil
         if dialogueViewController.dialoguePlaybackPhase == .playing {
             dialogueViewController.dialoguePausePlayback()
         }
@@ -1034,7 +1036,9 @@ final class DialogueNestedPagingExperimentViewController: UIViewController {
             focusTitle: focus.title,
             focusDetails: focus.detailLines,
             sessionMode: contentQASessionModeLabel(),
-            quizQuestionNumber: focus.quizQuestionNumber
+            quizQuestionNumber: focus.quizQuestionNumber,
+            pickedWord: pickedWord,
+            playbackSeconds: playbackSeconds
         )
         LessonIssueReportViewController.present(from: self, context: context)
     }

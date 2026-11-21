@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronLeftIcon, Loader2Icon, ThumbsDownIcon, ThumbsUpIcon } from "lucide-react";
+import { Loader2Icon, ThumbsDownIcon, ThumbsUpIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,20 +13,19 @@ import {
   latestNeedsReview,
   SendToAgentButton,
 } from "@/components/experiments/clips/clip-agent-attempts";
+import { RecoverIssueAttempt } from "@/components/content-issues/recover-issue-attempt";
 import { formatApiError } from "@/lib/api-error";
 import type { ClipRatingCounts } from "@/lib/clip-feedback/admin";
 import type { ClipFeedbackWithAttempts } from "@/lib/clip-agent/store";
 import { resolvedNoteFor, type ClipAgentTarget } from "@/lib/clip-agent/schema";
 import {
-  CLIP_FEEDBACK_REASONS,
   type ClipFeedbackReason,
   type ClipFeedbackStatus,
 } from "@/lib/clip-feedback/schema";
 import { cn } from "@/lib/utils";
 
 // Learner feedback from the app (POST /api/client/clips/[id]/feedback): thumbs
-// and "Report an issue". The clip editor shows one clip's; the inbox
-// (/experiments/clips/feedback) shows every clip's, open issues first.
+// and "Report an issue". Content Issues links back to individual clips.
 
 /** Same wording as the app's report screen (ClipFeedback.swift). */
 const REASON_LABELS: Record<ClipFeedbackReason, string> = {
@@ -112,7 +110,7 @@ function LineQuote({ row }: { row: ClipFeedbackRow }) {
   const picked = row.tokenPosition;
   return (
     <blockquote className="flex flex-col gap-0.5 border-l-2 border-border pl-3">
-      <span className="text-xs text-muted-foreground">Line {line.index + 1}</span>
+      <span className="text-xs text-muted-foreground">Line {line.index + 1} · {line.startSec.toFixed(2)} s</span>
       <span className="text-base" lang="ja">
         {picked != null && tokens.length > 0
           ? tokens.map((token) => (
@@ -145,7 +143,7 @@ function LineQuote({ row }: { row: ClipFeedbackRow }) {
   );
 }
 
-function FeedbackItem({
+export function FeedbackItem({
   row,
   showClip,
   agentTargets,
@@ -170,13 +168,13 @@ function FeedbackItem({
             <ThumbsDownIcon className="size-4 text-destructive" aria-label="Thumbs down" />
           )
         ) : null}
-        <span className="font-medium">
+        <Link className="font-medium hover:underline" href={`/content/issues/clip-${encodeURIComponent(row.id)}`}>
           {row.reason
             ? REASON_LABELS[row.reason]
             : row.rating === "up"
               ? "Good clip"
               : "Not a good clip"}
-        </span>
+        </Link>
         {row.status ? (
           <Badge variant={row.status === "open" ? "destructive" : "secondary"}>
             {STATUS_LABELS[row.status]}
@@ -309,7 +307,7 @@ export function ClipFeedbackSection({ clipId }: { clipId: string }) {
       }
       actions={
         <Link
-          href="/experiments/clips/feedback"
+          href="/content/issues?subject=clip"
           className="text-xs text-muted-foreground underline-offset-2 hover:underline"
         >
           All clips’ feedback
@@ -356,92 +354,16 @@ export function ClipFeedbackSection({ clipId }: { clipId: string }) {
   );
 }
 
-const INBOX_TABS: { status: StatusFilter; label: string }[] = [
-  { status: "open", label: "Open" },
-  { status: "resolved", label: "Resolved" },
-  { status: "wontfix", label: "Won’t fix" },
-  { status: "duplicate", label: "Duplicate" },
-  { status: "all", label: "Everything" },
-];
-
-/** /experiments/clips/feedback: every clip's reports, newest first. */
-export function ClipFeedbackInbox() {
-  const [status, setStatus] = useState<StatusFilter>("open");
-  const [reason, setReason] = useState<ClipFeedbackReason | null>(null);
-  const query = useQuery({
-    queryKey: ["clip-feedback", "inbox", status, reason],
-    queryFn: () => feedbackApi.list({ status, reason }),
-  });
-  const rows = query.data?.rows ?? [];
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <Link
-          href="/experiments/clips"
-          className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeftIcon className="size-3" /> Clips
-        </Link>
-        <h1 className="text-xl font-semibold tracking-tight">Clip feedback</h1>
-        <p className="text-sm text-muted-foreground">
-          What learners reported from the app: problems with a clip or one of its lines, and
-          thumbs-downs with a reason. Fix the clip in its editor and resolve the report, or send it
-          to an agent: its attempt shows what it changed on the clip.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {INBOX_TABS.map((tab) => (
-          <Button
-            key={tab.status}
-            type="button"
-            size="sm"
-            variant={status === tab.status ? "default" : "outline"}
-            onClick={() => setStatus(tab.status)}
-          >
-            {tab.label}
-            {tab.status === "open" && query.data ? (
-              <span className="tabular-nums opacity-70">{query.data.openIssues}</span>
-            ) : null}
-          </Button>
-        ))}
-        <select
-          className="ml-auto h-8 rounded-md border border-input bg-background px-2 text-sm"
-          aria-label="Reason"
-          value={reason ?? ""}
-          onChange={(e) => setReason((e.target.value || null) as ClipFeedbackReason | null)}
-        >
-          <option value="">Every reason</option>
-          {CLIP_FEEDBACK_REASONS.map((r) => (
-            <option key={r} value={r}>
-              {REASON_LABELS[r]}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {query.isPending ? (
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-24 w-full" />
-        </div>
-      ) : query.isError ? (
-        <p className="text-sm text-destructive">{query.error.message}</p>
-      ) : rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nothing here.</p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {rows.map((row) => (
-            <FeedbackItem
-              key={row.id}
-              row={row}
-              showClip
-              agentTargets={query.data?.agentTargets ?? []}
-            />
-          ))}
-        </ul>
-      )}
-    </div>
-  );
+/** Uses the same cache as the editor so triage and attempt actions refresh the detail. */
+export function ClipIssueDetail({id}:{id:string}) {
+  const query = useQuery({queryKey:["clip-feedback","detail",id],queryFn:()=>request<FeedbackResponse>("/api/experiments/clip-feedback?id="+encodeURIComponent(id))});
+  if (query.isPending) return <Skeleton className="h-28"/>;
+  if (query.isError) return <p role="alert">{query.error.message}</p>;
+  const row = query.data.rows[0];
+  const active = row?.attempts.find(a => a.status === "dispatched" || a.status === "working");
+  if (!row) return <p>Report not found.</p>;
+  return <><ul><FeedbackItem row={row} showClip agentTargets={query.data.agentTargets}/></ul>
+    {active && <RecoverIssueAttempt issueId={"clip-" + id} attemptId={active.id} onChange={() => void query.refetch()}/>}
+    {row.status === "open" && !query.data.agentTargets.length && <Link href="/settings/agents" className="underline">Configure dispatch agents</Link>}
+    {row.resolvedNote && <p>{row.resolvedNote}</p>}</>;
 }

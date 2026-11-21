@@ -51,11 +51,21 @@ Add Shorts to the queue (`src/queue-add.ts`, lookups in `src/youtube.ts`)
 - review_youtube_videos: 1–20 links or ids → one candidate per input, in order (job)
 - add_to_clip_queue: the approved ids → `queued` entries. Doesn't process; follow with run_clip_queue_batch. Safe to retry
 - Candidate verdicts: addable, in-queue, skipped-in-queue, already-clipped, fetching, unavailable (deleted / private / live / age-restricted), ineligible (not vertical, over 120 s), duplicate-input, invalid-input. Queue warnings (under 20 s, outside feed length, no Japanese title, music title) don't block adding
-- Needs yt-dlp on PATH (or `YT_DLP_PATH`); no YouTube API key. Queue checks and the write are `POST /api/experiments/clip-queue` (`dryRun` for review), backfill_clip_index (`pnpm clip:index-backfill`), compare_clip_asr (`pnpm clip:asr-compare`)
+- Needs yt-dlp on PATH (or `YT_DLP_PATH`); no YouTube API key. Queue checks and the write are `POST /api/experiments/clip-queue` (`dryRun` for review), backfill_clip_index (`pnpm clip:index-backfill`), compare_clip_asr (`pnpm clip:asr-compare` locally; `POST /api/experiments/clips/:id/asr-compare` on the server when STUDIO_BASE_URL isn't localhost, or `server: true`)
 
 The script tools run from `webapp/` with `webapp/.env.local` (production R2 and database for seed / backfill / ASR compare); `--write` style changes are off unless `write: true`. Batch and step tools talk to `STUDIO_BASE_URL`; against prod set `STUDIO_AGENT_TOKEN`.
 
 Server side: `GET /api/experiments/clip-report` (`?ids=`, `?since=`) computes the per-clip checks (`lib/experiments/clips/checks.ts`) and totals, so agents see the same rules as the Studio editor.
+
+## Learner clip feedback (`src/feedback.ts`)
+
+Agents work the reports learners send from the app, one at a time. Each take is an attempt in Studio with server-side before/after snapshots of the clip (see docs/clip-agent-tickets-plan.md).
+
+- list_clip_feedback: open reports (or `status`), with reason, note, the reported line and word, and each report's attempts
+- claim_clip_feedback: take one report. Returns `attemptId`, the clip, and the playbook for the report's reason. Fails while another attempt is working (`takeOver` for a dead run)
+- finish_clip_feedback: close with `fixed` / `no_change_needed` (resolves the report), `needs_review` (a person compares and accepts), or `could_not_fix`. Returns the diff
+
+Studio's **Send to agent** posts the same report to Grok Bot or OpenBot by webhook; the bot then calls claim and finish like anyone else.
 
 ## Thumbnails (Hana)
 

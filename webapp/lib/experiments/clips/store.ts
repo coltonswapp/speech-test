@@ -68,6 +68,11 @@ export async function writeClipDraft(draft: ClipDraft): Promise<ClipDraft> {
   return next;
 }
 
+export async function readClipAudio(id: string): Promise<Buffer | null> {
+  if (!isValidClipId(id) || !(await objectExists(clipAudioKey(id)))) return null;
+  return getObject(clipAudioKey(id));
+}
+
 export async function writeClipAudio(id: string, wav: Buffer): Promise<void> {
   await putObject(clipAudioKey(id), wav, "audio/wav");
 }

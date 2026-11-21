@@ -9,8 +9,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EditorSection } from "@/components/experiments/clips/editor-section";
+import {
+  AttemptCard,
+  latestNeedsReview,
+  SendToAgentButton,
+} from "@/components/experiments/clips/clip-agent-attempts";
 import { formatApiError } from "@/lib/api-error";
-import type { ClipFeedbackRow, ClipRatingCounts } from "@/lib/clip-feedback/admin";
+import type { ClipRatingCounts } from "@/lib/clip-feedback/admin";
+import type { ClipFeedbackWithAttempts } from "@/lib/clip-agent/store";
+import { resolvedNoteFor, type ClipAgentTarget } from "@/lib/clip-agent/schema";
 import {
   CLIP_FEEDBACK_REASONS,
   type ClipFeedbackReason,
@@ -41,10 +48,14 @@ const STATUS_LABELS: Record<ClipFeedbackStatus, string> = {
 
 type StatusFilter = ClipFeedbackStatus | "issues" | "all";
 
+type ClipFeedbackRow = ClipFeedbackWithAttempts;
+
 type FeedbackResponse = {
   rows: ClipFeedbackRow[];
   counts: ClipRatingCounts | null;
   openIssues: number;
+  /** Agents "Send to agent" can reach (webhook env set). */
+  agentTargets: ClipAgentTarget[];
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -63,19 +74,19 @@ const feedbackApi = {
     if (params.reason) query.set("reason", params.reason);
     return request<FeedbackResponse>(`/api/experiments/clip-feedback?${query}`);
   },
-  setStatus: (id: string, status: ClipFeedbackStatus) =>
+  setStatus: (id: string, status: ClipFeedbackStatus, note?: string) =>
     request<{ ok: true }>("/api/experiments/clip-feedback", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify({ id, status, note }),
     }),
 };
 
 function useSetStatus() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: ClipFeedbackStatus }) =>
-      feedbackApi.setStatus(id, status),
+    mutationFn: ({ id, status, note }: { id: string; status: ClipFeedbackStatus; note?: string }) =>
+      feedbackApi.setStatus(id, status, note),
     onSuccess: (_, { status }) => {
       toast.success(status === "open" ? "Reopened" : `Marked ${STATUS_LABELS[status].toLowerCase()}`);
       void queryClient.invalidateQueries({ queryKey: ["clip-feedback"] });
@@ -134,10 +145,20 @@ function LineQuote({ row }: { row: ClipFeedbackRow }) {
   );
 }
 
-function FeedbackItem({ row, showClip }: { row: ClipFeedbackRow; showClip: boolean }) {
+function FeedbackItem({
+  row,
+  showClip,
+  agentTargets,
+}: {
+  row: ClipFeedbackRow;
+  showClip: boolean;
+  agentTargets: ClipAgentTarget[];
+}) {
   const setStatus = useSetStatus();
   const busy = setStatus.isPending;
   const isIssue = row.status !== null;
+  const review = row.status === "open" ? latestNeedsReview(row.attempts) : null;
+  const agentBusy = row.attempts.some((a) => a.status === "dispatched" || a.status === "working");
 
   return (
     <li className="flex flex-col gap-2 rounded-lg border border-border/60 p-3">
@@ -161,6 +182,8 @@ function FeedbackItem({ row, showClip }: { row: ClipFeedbackRow; showClip: boole
             {STATUS_LABELS[row.status]}
           </Badge>
         ) : null}
+        {review ? <Badge className="bg-amber-500 text-white">Needs review</Badge> : null}
+        {row.status === "open" && agentBusy ? <Badge variant="outline">Agent working</Badge> : null}
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">
           {formatDate(row.createdAt)}
         </span>
@@ -193,6 +216,26 @@ function FeedbackItem({ row, showClip }: { row: ClipFeedbackRow; showClip: boole
           <span className="ml-auto flex gap-1">
             {row.status === "open" ? (
               <>
+                {review ? (
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() =>
+                      setStatus.mutate({
+                        id: row.id,
+                        status: "resolved",
+                        note: `Accepted: ${resolvedNoteFor(review.agent, review.id, review.summary ?? "")}`,
+                      })
+                    }
+                  >
+                    Accept fix
+                  </Button>
+                ) : null}
+                <SendToAgentButton
+                  feedbackId={row.id}
+                  targets={agentTargets}
+                  disabled={busy || agentBusy}
+                />
                 <Button
                   size="sm"
                   variant="outline"
@@ -232,6 +275,14 @@ function FeedbackItem({ row, showClip }: { row: ClipFeedbackRow; showClip: boole
           </span>
         ) : null}
       </div>
+
+      {row.attempts.length > 0 ? (
+        <div className="flex flex-col gap-1.5">
+          {row.attempts.map((attempt) => (
+            <AttemptCard key={attempt.id} attempt={attempt} />
+          ))}
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -285,7 +336,12 @@ export function ClipFeedbackSection({ clipId }: { clipId: string }) {
           {shown.length > 0 ? (
             <ul className="flex flex-col gap-2">
               {shown.map((row) => (
-                <FeedbackItem key={row.id} row={row} showClip={false} />
+                <FeedbackItem
+                  key={row.id}
+                  row={row}
+                  showClip={false}
+                  agentTargets={query.data?.agentTargets ?? []}
+                />
               ))}
             </ul>
           ) : (
@@ -330,7 +386,8 @@ export function ClipFeedbackInbox() {
         <h1 className="text-xl font-semibold tracking-tight">Clip feedback</h1>
         <p className="text-sm text-muted-foreground">
           What learners reported from the app: problems with a clip or one of its lines, and
-          thumbs-downs with a reason. Fix the clip in its editor, then resolve the report.
+          thumbs-downs with a reason. Fix the clip in its editor and resolve the report, or send it
+          to an agent: its attempt shows what it changed on the clip.
         </p>
       </div>
 
@@ -376,7 +433,12 @@ export function ClipFeedbackInbox() {
       ) : (
         <ul className="flex flex-col gap-2">
           {rows.map((row) => (
-            <FeedbackItem key={row.id} row={row} showClip />
+            <FeedbackItem
+              key={row.id}
+              row={row}
+              showClip
+              agentTargets={query.data?.agentTargets ?? []}
+            />
           ))}
         </ul>
       )}

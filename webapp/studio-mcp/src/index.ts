@@ -24,6 +24,7 @@ import {
 import { analyzeScenario } from "./flags.ts";
 import { registerClipTools } from "./clips.ts";
 import { registerQueueAddTools } from "./queue-add.ts";
+import { registerFeedbackTools } from "./feedback.ts";
 
 function jsonResult(data: unknown) {
   return {
@@ -668,6 +669,7 @@ server.registerTool(
 
 registerClipTools(server);
 registerQueueAddTools(server);
+registerFeedbackTools(server);
 
 async function main() {
   const transport = new StdioServerTransport();

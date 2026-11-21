@@ -582,3 +582,44 @@ export const clipFeedback = pgTable(
     uniqueIndex("clip_feedback_rating_uniq").on(t.clipId, t.userId).where(sql`kind = 'rating'`),
   ]
 );
+
+// --- Agent attempts at clip feedback (docs/clip-agent-tickets-plan.md) ---
+// One row per try at one report. Created by scripts/clip-agent-attempt-table.ts
+// (CLIP_AGENT_ATTEMPT_DDL in lib/clip-agent/schema.ts).
+
+export const clipAgentAttempt = pgTable(
+  "clip_agent_attempt",
+  {
+    id: text("id").primaryKey(), // att_<random>
+    /** clip_feedback.id */
+    feedbackId: text("feedback_id").notNull(),
+    clipId: text("clip_id").notNull(),
+    /** grokbot | openbot, or the name a claiming agent gave. */
+    agent: text("agent").notNull(),
+    /** Studio session email, or `agent-token`. */
+    dispatchedBy: text("dispatched_by").notNull(),
+    instructions: text("instructions"),
+    /** dispatched | working | done | failed */
+    status: text("status").notNull(),
+    /** Webhook result: { status?, error?, at }. */
+    delivery: jsonb("delivery"),
+    runUrl: text("run_url"),
+    /** ClipSnapshot at claim and at finish (lib/clip-agent/snapshot.ts). */
+    before: jsonb("before"),
+    after: jsonb("after"),
+    /** fixed | no_change_needed | needs_review | could_not_fix */
+    outcome: text("outcome"),
+    summary: text("summary"),
+    /** Pipeline runs on the clip while the attempt was open (from its usage log), set at finish. */
+    runs: jsonb("runs"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("clip_agent_attempt_feedback_idx").on(t.feedbackId, t.createdAt),
+    index("clip_agent_attempt_clip_idx").on(t.clipId),
+    index("clip_agent_attempt_status_idx").on(t.status),
+  ]
+);

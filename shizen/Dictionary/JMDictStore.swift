@@ -514,12 +514,18 @@ final class JMDictStore {
         }
         // MeCab often splits 初めまして as 初め+まして. The only exact 初め row is
         // the rare ぞめ suffix; extend to the longer greeting when it is on the page.
+        // Kana the extended headword adds after the word (大食 + い → 大食い). That kana is
+        // already on the page, so it must not be repeated in the ruby.
+        var extendedKana = ""
         if let longer = kanaExtendedExactMatch(
             wordSurface: trimmedWord,
             rubySurface: trimmedRuby,
             range: range,
             in: sentence
         ) {
+            if longer.hasPrefix(lookupExpression), lookupExpression == trimmedWord {
+                extendedKana = String(longer.dropFirst(trimmedWord.count))
+            }
             lookupExpression = longer
         }
 
@@ -568,6 +574,13 @@ final class JMDictStore {
                        chosenLemmaReading.count > prefix.count {
                         return String(chosenLemmaReading.dropFirst(prefix.count))
                     }
+                }
+                return rubyReading
+            }
+            if !extendedKana.isEmpty, trimmedRuby == trimmedWord {
+                if chosenLemmaReading.hasSuffix(extendedKana),
+                   chosenLemmaReading.count > extendedKana.count {
+                    return String(chosenLemmaReading.dropLast(extendedKana.count))
                 }
                 return rubyReading
             }

@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 // Agent attempts on a learner report (docs/clip-agent-tickets-plan.md): Send
 // to agent, and one card per attempt with what changed on the clip.
 
-const OUTCOME_LABELS: Record<ClipAgentOutcome, string> = {
+export const OUTCOME_LABELS: Record<ClipAgentOutcome, string> = {
   fixed: "Fixed",
   no_change_needed: "No change needed",
   needs_review: "Needs review",
@@ -242,7 +242,7 @@ function DiffView({ diff }: { diff: ClipSnapshotDiff }) {
   );
 }
 
-const STATUS_VARIANT: Record<ClipAgentAttemptView["status"], "default" | "secondary" | "destructive" | "outline"> = {
+export const STATUS_VARIANT: Record<ClipAgentAttemptView["status"], "default" | "secondary" | "destructive" | "outline"> = {
   dispatched: "outline",
   working: "default",
   done: "secondary",

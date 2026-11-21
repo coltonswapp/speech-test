@@ -23,26 +23,13 @@ import {
   type ClipFeedbackStatus,
 } from "@/lib/clip-feedback/schema";
 import { cn } from "@/lib/utils";
+import { CLIP_REASON_LABELS, ISSUE_STATUS_LABELS } from "@/lib/content-issues/labels";
 
 // Learner feedback from the app (POST /api/client/clips/[id]/feedback): thumbs
 // and "Report an issue". Content Issues links back to individual clips.
 
-/** Same wording as the app's report screen (ClipFeedback.swift). */
-const REASON_LABELS: Record<ClipFeedbackReason, string> = {
-  translation: "Bad translation",
-  tokenization: "Words split wrong",
-  reading: "Wrong reading",
-  timing: "Subtitles out of sync",
-  video: "Video problem",
-  other: "Something else",
-};
-
-const STATUS_LABELS: Record<ClipFeedbackStatus, string> = {
-  open: "Open",
-  resolved: "Resolved",
-  wontfix: "Won’t fix",
-  duplicate: "Duplicate",
-};
+const REASON_LABELS = CLIP_REASON_LABELS;
+const STATUS_LABELS = ISSUE_STATUS_LABELS;
 
 type StatusFilter = ClipFeedbackStatus | "issues" | "all";
 
@@ -355,15 +342,40 @@ export function ClipFeedbackSection({ clipId }: { clipId: string }) {
 }
 
 /** Uses the same cache as the editor so triage and attempt actions refresh the detail. */
-export function ClipIssueDetail({id}:{id:string}) {
-  const query = useQuery({queryKey:["clip-feedback","detail",id],queryFn:()=>request<FeedbackResponse>("/api/experiments/clip-feedback?id="+encodeURIComponent(id))});
-  if (query.isPending) return <Skeleton className="h-28"/>;
-  if (query.isError) return <p role="alert">{query.error.message}</p>;
+export function ClipIssueDetail({ id }: { id: string }) {
+  const query = useQuery({
+    queryKey: ["clip-feedback", "detail", id],
+    queryFn: () => request<FeedbackResponse>("/api/experiments/clip-feedback?id=" + encodeURIComponent(id)),
+  });
+  if (query.isPending) return <Skeleton className="h-40 w-full rounded-xl" />;
+  if (query.isError) return <p role="alert" className="text-sm text-destructive">{query.error.message}</p>;
   const row = query.data.rows[0];
-  const active = row?.attempts.find(a => a.status === "dispatched" || a.status === "working");
-  if (!row) return <p>Report not found.</p>;
-  return <><ul><FeedbackItem row={row} showClip agentTargets={query.data.agentTargets}/></ul>
-    {active && <RecoverIssueAttempt issueId={"clip-" + id} attemptId={active.id} onChange={() => void query.refetch()}/>}
-    {row.status === "open" && !query.data.agentTargets.length && <Link href="/settings/agents" className="underline">Configure dispatch agents</Link>}
-    {row.resolvedNote && <p>{row.resolvedNote}</p>}</>;
+  if (!row) return <p className="text-sm text-muted-foreground">Report not found.</p>;
+  const active = row.attempts.find((a) => a.status === "dispatched" || a.status === "working");
+  return (
+    <>
+      <ul>
+        <FeedbackItem row={row} showClip agentTargets={query.data.agentTargets} />
+      </ul>
+      {row.resolvedNote ? (
+        <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-3 text-sm">
+          <p className="mb-1 text-xs text-muted-foreground">
+            Resolution note{row.resolvedAt ? ` · ${formatDate(row.resolvedAt)}` : ""}
+          </p>
+          <p className="whitespace-pre-wrap">{row.resolvedNote}</p>
+        </div>
+      ) : null}
+      {row.status === "open" && !query.data.agentTargets.length ? (
+        <p className="text-sm text-muted-foreground">
+          No dispatch agents are available.{" "}
+          <Link href="/settings/agents" className="text-foreground underline-offset-2 hover:underline">
+            Configure agents
+          </Link>
+        </p>
+      ) : null}
+      {active ? (
+        <RecoverIssueAttempt issueId={"clip-" + id} attemptId={active.id} onChange={() => void query.refetch()} />
+      ) : null}
+    </>
+  );
 }

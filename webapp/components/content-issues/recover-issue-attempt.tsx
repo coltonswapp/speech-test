@@ -1,6 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { ChevronRightIcon, Loader2Icon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export function RecoverIssueAttempt({ issueId, attemptId, onChange }: {
   issueId: string;
@@ -33,13 +37,27 @@ export function RecoverIssueAttempt({ issueId, attemptId, onChange }: {
     }
   }
 
-  return <details className="rounded border p-3">
-    <summary className="cursor-pointer">Recover a stalled attempt</summary>
-    <form onSubmit={recover} className="mt-2 space-y-2">
-      <p>Confirm the dispatch or agent run has stopped before releasing this issue.</p>
-      <label className="block">Reason <input name="reason" required maxLength={500} className="rounded border p-1" /></label>
-      <button type="submit" disabled={busy} className="rounded border px-3 py-1">Stop attempt and release issue</button>
-      {error && <p role="alert">{error}</p>}
-    </form>
-  </details>;
+  const inputId = `recover-reason-${attemptId}`;
+  return (
+    <details className="group rounded-xl border border-border/60">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+        <ChevronRightIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-90" />
+        Recover a stalled attempt
+      </summary>
+      <form onSubmit={recover} className="flex flex-col gap-3 border-t border-border/60 p-4">
+        <p className="text-xs text-muted-foreground">
+          Confirm the dispatch or agent run has stopped before releasing this issue.
+        </p>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={inputId} className="text-xs">Reason</Label>
+          <Input id={inputId} name="reason" required maxLength={500} placeholder="e.g. Run crashed, no output" />
+        </div>
+        <Button type="submit" size="sm" variant="destructive" disabled={busy} className="self-start">
+          {busy ? <Loader2Icon className="animate-spin" /> : null}
+          Stop attempt and release issue
+        </Button>
+        {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+      </form>
+    </details>
+  );
 }

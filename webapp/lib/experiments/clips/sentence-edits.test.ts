@@ -139,6 +139,26 @@ describe("applyClipSplit", () => {
     assert.equal(result.draft.sentences.flatMap((s) => s.tokens ?? []).length, longTokens.length);
   });
 
+  it("drops spaces at the cut so pieces are stored trimmed", () => {
+    const text = "まずは、 これを見て";
+    const tokens = [token("まずは", 0.5), token("これ", 1.2), token("を", 1.5), token("見て", 1.7)];
+    const result = applyClipSplit(draft([line(text, tokens)]), { sentence: 0, atToken: 1 });
+    assert.ok(!("error" in result), "error" in result ? result.error : "");
+    assert.deepEqual(result.draft.sentences.map((s) => s.text), ["まずは、", "これを見て"]);
+  });
+
+  it("starts the next line with an opening bracket instead of leaving it dangling", () => {
+    const text = "彼は「行こう」と言った";
+    const tokens = [token("彼", 0), token("は", 0.2), token("行こう", 0.5), token("と", 1), token("言った", 1.2)];
+    const result = applyClipSplit(draft([line(text, tokens)]), { sentence: 0, atToken: 2 });
+    assert.ok(!("error" in result), "error" in result ? result.error : "");
+    assert.deepEqual(result.draft.sentences.map((s) => s.text), ["彼は", "「行こう」と言った"]);
+    // Closing punctuation still stays on the left.
+    const atTo = applyClipSplit(draft([line(text, tokens)]), { sentence: 0, atToken: 3 });
+    assert.ok(!("error" in atTo), "error" in atTo ? atTo.error : "");
+    assert.deepEqual(atTo.draft.sentences.map((s) => s.text), ["彼は「行こう」", "と言った"]);
+  });
+
   it("rejects a split that would drop tokens or miss a boundary", () => {
     const before = draft([line(longText, longTokens), neighbour]);
     assert.equal("error" in applyClipSplit(before, { sentence: 0, atToken: 0 }), true);
@@ -185,5 +205,15 @@ describe("applyClipMerge", () => {
     assert.equal(result.draft.sentences[0]!.en, "First of all, Look at this.");
     assert.equal(result.draft.sentences[1], neighbour);
     assert.equal(result.draft.highlights?.grammarPatterns?.[0]?.sourceSpokenStart, 1);
+  });
+
+  it("keeps existing English when some merged lines have none", () => {
+    const before = draft([
+      line("まずは、", [longTokens[0]!], { en: "First of all," }),
+      { ...line("これを見てください。", longTokens.slice(1)), en: undefined },
+    ]);
+    const result = applyClipMerge(before, { sentence: 0 });
+    assert.ok(!("error" in result), "error" in result ? result.error : "");
+    assert.equal(result.draft.sentences[0]!.en, "First of all,");
   });
 });

@@ -11,7 +11,8 @@ export const CLIP_MAX_SENTENCES = 200;
 
 /**
  * `atToken` is the first token of the next line (1…n−1), or several of those
- * in order. Punctuation between tokens stays on the left.
+ * in order. Punctuation between tokens stays on the left, except opening
+ * brackets and quotes, which start the next line. Spaces at a cut are dropped.
  */
 export const clipSplitSchema = z.object({
   sentence: z.number().int().min(0),
@@ -19,7 +20,10 @@ export const clipSplitSchema = z.object({
     z.number().int().min(1),
     z.array(z.number().int().min(1)).min(1).max(CLIP_MAX_SENTENCES - 1),
   ]),
-  /** One English string per new line. Empty string leaves that line untranslated. */
+  /**
+   * One English string per new line. Empty string leaves that line untranslated.
+   * Omit to clear: the original line's English no longer fits any one piece.
+   */
   english: z.array(z.string().max(1000)).max(CLIP_MAX_SENTENCES).optional(),
 });
 export type ClipSplit = z.infer<typeof clipSplitSchema>;
@@ -28,7 +32,7 @@ export type ClipSplit = z.infer<typeof clipSplitSchema>;
 export const clipMergeSchema = z.object({
   sentence: z.number().int().min(0),
   count: z.number().int().min(1).max(CLIP_MAX_SENTENCES - 1).optional(),
-  /** English for the joined line. Empty string clears it. Omit to join existing English. */
+  /** English for the joined line. Empty string clears it. Omit to join the lines' existing English (blank lines skipped). */
   english: z.string().max(1000).optional(),
 });
 export type ClipMerge = z.infer<typeof clipMergeSchema>;
@@ -64,6 +68,26 @@ function assignEnglish(pieces: ClipSentence[], english: string[] | undefined): C
     }
     return { ...piece, en };
   });
+}
+
+/** Opening brackets and quotes (「『（“‘). Straight quotes open and close, so they stay left. */
+const OPENING_RE = /[\p{Ps}\p{Pi}]/u;
+const SPACE_RE = /\s/u;
+
+/**
+ * Where the next line starts within the gap between two tokens
+ * (`gapStart`…`gapEnd`): at the first opening bracket or quote, else at the
+ * next token. Callers trim, so spaces in the gap are dropped.
+ */
+function cutOffset(text: string, gapStart: number, gapEnd: number): number {
+  for (let i = gapStart; i < gapEnd; i++) {
+    if (OPENING_RE.test(text[i]!)) return i;
+  }
+  return gapEnd;
+}
+
+function withoutSpaces(text: string): string {
+  return [...text].filter((ch) => !SPACE_RE.test(ch)).join("");
 }
 
 function copyLineMeta(sentence: ClipSentence, text: string, tokens: NonNullable<ClipSentence["tokens"]>): ClipSentence {
@@ -119,9 +143,10 @@ export function applyClipSplit(draft: ClipDraft, input: ClipSplit): ClipEditResu
   for (let i = 0; i < bounds.length - 1; i++) {
     const from = bounds[i]!;
     const to = bounds[i + 1]!;
-    const charStart = from === 0 ? 0 : ranges[from]!.start;
-    const charEnd = to === tokens.length ? sentence.text.length : ranges[to]!.start;
-    const text = sentence.text.slice(charStart, charEnd);
+    const charStart = from === 0 ? 0 : cutOffset(sentence.text, ranges[from - 1]!.end, ranges[from]!.start);
+    const charEnd = to === tokens.length ? sentence.text.length : cutOffset(sentence.text, ranges[to - 1]!.end, ranges[to]!.start);
+    // Every other path stores trimmed lines; a trailing space would read as an edit later.
+    const text = sentence.text.slice(charStart, charEnd).trim();
     const pieceTokens = tokens.slice(from, to);
     if (pieceTokens.length === 0) {
       return { error: "Each new line needs at least one token." };
@@ -130,7 +155,7 @@ export function applyClipSplit(draft: ClipDraft, input: ClipSplit): ClipEditResu
     if (problem) return { error: problem };
     pieces.push(copyLineMeta(sentence, text, pieceTokens));
   }
-  if (pieces.map((p) => p.text).join("") !== sentence.text) {
+  if (withoutSpaces(pieces.map((p) => p.text).join("")) !== withoutSpaces(sentence.text)) {
     return { error: "Split pieces must join back to the original sentence." };
   }
   const withEnglish = assignEnglish(pieces, input.english);
@@ -191,8 +216,9 @@ export function applyClipMerge(draft: ClipDraft, input: ClipMerge): ClipEditResu
     const en = input.english.trim();
     if (en) merged.en = en;
   } else {
-    const english = group.map((s) => s.en?.trim() ?? "");
-    if (english.every(Boolean)) merged.en = english.join(" ");
+    // Keep whatever English exists; a line without any must not wipe the rest.
+    const english = group.map((s) => s.en?.trim() ?? "").filter(Boolean);
+    if (english.length > 0) merged.en = english.join(" ");
   }
 
   const sentences = [

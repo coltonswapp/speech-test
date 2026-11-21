@@ -9,6 +9,8 @@ const RULES = `Rules:
 - Fix only what the report is about. Note other problems you see in the summary instead of fixing them.
 - Never delete_clip. If a clip is clearly broken beyond repair, patch_clip deprecated {reason} and finish could_not_fix.
 - When you change transcript lines, send sentences and hand-written english in the same patch_clip call, then run_clip_steps mode "missing". Don't rely on the Translate step for lines you wrote.
+- To break a long subtitle line, use patch_clip split {sentence, atToken, english?}. That keeps tokens, timings, alignment and the feed verdict. Don't send sentences just to move a line break — that retokenizes and can change readings.
+- To join adjacent lines, use patch_clip merge {sentence, count?, english?}. Same preservation.
 - Unsure (models disagree, the fix would touch more than the reported lines, or you can't tell from the evidence): finish needs_review and say what a person should compare. Applying a fix and asking for review is fine.
 - Always call finish_clip_feedback, also when you give up (could_not_fix). Summary: first line = cause and fix in one sentence; then the details.`;
 

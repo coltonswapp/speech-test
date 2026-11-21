@@ -714,9 +714,11 @@ export function registerClipTools(server: McpServer) {
     {
       title: "Edit clip",
       description: [
-        "Edit a clip draft (PATCH /api/experiments/clips/:id). Send only what changes. Fields are applied in this order: sentences, english, tokens, clearFlags, highlights, jlptLevel, feedEligible, tags, deprecated, shiftSec, orientation.",
-        "• sentences: the FULL transcript, one sentence per entry. Any change drops alignment and the automatic feed verdict (a hand-set feed answer stays); changed lines lose their tokens. Afterwards run run_clip_steps mode \"missing\" (tokenize → align → translate → level → tag → feed).",
-        "• english: one string per sentence, same count and order as the saved transcript (send sentences first in the same call if both change). Empty string clears a line.",
+        "Edit a clip draft (PATCH /api/experiments/clips/:id). Send only what changes. Fields are applied in this order: sentences, split, merge, english, tokens, clearFlags, highlights, jlptLevel, feedEligible, tags, deprecated, shiftSec, orientation.",
+        "• sentences: the FULL transcript, one sentence per entry. Any change drops alignment and the automatic feed verdict (a hand-set feed answer stays); changed lines lose their tokens. Afterwards run run_clip_steps mode \"missing\" (tokenize → align → translate → level → tag → feed). Do not use this just to break or join subtitle lines.",
+        "• split {sentence, atToken, english?}: break one line at token boundaries. atToken is the first token of the next line (1…n−1), or a list of those. Pieces join back to the original Japanese (punctuation between tokens stays on the left). Each token keeps its text, reading and timing; other lines, alignment and the feed verdict stay. english: one string per new line; omit or empty to fill in later. No tokenize or align needed.",
+        "• merge {sentence, count?, english?}: join sentence with the next `count` lines (default 1). Tokens concatenate; timings, alignment and feed stay. english optional; omit to join existing English with a space.",
+        "• english: one string per sentence, same count and order as the saved transcript (send sentences / split / merge first in the same call if the line count changes). Empty string clears a line.",
         "• tokens: hand-fix one sentence's tokens {sentence, tokens:[{text, reading?}]}. Token texts must join to exactly that sentence. Merges and reading fixes keep their timings; split halves need re-aligning (run_clip_steps steps [\"align\"], onlyUntimed).",
         "• clearFlags {sentence, cleared}: mark a line's warnings as reviewed.",
         "• highlights: replace vocabulary / grammarPatterns / contextNotes (grammar source indices are sentence indices); null clears.",
@@ -729,6 +731,29 @@ export function registerClipTools(server: McpServer) {
       inputSchema: {
         id: z.string().regex(CLIP_ID),
         sentences: z.array(z.string()).max(200).optional(),
+        split: z
+          .object({
+            sentence: z.number().int().min(0),
+            atToken: z
+              .union([
+                z.number().int().min(1),
+                z.array(z.number().int().min(1)).min(1).max(199),
+              ])
+              .describe("First token of the next line (1…n−1), or several of those. Punctuation between tokens stays on the left."),
+            english: z
+              .array(z.string().max(1000))
+              .max(200)
+              .optional()
+              .describe("One string per new line. Omit or empty to fill in later."),
+          })
+          .optional(),
+        merge: z
+          .object({
+            sentence: z.number().int().min(0),
+            count: z.number().int().min(1).max(199).optional().describe("How many following lines to join in. Default 1."),
+            english: z.string().max(1000).optional().describe("English for the joined line. Omit to join existing English with a space."),
+          })
+          .optional(),
         english: z.array(z.string().max(1000)).max(200).optional(),
         tokens: z
           .object({

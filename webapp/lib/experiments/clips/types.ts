@@ -384,7 +384,8 @@ export function clipHasUntimedLines(draft: ClipDraft): boolean {
 /**
  * Apply edited sentence texts: keep tokens for lines whose text is unchanged,
  * drop all timings (the aligner times the whole script at once, so any edit
- * can shift its neighbours).
+ * can shift its neighbours). Changed lines lose their tokens. Breaking a line
+ * at a token boundary without retokenizing is applyClipSplit / applyClipMerge.
  */
 export function applySentenceEdits(draft: ClipDraft, texts: string[]): ClipSentence[] {
   const cleaned = texts.map((t) => t.trim()).filter((t) => t.length > 0);

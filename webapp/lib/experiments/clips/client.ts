@@ -77,6 +77,10 @@ export const clipsApi = {
     id: string,
     body: {
       sentences?: string[];
+      /** Break one line at token boundaries without dropping tokens or alignment. */
+      split?: { sentence: number; atToken: number | number[]; english?: string[] };
+      /** Join a line with the following `count` lines (default 1). */
+      merge?: { sentence: number; count?: number; english?: string };
       shiftSec?: number;
       orientation?: ClipOrientation;
       english?: string[];

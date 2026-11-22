@@ -12,3 +12,12 @@ if (!connectionString) {
 
 const queryClient = postgres(connectionString);
 export const db = drizzle(queryClient, { schema });
+
+let ended = false;
+
+/** Close the postgres-js pool so standalone scripts can exit. */
+export async function closeStandaloneDb(): Promise<void> {
+  if (ended) return;
+  ended = true;
+  await queryClient.end({ timeout: 5 });
+}

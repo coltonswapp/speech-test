@@ -8,6 +8,7 @@
 //
 //   pnpm clip:supercut --word ちゃう --limit 10 --pad 0.8 --out /tmp/chau.mp4
 //   pnpm clip:supercut --word ています --feed --burn-in --dry-run
+//   pnpm clip:supercut --word ちゃう --segments-dir /tmp/chau-clips --no-concat
 //
 // Needs DATABASE_URL (clip_token_index; apply 0026 then `pnpm clip:index-backfill
 // --write`) plus yt-dlp and ffmpeg on PATH. `--studio http://localhost:3000`
@@ -59,8 +60,11 @@ async function searchViaStudio(args: SupercutArgs): Promise<SupercutHit[]> {
   return body?.hits ?? [];
 }
 
+let closeDb: (() => Promise<void>) | null = null;
+
 async function searchViaDb(args: SupercutArgs): Promise<SupercutHit[]> {
-  const { db } = await import("../lib/db/standalone-client");
+  const { closeStandaloneDb, db } = await import("../lib/db/standalone-client");
+  closeDb = closeStandaloneDb;
   const { isUndefinedTable, searchClipTokenIndex } = await import(
     "../lib/experiments/clips/token-index-db"
   );
@@ -81,6 +85,13 @@ async function searchViaDb(args: SupercutArgs): Promise<SupercutHit[]> {
     }
     throw error;
   }
+}
+
+async function closeOpenedDb(): Promise<void> {
+  if (!closeDb) return;
+  const end = closeDb;
+  closeDb = null;
+  await end();
 }
 
 async function downloadSection(
@@ -133,7 +144,7 @@ async function main() {
     return;
   }
   if (hits.length === 0) {
-    throw new Error("No hits. Nothing to stitch.");
+    throw new Error("No hits.");
   }
   requireTool("yt-dlp");
   requireTool("ffmpeg");
@@ -156,17 +167,29 @@ async function main() {
       lineText: hit.lineText,
       matchedText: hit.matchedText,
       charStart: hit.charStart,
+      clipId: hit.clipId,
+      videoId: hit.videoId,
+      lineIndex: hit.lineIndex,
+      startSec: hit.startSec,
+      endSec: hit.endSec,
+      paddedStartSec: range.startSec,
+      paddedEndSec: range.endSec,
     });
   }
   if (local.length === 0) {
     throw new Error("Every download failed. See warnings above.");
   }
-  const outPath = path.resolve(args.out ?? defaultOutPath(args.word));
-  await mkdir(path.dirname(outPath), { recursive: true });
-  await stitchLocalClips({
+  const concat = !args.noConcat;
+  const outPath = concat ? path.resolve(args.out ?? defaultOutPath(args.word)) : null;
+  if (outPath) await mkdir(path.dirname(outPath), { recursive: true });
+  const segmentsDir = args.segmentsDir ? path.resolve(args.segmentsDir) : null;
+  const result = await stitchLocalClips({
     ffmpeg: "ffmpeg",
     clips: local,
     outPath,
+    segmentsDir,
+    word: args.word,
+    pad: args.pad,
     width: args.width,
     height: args.height,
     fps: args.fps,
@@ -174,10 +197,23 @@ async function main() {
     fontPath: findFontPath(),
     workDir,
   });
-  console.log(`Wrote ${outPath} (${local.length} clip${local.length === 1 ? "" : "s"}).`);
+  if (result.outPath) {
+    console.log(`Wrote ${result.outPath} (${local.length} clip${local.length === 1 ? "" : "s"}).`);
+  }
+  if (result.manifestPath) {
+    console.log(`Wrote ${result.segmentFiles.length} segments and ${result.manifestPath}.`);
+  }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+async function run() {
+  try {
+    await main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    await closeOpenedDb();
+    process.exit(1);
+  }
+  await closeOpenedDb();
+}
+
+void run();

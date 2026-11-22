@@ -1,7 +1,7 @@
 import "server-only";
-import { and, desc, eq, isNotNull, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { clipFeedback, clipIndex } from "@/lib/db/schema";
+import { clipAgentAttempt, clipFeedback, clipIndex } from "@/lib/db/schema";
 import type { ClipSummary } from "@/lib/experiments/clips/types";
 import type { ClipFeedbackReason, ClipFeedbackStatus, ClipLineSnapshot } from "@/lib/clip-feedback/schema";
 
@@ -40,14 +40,50 @@ export type ClipFeedbackQuery = {
   reason?: ClipFeedbackReason | null;
   before?: { timestamp: string; id?: string; inclusive?: boolean };
   limit?: number;
+  /**
+   * Open reports whose latest done/working attempt finished `needs_review`.
+   * The report status stays `open`; this is derived from clip_agent_attempt.
+   */
+  latestNeedsReview?: boolean;
 };
+
+function mapClipFeedbackRow(
+  f: typeof clipFeedback.$inferSelect,
+  summary: ClipSummary | null,
+  cursorTimestamp: string,
+): ClipFeedbackRow {
+  return {
+    id: f.id,
+    cursorTimestamp,
+    clipId: f.clipId,
+    videoId: summary?.videoId ?? null,
+    videoStartSec: summary?.startSec ?? 0,
+    clipTitle: summary ? (summary.videoTitleEn ?? summary.videoTitle) : null,
+    userId: f.userId,
+    kind: f.kind as ClipFeedbackRow["kind"],
+    rating: f.rating as ClipFeedbackRow["rating"],
+    reason: f.reason as ClipFeedbackRow["reason"],
+    note: f.note,
+    sentenceIndex: f.sentenceIndex,
+    tokenPosition: f.tokenPosition,
+    line: (f.snapshot as ClipLineSnapshot | null) ?? null,
+    appVersion: f.appVersion,
+    appBuild: f.appBuild,
+    status: f.status as ClipFeedbackRow["status"],
+    resolvedAt: f.resolvedAt?.toISOString() ?? null,
+    resolvedNote: f.resolvedNote,
+    createdAt: f.createdAt.toISOString(),
+    updatedAt: f.updatedAt.toISOString(),
+  };
+}
 
 export async function listClipFeedback(q: ClipFeedbackQuery): Promise<ClipFeedbackRow[]> {
   const where: SQL[] = [];
   if (q.id) where.push(eq(clipFeedback.id, q.id));
   if (q.clipId) where.push(eq(clipFeedback.clipId, q.clipId));
   const status = q.status ?? (q.id ? "all" : "issues");
-  if (status === "issues") where.push(isNotNull(clipFeedback.status));
+  if (q.latestNeedsReview) where.push(eq(clipFeedback.status, "open"));
+  else if (status === "issues") where.push(isNotNull(clipFeedback.status));
   else if (status !== "all") where.push(eq(clipFeedback.status, status));
   if (q.reason) where.push(eq(clipFeedback.reason, q.reason));
 
@@ -59,44 +95,56 @@ export async function listClipFeedback(q: ClipFeedbackQuery): Promise<ClipFeedba
       : sql`(${clipFeedback.createdAt}, ${clipFeedback.id}) < (${timestamp}::timestamptz, ${id})`);
   }
 
+  const columns = {
+    feedback: clipFeedback,
+    summary: clipIndex.summary,
+    cursorTimestamp: sql<string>`to_char(${clipFeedback.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"000Z"')`,
+  };
+  const limit = Math.min(q.limit ?? 200, 500);
+  const filter = where.length ? and(...where) : undefined;
+
+  if (q.latestNeedsReview) {
+    const latestAttempt = db
+      .selectDistinctOn([clipAgentAttempt.feedbackId], {
+        feedbackId: clipAgentAttempt.feedbackId,
+        status: clipAgentAttempt.status,
+        outcome: clipAgentAttempt.outcome,
+      })
+      .from(clipAgentAttempt)
+      .where(inArray(clipAgentAttempt.status, ["done", "working"]))
+      .orderBy(clipAgentAttempt.feedbackId, desc(clipAgentAttempt.createdAt))
+      .as("latest_clip_attempt");
+    const rows = await db
+      .select(columns)
+      .from(clipFeedback)
+      .innerJoin(
+        latestAttempt,
+        and(
+          eq(clipFeedback.id, latestAttempt.feedbackId),
+          eq(latestAttempt.status, "done"),
+          eq(latestAttempt.outcome, "needs_review"),
+        ),
+      )
+      .leftJoin(clipIndex, eq(clipIndex.id, clipFeedback.clipId))
+      .where(filter)
+      .orderBy(desc(clipFeedback.createdAt), desc(clipFeedback.id))
+      .limit(limit);
+    return rows.map(({ feedback: f, summary, cursorTimestamp }) =>
+      mapClipFeedbackRow(f, summary as ClipSummary | null, cursorTimestamp),
+    );
+  }
+
   const rows = await db
-    .select({
-      feedback: clipFeedback,
-      summary: clipIndex.summary,
-      cursorTimestamp: sql<string>`to_char(${clipFeedback.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"000Z"')`,
-    })
+    .select(columns)
     .from(clipFeedback)
     .leftJoin(clipIndex, eq(clipIndex.id, clipFeedback.clipId))
-    .where(where.length ? and(...where) : undefined)
+    .where(filter)
     .orderBy(desc(clipFeedback.createdAt), desc(clipFeedback.id))
-    .limit(Math.min(q.limit ?? 200, 500));
+    .limit(limit);
 
-  return rows.map(({ feedback: f, summary, cursorTimestamp }) => {
-    const s = summary as ClipSummary | null;
-    return {
-      id: f.id,
-      cursorTimestamp,
-      clipId: f.clipId,
-      videoId: s?.videoId ?? null,
-      videoStartSec: s?.startSec ?? 0,
-      clipTitle: s ? (s.videoTitleEn ?? s.videoTitle) : null,
-      userId: f.userId,
-      kind: f.kind as ClipFeedbackRow["kind"],
-      rating: f.rating as ClipFeedbackRow["rating"],
-      reason: f.reason as ClipFeedbackRow["reason"],
-      note: f.note,
-      sentenceIndex: f.sentenceIndex,
-      tokenPosition: f.tokenPosition,
-      line: (f.snapshot as ClipLineSnapshot | null) ?? null,
-      appVersion: f.appVersion,
-      appBuild: f.appBuild,
-      status: f.status as ClipFeedbackRow["status"],
-      resolvedAt: f.resolvedAt?.toISOString() ?? null,
-      resolvedNote: f.resolvedNote,
-      createdAt: f.createdAt.toISOString(),
-      updatedAt: f.updatedAt.toISOString(),
-    };
-  });
+  return rows.map(({ feedback: f, summary, cursorTimestamp }) =>
+    mapClipFeedbackRow(f, summary as ClipSummary | null, cursorTimestamp),
+  );
 }
 
 export type ClipRatingCounts = { up: number; down: number; openIssues: number };

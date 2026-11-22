@@ -18,6 +18,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         LearnerFirestore.configure()
         Analytics.configure()
         AuthService.shared.start()
+        // Listens from launch, so a clip's menu already knows whether it's saved.
+        _ = SavedClipStore.shared
         return true
     }
 

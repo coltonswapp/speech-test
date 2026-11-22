@@ -49,16 +49,13 @@ final class FlashcardExperimentViewController: UIViewController {
         view.addSubview(stackView)
         view.addSubview(instructionsLabel)
 
+        let inset: CGFloat = 24
         NSLayoutConstraint.activate([
             stackView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
-            stackView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
-            stackView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
             stackView.bottomAnchor.constraint(equalTo: instructionsLabel.topAnchor, constant: -16),
-
-            instructionsLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
-            instructionsLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
             instructionsLabel.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
-        ])
+        ] + ContentColumn.horizontalConstraints(for: stackView, in: view, inset: inset)
+          + ContentColumn.horizontalConstraints(for: instructionsLabel, in: view, inset: inset))
 
         stackView.setDeck(cards)
     }

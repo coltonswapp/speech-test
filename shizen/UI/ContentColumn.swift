@@ -37,12 +37,46 @@ enum ContentColumn {
         maxWidth: CGFloat = readableWidth
     ) -> [NSLayoutConstraint] {
         let frame = scrollView.frameLayoutGuide
-        let fill = content.widthAnchor.constraint(equalTo: frame.widthAnchor, constant: -inset * 2)
-        fill.priority = .required - 1
         return [
             scrollView.contentLayoutGuide.widthAnchor.constraint(equalTo: frame.widthAnchor),
-            content.centerXAnchor.constraint(equalTo: scrollView.contentLayoutGuide.centerXAnchor),
-            content.widthAnchor.constraint(lessThanOrEqualTo: frame.widthAnchor, constant: -inset * 2),
+        ] + horizontalConstraints(
+            for: content,
+            centerX: frame.centerXAnchor,
+            width: frame.widthAnchor,
+            inset: inset,
+            maxWidth: maxWidth
+        )
+    }
+
+    /// Horizontal constraints for `content` in a non-scrolling `container`:
+    /// centered, `inset` from each edge, and no wider than `maxWidth`.
+    static func horizontalConstraints(
+        for content: UIView,
+        in container: UIView,
+        inset: CGFloat,
+        maxWidth: CGFloat = readableWidth
+    ) -> [NSLayoutConstraint] {
+        horizontalConstraints(
+            for: content,
+            centerX: container.centerXAnchor,
+            width: container.widthAnchor,
+            inset: inset,
+            maxWidth: maxWidth
+        )
+    }
+
+    private static func horizontalConstraints(
+        for content: UIView,
+        centerX: NSLayoutXAxisAnchor,
+        width: NSLayoutDimension,
+        inset: CGFloat,
+        maxWidth: CGFloat
+    ) -> [NSLayoutConstraint] {
+        let fill = content.widthAnchor.constraint(equalTo: width, constant: -inset * 2)
+        fill.priority = .required - 1
+        return [
+            content.centerXAnchor.constraint(equalTo: centerX),
+            content.widthAnchor.constraint(lessThanOrEqualTo: width, constant: -inset * 2),
             content.widthAnchor.constraint(lessThanOrEqualToConstant: maxWidth),
             fill,
         ]

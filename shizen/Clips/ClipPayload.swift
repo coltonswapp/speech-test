@@ -9,7 +9,7 @@
 import Foundation
 
 /// Video shape from Studio: "portrait" = 9:16 YouTube Short. Missing = landscape.
-nonisolated enum ClipOrientation: String, Decodable, Sendable {
+nonisolated enum ClipOrientation: String, Codable, Sendable {
     case landscape
     case portrait
 
@@ -21,7 +21,7 @@ nonisolated enum ClipOrientation: String, Decodable, Sendable {
 
 /// Catalog tags from Studio's Tag step. Values grow over time, so unknown ones
 /// are kept as plain strings and shown as-is.
-nonisolated struct ClipTags: Decodable, Hashable, Sendable {
+nonisolated struct ClipTags: Codable, Hashable, Sendable {
     /// anime, drama, comedy-skit, variety, vlog, streamer, explainer, how-to, interview, learner, other
     let format: String
     /// 0–3, most important first: food, travel, school, work, romance…
@@ -37,7 +37,7 @@ nonisolated struct ClipTags: Decodable, Hashable, Sendable {
 }
 
 /// How fast the clip is spoken (measured from word timings).
-nonisolated struct ClipPace: Decodable, Hashable, Sendable {
+nonisolated struct ClipPace: Codable, Hashable, Sendable {
     /// slow, natural, fast
     let label: String
     let charsPerSec: Double
@@ -90,7 +90,8 @@ extension ClipTags {
     }
 }
 
-nonisolated struct ClipSummary: Decodable, Hashable, Sendable {
+/// Encodable so a saved clip can keep its summary on the learner's account (`SavedClipStore`).
+nonisolated struct ClipSummary: Codable, Hashable, Sendable {
     let clipID: String
     let videoID: String
     let startSec: Double
@@ -131,6 +132,58 @@ nonisolated struct ClipSummary: Decodable, Hashable, Sendable {
         case inFeed = "in_feed"
         case tags
         case pace
+    }
+
+    init(
+        clipID: String,
+        videoID: String,
+        startSec: Double,
+        endSec: Double,
+        sentenceCount: Int,
+        previewJP: String,
+        orientation: ClipOrientation?,
+        jlptLevel: Int?,
+        title: String?,
+        titleEN: String?,
+        channelName: String?,
+        inFeed: Bool?,
+        tags: ClipTags?,
+        pace: ClipPace?
+    ) {
+        self.clipID = clipID
+        self.videoID = videoID
+        self.startSec = startSec
+        self.endSec = endSec
+        self.sentenceCount = sentenceCount
+        self.previewJP = previewJP
+        self.orientation = orientation
+        self.jlptLevel = jlptLevel
+        self.title = title
+        self.titleEN = titleEN
+        self.channelName = channelName
+        self.inFeed = inFeed
+        self.tags = tags
+        self.pace = pace
+    }
+
+    /// For a clip opened without a list row (a deep link): the same fields, from its payload.
+    init(payload: ClipPayload) {
+        self.init(
+            clipID: payload.clipID,
+            videoID: payload.media.videoID,
+            startSec: payload.media.startSec,
+            endSec: payload.media.endSec,
+            sentenceCount: payload.sentences.count,
+            previewJP: payload.sentences.first?.textJP ?? "",
+            orientation: payload.media.orientation,
+            jlptLevel: payload.jlptLevel,
+            title: payload.media.title,
+            titleEN: payload.media.titleEN,
+            channelName: payload.media.channelName,
+            inFeed: nil,
+            tags: payload.tags,
+            pace: payload.pace
+        )
     }
 
     init(from decoder: Decoder) throws {
@@ -238,6 +291,8 @@ nonisolated struct ClipPayload: Decodable, Sendable {
         let titleEN: String?
         let channelName: String?
         let channelURL: String?
+        /// Stable YouTube id when Studio has resolved it; may also be parsed from `channel_url`.
+        let channelID: String?
         let thumbnailURL: String?
 
         var isPortrait: Bool { orientation == .portrait }
@@ -252,6 +307,7 @@ nonisolated struct ClipPayload: Decodable, Sendable {
             case titleEN = "title_en"
             case channelName = "channel_name"
             case channelURL = "channel_url"
+            case channelID = "channel_id"
             case thumbnailURL = "thumbnail_url"
         }
     }

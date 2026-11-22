@@ -1,0 +1,1 @@
+../../../shizen/Dictionary/JMDictStore.swift

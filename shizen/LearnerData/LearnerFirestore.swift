@@ -36,6 +36,13 @@ enum LearnerFirestore {
             .collection("folders")
     }
 
+    static func savedClips(uid: String) -> CollectionReference {
+        Firestore.firestore()
+            .collection("users")
+            .document(uid)
+            .collection("savedClips")
+    }
+
     static func commit(_ data: [String: Any], to document: DocumentReference, merge: Bool = true) {
         document.setData(data, merge: merge) { error in
             guard let error else { return }

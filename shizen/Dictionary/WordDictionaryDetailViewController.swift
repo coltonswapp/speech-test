@@ -250,12 +250,13 @@ enum WordDictionaryDetailSheetPresenter {
         keepsTappedFormAsHeadword: Bool = false,
         ranksSenses: Bool = false,
         floating: FloatingSheetStyle? = nil,
+        analyticsSource: String? = nil,
         from viewController: UIViewController,
         animated: Bool = true
     ) {
         let trimmed = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        Analytics.track(.wordDetailOpened, ["from_sentence": sentence != nil])
+        Analytics.track(.wordDetailOpened, Self.wordDetailProperties(sentence: sentence, source: analyticsSource))
 
         DefinitionCalloutPresenter.shared.dismiss(animated: true)
 
@@ -276,6 +277,12 @@ enum WordDictionaryDetailSheetPresenter {
         }
         configureAsSheet(sheet, fullSheet: fullSheet)
         viewController.present(sheet, animated: animated)
+    }
+
+    private static func wordDetailProperties(sentence: String?, source: String?) -> [String: Any] {
+        var properties: [String: Any] = ["from_sentence": sentence != nil]
+        if let source { properties["source"] = source }
+        return properties
     }
 
     private static func configureAsSheet(_ sheet: UIViewController, fullSheet: Bool) {
@@ -302,12 +309,13 @@ enum WordDictionaryDetailSheetPresenter {
         sourceTitle: String? = nil,
         lineEnglish: String? = nil,
         allowsCommonUses: Bool = true,
+        analyticsSource: String? = nil,
         from viewController: UIViewController,
         animated: Bool = true
     ) {
         let trimmed = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        Analytics.track(.wordDetailOpened, ["from_sentence": sentence != nil])
+        Analytics.track(.wordDetailOpened, Self.wordDetailProperties(sentence: sentence, source: analyticsSource))
 
         DefinitionCalloutPresenter.shared.dismiss(animated: true)
 
@@ -336,6 +344,7 @@ enum WordDictionaryDetailSheetPresenter {
     /// Only one level deep: words in the example don't offer Common Uses again.
     static func pushExample(
         _ example: GeminiGrammarUsage.Example,
+        analyticsSource: String? = nil,
         from viewController: UIViewController,
         animated: Bool = true
     ) {
@@ -351,7 +360,8 @@ enum WordDictionaryDetailSheetPresenter {
             englishTranslation: example.english,
             tokens: tokens,
             showsListenControl: true,
-            allowsCommonUses: false
+            allowsCommonUses: false,
+            analyticsSource: analyticsSource
         )
         if let nav = viewController.navigationController {
             nav.pushViewController(scrub, animated: animated)

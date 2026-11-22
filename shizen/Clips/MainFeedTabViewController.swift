@@ -50,6 +50,7 @@ final class MainFeedTabViewController: UIViewController {
         guard active != isActive else { return }
         isActive = active
         if active, feed == nil { installFeed() }
+        if active { Analytics.track(.clipFeedOpened, ["source": ClipAnalytics.mainTab]) }
         feed?.setActive(active)
         if active {
             scheduleImmersive()
@@ -120,6 +121,7 @@ final class MainFeedTabViewController: UIViewController {
 
     private func installFeed() {
         let feed = ClipFeedViewController(learnerLevel: nil, presentation: .mainTab)
+        feed.analyticsSource = ClipAnalytics.mainTab
         feed.onClipChanged = { [weak self] in
             // A new clip restarts the countdown (e.g. after collapsing back to the tabs).
             self?.scheduleImmersive()

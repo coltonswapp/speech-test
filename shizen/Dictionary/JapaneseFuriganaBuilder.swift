@@ -836,7 +836,7 @@ enum JapaneseFuriganaBuilder {
     fileprivate static let rubySizeFactor: CGFloat = 0.45
     fileprivate static let rubyTextColor = UIColor.secondaryLabel
     /// Bump when ruby alignment / drawing changes so cached strings don't keep the old layout.
-    private static let rubyLayoutRevision = "ruby-glued-runs-v15"
+    private static let rubyLayoutRevision = "ruby-glued-runs-v16"
 
     /// Vertical gap between transcript lines in the same speaker turn.
     static let transcriptLineSpacing: CGFloat = 18
@@ -1012,15 +1012,27 @@ enum JapaneseFuriganaBuilder {
         return paragraphStyle
     }
 
-    static func applyFurigana(to attributed: NSMutableAttributedString, text: String, font: UIFont) {
-        applyFurigana(to: attributed, text: text, font: font, paragraphStyle: paragraphStyleForFurigana(font: font))
+    static func applyFurigana(
+        to attributed: NSMutableAttributedString,
+        text: String,
+        font: UIFont,
+        inSentence sentence: String? = nil
+    ) {
+        applyFurigana(
+            to: attributed,
+            text: text,
+            font: font,
+            paragraphStyle: paragraphStyleForFurigana(font: font),
+            inSentence: sentence
+        )
     }
 
     private static func applyFurigana(
         to attributed: NSMutableAttributedString,
         text: String,
         font: UIFont,
-        paragraphStyle: NSParagraphStyle
+        paragraphStyle: NSParagraphStyle,
+        inSentence sentence: String? = nil
     ) {
         guard !text.isEmpty, attributed.length > 0 else { return }
 
@@ -1033,7 +1045,7 @@ enum JapaneseFuriganaBuilder {
             .font: rubyFont,
         ]
 
-        for furi in JapaneseTokenizer.furiganaAnnotations(for: text) {
+        for furi in JapaneseTokenizer.furiganaAnnotations(for: text, inSentence: sentence) {
             let range = NSRange(furi.range, in: text)
             guard range.location != NSNotFound, NSMaxRange(range) <= attributed.length else { continue }
             // `.center` widens each kanji to the ruby width (つか on 疲).
@@ -1065,14 +1077,20 @@ enum JapaneseFuriganaBuilder {
         return label
     }
 
-    static func attributedString(for text: String, font: UIFont, textColor: UIColor) -> NSAttributedString {
+    static func attributedString(
+        for text: String,
+        font: UIFont,
+        textColor: UIColor,
+        inSentence sentence: String? = nil
+    ) -> NSAttributedString {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: textColor])
         }
 
+        let sentenceKey = sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let cacheKey =
-            "\(trimmed)|\(font.fontName)|\(font.pointSize)|\(textColor.cgColor.hashValue)|\(transcriptRubyTopInset(for: font))|\(transcriptLineSpacing)|\(rubyLayoutRevision)" as NSString
+            "\(trimmed)|\(sentenceKey)|\(font.fontName)|\(font.pointSize)|\(textColor.cgColor.hashValue)|\(transcriptRubyTopInset(for: font))|\(transcriptLineSpacing)|\(rubyLayoutRevision)" as NSString
         if let cached = cache.object(forKey: cacheKey) {
             return cached
         }
@@ -1084,7 +1102,7 @@ enum JapaneseFuriganaBuilder {
                 .foregroundColor: textColor,
             ]
         )
-        applyFurigana(to: base, text: trimmed, font: font)
+        applyFurigana(to: base, text: trimmed, font: font, inSentence: sentence)
 
         let result = NSAttributedString(attributedString: base)
         cache.setObject(result, forKey: cacheKey)

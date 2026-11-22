@@ -64,6 +64,18 @@ enum Analytics {
         case llmFeedback = "llm_feedback"
         case gatewayRequestFailed = "gateway_request_failed"
         case lessonAudioFailed = "lesson_audio_failed"
+
+        // Clips. Separate from lessons; `source` says which surface opened the feed or player.
+        case clipFeedOpened = "clip_feed_opened"
+        case clipPlayed = "clip_played"
+        case clipCompleted = "clip_completed"
+        case clipSwiped = "clip_swiped"
+        case clipTokenTapped = "clip_token_tapped"
+        case clipHighlightsViewed = "clip_highlights_viewed"
+        case clipIssueReported = "clip_issue_reported"
+        case clipRated = "clip_rated"
+        case clipSaved = "clip_saved"
+        case clipUnsaved = "clip_unsaved"
     }
 
     /// What `trial_started` / `purchased` report. Built by `PurchaseAnalytics` from RevenueCat's customer info.

@@ -244,6 +244,9 @@ final class ClipIssueReportViewController: UITableViewController, UITextViewDele
         view.endEditing(true)
 
         let note = noteCell.textView.text
+        let hasNote = !(note ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasLine = line != nil
+        let hasToken = tokenPosition != nil
         Task { [weak self, clipID, line, tokenPosition] in
             do {
                 try await ClipFeedbackClient.reportIssue(
@@ -253,6 +256,13 @@ final class ClipIssueReportViewController: UITableViewController, UITextViewDele
                     line: line,
                     tokenPosition: tokenPosition
                 )
+                Analytics.track(.clipIssueReported, [
+                    "clip_id": clipID,
+                    "reason": reason.rawValue,
+                    "has_note": hasNote,
+                    "has_line": hasLine,
+                    "has_token": hasToken,
+                ])
                 self?.finish()
             } catch {
                 self?.failed(error)

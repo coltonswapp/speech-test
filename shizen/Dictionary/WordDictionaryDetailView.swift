@@ -331,11 +331,13 @@ final class WordDictionaryDetailView: UIView {
             && (glossInSentence || hasSentenceContext || entries.isEmpty)
 
         let wordFont = selectedWordLabel.font ?? UIFont.preferredFont(forTextStyle: .largeTitle)
+        let sentenceForReading = hasSentenceContext ? trimmedSentence : nil
         applySelectedWordHeadline(
             JapaneseFuriganaBuilder.attributedString(
                 for: displayHeadword,
                 font: wordFont,
-                textColor: .label
+                textColor: .label,
+                inSentence: sentenceForReading
             ),
             maxLines: 3
         )
@@ -349,13 +351,22 @@ final class WordDictionaryDetailView: UIView {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             readingForRomaji = JMDictStore.shared.kanaReadingForDisplay(
                 surface: displayHeadword,
-                matching: primary
+                matching: primary,
+                inSentence: sentenceForReading
             )
             romaji = HiraganaRomaji.romanize(readingForRomaji.isEmpty ? lemmaKana : readingForRomaji)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         } else {
-            readingForRomaji = JMDictStore.shared.kanaReadingForDisplay(surface: surface, matching: primary)
-            romaji = JMDictStore.shared.romajiForDisplay(surface: surface, matching: primary)
+            readingForRomaji = JMDictStore.shared.kanaReadingForDisplay(
+                surface: surface,
+                matching: primary,
+                inSentence: sentenceForReading
+            )
+            romaji = JMDictStore.shared.romajiForDisplay(
+                surface: surface,
+                matching: primary,
+                inSentence: sentenceForReading
+            )
         }
         setReadingLine(
             kana: readingForRomaji.isEmpty && showingLemmaAsHeadword
@@ -407,7 +418,11 @@ final class WordDictionaryDetailView: UIView {
         // `readingForRomaji` is the tapped form's reading (ききました); a card needs the lemma's (きく).
         let savedReading = savedSurface == displayHeadword.trimmingCharacters(in: .whitespacesAndNewlines)
             ? readingForRomaji
-            : JMDictStore.shared.kanaReadingForDisplay(surface: savedSurface, matching: primary)
+            : JMDictStore.shared.kanaReadingForDisplay(
+                surface: savedSurface,
+                matching: primary,
+                inSentence: sentenceForReading
+            )
         saveDraft = SavedVocabularyItem(
             id: UUID().uuidString,
             surface: savedSurface,
@@ -835,13 +850,22 @@ final class WordDictionaryDetailView: UIView {
             JapaneseFuriganaBuilder.attributedString(
                 for: surface,
                 font: wordFont,
-                textColor: .label
+                textColor: .label,
+                inSentence: lastConfiguredSentence
             ),
             maxLines: 3
         )
 
-        let reading = JMDictStore.shared.kanaReadingForDisplay(surface: surface, matching: nil)
-        let romaji = JMDictStore.shared.romajiForDisplay(surface: surface, matching: nil)
+        let reading = JMDictStore.shared.kanaReadingForDisplay(
+            surface: surface,
+            matching: nil,
+            inSentence: lastConfiguredSentence
+        )
+        let romaji = JMDictStore.shared.romajiForDisplay(
+            surface: surface,
+            matching: nil,
+            inSentence: lastConfiguredSentence
+        )
         setReadingLine(kana: reading, romaji: romaji, headword: surface)
         dictionaryFormLabel.text = nil
         dictionaryFormLabel.isHidden = true

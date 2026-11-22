@@ -13,6 +13,7 @@ final class UserProfileViewController: UIViewController {
         case account
         case progress
         case levels
+        case library
         case membership
         case logOut
         case hana
@@ -22,6 +23,7 @@ final class UserProfileViewController: UIViewController {
             case .account: return "Account"
             case .progress: return "Progress"
             case .levels: return "Levels"
+            case .library: return "Library"
             case .membership: return "Membership"
             case .logOut, .hana: return nil
             }
@@ -32,6 +34,7 @@ final class UserProfileViewController: UIViewController {
         case identity(title: String, subtitle: String)
         case stats(stars: Int, scenes: Int, days: Int?)
         case level(Int, completed: Int, total: Int, stars: Int)
+        case savedClips(count: Int)
         case plan(isPro: Bool)
         case logOut
         case hana
@@ -56,6 +59,12 @@ final class UserProfileViewController: UIViewController {
             self,
             selector: #selector(progressDidChange),
             name: DialogueProgressStore.didChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(savedClipsDidChange),
+            name: SavedClipStore.didChangeNotification,
             object: nil
         )
         NotificationCenter.default.addObserver(
@@ -179,6 +188,15 @@ final class UserProfileViewController: UIViewController {
             cell.accessories = []
             cell.backgroundConfiguration = UIBackgroundConfiguration.listGroupedCell()
 
+        case .savedClips(let count):
+            SettingsMenuStyle.apply(
+                to: cell,
+                title: "Saved Clips",
+                subtitle: nil,
+                symbolName: "bookmark",
+                accessories: [.label(text: "\(count)"), .disclosureIndicator()]
+            )
+
         case .plan(let isPro):
             SettingsMenuStyle.apply(
                 to: cell,
@@ -215,11 +233,12 @@ final class UserProfileViewController: UIViewController {
 
         var snapshot = NSDiffableDataSourceSnapshot<Section, Item>()
         let levels = levelItems()
-        snapshot.appendSections(
-            levels.isEmpty
-                ? [.account, .progress, .membership, .logOut, .hana]
-                : [.account, .progress, .levels, .membership, .logOut, .hana]
-        )
+        let savedClips = SavedClipStore.shared
+        var sections: [Section] = [.account, .progress]
+        if !levels.isEmpty { sections.append(.levels) }
+        if savedClips.isAvailable { sections.append(.library) }
+        sections += [.membership, .logOut, .hana]
+        snapshot.appendSections(sections)
         snapshot.appendItems([.identity(title: account.title, subtitle: account.subtitle)], toSection: .account)
 
         let joined = UserProfileStore.shared.profile?.createdAt ?? AuthService.shared.accountCreationDate
@@ -234,6 +253,9 @@ final class UserProfileViewController: UIViewController {
         )], toSection: .progress)
         if !levels.isEmpty {
             snapshot.appendItems(levels, toSection: .levels)
+        }
+        if savedClips.isAvailable {
+            snapshot.appendItems([.savedClips(count: savedClips.count)], toSection: .library)
         }
         snapshot.appendItems([.plan(isPro: ProMembership.isPro)], toSection: .membership)
         snapshot.appendItems([.logOut], toSection: .logOut)
@@ -274,6 +296,10 @@ final class UserProfileViewController: UIViewController {
     // MARK: - Updates
 
     @objc private func progressDidChange() {
+        applySnapshot()
+    }
+
+    @objc private func savedClipsDidChange() {
         applySnapshot()
     }
 
@@ -319,12 +345,24 @@ final class UserProfileViewController: UIViewController {
 
 extension UserProfileViewController: UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, shouldSelectItemAt indexPath: IndexPath) -> Bool {
-        dataSource.itemIdentifier(for: indexPath) == .logOut
+        switch dataSource.itemIdentifier(for: indexPath) {
+        case .logOut, .savedClips: true
+        default: false
+        }
     }
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: true)
-        guard dataSource.itemIdentifier(for: indexPath) == .logOut else { return }
-        confirmLogOut()
+        switch dataSource.itemIdentifier(for: indexPath) {
+        case .logOut:
+            confirmLogOut()
+        case .savedClips:
+            navigationController?.pushViewController(
+                ClipQueryListViewController(query: .saved),
+                animated: true
+            )
+        default:
+            break
+        }
     }
 }

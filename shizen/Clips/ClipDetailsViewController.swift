@@ -16,6 +16,8 @@ import UIKit
 final class ClipDetailsViewController: UITableViewController {
     private enum Section {
         case video
+        /// Save Clip / Saved, for a signed-in learner.
+        case save
         case clip
         case tags
         case moreFromVideo
@@ -46,6 +48,8 @@ final class ClipDetailsViewController: UITableViewController {
     }
 
     let details: ClipDetails
+    /// What saving this clip keeps (`SavedClipStore`). Nil hides Save Clip.
+    private let saveSummary: ClipSummary?
     /// A clip picked under "More From This Video". Nil hides that section.
     private let onSelectClip: ((ClipSummary) -> Void)?
     /// "Play All" under "More From This Video": the whole video's clips as a feed.
@@ -76,15 +80,18 @@ final class ClipDetailsViewController: UITableViewController {
 
     /// `onSelectClip`: a clip picked under "More From This Video". Nil hides that section.
     /// `onPlayAll`: every clip from this video, in video order, for a feed.
-    /// `onPlayFeed`: clips picked from a tag's list, as a feed starting at the given one.
-    /// Nil hides the tags' links (the tags still show).
+    /// `onPlayFeed`: clips picked from a tag's or channel's list, as a feed starting at
+    /// the given one. The third value is the analytics source. Nil hides the tags' links
+    /// (the tags still show).
     init(
         payload: ClipPayload,
+        saveSummary: ClipSummary? = nil,
         onSelectClip: ((ClipSummary) -> Void)? = nil,
         onPlayAll: (([ClipSummary]) -> Void)? = nil,
-        onPlayFeed: (([ClipSummary], Int) -> Void)? = nil
+        onPlayFeed: ClipFeedPlayHandler? = nil
     ) {
         details = ClipDetails(payload: payload)
+        self.saveSummary = saveSummary
         self.onSelectClip = onSelectClip
         self.onPlayAll = onPlayAll
         super.init(style: .insetGrouped)
@@ -118,13 +125,15 @@ final class ClipDetailsViewController: UITableViewController {
     /// Wraps the details in a navigation controller, shown as a medium/large sheet.
     static func makeSheet(
         payload: ClipPayload,
+        saveSummary: ClipSummary? = nil,
         onSelectClip: ((ClipSummary) -> Void)? = nil,
         onPlayAll: (([ClipSummary]) -> Void)? = nil,
-        onPlayFeed: (([ClipSummary], Int) -> Void)? = nil
+        onPlayFeed: ClipFeedPlayHandler? = nil
     ) -> UINavigationController {
         let nav = UINavigationController(
             rootViewController: ClipDetailsViewController(
                 payload: payload,
+                saveSummary: saveSummary,
                 onSelectClip: onSelectClip,
                 onPlayAll: onPlayAll,
                 onPlayFeed: onPlayFeed
@@ -148,6 +157,14 @@ final class ClipDetailsViewController: UITableViewController {
         titleCell.configure(details: details, translation: translation)
         Task { await translateTitle() }
         Task { await loadVideoClips() }
+        // Saved or unsaved from elsewhere, or the learner signed out.
+        NotificationCenter.default.addObserver(
+            forName: SavedClipStore.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.tableView.reloadData() }
+        }
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -159,7 +176,9 @@ final class ClipDetailsViewController: UITableViewController {
     // MARK: - Rows
 
     private var sections: [Section] {
-        var result: [Section] = [.video, .clip]
+        var result: [Section] = [.video]
+        if saveSummary != nil, SavedClipStore.shared.isAvailable { result.append(.save) }
+        result.append(.clip)
         if !details.tagFilters.isEmpty { result.append(.tags) }
         if onSelectClip != nil, videoClips.contains(where: { $0.clipID != details.clipID }) {
             result.append(.moreFromVideo)
@@ -226,7 +245,7 @@ final class ClipDetailsViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         switch sections[section] {
-        case .video, .tags: 1
+        case .video, .save, .tags: 1
         case .clip: infoRows.count
         case .moreFromVideo: moreRows.count
         case .links: linkRows.count
@@ -240,6 +259,7 @@ final class ClipDetailsViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
         switch sections[section] {
         case .video: "Video"
+        case .save: nil
         case .clip: "This Clip"
         case .tags: "Tags"
         case .moreFromVideo: "More From This Video"
@@ -253,7 +273,7 @@ final class ClipDetailsViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
         switch sections[section] {
-        case .video, .clip, .moreFromVideo: nil
+        case .video, .save, .clip, .moreFromVideo: nil
         case .tags: onSelectTag != nil ? "Tap a tag for more clips like this one." : nil
         case .links: "YouTube links leave the app. Open in YouTube starts the full video at this clip."
         case .feedback:
@@ -270,6 +290,14 @@ final class ClipDetailsViewController: UITableViewController {
         switch sections[indexPath.section] {
         case .video:
             return titleCell
+        case .save:
+            let saved = SavedClipStore.shared.isSaved(details.clipID)
+            var content = UIListContentConfiguration.cell()
+            content.text = saved ? "Saved" : "Save Clip"
+            content.image = UIImage(systemName: saved ? "bookmark.fill" : "bookmark")
+            let cell = actionCell(content, at: indexPath)
+            cell.accessibilityHint = saved ? "Removes it from Saved Clips in Profile." : "Adds it to Saved Clips in Profile."
+            return cell
         case .tags:
             return tagsCell
         case .clip:
@@ -377,6 +405,7 @@ final class ClipDetailsViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, shouldHighlightRowAt indexPath: IndexPath) -> Bool {
         switch sections[indexPath.section] {
         case .video, .clip, .tags: false
+        case .save: true
         case .moreFromVideo:
             switch moreRows[indexPath.row] {
             case .playAll: true
@@ -395,6 +424,9 @@ final class ClipDetailsViewController: UITableViewController {
         switch sections[indexPath.section] {
         case .video, .clip, .tags:
             break
+        case .save:
+            guard let saveSummary else { return }
+            SavedClipStore.shared.toggle(saveSummary, from: .details)
         case .moreFromVideo:
             switch moreRows[indexPath.row] {
             case .playAll:
@@ -843,25 +875,28 @@ private final class ClipDetailsClipCell: UITableViewCell {
 
 /// The clip being looked at, as declared fields (see CSFeedback.json).
 extension ClipDetailsViewController: FeedbackContextProvider {
-    func feedbackValues() -> FeedbackValues {
-        let details = self.details
-        var values: FeedbackValues = [
-            "qaSource": .string("screen"),
-            "focusTitle": .string("Clip"),
-            "clipId": .string(details.clipID),
-            "videoId": .string(details.videoID),
-            "studioLink": .string(details.studioLink),
-            "focus": .strings(details.feedbackFocusLines),
-        ]
-        if let title = details.title { values["videoTitle"] = .string(title) }
-        if let channel = details.channelName { values["channelName"] = .string(channel) }
-        if let url = details.channelURL { values["channelURL"] = .string(url.absoluteString) }
-        if let url = details.videoURL { values["youtubeLink"] = .string(url.absoluteString) }
-        return values
-    }
+    func feedbackValues() -> FeedbackValues { details.csFeedbackValues() }
 }
 
 extension ClipDetails {
+    /// Declared CSFeedback fields for a clip (see CSFeedback.json).
+    func csFeedbackValues(extraFocusLines: [String] = []) -> FeedbackValues {
+        var values: FeedbackValues = [
+            "qaSource": .string("screen"),
+            "focusTitle": .string("Clip"),
+            "sourceId": .string(clipID),
+            "clipId": .string(clipID),
+            "videoId": .string(videoID),
+            "studioLink": .string(studioLink),
+            "focus": .strings(feedbackFocusLines + extraFocusLines),
+        ]
+        if let title { values["videoTitle"] = .string(title) }
+        if let channelName { values["channelName"] = .string(channelName) }
+        if let channelID { values["channelId"] = .string(channelID) }
+        if let url = channelURL { values["channelURL"] = .string(url.absoluteString) }
+        if let url = videoURL { values["youtubeLink"] = .string(url.absoluteString) }
+        return values
+    }
     /// Readable lines for the note body ("Looking at: Clip" + these).
     var feedbackFocusLines: [String] {
         let time: (Double) -> String = { seconds in
@@ -872,6 +907,7 @@ extension ClipDetails {
         lines.append("Video: \(title ?? "Untitled") (\(videoID))")
         if let titleEN { lines.append("Video (EN): \(titleEN)") }
         if let channelName { lines.append("Channel: \(channelName)") }
+        if let channelID { lines.append("Channel ID: \(channelID)") }
         lines.append("In the video: \(time(startSec))–\(time(endSec))")
         lines.append("Level: \(jlptLevel.map { "N\($0)" } ?? "Not rated")")
         if !tagFilters.isEmpty {
@@ -892,6 +928,8 @@ struct ClipDetails {
     let titleEN: String?
     let channelName: String?
     let channelURL: URL?
+    /// YouTube channel id (`UC…`), from the payload or parsed from `channelURL`.
+    let channelID: String?
     let isPortrait: Bool
     let startSec: Double
     let endSec: Double
@@ -920,6 +958,7 @@ struct ClipDetails {
         titleEN = trimmed(media.titleEN)
         channelName = trimmed(media.channelName)
         channelURL = trimmed(media.channelURL).flatMap(URL.init(string:))
+        channelID = trimmed(media.channelID) ?? Self.youtubeChannelID(from: channelURL)
         isPortrait = media.isPortrait
         startSec = media.startSec
         endSec = media.endSec
@@ -932,6 +971,14 @@ struct ClipDetails {
         isDeprecated = payload.isDeprecated
         let start = Int(media.startSec.rounded(.down))
         videoURL = URL(string: "https://www.youtube.com/watch?v=\(media.videoID)&t=\(start)s")
+    }
+
+    private static func youtubeChannelID(from url: URL?) -> String? {
+        let parts = url?.path.split(separator: "/").map(String.init) ?? []
+        guard parts.count >= 2, parts[0] == "channel" else { return nil }
+        let id = parts[1]
+        guard id.hasPrefix("UC"), id.count >= 24 else { return nil }
+        return id
     }
 }
 

@@ -3,7 +3,9 @@
 //  shizen
 //
 
+#if canImport(Dictionary)
 import Dictionary
+#endif
 import Foundation
 import IPADic
 import Mecab_Swift
@@ -514,8 +516,10 @@ extension JapaneseTokenizer {
     private static let furiganaAnnotationsCache = NSCache<NSString, FuriganaAnnotationsBox>()
 
     /// Expands kanji via furigana so mixed surfaces become kana (探してます → さがしてます).
-    static func hiraganaReading(for text: String) -> String {
-        let annotations = furiganaAnnotations(for: text)
+    /// When `inSentence` contains `text`, readings are taken from the sentence so a
+    /// headword shown in isolation (Breakdown header) matches the line ruby.
+    static func hiraganaReading(for text: String, inSentence sentence: String? = nil) -> String {
+        let annotations = furiganaAnnotations(for: text, inSentence: sentence)
             .sorted { $0.range.lowerBound < $1.range.lowerBound }
         guard !annotations.isEmpty else { return text }
 
@@ -531,6 +535,36 @@ extension JapaneseTokenizer {
         }
         result += text[cursor...]
         return result
+    }
+
+    /// Readings whose ruby range overlaps `substring` in `text`, in order.
+    static func rubyReadings(covering substring: String, in text: String) -> [String] {
+        guard let range = text.range(of: substring) else { return [] }
+        return furiganaAnnotations(for: text)
+            .filter { $0.range.lowerBound < range.upperBound && $0.range.upperBound > range.lowerBound }
+            .sorted { $0.range.lowerBound < $1.range.lowerBound }
+            .map(\.reading)
+    }
+
+    /// Sentence ruby, or the slice of that ruby that sits on `text` when `text` appears in `sentence`.
+    static func furiganaAnnotations(for text: String, inSentence sentence: String?) -> [FuriganaAnnotation] {
+        let trimmedSentence = sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedSentence.isEmpty, trimmedSentence != text,
+              let hostRange = trimmedSentence.range(of: text) else {
+            return furiganaAnnotations(for: text)
+        }
+        return furiganaAnnotations(for: trimmedSentence).compactMap { annotation in
+            let start = annotation.range.lowerBound < hostRange.lowerBound
+                ? hostRange.lowerBound : annotation.range.lowerBound
+            let end = annotation.range.upperBound > hostRange.upperBound
+                ? hostRange.upperBound : annotation.range.upperBound
+            guard start < end else { return nil }
+            let startOffset = trimmedSentence.distance(from: hostRange.lowerBound, to: start)
+            let endOffset = trimmedSentence.distance(from: hostRange.lowerBound, to: end)
+            let mappedStart = text.index(text.startIndex, offsetBy: startOffset)
+            let mappedEnd = text.index(text.startIndex, offsetBy: endOffset)
+            return FuriganaAnnotation(reading: annotation.reading, range: mappedStart..<mappedEnd)
+        }
     }
 
     static func furiganaAnnotations(for text: String) -> [FuriganaAnnotation] {
@@ -566,6 +600,7 @@ extension JapaneseTokenizer {
         var result: [FuriganaAnnotation] = []
         result.reserveCapacity(annotations.count)
         var consumedCompounds = Set<Int>()
+        var consumedParentStarts = Set<Int>()
         for annotation in annotations {
             // MeCab split a dictionary compound across tokens (一+人): collapse the contained
             // annotations into one ruby spanning the whole compound, since jukujikun readings
@@ -591,6 +626,30 @@ extension JapaneseTokenizer {
             let wordSurface = parent.map(\.base) ?? rubySurface
             let wordReading = parent?.reading ?? annotation.reading
             let wordDictionaryForm = parent?.dictionaryForm
+            // Isolated 何色 is one MeCab token with per-kanji ruby (なに+しょく). Collapse
+            // to the dictionary reading for the whole headword, then split only if confident.
+            if let parent,
+               isKanjiOnlySurface(wordSurface),
+               wordSurface.count >= 2,
+               !(startsWithNumeral(wordSurface) && !numeralJukujikunCompounds.contains(wordSurface)
+                    && wordSurface.first != "何"),
+               let mergedReading = JMDictStore.shared.compoundMergedReading(
+                    forSurface: wordSurface,
+                    mecabReading: wordReading,
+                    in: text,
+                    at: parent.range
+               ) {
+                let parentStart = parent.range.lowerBound.utf16Offset(in: text)
+                if consumedParentStarts.insert(parentStart).inserted {
+                    let kanjiEnd = kanjiBlockEnd(in: parent, text: text)
+                    let range = parent.range.lowerBound..<kanjiEnd
+                    result.append(contentsOf: splitMixedKanjiKanaRuby(
+                        FuriganaAnnotation(reading: mergedReading, range: range),
+                        in: text
+                    ))
+                }
+                continue
+            }
             // 〜方 after a verb stem is "way of doing" (上げ方, 読み方): always かた, never ほう.
             if rubySurface == "方",
                let previous = tokenAnnotations.last(where: { $0.range.upperBound <= annotation.range.lowerBound }),
@@ -652,19 +711,27 @@ extension JapaneseTokenizer {
                 guard isContiguousKanjiCompoundRun(run) else { continue }
                 let surface = run.map { leadingKanjiBlock(in: $0.base) }.joined()
                 guard surface.count >= 2 else { continue }
-                if startsWithNumeral(surface), !numeralJukujikunCompounds.contains(surface) { continue }
+                if startsWithNumeral(surface), !numeralJukujikunCompounds.contains(surface) {
+                    // 何色 is a lexical homograph, not a numeral+counter (三人). Let
+                    // interrogative 何+kanji headwords merge so the sentence picker can run.
+                    guard surface.first == "何", isKanjiOnlySurface(surface) else { continue }
+                }
                 let mecabReading = run.map(\.reading).joined()
-                guard let reading = okuriganaHeadwordKanjiReading(
-                    kanjiSurface: surface,
-                    lastTokenBase: run[run.count - 1].base,
-                    mecabReading: mecabReading
-                ) ?? JMDictStore.shared.compoundMergedReading(
-                    forSurface: surface,
-                    mecabReading: mecabReading
-                ) else { continue }
                 let kanjiEnd = kanjiBlockEnd(in: run[run.count - 1], text: text)
                 guard kanjiEnd > run[0].range.lowerBound else { continue }
                 let range = run[0].range.lowerBound..<kanjiEnd
+                guard let reading = okuriganaHeadwordKanjiReading(
+                    kanjiSurface: surface,
+                    lastTokenBase: run[run.count - 1].base,
+                    mecabReading: mecabReading,
+                    in: text,
+                    at: range
+                ) ?? JMDictStore.shared.compoundMergedReading(
+                    forSurface: surface,
+                    mecabReading: mecabReading,
+                    in: text,
+                    at: range
+                ) else { continue }
                 merged = (j, KanjiCompound(range: range, reading: reading))
                 break
             }
@@ -685,7 +752,9 @@ extension JapaneseTokenizer {
     private static func okuriganaHeadwordKanjiReading(
         kanjiSurface: String,
         lastTokenBase: String,
-        mecabReading: String
+        mecabReading: String,
+        in sentence: String,
+        at range: Range<String.Index>
     ) -> String? {
         let tail = lastTokenBase.drop { isKanjiOnlySurface(String($0)) }
         guard !tail.isEmpty, tail.allSatisfy({ isKanaSurface(String($0)) }) else { return nil }
@@ -693,7 +762,9 @@ extension JapaneseTokenizer {
             let okurigana = String(tail.prefix(length))
             guard let reading = JMDictStore.shared.compoundMergedReading(
                 forSurface: kanjiSurface + okurigana,
-                mecabReading: mecabReading
+                mecabReading: mecabReading,
+                in: sentence,
+                at: range
             ), reading.hasSuffix(okurigana), reading.count > okurigana.count else { continue }
             return String(reading.dropLast(okurigana.count))
         }

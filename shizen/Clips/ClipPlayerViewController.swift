@@ -11,6 +11,7 @@
 //  then the clip's highlights when it has any. Paging away pauses the video.
 //
 
+import CSFeedbackKitUI
 import InteractionKit
 import NNKit
 import QuartzCore
@@ -189,6 +190,10 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     /// Set by `ClipFeedViewController` before the view loads: this screen is one page of
     /// a vertical feed, so highlights always open as a sheet (the feed owns vertical paging).
     var isInFeed = false
+    /// Set by the feed for the clip on screen. Nil on a neighbor page.
+    var analyticsVisit: ClipVisitAnalytics?
+    /// Where a standalone player was opened from. Feed pages use the visit's source.
+    var analyticsSource = "unknown"
     /// Off when reached from Explore, a search, or a tag's list (see
     /// `ClipFeedViewController.allowsExploring`). Set before the view loads.
     var allowsExploring = true
@@ -217,6 +222,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     func startPlayback() {
         applyPreferredPlaybackRate()
         playerView.play()
+        // Already playing (a resume that doesn't post a new state): count it once.
+        if playerView.state == .playing { noteClipPlaying() }
     }
 
     @objc private func feedPanned(_ pan: UIPanGestureRecognizer) {
@@ -512,11 +519,14 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        ensureStandaloneVisit()
+        if !isInFeed { analyticsVisit?.openWatchWindow() }
         startDisplayLink()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        if !isInFeed { analyticsVisit?.closeWatchWindow() }
         playerView.pause()
         dismissCallout(animated: false)
         stopDisplayLink()
@@ -1172,11 +1182,16 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         dismissCallout(animated: false)
         let sheet = ClipDetailsViewController.makeSheet(
             payload: payload,
+            saveSummary: saveSummary,
             onSelectClip: { [weak self] clip in self?.openClipFromSameVideo(clip) },
-            onPlayAll: { [weak self] clips in self?.playVideoClipsInFeed(clips) },
-            // A tag's list is exploring: only offered where exploring is allowed.
+            onPlayAll: { [weak self] clips in
+                self?.playVideoClipsInFeed(clips, analyticsSource: ClipAnalytics.moreFromVideo, allowsExploring: true)
+            },
+            // A tag's or channel's list is exploring: only offered where exploring is allowed.
             onPlayFeed: allowsExploring
-                ? { [weak self] clips, start in self?.playVideoClipsInFeed(clips, startingAt: start, fromTagList: true) }
+                ? { [weak self] clips, start, source in
+                    self?.playVideoClipsInFeed(clips, startingAt: start, analyticsSource: source, allowsExploring: false)
+                }
                 : nil
         )
         present(sheet, animated: true)
@@ -1187,6 +1202,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         dismiss(animated: true) { [weak self] in
             guard let self else { return }
             let player = ClipPlayerViewController(clipID: clip.clipID, preview: clip)
+            player.analyticsSource = ClipAnalytics.moreFromVideo
             player.allowsExploring = self.allowsExploring
             if let navigationController = self.navigationController {
                 navigationController.pushViewController(player, animated: true)
@@ -1197,14 +1213,20 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     }
 
     /// "Play All" in Clip Details (the video's clips, in order), or clips picked from
-    /// a tag's list: closes the sheet and plays them as a feed. A tag list's feed (or
-    /// any feed from here once exploring) offers no way to explore further.
-    private func playVideoClipsInFeed(_ clips: [ClipSummary], startingAt start: Int = 0, fromTagList: Bool = false) {
+    /// a tag's or channel's list: closes the sheet and plays them as a feed. A list's
+    /// feed offers no way to explore further.
+    private func playVideoClipsInFeed(
+        _ clips: [ClipSummary],
+        startingAt start: Int = 0,
+        analyticsSource: String,
+        allowsExploring: Bool
+    ) {
         dismiss(animated: true) { [weak self] in
             guard let self else { return }
             self.playerView.pause()
             let feed = ClipFeedViewController(clips: clips, startingAt: start)
-            feed.allowsExploring = self.allowsExploring && !fromTagList
+            feed.analyticsSource = analyticsSource
+            feed.allowsExploring = self.allowsExploring && allowsExploring
             if let navigationController = self.navigationController {
                 navigationController.pushViewController(feed, animated: true)
             } else {
@@ -1584,6 +1606,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             if resumeOnTranscriptPage { playerView.play() }
             resumeOnTranscriptPage = false
         } else {
+            analyticsVisit?.noteHighlightsViewed()
             resumeOnTranscriptPage = playerView.isPlaying
             playerView.pause()
         }
@@ -1772,6 +1795,27 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             : [options]
     }
 
+    /// What a save keeps for the saved list: the list row this clip opened from, else
+    /// the same fields from its payload (a deep link). Nil until either is here.
+    private var saveSummary: ClipSummary? {
+        preview ?? payload.map(ClipSummary.init(payload:))
+    }
+
+    /// Save Clip / Saved. Nil when signed out or nothing is loaded to save yet.
+    private func saveMenuElement() -> UIMenuElement? {
+        let store = SavedClipStore.shared
+        guard store.isAvailable, let summary = saveSummary else { return nil }
+        let saved = store.isSaved(clipID)
+        let action = UIAction(
+            title: saved ? "Saved" : "Save Clip",
+            image: UIImage(systemName: saved ? "bookmark.fill" : "bookmark"),
+            state: saved ? .on : .off
+        ) { _ in
+            store.toggle(summary, from: .menu)
+        }
+        return UIMenu(options: .displayInline, children: [action])
+    }
+
     private func optionsMenuElements() -> [UIMenuElement] {
         let furigana = UIAction(
             title: "Furigana",
@@ -1821,9 +1865,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             Self.highlightsInSheet.toggle()
             if let payload = self.payload { self.installHighlights(payload) }
         }
-        var elements: [UIMenuElement] = [
-            UIMenu(options: .displayInline, children: [furigana, english, loop, wordTapPauses, youTubeControls]),
-        ]
+        var elements: [UIMenuElement] = [saveMenuElement()].compactMap { $0 }
+        elements.append(UIMenu(options: .displayInline, children: [furigana, english, loop, wordTapPauses, youTubeControls]))
         let ambient = UIAction(
             title: "Ambient backdrop",
             image: UIImage(systemName: "sparkles.tv"),
@@ -1887,9 +1930,12 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     }
 
     private func setPlaybackRate(_ rate: Double) {
+        let changed = abs(rate - Self.preferredPlaybackRate) > 0.01
         Self.preferredPlaybackRate = rate
         playerView.setPlaybackRate(rate)
         updateSpeedButton()
+        guard changed else { return }
+        Analytics.track(.playbackSpeedChanged, ["speed": rate, "clip_id": clipID])
     }
 
     /// Feed pages built before the speed changed on another clip catch up when they play.
@@ -2158,6 +2204,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
 
     private func presentHighlightsSheet() {
         guard let payload, presentedViewController == nil else { return }
+        ensureStandaloneVisit()
+        analyticsVisit?.noteHighlightsViewed()
         dismissCallout(animated: false)
         playerView.pause()
         let sheet = ClipHighlightsSheetViewController(highlights: payload.learningHighlights)
@@ -2171,6 +2219,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
                 glossFraming: .word,
                 lineEnglish: sentence?.textEN,
                 ranksSenses: true,
+                analyticsSource: ClipAnalytics.clip,
                 from: sheet
             )
         }
@@ -2198,6 +2247,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             glossFraming: .word,
             lineEnglish: sentence?.textEN,
             ranksSenses: true,
+            analyticsSource: ClipAnalytics.clip,
             from: self
         )
     }
@@ -2275,8 +2325,9 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     // MARK: - Player
 
     private func configurePlayerCallbacks() {
-        playerView.onStateChange = { [weak self] _ in
+        playerView.onStateChange = { [weak self] state in
             self?.updatePlayPauseButton()
+            if state == .playing { self?.noteClipPlaying() }
         }
         playerView.onError = { [weak self] code in
             guard let self else { return }
@@ -2309,6 +2360,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
            time >= payload.media.endSec,
            CACurrentMediaTime() - lastLoopSeekTime > 1 {
             lastLoopSeekTime = CACurrentMediaTime()
+            analyticsVisit?.noteCompleted(speed: playerView.playbackRate)
             if loopsClip {
                 playerView.seek(to: payload.media.startSec)
             } else {
@@ -2620,7 +2672,8 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             englishTranslation: row.sentence.textEN,
             dialogueContext: DialogueNuanceContext.around(lines: lines, focusedIndex: index),
             tokens: row.japaneseTokens,
-            reportIssue: lineReportAction(for: row.sentence)
+            reportIssue: lineReportAction(for: row.sentence),
+            analyticsSource: ClipAnalytics.clip
         )
         if traitCollection.horizontalSizeClass == .regular {
             // iPad: a floating, undimmed sheet, so the clip and transcript stay in view
@@ -2661,6 +2714,41 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
 
     // MARK: - Definition callout
 
+    /// A player opened on its own (not a feed page) keeps its own visit.
+    private func ensureStandaloneVisit() {
+        guard !isInFeed, analyticsVisit == nil else { return }
+        analyticsVisit = ClipVisitAnalytics(
+            clipID: clipID,
+            source: analyticsSource,
+            jlptLevel: preview?.jlptLevel,
+            orientation: preview?.orientation?.rawValue,
+            alreadySeen: ClipSeenStore.contains(clipID)
+        )
+    }
+
+    /// Embed reported playing. Once per visit; pause, resume, and loop seeks don't repeat it.
+    private func noteClipPlaying() {
+        ensureStandaloneVisit()
+        let orientation: String?
+        if payload != nil {
+            orientation = payload?.media.isPortrait == true ? "portrait" : "landscape"
+        } else {
+            orientation = preview?.orientation?.rawValue
+        }
+        analyticsVisit?.notePlaying(
+            jlptLevel: payload?.jlptLevel ?? preview?.jlptLevel,
+            orientation: orientation
+        )
+    }
+
+    private func trackTokenTapped() {
+        ensureStandaloneVisit()
+        Analytics.track(.clipTokenTapped, [
+            "clip_id": clipID,
+            "source": analyticsVisit?.source ?? analyticsSource,
+        ])
+    }
+
     /// First tap: pause and show the rich callout (reading, dictionary form, part of speech,
     /// first senses) over the word. Tapping it opens the full dictionary sheet.
     private func wordTapped(surface: String, tokenIndex: Int, row rowIndex: Int) {
@@ -2677,6 +2765,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
         let row = rows[rowIndex]
         let fragments = row.textView.mergedWordLineFragmentRectsInTextView(forTokenIndex: tokenIndex)
         guard !fragments.isEmpty else {
+            trackTokenTapped()
             presentDictionary(surface: surface, sentence: row.sentence)
             return
         }
@@ -2684,6 +2773,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
             rows[previous.sentence].textView.setDefinitionSelectionHighlight(tokenIndex: nil)
         }
         calloutToken = ref
+        trackTokenTapped()
         row.textView.setDefinitionSelectionHighlight(tokenIndex: tokenIndex)
 
         DefinitionCalloutPresenter.shared.presentOrUpdate(
@@ -2740,6 +2830,7 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
                 keepsTappedFormAsHeadword: true,
                 ranksSenses: true,
                 floating: Self.floatingSheetStyle,
+                analyticsSource: ClipAnalytics.clip,
                 from: self
             )
         }
@@ -2827,6 +2918,37 @@ final class ClipPlayerViewController: UIViewController, UIScrollViewDelegate, UI
     private static func formatTime(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds.rounded(.down)))
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+// MARK: - CSFeedbackKit context
+
+/// The clip on screen. Feed neighbors keep an empty context so a preloaded page doesn't win.
+extension ClipPlayerViewController: FeedbackContextProvider {
+    func feedbackValues() -> FeedbackValues {
+        if isInFeed, analyticsVisit == nil { return [:] }
+        let feedLine = isInFeed ? ["View: Feed"] : []
+        if let payload {
+            return ClipDetails(payload: payload).csFeedbackValues(extraFocusLines: feedLine)
+        }
+        var lines = ["Clip: \(clipID)"]
+        if let preview {
+            lines.append("Video: \(preview.title ?? "Untitled") (\(preview.videoID))")
+            if let channel = preview.channelName { lines.append("Channel: \(channel)") }
+        }
+        lines += feedLine
+        var values: FeedbackValues = [
+            "qaSource": .string("screen"),
+            "focusTitle": .string("Clip"),
+            "sourceId": .string(clipID),
+            "clipId": .string(clipID),
+            "studioLink": .string(ContentCMSClient.studioClipEditorLink(clipID: clipID)),
+            "focus": .strings(lines),
+        ]
+        if let videoID = preview?.videoID { values["videoId"] = .string(videoID) }
+        if let title = preview?.title { values["videoTitle"] = .string(title) }
+        if let channel = preview?.channelName { values["channelName"] = .string(channel) }
+        return values
     }
 }
 

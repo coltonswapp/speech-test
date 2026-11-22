@@ -144,24 +144,32 @@ enum ClipLinkOpener {
     static func destination(for link: ClipLink) async throws -> UIViewController {
         switch link {
         case .clip(let id):
-            return ClipPlayerViewController(clipID: id)
+            return Self.player(clipID: id, preview: nil)
         case .video(let videoID):
             let clips = try await ContentCMSClient.fetchClipList(videoID: videoID)
             guard let first = clips.first else { throw OpenError.noClipsForVideo(videoID) }
             if clips.count == 1 {
-                return ClipPlayerViewController(clipID: first.clipID, preview: first)
+                return Self.player(clipID: first.clipID, preview: first)
             }
-            return ClipFeedViewController(clips: clips)
+            let feed = ClipFeedViewController(clips: clips)
+            feed.analyticsSource = ClipAnalytics.deepLink
+            return feed
         case .clipOrSearch(let text):
             do {
                 _ = try await ContentCMSClient.fetchClip(id: text)
-                return ClipPlayerViewController(clipID: text)
+                return Self.player(clipID: text, preview: nil)
             } catch ContentCMSClient.CMSClientError.httpStatus(404) {
                 return ClipQueryListViewController(query: .search(text))
             }
         case .search(let text):
             return ClipQueryListViewController(query: .search(text))
         }
+    }
+
+    private static func player(clipID: String, preview: ClipSummary?) -> ClipPlayerViewController {
+        let player = ClipPlayerViewController(clipID: clipID, preview: preview)
+        player.analyticsSource = ClipAnalytics.deepLink
+        return player
     }
 
     /// A `shizen://` link opened from outside the app: shows the clip full screen

@@ -157,15 +157,21 @@ public final class FlashcardStackView: UIView, UIGestureRecognizerDelegate {
 
     private func constrainCard(_ card: UIView) {
         card.translatesAutoresizingMaskIntoConstraints = false
-        let widthConstraint = card.widthAnchor.constraint(equalTo: widthAnchor, constant: -40)
-        widthConstraint.priority = .required
-        let heightCap = card.heightAnchor.constraint(lessThanOrEqualTo: heightAnchor, multiplier: 0.82)
+        let horizontalInset: CGFloat = 40
+        let heightFraction: CGFloat = 0.82
+        let aspectRatio: CGFloat = 1.1
+        // Fill the stack on phones; yield when height (iPad landscape) would
+        // otherwise fight the 1.1 aspect.
+        let widthFill = card.widthAnchor.constraint(equalTo: widthAnchor, constant: -horizontalInset)
+        widthFill.priority = .required - 1
         NSLayoutConstraint.activate([
             card.centerXAnchor.constraint(equalTo: centerXAnchor),
             card.centerYAnchor.constraint(equalTo: centerYAnchor),
-            widthConstraint,
-            card.heightAnchor.constraint(equalTo: card.widthAnchor, multiplier: 1.1),
-            heightCap,
+            widthFill,
+            card.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -horizontalInset),
+            card.widthAnchor.constraint(lessThanOrEqualTo: heightAnchor, multiplier: heightFraction / aspectRatio),
+            card.heightAnchor.constraint(equalTo: card.widthAnchor, multiplier: aspectRatio),
+            card.heightAnchor.constraint(lessThanOrEqualTo: heightAnchor, multiplier: heightFraction),
         ])
     }
 

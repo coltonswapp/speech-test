@@ -1,6 +1,6 @@
 # Analytics & privacy (PostHog)
 
-Shizen sends a small set of funnel events (onboarding → paywall → purchase) to PostHog.
+Shizen sends a small set of funnel and product events (onboarding → paywall → purchase, lessons, clips) to PostHog.
 All of it goes through `shizen/App/Analytics.swift`; no other file imports PostHog.
 
 ## What is never collected
@@ -41,15 +41,39 @@ All carry `lesson_type` (`dialogue`, `grammar`, `kana`) and `lesson_id` (scene i
 
 | Event | When | Properties |
 | --- | --- | --- |
-| `sentence_breakdown_opened` | A dialogue line's breakdown screen opens | `source` (`dialogue`, `scripted`, `other`) |
+| `sentence_breakdown_opened` | A line's breakdown screen opens | `source` (`dialogue`, `scripted`, `clip`, `other`) |
 | `sentence_breakdown_closed` | Breakdown screen closes (one summary per visit) | `tokens_viewed` (count of distinct words), `spans_viewed`, `nuance_opened`, `sentence_plays`, `opened_repeat_after_me`, `seconds`, `source` |
 | `gloss_viewed` | Multi-word span selected, or nuance card opened | `kind` (`multi_token`, `nuance`), `token_count`, `source` |
-| `word_detail_opened` | Dictionary detail for a word | `from_sentence` |
+| `word_detail_opened` | Dictionary detail for a word | `from_sentence`, `source` (`clip` when opened from a clip; omitted otherwise) |
 | `kanji_detail_opened` | Kanji detail screen | — |
 | `dictionary_result_opened` | A dictionary search result is tapped (the search text is never sent) | `result_rank` |
 | `flashcard_added` | Word or phrase saved to a folder | `kind` (`word`, `phrase`), `from_lesson` |
-| `audio_replayed` | Dialogue played again, restarted, a line jumped to, or a sentence played in a breakdown | `kind` (`dialogue`, `restart`, `line`, `sentence`), `speed`, `lesson_id` |
-| `playback_speed_changed` | Dialogue speed changed | `speed`, `lesson_id` |
+| `audio_replayed` | Dialogue played again, restarted, a line jumped to, or a sentence played in a breakdown | `kind` (`dialogue`, `restart`, `line`, `sentence`), `speed`, `lesson_id`. A sentence replay also sends `source` (a clip line is `clip`) |
+| `playback_speed_changed` | Dialogue or clip speed changed | `speed`, and `lesson_id` (dialogue) or `clip_id` (a clip) |
+
+### Clips
+
+Separate from lessons. No transcript text, token surfaces, titles, channel names, or issue-report notes.
+
+`source` on the feed and player events is where that feed or player was opened: `main_tab`, `explore` (a level list in Explore), `search`, `tag`, `channel`, `more_from_video`, `deep_link`, `list` (the debug clip list), `onboarding`.
+
+`seconds` is time that visit was on screen. `watched` matches `ClipSeenStore`: true only after one uninterrupted stretch of 5 seconds (`watchedAfter`), playing or paused. A swipe past in less than that is `watched` false. `already_seen` is whether this device had already counted the clip before this visit.
+
+| Event | When | Properties |
+| --- | --- | --- |
+| `clip_feed_opened` | The main Clips tab becomes active, or a pushed or presented feed first appears | `source` |
+| `clip_played` | The embed first reports playing on this visit. Not on `startPlayback` alone, pause/resume, a loop seek, or a neighbor page | `clip_id`, `source`, `already_seen`, and `jlpt_level` / `orientation` (`portrait`, `landscape`) when known |
+| `clip_completed` | The playhead first reaches the clip's end on this visit, including when it then loops | `clip_id`, `source`, `seconds`, `speed` |
+| `clip_swiped` | The learner moves from one clip to another in the feed. Not when leaving the feed or the Clips tab, and not for a separate skip | `clip_id`, `source`, `direction` (`next`, `previous`), `seconds`, `completed`, `watched` |
+| `clip_token_tapped` | A caption token tap opens the definition callout, or the dictionary when there is no callout. Not karaoke, and not scrubbing inside a breakdown | `clip_id`, `source` |
+| `clip_highlights_viewed` | The highlights sheet or highlights page is first shown on this visit | `clip_id`, `source` |
+| `clip_issue_reported` | A broken-clip report sends successfully | `clip_id`, `reason` (`translation`, `tokenization`, `reading`, `timing`, `video`, `other`), `has_note`, `has_line`, `has_token` |
+| `clip_rated` | Clip Details thumbs send successfully | `clip_id`, `rating` (`up`, `down`), `reason` when a thumbs-down picked one |
+| `clip_saved` / `clip_unsaved` | The learner saves or unsaves a clip (stored on their account at `users/{uid}/savedClips`) | `clip_id`, `from` (`menu` for the clip's ⋯ menu, `details` for Clip Details, `list` for a long-press in Saved Clips) |
+
+A feed played from Profile → Saved Clips reports `source` `saved`.
+
+A clip line's breakdown reports `sentence_breakdown_opened` / `sentence_breakdown_closed` and `gloss_viewed` with `source` `clip`. Opening the dictionary from a clip reports `word_detail_opened` with `source` `clip` (no second dictionary event).
 
 ### Paywall detail (`feature_carousel`, `bold_hero_glass_compact`)
 
@@ -106,7 +130,7 @@ Add these data types (all purpose **Analytics**, **not used for tracking**):
 | Data type | Linked to user? | Why |
 | --- | --- | --- |
 | Identifiers → **User ID** | Yes | Firebase uid sent via `identify` |
-| Usage Data → **Product Interaction** | Yes | Onboarding, lesson, interaction, paywall, and lifecycle events; onboarding answers as person properties |
+| Usage Data → **Product Interaction** | Yes | Onboarding, lesson, clip, interaction, paywall, and lifecycle events; onboarding answers as person properties |
 | Diagnostics → **Other Diagnostic Data** | Yes | `gateway_request_failed`, `lesson_audio_failed` |
 | Purchases → **Purchase History** | Yes | `trial_started`, `purchased` |
 | Identifiers → **Device ID** | Yes | Only if Apple's definition is taken to cover PostHog's anonymous random id; the conservative choice is to declare it |

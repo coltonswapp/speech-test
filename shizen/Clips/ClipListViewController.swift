@@ -76,7 +76,9 @@ final class ClipListViewController: UITableViewController {
 
     /// The feed-eligible clips (same level filter) as a swipeable feed.
     private func openFeed() {
-        navigationController?.pushViewController(ClipFeedViewController(learnerLevel: learnerLevel), animated: true)
+        let feed = ClipFeedViewController(learnerLevel: learnerLevel)
+        feed.analyticsSource = ClipAnalytics.list
+        navigationController?.pushViewController(feed, animated: true)
     }
 
     @objc private func reload() {
@@ -171,10 +173,9 @@ final class ClipListViewController: UITableViewController {
             return
         }
         let clip = clips[indexPath.row]
-        navigationController?.pushViewController(
-            ClipPlayerViewController(clipID: clip.clipID, preview: clip),
-            animated: true
-        )
+        let player = ClipPlayerViewController(clipID: clip.clipID, preview: clip)
+        player.analyticsSource = ClipAnalytics.list
+        navigationController?.pushViewController(player, animated: true)
     }
 
     private static func formatTime(_ seconds: Double) -> String {

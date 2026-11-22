@@ -1,0 +1,1 @@
+../../../shizen/Kana/KanaCurriculum.swift

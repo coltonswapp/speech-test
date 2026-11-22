@@ -125,8 +125,13 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
     private let spinner = UIActivityIndicatorView(style: .large)
     private let statusLabel = UILabel()
     private let presentation: Presentation
+    /// Where this feed was opened from (`ClipAnalytics`). Set before the feed appears.
+    var analyticsSource = "unknown"
     /// Whether this feed is on screen and allowed to play. Pushed feeds are always active.
     private(set) var isActive = true
+    /// The clip on screen. Nil on the end page, and until the first clip is showing.
+    private var visit: ClipVisitAnalytics?
+    private var didTrackOpened = false
     var hasClips: Bool { !clips.isEmpty }
     /// Main tab: the viewer moved to another clip.
     var onClipChanged: (() -> Void)?
@@ -216,6 +221,7 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
         guard active != isActive else { return }
         isActive = active
         if active {
+            beginVisitIfNeeded()
             pages[currentIndex]?.startPlayback()
         } else {
             pages[currentIndex]?.pausePlayback()
@@ -228,7 +234,11 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
     private func restartWatchTimer() {
         watchTimer?.cancel()
         watchTimer = nil
+        // A restarted timer throws away a stretch that hasn't reached `watchedAfter`.
+        visit?.closeWatchWindow()
         guard isActive, view.window != nil, clips.indices.contains(currentIndex) else { return }
+        beginVisitIfNeeded()
+        visit?.openWatchWindow()
         let clipID = clips[currentIndex].clipID
         watchTimer = Task {
             try? await Task.sleep(for: ClipSeenStore.watchedAfter)
@@ -266,6 +276,7 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
             }
             syncPages()
             installEndPageIfFinished()
+            if isFirstBatch { beginVisitIfNeeded() }
             if isFirstBatch, isActive { pages[currentIndex]?.startPlayback() }
             if isFirstBatch { restartWatchTimer() }
         } catch {
@@ -361,6 +372,7 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
             page.isInFeed = true
             page.allowsExploring = allowsExploring
             page.presentsBreakdownAsSheet = presentsBreakdownAsSheet
+            page.analyticsSource = analyticsSource
             page.onFeedPan = { [weak self] pan in
                 self?.handleFeedPan(pan)
             }
@@ -371,6 +383,7 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
             pages[index] = page
         }
         layoutPages()
+        attachVisit()
         if updatingCoordinator {
             // Re-claims the transcripts' delegates for the feed's handoff.
             coordinator?.replaceInnerScrollViews(innerScrollViews())
@@ -455,13 +468,54 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
 
     private func pageDidChange(to page: Int) {
         guard page != currentIndex, page >= 0, page < pageCount else { return }
-        pages[currentIndex]?.pausePlayback()
+        let previous = currentIndex
+        pages[previous]?.pausePlayback()
+        pages[previous]?.analyticsVisit = nil
+        if clips.indices.contains(previous), clips.indices.contains(page) {
+            visit?.swiped(direction: page > previous ? "next" : "previous")
+        } else {
+            visit?.closeWatchWindow()
+        }
+        visit = nil
         currentIndex = page
         syncPages()
+        beginVisitIfNeeded()
         if isActive { pages[page]?.startPlayback() }
         restartWatchTimer()
         topUpIfNeeded()
         onClipChanged?()
+    }
+
+    /// Opens a visit for the clip on screen. The end page has none. `already_seen` is
+    /// read before this visit can mark the clip, so a first watch stays false.
+    private func beginVisitIfNeeded() {
+        guard visit == nil, clips.indices.contains(currentIndex) else {
+            attachVisit()
+            return
+        }
+        let clip = clips[currentIndex]
+        visit = ClipVisitAnalytics(
+            clipID: clip.clipID,
+            source: analyticsSource,
+            jlptLevel: clip.jlptLevel,
+            orientation: clip.orientation?.rawValue,
+            alreadySeen: ClipSeenStore.contains(clip.clipID)
+        )
+        attachVisit()
+    }
+
+    /// Only the current page holds the visit, so a neighbor's embed can't log playback.
+    private func attachVisit() {
+        for (index, page) in pages {
+            page.analyticsSource = analyticsSource
+            page.analyticsVisit = index == currentIndex ? visit : nil
+        }
+    }
+
+    private func trackOpenedIfNeeded() {
+        guard presentation != .mainTab, !didTrackOpened else { return }
+        didTrackOpened = true
+        Analytics.track(.clipFeedOpened, ["source": analyticsSource])
     }
 
     /// The clip's options menu lives in the feed's navigation bar (on the main tab, the
@@ -477,6 +531,9 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         pages[currentIndex]?.pausePlayback()
+        // Leaving the screen (a breakdown, Settings) drops the current stretch, same as
+        // cancelling the seen timer. It is not a swipe.
+        visit?.closeWatchWindow()
         watchTimer?.cancel()
         watchTimer = nil
     }
@@ -484,6 +541,7 @@ final class ClipFeedViewController: UIViewController, UIScrollViewDelegate {
     /// Main tab: back from a pushed screen (Settings) with the feed still on screen.
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        trackOpenedIfNeeded()
         if presentation == .mainTab, isActive { pages[currentIndex]?.startPlayback() }
         restartWatchTimer()
     }

@@ -547,8 +547,8 @@ final class MainViewController: UIViewController {
 
     /// Immersive feed: the tab bar fades out and side-swiping between tabs stops, and the
     /// navigation bar trades settings for the clip's menu, with the expand button turned
-    /// into collapse. Dictionary stays, so words can be looked up mid-feed. Runs inside
-    /// the feed's fade animation.
+    /// into collapse. The "Feed" title is hidden. Dictionary stays, so words can be looked
+    /// up mid-feed. Runs inside the feed's fade animation.
     private func setFeedImmersiveChrome(_ immersive: Bool, feed: MainFeedTabViewController) {
         tabBar.alpha = immersive ? 0 : 1
         tabBar.isUserInteractionEnabled = !immersive
@@ -568,7 +568,8 @@ final class MainViewController: UIViewController {
             let collapse = feedModeItem(feed: feed, immersive: true)
             let search = ClipExplorerViewController.searchBarItem(pushingFrom: self)
             navigationItem.setRightBarButtonItems([options, collapse, search], animated: true)
-            navigationItem.title = "Feed"
+            // Empty, not nil: nil falls back to this screen's "Shizen" title.
+            navigationItem.title = ""
         } else {
             feedOptionsItem = nil
             setupNavigationBar(animated: true)

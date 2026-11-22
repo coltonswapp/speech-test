@@ -9,7 +9,8 @@
 //  Secrets.plist. The screenshot is uploaded once via Studio's signer
 //  (/api/client/feedback-uploads) and OpenBot gets the download link.
 //  Xcode builds only for now. A screenshot offers the composer; screens add context through
-//  FeedbackContextProvider (lesson picker, lesson player, sentence breakdown). The old QA note
+//  FeedbackContextProvider (lesson picker, lesson player, sentence breakdown, clip feed/player,
+//  clip details). The old QA note
 //  still opens from the QA menus. Notes that fail wait in Settings → Debug → Feedback queue.
 //
 

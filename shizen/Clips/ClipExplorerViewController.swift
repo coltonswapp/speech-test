@@ -16,8 +16,9 @@
 
 import UIKit
 
-/// Plays clips as a feed starting at the given index.
-typealias ClipFeedPlayHandler = ([ClipSummary], Int) -> Void
+/// Plays clips as a feed starting at the given index. `source` is the analytics entry
+/// point (`ClipAnalytics`): explore, search, tag, channel.
+typealias ClipFeedPlayHandler = ([ClipSummary], Int, String) -> Void
 
 /// Plays `clips` from `start`: through `handler` if given, else as a feed pushed on
 /// `controller`'s stack. Either way the feed offers no way to explore further: the
@@ -26,13 +27,15 @@ typealias ClipFeedPlayHandler = ([ClipSummary], Int) -> Void
 private func playClips(
     _ clips: [ClipSummary],
     startingAt start: Int,
+    analyticsSource: String,
     handler: ClipFeedPlayHandler?,
     from controller: UIViewController?
 ) {
     if let handler {
-        handler(clips, start)
+        handler(clips, start, analyticsSource)
     } else {
         let feed = ClipFeedViewController(clips: clips, startingAt: start)
+        feed.analyticsSource = analyticsSource
         feed.allowsExploring = false
         controller?.navigationController?.pushViewController(feed, animated: true)
     }
@@ -331,6 +334,10 @@ struct ClipQuery: Hashable {
     var channel: String?
     /// Exactly this JLPT level (5 = N5 … 1 = N1). Nil = every level.
     var level: Int?
+    /// The learner's saved clips (`SavedClipStore`), newest first, instead of a server query.
+    var saved = false
+
+    static let saved = ClipQuery(saved: true)
 
     static func tag(_ filter: ClipTagFilter, level: Int? = nil) -> ClipQuery {
         ClipQuery(tag: filter, level: level)
@@ -349,6 +356,7 @@ struct ClipQuery: Hashable {
     }
 
     var title: String {
+        if saved { return "Saved Clips" }
         if let tag { return tag.hashtag }
         if let search { return "“\(search)”" }
         if let channel { return channel }
@@ -358,6 +366,15 @@ struct ClipQuery: Hashable {
 
     /// A tag's, search's or channel's list can switch levels; a level's list is already one level.
     var offersLevelPicker: Bool { tag != nil || search != nil || channel != nil }
+
+    /// Where a feed opened from this list is counted. A level-only list is the explorer.
+    var analyticsSource: String {
+        if saved { return ClipAnalytics.saved }
+        if tag != nil { return ClipAnalytics.tag }
+        if search != nil { return ClipAnalytics.search }
+        if channel != nil { return ClipAnalytics.channel }
+        return ClipAnalytics.explore
+    }
 }
 
 /// One tag's (or search's) clips: Play All, Shuffle, or pick one.
@@ -427,6 +444,16 @@ final class ClipQueryListViewController: UIViewController, UICollectionViewDeleg
         configureDataSource()
         applySnapshot()
         Task { await load() }
+        if query.saved {
+            // Saved or unsaved from a clip in the feed this list played.
+            NotificationCenter.default.addObserver(
+                forName: SavedClipStore.didChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in await self?.load() }
+            }
+        }
     }
 
     private static func makeLayout() -> UICollectionViewLayout {
@@ -508,6 +535,7 @@ final class ClipQueryListViewController: UIViewController, UICollectionViewDeleg
     }
 
     private var emptyMessage: String {
+        if query.saved { return "No saved clips yet. Save one from a clip’s ••• menu or Clip Details." }
         if let errorText { return "Couldn’t load clips. \(errorText)" }
         if let level = query.level, query.offersLevelPicker { return "No N\(level) clips match. Try another level." }
         return "No clips match."
@@ -515,7 +543,13 @@ final class ClipQueryListViewController: UIViewController, UICollectionViewDeleg
 
     private func play(startingAt start: Int, shuffled: Bool) {
         guard !clips.isEmpty else { return }
-        playClips(shuffled ? clips.shuffled() : clips, startingAt: start, handler: onPlay, from: self)
+        playClips(
+            shuffled ? clips.shuffled() : clips,
+            startingAt: start,
+            analyticsSource: query.analyticsSource,
+            handler: onPlay,
+            from: self
+        )
     }
 
     /// Narrows the list to one level (nil = every level) and reloads it.
@@ -531,6 +565,15 @@ final class ClipQueryListViewController: UIViewController, UICollectionViewDeleg
         generation += 1
         let current = generation
         let query = query
+        if query.saved {
+            // Already on hand, and kept current by the store's listener.
+            clips = SavedClipStore.shared.clips
+            clipsByID = Dictionary(clips.map { ($0.clipID, $0) }, uniquingKeysWith: { first, _ in first })
+            errorText = nil
+            isLoading = false
+            applySnapshot()
+            return
+        }
         let filters = query.tag.map { [$0] } ?? []
         // The server has no channel filter, but its search covers channel names;
         // the exact match happens below.
@@ -597,6 +640,28 @@ final class ClipQueryListViewController: UIViewController, UICollectionViewDeleg
         guard case .clip(let id) = dataSource.itemIdentifier(for: indexPath),
               let index = clips.firstIndex(where: { $0.clipID == id }) else { return }
         play(startingAt: index, shuffled: false)
+    }
+
+    /// Saved Clips: long-press a clip to unsave it without opening it.
+    func collectionView(
+        _ collectionView: UICollectionView,
+        contextMenuConfigurationForItemsAt indexPaths: [IndexPath],
+        point: CGPoint
+    ) -> UIContextMenuConfiguration? {
+        guard query.saved, indexPaths.count == 1,
+              case .clip(let id) = dataSource.itemIdentifier(for: indexPaths[0]),
+              let clip = clipsByID[id] else { return nil }
+        return UIContextMenuConfiguration(actionProvider: { _ in
+            UIMenu(children: [
+                UIAction(
+                    title: "Remove from Saved",
+                    image: UIImage(systemName: "bookmark.slash"),
+                    attributes: .destructive
+                ) { _ in
+                    SavedClipStore.shared.toggle(clip, from: .list)
+                },
+            ])
+        })
     }
 }
 

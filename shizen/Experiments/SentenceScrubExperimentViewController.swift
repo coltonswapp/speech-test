@@ -29,6 +29,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
 
     /// Short labels for the menu; sentences exercise different particles, questions, and kanji density.
     private static let exampleSentences: [(title: String, text: String)] = [
+        ("What color", "この桜は何色ですか？"),
         ("Change", "お釣りは五十円です。"),
         ("Weather", "今日はとてもいい天気ですね。"),
         ("Walk to station", "駅まで歩いて行きましょう。"),
@@ -64,6 +65,8 @@ final class SentenceScrubExperimentViewController: UIViewController {
     /// "Report an Issue" in the options menu, for the line this screen shows
     /// (clips pass one that already knows the clip and line). Nil hides it.
     private let reportIssue: (() -> Void)?
+    /// Set by a clip line so breakdown and gloss events say `clip` instead of `other`.
+    private let analyticsSourceOverride: String?
     private var analyticsVisit = SentenceBreakdownVisit()
 
     init(
@@ -78,12 +81,14 @@ final class SentenceScrubExperimentViewController: UIViewController {
         showsListenControl: Bool = true,
         script: SentenceScrubScript? = nil,
         allowsCommonUses: Bool = true,
-        reportIssue: (() -> Void)? = nil
+        reportIssue: (() -> Void)? = nil,
+        analyticsSource: String? = nil
     ) {
         currentSentence = sentence
         self.script = script
         self.reportIssue = reportIssue
         self.allowsCommonUses = allowsCommonUses
+        self.analyticsSourceOverride = analyticsSource
         let tokens = tokens ?? script?.tokens(in: sentence)
         let trimmedEnglish = englishTranslation?.trimmingCharacters(in: .whitespacesAndNewlines)
         providedEnglish = (trimmedEnglish?.isEmpty ?? true) ? nil : trimmedEnglish
@@ -113,6 +118,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
         script = nil
         allowsCommonUses = true
         reportIssue = nil
+        analyticsSourceOverride = nil
         super.init(coder: coder)
     }
 
@@ -407,6 +413,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
                 sourceTitle: self.vocabularySourceTitle(),
                 lineEnglish: self.vocabularyLineEnglish(),
                 allowsCommonUses: self.allowsCommonUses,
+                analyticsSource: self.analyticsSourceOverride,
                 from: self
             )
         }
@@ -416,6 +423,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
                 surface: word,
                 glossFraming: .word,
                 allowsCommonUses: self.allowsCommonUses,
+                analyticsSource: self.analyticsSourceOverride,
                 from: self
             )
         }
@@ -423,7 +431,11 @@ final class SentenceScrubExperimentViewController: UIViewController {
         if allowsCommonUses {
             wordDictionaryDetailView.onSelectCommonUsesExample = { [weak self] example in
                 guard let self else { return }
-                WordDictionaryDetailSheetPresenter.pushExample(example, from: self)
+                WordDictionaryDetailSheetPresenter.pushExample(
+                    example,
+                    analyticsSource: self.analyticsSourceOverride,
+                    from: self
+                )
             }
         }
         wordDictionaryDetailView.onSelectKanji = { [weak self] character in
@@ -577,6 +589,7 @@ final class SentenceScrubExperimentViewController: UIViewController {
     }
 
     private var analyticsSource: String {
+        if let analyticsSourceOverride { return analyticsSourceOverride }
         if script != nil { return "scripted" }
         return dialogueLineAudio != nil ? "dialogue" : "other"
     }

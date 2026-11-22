@@ -206,7 +206,7 @@
 				F6PH00012FPOSTHOG001 /* XCRemoteSwiftPackageReference "posthog-ios" */,
 				F6AA00012F957A880FFF001 /* XCLocalSwiftPackageReference "TTSCore" */,
 				F6IK00012FINTERACT001 /* XCLocalSwiftPackageReference "InteractionKit" */,
-				F6FBK0012FCSFBKIT0001 /* XCRemoteSwiftPackageReference "CSFeedbackKit" */,
+				F6FBK0012FCSFBKIT0001 /* XCLocalSwiftPackageReference "../CSFeedbackKit" */,
 				F6SC00012FCONTENT001 /* XCLocalSwiftPackageReference "GrammarContentKit" */,
 				F65E7DF9300B104C0081F120 /* XCLocalSwiftPackageReference "../cs-ios-style-guide" */,
 			);
@@ -507,6 +507,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = TTSCore;
 		};
+		F6FBK0012FCSFBKIT0001 /* XCLocalSwiftPackageReference "../CSFeedbackKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../CSFeedbackKit;
+		};
 		F6IK00012FINTERACT001 /* XCLocalSwiftPackageReference "InteractionKit" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = InteractionKit;
@@ -556,14 +560,6 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 6.0.0;
-			};
-		};
-		F6FBK0012FCSFBKIT0001 /* XCRemoteSwiftPackageReference "CSFeedbackKit" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/coltonswapp/CSFeedbackKit";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.1.1;
 			};
 		};
 		F6PH00012FPOSTHOG001 /* XCRemoteSwiftPackageReference "posthog-ios" */ = {
@@ -659,7 +655,6 @@
 		};
 		F6FBK0022FCSFBKIT0002 /* CSFeedbackKitUI */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = F6FBK0012FCSFBKIT0001 /* XCRemoteSwiftPackageReference "CSFeedbackKit" */;
 			productName = CSFeedbackKitUI;
 		};
 		F6IK00022FINTERACT002 /* InteractionKit */ = {

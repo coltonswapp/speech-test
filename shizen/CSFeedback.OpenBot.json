@@ -9,6 +9,7 @@
   "destinations": [
     {
       "id": "openbot",
+      "name": "OpenBot",
       "url": "${OPENBOT_WEBHOOK_URL}",
       "format": "openbot",
       "signing": { "scheme": "openbot", "secret": "${OPENBOT_WEBHOOK_SECRET}" },

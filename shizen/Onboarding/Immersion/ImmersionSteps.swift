@@ -369,6 +369,7 @@ final class ImmersionClipsStepViewController: ImmersionStepViewController {
 
     private func installFeed(_ clips: [ClipSummary]) {
         let feed = ClipFeedViewController(clips: clips)
+        feed.analyticsSource = ClipAnalytics.onboarding
         feed.allowsExploring = false
         // Onboarding's navigation stack isn't the feed's: a pushed breakdown would land in the flow.
         feed.presentsBreakdownAsSheet = true

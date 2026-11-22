@@ -123,9 +123,7 @@ final class JMDictStore {
 
     private func openDatabaseIfNeeded() {
         guard dbQueue == nil else { return }
-        guard
-            let url = Bundle.main.url(forResource: "jmdict", withExtension: "sqlite")
-        else {
+        guard let url = Self.jmdictSQLiteURL() else {
             print("JMDictStore: jmdict.sqlite not found in bundle")
             return
         }
@@ -549,7 +547,8 @@ final class JMDictStore {
                 forExpression: lookupExpression,
                 mecabReading: compareReading,
                 rows: rows,
-                in: sentence
+                in: sentence,
+                at: range
             )
             let inflectionSurface = trimmedWord.isEmpty ? trimmedRuby : trimmedWord
             // Ruby narrower than the word (食 inside token 食べ): the only reading we may emit is the
@@ -681,7 +680,12 @@ final class JMDictStore {
     /// Reading for a run of adjacent MeCab tokens merged into a single JMdict headword
     /// (一+人 → 一人/ひとり). Returns nil when the merged surface is not a headword; keeps
     /// `mecabReading` when the dictionary agrees with it (same ranking as other refinements).
-    func compoundMergedReading(forSurface surface: String, mecabReading: String) -> String? {
+    func compoundMergedReading(
+        forSurface surface: String,
+        mecabReading: String,
+        in sentence: String? = nil,
+        at range: Range<String.Index>? = nil
+    ) -> String? {
         openDatabaseIfNeeded()
         guard let dbQueue, !surface.isEmpty else { return nil }
         do {
@@ -709,7 +713,8 @@ final class JMDictStore {
                 forExpression: surface,
                 mecabReading: mecabReading,
                 rows: rows,
-                in: surface
+                in: sentence ?? surface,
+                at: range
             )
         } catch {
             print("JMDictStore: compoundMergedReading error: \(error)")
@@ -721,14 +726,17 @@ final class JMDictStore {
         forExpression expression: String,
         mecabReading: String,
         rows: [JMDictEntry],
-        in sentence: String
+        in sentence: String,
+        at range: Range<String.Index>? = nil
     ) -> String {
         var bestScoreByReading: [String: Int] = [:]
+        var glossariesByReading: [String: [String]] = [:]
         for row in rows {
             let reading = row.displayReading.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !reading.isEmpty else { continue }
             let score = row.score ?? 0
             bestScoreByReading[reading] = max(bestScoreByReading[reading] ?? Int.min, score)
+            glossariesByReading[reading, default: []].append(row.glossary)
         }
         guard !bestScoreByReading.isEmpty else { return mecabReading }
 
@@ -743,6 +751,31 @@ final class JMDictStore {
         }
 
         guard let top = bestScoreByReading.max(by: { $0.value < $1.value }) else { return mecabReading }
+
+        // Homographs (何色 なにいろ vs なんしょく): never keep a MeCab hybrid that is
+        // not a dictionary reading, and do not keep a valid-but-wrong MeCab reading
+        // just because it is in JMdict. Default to the highest-scored reading unless
+        // the sentence remainder matches another sense (e.g. "how many" + ある).
+        if bestScoreByReading.count > 1 {
+            let remainder = sentenceRemainder(after: expression, in: sentence, at: range)
+            if let quantityReading = quantitySenseReading(
+                glossariesByReading: glossariesByReading,
+                remainder: remainder,
+                scores: bestScoreByReading
+            ) {
+                return quantityReading
+            }
+            // 何色: both readings score 0. Prefer the non-"how many" sense
+            // (なにいろ) unless the sentence is a quantity question.
+            if let qualityReading = qualitySenseReading(
+                glossariesByReading: glossariesByReading,
+                scores: bestScoreByReading
+            ) {
+                return qualityReading
+            }
+            return top.key
+        }
+
         // MeCab reading absent from JMdict (一人 → いちにん / ひとり): take the
         // dictionary reading only when it is actually popular. A score-0 hapax
         // (初め/ぞめ) must not overwrite MeCab's はじめ.
@@ -753,6 +786,75 @@ final class JMDictStore {
             return top.key
         }
         return mecabReading
+    }
+
+    private static func sentenceRemainder(
+        after expression: String,
+        in sentence: String,
+        at range: Range<String.Index>?
+    ) -> String {
+        if let range, range.upperBound <= sentence.endIndex, sentence[range] == expression {
+            return String(sentence[range.upperBound...])
+        }
+        if let found = sentence.range(of: expression) {
+            return String(sentence[found.upperBound...])
+        }
+        return ""
+    }
+
+    private static let existencePredicatePrefixes = [
+        "あります", "ある", "います", "いる", "あった", "いた",
+    ]
+
+    /// Quantity interrogatives (何色 なんしょく "how many colours") follow ある / いる.
+    private static func sentenceHintsQuantityReading(_ remainder: String) -> Bool {
+        var text = remainder.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let first = text.first, "がはもを".contains(first) {
+            text = String(text.dropFirst())
+        }
+        return existencePredicatePrefixes.contains(where: { text.hasPrefix($0) })
+    }
+
+    private static func glossesContainHowMany(_ glosses: [String]) -> Bool {
+        glosses.contains { $0.localizedCaseInsensitiveContains("how many") }
+    }
+
+    private static func quantitySenseReading(
+        glossariesByReading: [String: [String]],
+        remainder: String,
+        scores: [String: Int]
+    ) -> String? {
+        guard sentenceHintsQuantityReading(remainder) else { return nil }
+        let quantityReadings = glossariesByReading.compactMap { reading, glosses -> String? in
+            glossesContainHowMany(glosses) ? reading : nil
+        }
+        return quantityReadings.max(by: { (scores[$0] ?? Int.min) < (scores[$1] ?? Int.min) })
+    }
+
+    private static func qualitySenseReading(
+        glossariesByReading: [String: [String]],
+        scores: [String: Int]
+    ) -> String? {
+        let quality = glossariesByReading.compactMap { reading, glosses -> String? in
+            glossesContainHowMany(glosses) ? nil : reading
+        }
+        return quality.max(by: { (scores[$0] ?? Int.min) < (scores[$1] ?? Int.min) })
+    }
+
+    private static func jmdictSQLiteURL() -> URL? {
+        if let url = Bundle.main.url(forResource: "jmdict", withExtension: "sqlite") {
+            return url
+        }
+        // SPM tests symlink this file; resolve so sqlite is found next to shizen/Dictionary/.
+        let fromSource = URL(fileURLWithPath: #filePath)
+            .resolvingSymlinksInPath()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("jmdict.sqlite")
+        if FileManager.default.fileExists(atPath: fromSource.path) {
+            return fromSource
+        }
+        return nil
     }
 
     /// Score gap / floor used when JMdict may override MeCab (ひとり vs いちにん).
@@ -1067,24 +1169,81 @@ final class JMDictStore {
     }
 
     /// Full kana for romaji / speech. Prefers the inflected dictionary reading, then furigana expansion.
-    func kanaReadingForDisplay(surface: String, matching entry: JMDictEntry?) -> String {
-        let yomi = entry
-            .map { inflectedReadingForSurface(surface, matching: $0).trimmingCharacters(in: .whitespacesAndNewlines) }
+    func kanaReadingForDisplay(
+        surface: String,
+        matching entry: JMDictEntry?,
+        inSentence sentence: String? = nil
+    ) -> String {
+        let trimmedSurface = surface.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSentence = sentence?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedSentence.isEmpty, trimmedSentence != trimmedSurface,
+           trimmedSentence.contains(trimmedSurface) {
+            let fromSentence = JapaneseTokenizer.hiraganaReading(
+                for: trimmedSurface,
+                inSentence: trimmedSentence
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !fromSentence.isEmpty, !Self.containsKanji(fromSentence) {
+                return fromSentence
+            }
+        }
+
+        let chosen = sentencePreferredEntry(
+            surface: trimmedSurface,
+            matching: entry,
+            in: trimmedSentence
+        ) ?? entry
+        let yomi = chosen
+            .map { inflectedReadingForSurface(trimmedSurface, matching: $0).trimmingCharacters(in: .whitespacesAndNewlines) }
             ?? ""
         if !yomi.isEmpty, !Self.containsKanji(yomi) {
             return yomi
         }
-        let fromFurigana = JapaneseTokenizer.hiraganaReading(for: surface)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let fromFurigana = JapaneseTokenizer.hiraganaReading(
+            for: trimmedSurface,
+            inSentence: trimmedSentence.isEmpty ? nil : trimmedSentence
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
         if !fromFurigana.isEmpty, !Self.containsKanji(fromFurigana) {
             return fromFurigana
         }
-        return yomi.isEmpty ? surface.trimmingCharacters(in: .whitespacesAndNewlines) : yomi
+        return yomi.isEmpty ? trimmedSurface : yomi
     }
 
-    func romajiForDisplay(surface: String, matching entry: JMDictEntry?) -> String {
-        HiraganaRomaji.romanize(kanaReadingForDisplay(surface: surface, matching: entry))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+    func romajiForDisplay(
+        surface: String,
+        matching entry: JMDictEntry?,
+        inSentence sentence: String? = nil
+    ) -> String {
+        HiraganaRomaji.romanize(
+            kanaReadingForDisplay(surface: surface, matching: entry, inSentence: sentence)
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Among homograph rows, the entry whose reading fits `sentence` (same picker as furigana).
+    private func sentencePreferredEntry(
+        surface: String,
+        matching entry: JMDictEntry?,
+        in sentence: String
+    ) -> JMDictEntry? {
+        guard !sentence.isEmpty else { return nil }
+        let expression = (entry?.expression ?? surface).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !expression.isEmpty else { return nil }
+        let rows = entries(matchingExpression: expression)
+        guard rows.count > 1 else { return nil }
+        let readings = Set(rows.map { $0.displayReading.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .subtracting([""])
+        guard readings.count > 1 else { return nil }
+        let mecab = entry.map { $0.displayReading.trimmingCharacters(in: .whitespacesAndNewlines) }
+            ?? JapaneseTokenizer.hiraganaReading(for: surface)
+        let chosen = Self.preferredReadingAmongAlternates(
+            forExpression: expression,
+            mecabReading: mecab,
+            rows: rows,
+            in: sentence
+        )
+        return rows.first {
+            $0.displayReading.trimmingCharacters(in: .whitespacesAndNewlines) == chosen
+        }
     }
 
     private static func containsKanji(_ text: String) -> Bool {

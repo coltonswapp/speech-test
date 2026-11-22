@@ -16,6 +16,7 @@
     { "key": "videoId", "label": "Video", "sources": ["screen"] },
     { "key": "videoTitle", "label": "Video title", "sources": ["screen"] },
     { "key": "channelName", "label": "Channel", "sources": ["screen"] },
+    { "key": "channelId", "label": "Channel ID", "sources": ["screen"] },
     { "key": "channelURL", "label": "Channel link", "sources": ["screen"], "visible": false },
     { "key": "youtubeLink", "label": "YouTube", "sources": ["screen"], "visible": false },
     { "key": "studioLink", "label": "Studio", "sources": ["screen"] },
@@ -34,6 +35,7 @@
   "destinations": [
     {
       "id": "studio-notes",
+      "name": "Shizen Studio",
       "url": "${SHIZEN_CMS_BASE_URL}/api/client/content-qa/notes",
       "auth": "staff",
       "format": "shizenNote",

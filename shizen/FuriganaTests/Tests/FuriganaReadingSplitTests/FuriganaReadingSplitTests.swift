@@ -15,6 +15,24 @@ final class RubyReadingSplitTests: XCTestCase {
         )
     }
 
+    func testNaniIroStaysUnsplit() {
+        XCTAssertNil(
+            RubyReadingSplit.confidentKanjiReadingPieces(fullKanjiReading: "なにいろ", kanjiCount: 2)
+        )
+    }
+
+    func testNanShokuStaysUnsplit() {
+        XCTAssertNil(
+            RubyReadingSplit.confidentKanjiReadingPieces(fullKanjiReading: "なんしょく", kanjiCount: 2)
+        )
+    }
+
+    func testHybridNaniShokuStaysUnsplit() {
+        XCTAssertNil(
+            RubyReadingSplit.confidentKanjiReadingPieces(fullKanjiReading: "なにしょく", kanjiCount: 2)
+        )
+    }
+
     func testIdeographicSpaceRequiresExactRejoin() {
         XCTAssertEqual(
             RubyReadingSplit.ideographicSpaceParts(for: "つか\u{3000}さま"),

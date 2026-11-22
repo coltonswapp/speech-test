@@ -2,15 +2,6 @@
   "originHash" : "75b2de19e1d40900fefaec537f6d4204bd4fb0786a856f840ff008fb421c1c93",
   "pins" : [
     {
-      "identity" : "csfeedbackkit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/coltonswapp/CSFeedbackKit",
-      "state" : {
-        "revision" : "6d658691f26dacd72332561b5fb86546c010a4f0",
-        "version" : "0.1.1"
-      }
-    },
-    {
       "identity" : "abseil-cpp-binary",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/google/abseil-cpp-binary.git",

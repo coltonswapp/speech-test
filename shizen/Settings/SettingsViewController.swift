@@ -153,6 +153,7 @@ final class SettingsViewController: UIViewController {
         case paywalls
         case teamNote
         case teamNoteHana
+        case sentenceScrub
 
         var title: String {
             switch self {
@@ -202,6 +203,7 @@ final class SettingsViewController: UIViewController {
             case .paywalls: return "Paywalls"
             case .teamNote: return "Team note"
             case .teamNoteHana: return "Team note · Hana"
+            case .sentenceScrub: return "Breakdown"
             }
         }
 
@@ -253,6 +255,7 @@ final class SettingsViewController: UIViewController {
             case .paywalls: return "Custom paywall variants · mock offering · trial states"
             case .teamNote: return "Pre-paywall letter from the team · Continue opens the paywalls"
             case .teamNoteHana: return "Same note told by Hana in chat bubbles · Continue opens the paywalls"
+            case .sentenceScrub: return "Sentence view · この桜は何色ですか？"
             }
         }
 
@@ -304,6 +307,7 @@ final class SettingsViewController: UIViewController {
             case .paywalls: return "creditcard"
             case .teamNote: return "envelope.open"
             case .teamNoteHana: return "bubble.left.and.text.bubble.right"
+            case .sentenceScrub: return "text.magnifyingglass"
             }
         }
     }
@@ -743,6 +747,7 @@ final class SettingsViewController: UIViewController {
                     .flashcards,
                     .savedVocabulary,
                     .lemmaResolution,
+                    .sentenceScrub,
                     .kanjiDecomposition,
                     .verbCombo,
                     .slideComponents,
@@ -1154,6 +1159,14 @@ final class SettingsViewController: UIViewController {
             present(NaturalTeamNotePlaygroundController(), animated: true)
         case .teamNoteHana:
             present(NaturalTeamNotePlaygroundController(variant: .hana), animated: true)
+        case .sentenceScrub:
+            navigationController?.pushViewController(
+                SentenceScrubExperimentViewController(
+                    sentence: "この桜は何色ですか？",
+                    englishTranslation: "What color are these cherry blossoms?"
+                ),
+                animated: true
+            )
         }
     }
 

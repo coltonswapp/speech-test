@@ -129,14 +129,17 @@ enum ClipFeedbackClient {
             id: "clip:\(clipID)",
             reasons: ClipFeedbackReason.allCases.map { .init(id: $0.rawValue, title: $0.title) }
         ) { rating, reasonID in
+            let reason = reasonID.flatMap(ClipFeedbackReason.init(rawValue:))
             ClipRatingMemory.markRated(clipID)
             Task {
                 do {
-                    try await sendRating(
-                        clipID: clipID,
-                        rating: rating,
-                        reason: reasonID.flatMap(ClipFeedbackReason.init(rawValue:))
-                    )
+                    try await sendRating(clipID: clipID, rating: rating, reason: reason)
+                    var properties: [String: Any] = [
+                        "clip_id": clipID,
+                        "rating": rating.rawValue,
+                    ]
+                    if let reason { properties["reason"] = reason.rawValue }
+                    Analytics.track(.clipRated, properties)
                 } catch {
                     print("[ClipFeedback] rating for \(clipID) failed: \(error)")
                 }

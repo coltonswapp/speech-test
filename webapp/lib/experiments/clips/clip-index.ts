@@ -5,11 +5,18 @@ import { clipIndex } from "@/lib/db/schema";
 import type { ClipPayloadSummary } from "@/lib/experiments/clips/payload";
 import { clipIndexRow } from "@/lib/experiments/clips/summary";
 import { CLIP_TAG_FACETS, clipTagKey, type ClipTagFacet } from "@/lib/experiments/clips/tags";
+import {
+  deleteClipTokenIndex,
+  isUndefinedTable,
+  replaceClipTokenIndex,
+} from "@/lib/experiments/clips/token-index-db";
 import type { ClipDraft, ClipSummary } from "@/lib/experiments/clips/types";
 
 // Postgres index of clip drafts (see `clip_index` in lib/db/schema.ts). R2
 // holds the drafts; this holds what lists need, kept in step by
 // writeClipDraft / deleteClip. `pnpm clip:index-backfill` rebuilds it.
+// Token rows (`clip_token_index`) are rebuilt in the same calls so a
+// re-tokenized clip is searchable without a separate pipeline step.
 
 export async function upsertClipIndex(draft: ClipDraft): Promise<void> {
   const row = clipIndexRow(draft);
@@ -17,9 +24,25 @@ export async function upsertClipIndex(draft: ClipDraft): Promise<void> {
     .insert(clipIndex)
     .values(row)
     .onConflictDoUpdate({ target: clipIndex.id, set: { ...row, id: undefined } });
+  try {
+    await replaceClipTokenIndex(db, draft);
+  } catch (error) {
+    // Table is created by the drizzle migration / `pnpm clip:index-backfill --write`.
+    // Skip until then so clip saves don't fail if this deploy lands first.
+    if (isUndefinedTable(error, "clip_token_index")) {
+      console.warn("[clips] clip_token_index is missing; skipping token index upsert");
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function deleteClipIndex(id: string): Promise<void> {
+  try {
+    await deleteClipTokenIndex(db, id);
+  } catch (error) {
+    if (!isUndefinedTable(error, "clip_token_index")) throw error;
+  }
   await db.delete(clipIndex).where(eq(clipIndex.id, id));
 }
 

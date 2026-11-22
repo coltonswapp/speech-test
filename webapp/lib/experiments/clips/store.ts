@@ -62,8 +62,9 @@ export async function writeClipDraft(draft: ClipDraft): Promise<ClipDraft> {
     Buffer.from(JSON.stringify(next, null, 2)),
     "application/json"
   );
-  // Lists read the index, so a draft saved without it would be invisible
-  // there; let the error surface (the draft itself is saved, so retrying is safe).
+  // Lists and token search read the indexes, so a draft saved without them
+  // would be invisible there; let the error surface (the draft itself is
+  // saved, so retrying is safe). Token rows are rebuilt inside upsertClipIndex.
   await upsertClipIndex(next);
   return next;
 }

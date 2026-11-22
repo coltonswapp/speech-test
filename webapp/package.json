@@ -23,6 +23,7 @@
     "clip:fetch": "node public/clip-fetch.mjs",
     "clip:queue-seed": "dotenv -e .env.local -- tsx scripts/clip-queue-seed.ts",
     "clip:index-backfill": "dotenv -e .env.local -- tsx scripts/clip-index-backfill.ts",
+    "clip:supercut": "dotenv -e .env.local -- tsx scripts/clip-supercut.ts",
     "clip:queue-batch": "dotenv -e .env.local -- tsx scripts/clip-queue-batch.ts",
     "clip:queue-difficulty": "dotenv -e .env.local -- tsx scripts/clip-queue-difficulty.ts",
     "clip:asr-compare": "dotenv -e .env.local -- tsx scripts/clip-asr-compare.ts",

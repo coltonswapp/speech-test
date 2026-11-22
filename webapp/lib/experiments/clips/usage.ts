@@ -57,7 +57,7 @@ export function withUsageRun(
     step: run.step,
     at: new Date().toISOString(),
     model: run.model,
-    durationMs: Date.now() - run.startedAt,
+    durationMs: Math.max(0, Date.now() - run.startedAt),
     calls: run.calls,
     ...(run.tokens ?? ZERO_TOKENS),
     ...(run.cachedLines !== undefined ? { cachedLines: run.cachedLines } : {}),

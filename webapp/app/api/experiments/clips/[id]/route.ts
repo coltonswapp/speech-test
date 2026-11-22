@@ -12,7 +12,12 @@ import {
   clipOrientationSchema,
   type ClipDraftResponse,
 } from "@/lib/experiments/clips/types";
-import { carryTimings, clipTokensProblem } from "@/lib/experiments/clips/token-edits";
+import {
+  applyClipTokensEdit,
+  applyClipTokenSwap,
+  carryTimings,
+  clipTokensProblem,
+} from "@/lib/experiments/clips/token-edits";
 import { normalizeReading } from "@/lib/dialogue/token-readings";
 
 export async function GET(
@@ -69,8 +74,9 @@ const patchSchema = z.object({
   /** English per sentence, same order and length as the saved transcript. */
   english: z.array(z.string().max(1000)).max(200).optional(),
   /**
-   * Hand-edited tokens for one sentence (split / merge / reading). Drops that
-   * sentence's timings, so the clip needs re-aligning.
+   * Hand-edited tokens for one sentence (split / merge / reading / surface
+   * swap). Same-count text swaps keep timings and the feed verdict; a
+   * different count needs re-align (onlyUntimed).
    */
   tokens: z
     .object({
@@ -79,6 +85,19 @@ const patchSchema = z.object({
         .array(z.object({ text: z.string().min(1).max(100), reading: z.string().max(100).optional() }))
         .min(1)
         .max(300),
+      /** New Japanese when the tokens no longer spell the saved line. */
+      text: z.string().min(1).max(500).optional(),
+      english: z.string().max(1000).optional(),
+    })
+    .optional(),
+  /** One-token surface/reading swap. Keeps timings and the feed verdict. */
+  swap: z
+    .object({
+      sentence: z.number().int().min(0),
+      token: z.number().int().min(0),
+      text: z.string().min(1).max(100),
+      reading: z.string().max(100).optional(),
+      english: z.string().max(1000).optional(),
     })
     .optional(),
   /** Marks one sentence's warnings as reviewed (or un-marks it). */
@@ -146,37 +165,69 @@ export async function PATCH(
       };
     }
     if (parsed.data.tokens) {
-      const { sentence: index, tokens } = parsed.data.tokens;
-      const sentence = draft.sentences[index];
-      if (!sentence) {
-        return NextResponse.json({ error: `No sentence ${index + 1}.` }, { status: 400 });
-      }
-      const problem = clipTokensProblem(sentence.text, tokens);
-      if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+      const { sentence: index, tokens, text, english } = parsed.data.tokens;
       const cleaned = tokens.map((token) => {
         const reading = normalizeReading(token.reading);
         return { text: token.text, ...(reading ? { reading } : {}) };
       });
-      // Merges and reading fixes keep their times; only split halves need aligning.
-      const carried = carryTimings(sentence.text, sentence.tokens ?? [], cleaned);
-      const stillTimed = carried.every((t) => t.startSec !== undefined && t.endSec !== undefined);
-      draft = {
-        ...draft,
-        sentences: draft.sentences.map((s, i) =>
-          i !== index
-            ? s
-            : stillTimed
-              ? { ...s, tokens: carried, basicSplit: undefined }
-              : {
-                  ...s,
-                  tokens: carried,
-                  score: undefined,
-                  flagsCleared: undefined,
-                  basicSplit: undefined,
-                }
-        ),
-        ...(stillTimed ? {} : { alignment: undefined }),
-      };
+      const sentence = draft.sentences[index];
+      if (!sentence) {
+        return NextResponse.json({ error: `No sentence ${index + 1}.` }, { status: 400 });
+      }
+      const textChanging =
+        text !== undefined || Boolean(clipTokensProblem(sentence.text, cleaned));
+      if (textChanging) {
+        const edited = applyClipTokensEdit(draft, { sentence: index, tokens: cleaned, text, english });
+        if ("error" in edited) return NextResponse.json({ error: edited.error }, { status: 400 });
+        draft = edited.draft;
+      } else {
+        // Merges and reading fixes keep their times; only split halves need aligning.
+        const carried = carryTimings(sentence.text, sentence.tokens ?? [], cleaned);
+        const stillTimed = carried.every((t) => t.startSec !== undefined && t.endSec !== undefined);
+        draft = {
+          ...draft,
+          sentences: draft.sentences.map((s, i) =>
+            i !== index
+              ? s
+              : stillTimed
+                ? { ...s, tokens: carried, basicSplit: undefined }
+                : {
+                    ...s,
+                    tokens: carried,
+                    score: undefined,
+                    flagsCleared: undefined,
+                    basicSplit: undefined,
+                  }
+          ),
+          ...(stillTimed ? {} : { alignment: undefined }),
+        };
+        if (english !== undefined) {
+          const en = english.trim();
+          draft = {
+            ...draft,
+            sentences: draft.sentences.map((s, i) => {
+              if (i !== index) return s;
+              const next = { ...s };
+              if (en) next.en = en;
+              else delete next.en;
+              return next;
+            }),
+          };
+        }
+      }
+    }
+    if (parsed.data.swap) {
+      const swap = parsed.data.swap;
+      const reading = normalizeReading(swap.reading);
+      const edited = applyClipTokenSwap(draft, {
+        sentence: swap.sentence,
+        token: swap.token,
+        text: swap.text,
+        ...(reading || swap.reading !== undefined ? { reading: reading ?? "" } : {}),
+        english: swap.english,
+      });
+      if ("error" in edited) return NextResponse.json({ error: edited.error }, { status: 400 });
+      draft = edited.draft;
     }
     if (parsed.data.clearFlags) {
       const { sentence: index, cleared } = parsed.data.clearFlags;

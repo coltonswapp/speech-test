@@ -180,6 +180,10 @@ export function studioClipUrl(clipId: string): string {
   return `${studioPublicBaseUrl()}/experiments/clips/${clipId}`;
 }
 
+export function studioIssueUrl(feedbackId: string): string {
+  return `${studioPublicBaseUrl()}/content/issues/clip-${feedbackId}`;
+}
+
 function clipBrief(draft: ClipDraft) {
   return {
     id: draft.id,
@@ -204,6 +208,8 @@ function reportBrief(row: ClipFeedbackRow) {
     tokenPosition: row.tokenPosition,
     appVersion: row.appVersion,
     createdAt: row.createdAt,
+    issueId: `clip-${row.id}`,
+    issueUrl: studioIssueUrl(row.id),
   };
 }
 
@@ -251,7 +257,7 @@ export async function dispatchAttempt(input: {
     playbook: clipFeedbackPlaybook(report.reason),
     next: [
       `Use the shizen-studio MCP against ${studioPublicBaseUrl()} (STUDIO_BASE_URL, STUDIO_AGENT_TOKEN from Settings → Agent tokens).`,
-      `1. claim_content_issue { issueId: "clip-${report.id}", agent: "${input.agent}", attemptId: "${id}", runUrl: <this run's link> }.`,
+      `1. claim_content_issue { issueId: "clip-${report.id}" or the Studio URL ${studioIssueUrl(report.id)}, agent: "${input.agent}", attemptId: "${id}", runUrl: <this run's link> }.`,
       "2. Follow the playbook.",
       `3. finish_content_issue_attempt { issueId: "clip-${report.id}", attemptId: "${id}", outcome, summary }. Always finish, also when you couldn't fix it.`,
     ].join("\n"),

@@ -24,6 +24,8 @@ import {
 } from "@/lib/clip-feedback/schema";
 import { cn } from "@/lib/utils";
 import { CLIP_REASON_LABELS, ISSUE_STATUS_LABELS } from "@/lib/content-issues/labels";
+import { clipIssueId } from "@/lib/content-issues/subjects";
+import { CopyIssueLink } from "@/components/content-issues/copy-issue-link";
 
 // Learner feedback from the app (POST /api/client/clips/[id]/feedback): thumbs
 // and "Report an issue". Content Issues links back to individual clips.
@@ -162,6 +164,7 @@ export function FeedbackItem({
               ? "Good clip"
               : "Not a good clip"}
         </Link>
+        {isIssue ? <CopyIssueLink issueId={clipIssueId(row.id)} size="icon-sm" variant="ghost" /> : null}
         {row.status ? (
           <Badge variant={row.status === "open" ? "destructive" : "secondary"}>
             {STATUS_LABELS[row.status]}

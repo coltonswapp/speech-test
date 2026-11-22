@@ -28,12 +28,13 @@ export async function upsertClipIndex(draft: ClipDraft): Promise<void> {
     await replaceClipTokenIndex(db, draft);
   } catch (error) {
     // Table is created by the drizzle migration / `pnpm clip:index-backfill --write`.
-    // Skip until then so clip saves don't fail if this deploy lands first.
+    // Never fail tokenize/align/feed/patch because search index writes failed:
+    // the draft is already in R2.
     if (isUndefinedTable(error, "clip_token_index")) {
       console.warn("[clips] clip_token_index is missing; skipping token index upsert");
-      return;
+    } else {
+      console.warn("[clips] clip_token_index replace failed; clip draft was saved", error);
     }
-    throw error;
   }
 }
 
@@ -41,7 +42,11 @@ export async function deleteClipIndex(id: string): Promise<void> {
   try {
     await deleteClipTokenIndex(db, id);
   } catch (error) {
-    if (!isUndefinedTable(error, "clip_token_index")) throw error;
+    if (isUndefinedTable(error, "clip_token_index")) {
+      console.warn("[clips] clip_token_index is missing; skipping token index delete");
+    } else {
+      console.warn("[clips] clip_token_index delete failed", error);
+    }
   }
   await db.delete(clipIndex).where(eq(clipIndex.id, id));
 }

@@ -9,6 +9,7 @@ describe("clipFeedbackRequestSchema", () => {
   it("accepts a plain rating and a line flag", () => {
     assert.equal(parse({ kind: "rating", rating: "up" }).success, true);
     assert.equal(parse({ kind: "rating", rating: "down", reason: "timing" }).success, true);
+    assert.equal(parse({ kind: "flag", reason: "transcription", note: "misheard 背後霊" }).success, true);
     assert.equal(
       parse({ kind: "flag", reason: "tokenization", line, tokenPosition: 1, note: "split wrong" }).success,
       true,

@@ -10,6 +10,7 @@ import {
 
 export const STEP_LABELS: Record<ClipUsageStep, string> = {
   transcribe: "Transcribe",
+  asr: "ASR compare",
   translate: "Translate",
   tokenize: "Tokenize",
   align: "Align",

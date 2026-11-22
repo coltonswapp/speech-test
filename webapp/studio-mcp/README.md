@@ -32,7 +32,7 @@ Read
 - clip_report: feed / level / channel counts, why clips are out of the feed, `needsLook` buckets of clip ids, cost by step / model / day (`since`)
 
 Edit
-- patch_clip: transcript, split/merge at token boundaries (keeps tokens and alignment), English, one line's tokens, clearFlags, highlights, jlptLevel, feedEligible, deprecated, shiftSec, orientation. Returns the new checks and what to re-run
+- patch_clip: transcript, split/merge at token boundaries (keeps tokens and alignment), English, one line's tokens, **swap** (one-word surface/reading change; keeps timings and the feed verdict), clearFlags, highlights, jlptLevel, feedEligible, deprecated, shiftSec, orientation. Returns the new checks and what to re-run
 - delete_clip (`confirm: true`; prefer `deprecated` for clips that have been live)
 
 Pipeline and jobs
@@ -61,8 +61,8 @@ Server side: `GET /api/experiments/clip-report` (`?ids=`, `?since=`) computes th
 
 Agents work the reports learners send from the app, one at a time. Each take is an attempt in Studio with server-side before/after snapshots of the clip (see docs/clip-agent-tickets-plan.md).
 
-- list_clip_feedback: open reports (or `status`), with reason, note, the reported line and word, and each report's attempts
-- claim_clip_feedback: take one report. Returns `attemptId`, the clip, and the playbook for the report's reason. Fails while another attempt is working (`takeOver` for a dead run)
+- list_clip_feedback: open reports (or `status`), with reason, note, the reported line and word, each report's attempts, and the Studio issue URL
+- claim_clip_feedback / get_content_issue / claim_content_issue: take a report by `cfb_…`, `clip-cfb_…`, or the Studio issue URL copied from Content Issues. Returns `attemptId`, the clip, and the playbook for the report's reason. Fails while another attempt is working (`takeOver` for a dead run)
 - finish_clip_feedback: close with `fixed` / `no_change_needed` (resolves the report), `needs_review` (a person compares and accepts), or `could_not_fix`. Returns the diff
 
 Studio's **Send to agent** posts the same report to Grok Bot or OpenBot by webhook; the bot then calls claim and finish like anyone else.

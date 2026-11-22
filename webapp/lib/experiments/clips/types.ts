@@ -66,7 +66,16 @@ export const clipSentenceSchema = z.object({
 });
 export type ClipSentence = z.infer<typeof clipSentenceSchema>;
 
-export const CLIP_USAGE_STEPS = ["transcribe", "translate", "tokenize", "align", "level", "tag", "feed"] as const;
+export const CLIP_USAGE_STEPS = [
+  "transcribe",
+  "asr",
+  "translate",
+  "tokenize",
+  "align",
+  "level",
+  "tag",
+  "feed",
+] as const;
 export type ClipUsageStep = (typeof CLIP_USAGE_STEPS)[number];
 
 /** Gemini token counts for one model call (or a step's calls summed). */
@@ -81,7 +90,7 @@ export type GeminiTokenCounts = {
   thinkingTokens: number;
 };
 
-/** One run of a step (one button press). Align has no Gemini tokens. */
+/** One run of a step (one button press). Align has no Gemini tokens. ASR compare is diagnostic (does not replace the transcript). */
 export const clipUsageRunSchema = z.object({
   step: z.enum(CLIP_USAGE_STEPS),
   at: z.string(),

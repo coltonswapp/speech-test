@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   decodeTokenSearchCursor,
   encodeTokenSearchCursor,
+  isUndefinedTable,
 } from "./token-index-db";
 import {
   clipTokenIndexRows,
@@ -192,5 +193,18 @@ describe("token search cursor", () => {
     const cursor = { clipId: "short-test", lineIndex: 2, charStart: 4 };
     assert.deepEqual(decodeTokenSearchCursor(encodeTokenSearchCursor(cursor)), cursor);
     assert.equal(decodeTokenSearchCursor("not-a-cursor"), null);
+  });
+});
+
+describe("isUndefinedTable", () => {
+  it("matches Postgres 42P01 for clip_token_index", () => {
+    assert.equal(
+      isUndefinedTable(
+        { code: "42P01", message: `relation "clip_token_index" does not exist` },
+        "clip_token_index"
+      ),
+      true
+    );
+    assert.equal(isUndefinedTable({ code: "23505", message: "duplicate" }, "clip_token_index"), false);
   });
 });

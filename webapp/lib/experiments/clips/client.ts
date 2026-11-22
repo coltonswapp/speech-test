@@ -85,7 +85,14 @@ export const clipsApi = {
       orientation?: ClipOrientation;
       english?: string[];
       highlights?: DialogueHighlights | null;
-      tokens?: { sentence: number; tokens: { text: string; reading?: string }[] };
+      tokens?: {
+        sentence: number;
+        tokens: { text: string; reading?: string }[];
+        text?: string;
+        english?: string;
+      };
+      /** One-token surface/reading swap; keeps timings and the feed verdict. */
+      swap?: { sentence: number; token: number; text: string; reading?: string; english?: string };
       clearFlags?: { sentence: number; cleared: boolean };
       /** 5 = N5 … 1 = N1; null clears the rating. */
       jlptLevel?: number | null;

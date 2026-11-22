@@ -743,12 +743,13 @@ export function registerClipTools(server: McpServer) {
     {
       title: "Edit clip",
       description: [
-        "Edit a clip draft (PATCH /api/experiments/clips/:id). Send only what changes. Fields are applied in this order: sentences, split, merge, english, tokens, clearFlags, highlights, jlptLevel, feedEligible, tags, deprecated, shiftSec, orientation.",
-        "• sentences: the FULL transcript, one sentence per entry. Any change drops alignment and the automatic feed verdict (a hand-set feed answer stays); changed lines lose their tokens. Afterwards run run_clip_steps mode \"missing\" (tokenize → align → translate → level → tag → feed). Do not use this just to break or join subtitle lines.",
+        "Edit a clip draft (PATCH /api/experiments/clips/:id). Send only what changes. Fields are applied in this order: sentences, split, merge, english, tokens, swap, clearFlags, highlights, jlptLevel, feedEligible, tags, deprecated, shiftSec, orientation.",
+        "• swap {sentence, token, text, reading?, english?}: change one token's surface (and optional reading) inside a line. The line text is rewritten from the tokens; each token keeps its start/end; alignment and the feed verdict stay. Prefer this for a single misheard word (背後霊 → 守護霊). Don't send sentences for a one-word fix.",
+        "• sentences: the FULL transcript, one sentence per entry. Any change drops alignment and the automatic feed verdict (a hand-set feed answer stays); changed lines lose their tokens. Afterwards run run_clip_steps mode \"missing\" (tokenize → align → translate → level → tag → feed). Do not use this just to break or join subtitle lines, or to swap one word.",
         "• split {sentence, atToken, english?}: break one line at token boundaries. atToken is the first token of the next line (1…n−1), or a list of those. Pieces join back to the original Japanese (punctuation between tokens stays on the left; opening brackets and quotes start the next line; spaces at the cut are dropped). Each token keeps its text, reading and timing; other lines, alignment and the feed verdict stay. english: one string per new line; empty leaves a line to fill in later. Omitting english clears the original line's English on every piece — send it to keep a translation. No tokenize or align needed.",
         "• merge {sentence, count?, english?}: join sentence with the next `count` lines (default 1). Tokens concatenate; timings, alignment and feed stay. english optional; omit to join the lines' existing English with a space (lines without English are skipped, so none is lost).",
         "• english: one string per sentence, same count and order as the saved transcript (send sentences / split / merge first in the same call if the line count changes). Empty string clears a line.",
-        "• tokens: hand-fix one sentence's tokens {sentence, tokens:[{text, reading?}]}. Token texts must join to exactly that sentence. Merges and reading fixes keep their timings; split halves need re-aligning (run_clip_steps steps [\"align\"], onlyUntimed).",
+        "• tokens: hand-fix one sentence's tokens {sentence, tokens:[{text, reading?}], text?, english?}. Same-text splits/merges/readings: texts must join the saved line; merges and reading fixes keep timings; split halves need re-aligning (run_clip_steps steps [\"align\"], onlyUntimed). To change the Japanese, pass the new token list (and text if the token count changes). Same count keeps timings and the feed verdict; a different count drops that line's times — re-align with onlyUntimed. Prefer swap for a single-word fix.",
         "• clearFlags {sentence, cleared}: mark a line's warnings as reviewed.",
         "• highlights: replace vocabulary / grammarPatterns / contextNotes (grammar source indices are sentence indices); null clears.",
         "• jlptLevel 1–5 (5 = N5): hand-set level the Level step won't overwrite silently; null clears.",
@@ -788,6 +789,17 @@ export function registerClipTools(server: McpServer) {
           .object({
             sentence: z.number().int().min(0),
             tokens: z.array(z.object({ text: z.string().min(1), reading: z.string().optional() })).min(1).max(300),
+            text: z.string().min(1).max(500).optional().describe("New Japanese when the tokens don't spell the saved line. Required if the token count changes."),
+            english: z.string().max(1000).optional(),
+          })
+          .optional(),
+        swap: z
+          .object({
+            sentence: z.number().int().min(0),
+            token: z.number().int().min(0).describe("0-based token index on that line."),
+            text: z.string().min(1).max(100).describe("New token surface."),
+            reading: z.string().max(100).optional().describe("Hiragana reading. Omit to keep it when the surface is unchanged, or when the new surface is kana."),
+            english: z.string().max(1000).optional().describe("New English for this line when the old translation used the swapped word."),
           })
           .optional(),
         clearFlags: z.object({ sentence: z.number().int().min(0), cleared: z.boolean() }).optional(),
@@ -1229,7 +1241,7 @@ export function registerClipTools(server: McpServer) {
       title: "Compare speech-to-text models on clips",
       description:
         [
-          "Transcribes clips' stored audio with several models and shows where they disagree with the saved transcript and each other (lines every model agrees on are probably right; disagreements are what to listen to). Costs money per clip and model.",
+          "Transcribes clips' stored audio with several models and shows where they disagree with the saved transcript and each other (lines every model agrees on are probably right; disagreements are what to listen to). Costs money per clip and model; the server path records each model's usage on the clip (shown on the issue attempt as ASR compare).",
           "Two ways to run: locally via `pnpm clip:asr-compare` (needs webapp/.env.local; ids or find, optionally within clip ids starting with prefix; models gemini-* go to Gemini, others to OpenAI), or on the Studio server (ids only; Gemini models from the step list, default gemini-3.1-pro-preview + gemini-3.8-flash).",
           "server: default true when STUDIO_BASE_URL isn't localhost (cloud agents have no .env.local). Server results list, per model, its lines and `vsSaved` stretches: `[x → ∅]` = the model didn't hear x, `[∅ → y]` = the saved transcript lacks y.",
         ].join("\n"),

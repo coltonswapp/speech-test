@@ -1,9 +1,13 @@
-// Hand edits to a clip sentence's tokens (split, merge, reading). Client-safe
-// and pure: the editor previews with these, the PATCH route re-validates.
+import { sentenceIsTimed, type ClipDraft, type ClipSentence } from "./types";
+
+// Hand edits to a clip sentence's tokens (split, merge, reading, word swap).
+// Client-safe and pure: the editor previews with these, the PATCH route
+// re-validates.
 //
 // Tokens cover the sentence's words in order; punctuation and spaces between
 // them are not tokens. Merges and reading fixes keep their timings
-// (carryTimings); split halves have none until "Align edited lines".
+// (carryTimings); split halves have none until "Align edited lines". A
+// same-count surface swap keeps times by index (carryTimingsByIndex).
 
 export type EditableToken = { text: string; reading?: string };
 
@@ -185,5 +189,169 @@ export function setReading(
   return tokens.map((token, i) => {
     if (i !== index) return token;
     return cleaned ? { text: token.text, reading: cleaned } : { text: token.text };
+  });
+}
+
+export type ClipTokenSwap = {
+  sentence: number;
+  token: number;
+  text: string;
+  reading?: string;
+  english?: string;
+};
+
+export type ClipTokensEdit = {
+  sentence: number;
+  tokens: EditableToken[];
+  /** New Japanese for the line when the tokens no longer spell the saved sentence. */
+  text?: string;
+  english?: string;
+};
+
+export type ClipTokenEditResult =
+  | { draft: ClipDraft; keptTiming: boolean }
+  | { error: string };
+
+/**
+ * Rebuild the sentence from old token spans when the token count is unchanged
+ * (背後霊 → 守護霊 keeps surrounding punctuation). Null if counts differ or
+ * the old tokens don't sit in `oldText`.
+ */
+export function rewriteLineText(
+  oldText: string,
+  oldTokens: EditableToken[],
+  newTokens: EditableToken[]
+): string | null {
+  const ranges = tokenRanges(oldText, oldTokens);
+  if (!ranges || oldTokens.length !== newTokens.length) return null;
+  let text = oldText;
+  for (let i = ranges.length - 1; i >= 0; i--) {
+    const { start, end } = ranges[i]!;
+    text = text.slice(0, start) + newTokens[i]!.text + text.slice(end);
+  }
+  return text;
+}
+
+/** Copy start/end/score by token index. Used when the line's token count is unchanged. */
+export function carryTimingsByIndex(previous: TimedToken[], next: EditableToken[]): TimedToken[] {
+  if (previous.length !== next.length) return next.map((token) => ({ ...token }));
+  return next.map((token, i) => {
+    const old = previous[i]!;
+    return {
+      ...token,
+      ...(old.startSec !== undefined ? { startSec: old.startSec } : {}),
+      ...(old.endSec !== undefined ? { endSec: old.endSec } : {}),
+      ...(old.score !== undefined ? { score: old.score } : {}),
+      ...(old.readingFallback && old.reading === token.reading
+        ? { readingFallback: old.readingFallback }
+        : {}),
+    };
+  });
+}
+
+function withEnglish(sentence: ClipSentence, english: string | undefined): ClipSentence {
+  if (english === undefined) return sentence;
+  const en = english.trim();
+  if (!en) {
+    const next = { ...sentence };
+    delete next.en;
+    return next;
+  }
+  return { ...sentence, en };
+}
+
+function replaceSentence(draft: ClipDraft, index: number, sentence: ClipSentence): ClipDraft {
+  return {
+    ...draft,
+    sentences: draft.sentences.map((item, i) => (i === index ? sentence : item)),
+  };
+}
+
+/**
+ * Replace one line's tokens, optionally changing the Japanese. Same token
+ * count keeps each token's times and the clip's alignment + feed verdict.
+ * A different count drops that line's times (re-align with onlyUntimed) and
+ * still keeps the feed verdict.
+ */
+export function applyClipTokensEdit(draft: ClipDraft, edit: ClipTokensEdit): ClipTokenEditResult {
+  const sentence = draft.sentences[edit.sentence];
+  if (!sentence) return { error: `No sentence ${edit.sentence + 1}.` };
+  const previous = sentence.tokens ?? [];
+  const nextTokens = edit.tokens;
+  if (nextTokens.length === 0) return { error: "A sentence needs at least one token." };
+
+  const explicitText = edit.text?.trim();
+  let newText: string | null = null;
+  if (explicitText) {
+    newText = explicitText;
+  } else if (!clipTokensProblem(sentence.text, nextTokens)) {
+    newText = sentence.text;
+  } else {
+    newText = rewriteLineText(sentence.text, previous, nextTokens);
+  }
+  if (!newText) {
+    return {
+      error:
+        "Tokens must spell the line, or keep the token count so the line can be rewritten. Pass text when the token count changes.",
+    };
+  }
+  const problem = clipTokensProblem(newText, nextTokens);
+  if (problem) return { error: problem };
+
+  const textChanged = newText !== sentence.text;
+  const sameCount = nextTokens.length === previous.length;
+  const carried: TimedToken[] = !textChanged
+    ? carryTimings(sentence.text, previous, nextTokens)
+    : sameCount
+      ? carryTimingsByIndex(previous, nextTokens)
+      : nextTokens.map((token) => ({ ...token }));
+  const stillTimed = carried.length > 0 && carried.every((t) => t.startSec !== undefined && t.endSec !== undefined);
+
+  let nextSentence: ClipSentence = {
+    ...sentence,
+    text: newText,
+    tokens: carried,
+    basicSplit: undefined,
+  };
+  if (!stillTimed) {
+    nextSentence = { ...nextSentence, score: undefined, flagsCleared: undefined };
+  }
+  nextSentence = withEnglish(nextSentence, edit.english);
+
+  const nextDraft = replaceSentence(draft, edit.sentence, nextSentence);
+  if (!textChanged && !stillTimed) {
+    return { draft: { ...nextDraft, alignment: undefined }, keptTiming: false };
+  }
+  return { draft: nextDraft, keptTiming: stillTimed && sentenceIsTimed(nextSentence) };
+}
+
+/** One-token surface/reading swap. Token count stays the same, so timings stay. */
+export function applyClipTokenSwap(draft: ClipDraft, swap: ClipTokenSwap): ClipTokenEditResult {
+  const sentence = draft.sentences[swap.sentence];
+  if (!sentence) return { error: `No sentence ${swap.sentence + 1}.` };
+  const current = sentence.tokens ?? [];
+  if (!current[swap.token]) {
+    return { error: `No token ${swap.token + 1} on sentence ${swap.sentence + 1}.` };
+  }
+  const surface = swap.text.trim();
+  if (!surface) return { error: "Token text is empty." };
+  const tokens = current.map((token, i) => {
+    if (i !== swap.token) {
+      return { text: token.text, ...(token.reading ? { reading: token.reading } : {}) };
+    }
+    const reading =
+      swap.reading !== undefined
+        ? swap.reading.trim() || undefined
+        : surface === token.text
+          ? token.reading
+          : isKana(surface)
+            ? surface
+            : undefined;
+    return { text: surface, ...(reading ? { reading } : {}) };
+  });
+  return applyClipTokensEdit(draft, {
+    sentence: swap.sentence,
+    tokens,
+    english: swap.english,
   });
 }

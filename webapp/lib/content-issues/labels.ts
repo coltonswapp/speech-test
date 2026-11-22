@@ -2,9 +2,10 @@ import type { ClipFeedbackReason, ClipFeedbackStatus } from "@/lib/clip-feedback
 import { lessonReportCategoryLabels, type LessonReportCategory } from "@/lib/lesson-reports/types";
 import type { IssueSubject } from "./subjects";
 
-/** Same wording as the app's report screen (ClipFeedback.swift). */
+/** Same wording as the app's report screen (ClipFeedback.swift), plus transcription (iOS still hardcoded). */
 export const CLIP_REASON_LABELS: Record<ClipFeedbackReason, string> = {
   translation: "Bad translation",
+  transcription: "Bad Transcription",
   tokenization: "Words split wrong",
   reading: "Wrong reading",
   timing: "Subtitles out of sync",

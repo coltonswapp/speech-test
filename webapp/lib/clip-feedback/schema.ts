@@ -7,6 +7,7 @@ import { z } from "zod";
 
 export const CLIP_FEEDBACK_REASONS = [
   "translation", // English is wrong
+  "transcription", // Japanese transcript is wrong (misheard word, extra/missing line)
   "tokenization", // words split wrong
   "reading", // wrong furigana / reading
   "timing", // subtitles or karaoke out of sync

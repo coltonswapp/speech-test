@@ -390,7 +390,7 @@ function VideoUsageSection({ usage, clipCount }: { usage: VideoUsage; clipCount:
       defaultOpen={false}
     >
       <p className="text-xs text-muted-foreground">
-        Every Transcribe, Tokenize, Align, Translate, Level and Feed run on these {clipCount} clips,
+        Every Transcribe, ASR compare, Tokenize, Align, Translate, Level and Feed run on these {clipCount} clips,
         added up. Costs use published text rates (thinking billed as output); ≥ means some runs
         sent audio, which Gemini bills higher. Align runs on our aligner (no Gemini cost).
         Highlights runs aren’t logged, and each clip keeps its last 50 runs.

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeftIcon, ExternalLinkIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { CopyIssueLink } from "@/components/content-issues/copy-issue-link";
 import { parseIssueId } from "@/lib/content-issues/subjects";
 import { ClipIssueDetail } from "@/components/experiments/clips/clip-feedback";
 import { SceneIssue } from "@/components/content-issues/scene-issue";
@@ -85,12 +86,15 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
           reasons={report.reason ? [issueReasonLabel("clip", report.reason)] : []}
           createdAt={report.createdAt}
           action={
-            <Link
-              href={`/experiments/clips/${encodeURIComponent(report.clipId)}`}
-              className={buttonVariants({ size: "sm", variant: "outline" })}
-            >
-              Open clip editor
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <CopyIssueLink issueId={id} label="Copy link to issue" />
+              <Link
+                href={`/experiments/clips/${encodeURIComponent(report.clipId)}`}
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+              >
+                Open clip editor
+              </Link>
+            </div>
           }
         />
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
@@ -141,12 +145,15 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
         reasons={report.categories.map((category) => issueReasonLabel("scene", category))}
         createdAt={report.createdAt}
         action={
-          <Link
-            href={sceneHref}
-            className={buttonVariants({ size: "sm", variant: "outline" })}
-          >
-            Open scene editor
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <CopyIssueLink issueId={id} label="Copy link to issue" />
+            <Link
+              href={sceneHref}
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+            >
+              Open scene editor
+            </Link>
+          </div>
         }
       />
       <SceneIssue report={report} configured={(await agentSettings()).hana} />

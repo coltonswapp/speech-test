@@ -976,8 +976,8 @@ function UsageSection({ runs }: { runs: ClipUsageRun[] }) {
     >
       <div>
         <p className="text-xs text-muted-foreground">
-          Gemini tokens per run. Costs use published text rates; thinking is billed as output.
-          Highlights runs aren’t logged yet.
+          Gemini tokens per run, including ASR compare. Costs use published text rates; thinking is billed as output.
+          Align runs on our aligner (no Gemini cost). Highlights runs aren’t logged yet.
         </p>
       </div>
       {runs.length === 0 ? (

@@ -599,7 +599,7 @@ export const clipFeedback = pgTable(
     userId: text("user_id").notNull(),
     kind: text("kind").notNull(), // rating | flag
     rating: text("rating"), // up | down; set when kind = rating
-    /** translation | tokenization | reading | timing | video | other */
+    /** translation | transcription | tokenization | reading | timing | video | other */
     reason: text("reason"),
     note: text("note"),
     /** The line the learner reported from; null for clip-wide feedback. */

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronRightIcon, FilmIcon, InboxIcon, MessagesSquareIcon, TriangleAlertIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { CopyIssueLink } from "@/components/content-issues/copy-issue-link";
 import { LocalTime } from "@/components/content-issues/local-time";
 import { issueSubjects, type IssueSubject } from "@/lib/content-issues/subjects";
 import { issueQuery, listIssues } from "@/lib/content-issues/queue";
@@ -119,10 +120,10 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
             const Icon = SUBJECT_ICONS[issue.subject];
             const detail = issue.note || issue.location;
             return (
-              <li key={issue.id}>
+              <li key={issue.id} className="flex items-stretch">
                 <Link
                   href={`/content/issues/${issue.id}`}
-                  className="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/40"
+                  className="group flex min-w-0 flex-1 items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/40"
                 >
                   <span
                     className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
@@ -162,6 +163,9 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
                   </div>
                   <ChevronRightIcon className="mt-2 size-4 shrink-0 text-muted-foreground/60" />
                 </Link>
+                <div className="flex items-start py-3 pr-3">
+                  <CopyIssueLink issueId={issue.id} size="icon-sm" variant="ghost" />
+                </div>
               </li>
             );
           })}

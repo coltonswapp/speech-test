@@ -23,6 +23,7 @@ import {
   type ClipAgentOutcome,
   type ClipAgentTarget,
 } from "@/lib/clip-agent/schema";
+import { latestReviewAttempt } from "@/lib/content-issues/attempt-state";
 import { formatUSD, STEP_LABELS } from "@/lib/experiments/clips/usage-cost";
 import type { ClipUsageStep } from "@/lib/experiments/clips/types";
 import { cn } from "@/lib/utils";
@@ -60,8 +61,7 @@ const value = (v: string | number | boolean | null) =>
 
 /** The open report's latest finished attempt asked for a person's review. */
 export function latestNeedsReview(attempts: ClipAgentAttemptView[]): ClipAgentAttemptView | null {
-  const latest = attempts.find((a) => a.status === "done" || a.status === "working");
-  return latest?.status === "done" && latest.outcome === "needs_review" ? latest : null;
+  return latestReviewAttempt(attempts);
 }
 
 export function SendToAgentButton({

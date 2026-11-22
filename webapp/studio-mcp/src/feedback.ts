@@ -109,7 +109,7 @@ export function registerFeedbackTools(server: McpServer) {
   }
   server.registerTool("list_content_issues", {
     title: "List content issues", description: "List learner reports. Pass the returned next filters and cursors to continue.",
-    inputSchema: {subject:z.enum(["all","clip","scene"]).optional(), status:z.enum(["all","open","resolved","wontfix","duplicate"]).optional(), cursor:z.string().optional()},
+    inputSchema: {subject:z.enum(["all","clip","scene"]).optional(), status:z.enum(["all","open","needs_review","resolved","wontfix","duplicate"]).optional(), cursor:z.string().optional()},
   }, async (args) => callIssue("?" + new URLSearchParams(Object.entries(args).map(([k,v]): [string,string] => [k,String(v)]))));
   server.registerTool("get_content_issue", {
     title: "Read a content issue", description: "Read report evidence and history. For a scene, published=true returns its learner-visible export and verification revision. issueId accepts the Studio issue URL or a clip feedback id.",

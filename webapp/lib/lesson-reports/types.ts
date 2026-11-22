@@ -50,6 +50,8 @@ export type LessonReportEntry = {
   id: string;
   createdAt: string | null;
   status: LessonReportStatus;
+  /** Set by Studio when the status changes (`lessonReports.statusUpdatedAt`). */
+  statusUpdatedAt: string | null;
   categories: LessonReportCategory[];
   note: string | null;
   page: string | null;
@@ -123,6 +125,7 @@ export function parseLessonReportEntry(
     id,
     createdAt: timestampIso(data.createdAt),
     status: isLessonReportStatus(data.status) ? data.status : "open",
+    statusUpdatedAt: timestampIso(data.statusUpdatedAt),
     categories,
     note: str(data.note),
     page: str(data.page),

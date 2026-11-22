@@ -4,14 +4,16 @@ import { ChevronLeftIcon, ExternalLinkIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { CopyIssueLink } from "@/components/content-issues/copy-issue-link";
+import { IssueStatusBadge } from "@/components/content-issues/issue-status-badge";
 import { parseIssueId } from "@/lib/content-issues/subjects";
 import { ClipIssueDetail } from "@/components/experiments/clips/clip-feedback";
 import { SceneIssue } from "@/components/content-issues/scene-issue";
 import { LocalTime } from "@/components/content-issues/local-time";
 import { agentSettings } from "@/lib/content-issues/agents";
+import { issueAttemptState } from "@/lib/content-issues/attempt-state";
 import { sceneDetail } from "@/lib/content-issues/scenes";
-import { issueReasonLabel, issueStatusLabel, ISSUE_SUBJECT_LABELS } from "@/lib/content-issues/labels";
-import { AttemptError } from "@/lib/clip-agent/store";
+import { issueReasonLabel, ISSUE_SUBJECT_LABELS } from "@/lib/content-issues/labels";
+import { AttemptError, clipAttemptSummaries } from "@/lib/clip-agent/store";
 import { listClipFeedback } from "@/lib/clip-feedback/admin";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +22,8 @@ function Header({
   eyebrow,
   title,
   status,
+  needsReview,
+  agentWorking,
   reasons,
   createdAt,
   action,
@@ -27,6 +31,8 @@ function Header({
   eyebrow: string;
   title: React.ReactNode;
   status: string | null;
+  needsReview?: boolean;
+  agentWorking?: boolean;
   reasons: string[];
   createdAt: string | null;
   action?: React.ReactNode;
@@ -44,9 +50,7 @@ function Header({
           <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{eyebrow}</span>
           <h1 className="text-xl font-semibold tracking-tight break-words">{title}</h1>
           <div className="flex flex-wrap items-center gap-2">
-            {status ? (
-              <Badge variant={status === "open" ? "destructive" : "secondary"}>{issueStatusLabel(status)}</Badge>
-            ) : null}
+            <IssueStatusBadge status={status} needsReview={needsReview} agentWorking={agentWorking} />
             {reasons.map((reason) => (
               <Badge key={reason} variant="outline">
                 {reason}
@@ -72,6 +76,8 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
   if (kind === "clip") {
     const [report] = await listClipFeedback({ id: key, status: "issues" });
     if (!report) notFound();
+    const attempts = (await clipAttemptSummaries([key])).get(key) ?? [];
+    const state = report.status === "open" ? issueAttemptState(attempts) : { needsReview: false, agentWorking: false };
     const start = Math.floor(report.videoStartSec + (report.line?.startSec ?? 0));
     return (
       <div className="flex flex-col gap-6">
@@ -83,6 +89,8 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
             </Link>
           }
           status={report.status}
+          needsReview={state.needsReview}
+          agentWorking={state.agentWorking}
           reasons={report.reason ? [issueReasonLabel("clip", report.reason)] : []}
           createdAt={report.createdAt}
           action={
@@ -130,6 +138,7 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
     if (e instanceof AttemptError && e.status === 404) notFound();
     throw e;
   });
+  const sceneState = report.status === "open" ? issueAttemptState(report.attempts) : { needsReview: false, agentWorking: false };
   const sceneHref = `/content/dialogues/${encodeURIComponent(report.collectionId)}/${encodeURIComponent(report.scenarioId)}`;
   return (
     <div className="flex flex-col gap-6">
@@ -142,6 +151,8 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
           </Link>
         }
         status={report.status}
+        needsReview={sceneState.needsReview}
+        agentWorking={sceneState.agentWorking}
         reasons={report.categories.map((category) => issueReasonLabel("scene", category))}
         createdAt={report.createdAt}
         action={

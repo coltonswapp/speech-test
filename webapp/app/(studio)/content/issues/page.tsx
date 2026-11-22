@@ -3,10 +3,11 @@ import { ChevronRightIcon, FilmIcon, InboxIcon, MessagesSquareIcon, TriangleAler
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { CopyIssueLink } from "@/components/content-issues/copy-issue-link";
-import { LocalTime } from "@/components/content-issues/local-time";
+import { IssueStatusBadge } from "@/components/content-issues/issue-status-badge";
+import { IssueTimeline } from "@/components/content-issues/issue-timeline";
 import { issueSubjects, type IssueSubject } from "@/lib/content-issues/subjects";
 import { issueQuery, listIssues } from "@/lib/content-issues/queue";
-import { issueReasonLabel, issueStatusLabel, ISSUE_SUBJECT_LABELS } from "@/lib/content-issues/labels";
+import { issueReasonLabel, ISSUE_SUBJECT_LABELS } from "@/lib/content-issues/labels";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ const SUBJECT_FILTERS: { value: Query["subject"]; label: string }[] = [
 
 const STATUS_FILTERS: { value: Query["status"]; label: string }[] = [
   { value: "open", label: "Open" },
+  { value: "needs_review", label: "Needs review" },
   { value: "resolved", label: "Resolved" },
   { value: "wontfix", label: "Won’t fix" },
   { value: "duplicate", label: "Duplicate" },
@@ -152,14 +154,19 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
                       </p>
                     ) : null}
                     <span className="text-xs text-muted-foreground">{ISSUE_SUBJECT_LABELS[issue.subject]}</span>
+                    <IssueTimeline
+                      createdAt={issue.createdAt}
+                      agentFinishedAt={issue.agentFinishedAt}
+                      resolvedAt={issue.resolvedAt}
+                      status={issue.status}
+                    />
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1.5">
-                    {issue.status ? (
-                      <Badge variant={issue.status === "open" ? "destructive" : "secondary"}>
-                        {issueStatusLabel(issue.status)}
-                      </Badge>
-                    ) : null}
-                    <LocalTime iso={issue.createdAt} className="text-xs text-muted-foreground tabular-nums" />
+                    <IssueStatusBadge
+                      status={issue.status}
+                      needsReview={issue.needsReview}
+                      agentWorking={issue.agentWorking}
+                    />
                   </div>
                   <ChevronRightIcon className="mt-2 size-4 shrink-0 text-muted-foreground/60" />
                 </Link>

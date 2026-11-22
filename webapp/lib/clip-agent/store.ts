@@ -114,6 +114,35 @@ function toView(row: AttemptRow, live: { draft: ClipDraft | null } | null): Clip
   };
 }
 
+/** Status/outcome/finish time for these reports, newest first. One query; no live diffs. */
+export async function clipAttemptSummaries(
+  feedbackIds: string[],
+): Promise<Map<string, { status: ClipAgentAttemptStatus; outcome: ClipAgentOutcome | null; finishedAt: string | null }[]>> {
+  const out = new Map<string, { status: ClipAgentAttemptStatus; outcome: ClipAgentOutcome | null; finishedAt: string | null }[]>();
+  if (feedbackIds.length === 0) return out;
+  const rows = await db
+    .select({
+      feedbackId: clipAgentAttempt.feedbackId,
+      status: clipAgentAttempt.status,
+      outcome: clipAgentAttempt.outcome,
+      finishedAt: clipAgentAttempt.finishedAt,
+    })
+    .from(clipAgentAttempt)
+    .where(inArray(clipAgentAttempt.feedbackId, feedbackIds))
+    .orderBy(desc(clipAgentAttempt.createdAt));
+  for (const row of rows) {
+    out.set(row.feedbackId, [
+      ...(out.get(row.feedbackId) ?? []),
+      {
+        status: row.status as ClipAgentAttemptStatus,
+        outcome: (row.outcome as ClipAgentOutcome | null) ?? null,
+        finishedAt: row.finishedAt?.toISOString() ?? null,
+      },
+    ]);
+  }
+  return out;
+}
+
 /** Attempts for these reports, newest first; open attempts are diffed against the clip now. */
 export async function attemptsForFeedback(
   feedbackIds: string[],

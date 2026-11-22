@@ -7,6 +7,8 @@ import { parseLessonReportEntry, isLessonReportStatus } from "@/lib/lesson-repor
 import { getPublicDialogueCollectionFile } from "@/lib/dialogue/public-api";
 import { AttemptError } from "@/lib/clip-agent/store";
 import { outcomeResolvesReport, type ClipAgentOutcome } from "@/lib/clip-agent/schema";
+import { timestampIso } from "@/lib/lesson-feedback/types";
+import type { AttemptSummary } from "./attempt-state";
 import { agentSettings } from "./agents";
 
 type SceneAttempt = {
@@ -24,6 +26,33 @@ type SceneAttempt = {
 function reference(id: string) {
   if (!getFirebaseAdminStatus().ok) throw new AttemptError("Scene reports are unavailable.", 503);
   return getUsageFirestore().collection("lessonReports").doc(id);
+}
+
+function attemptSummary(data: FirebaseFirestore.DocumentData): AttemptSummary {
+  return {
+    status: typeof data.status === "string" ? data.status : "",
+    outcome: typeof data.outcome === "string" ? data.outcome : null,
+    finishedAt:
+      typeof data.finishedAt === "string" ? data.finishedAt : timestampIso(data.finishedAt),
+  };
+}
+
+/**
+ * Newest-first attempt summaries for these scene reports.
+ * Firestore can't IN-query a subcollection by parent, so the reads run together
+ * in one round rather than sequentially per row.
+ */
+export async function sceneAttemptSummaries(ids: string[]): Promise<Map<string, AttemptSummary[]>> {
+  const out = new Map<string, AttemptSummary[]>();
+  if (ids.length === 0) return out;
+  const db = getUsageFirestore();
+  const snapshots = await Promise.all(
+    ids.map((id) => db.collection("lessonReports").doc(id).collection("attempts").orderBy("createdAt", "desc").get()),
+  );
+  snapshots.forEach((snap, index) => {
+    out.set(ids[index]!, snap.docs.map((doc) => attemptSummary(doc.data())));
+  });
+  return out;
 }
 
 export async function sceneDetail(id: string) {

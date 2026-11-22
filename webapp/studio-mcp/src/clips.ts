@@ -516,6 +516,35 @@ export function registerClipTools(server: McpServer) {
   );
 
   server.registerTool(
+    "search_clips_by_token",
+    {
+      title: "Search clips by spoken word",
+      description:
+        "Find where a word or ending is said across the clip library (exact surface match, including a word split across adjacent tokens in a line: て/い/ます → ています). No lemma. Returns clip id, YouTube video id, line index, line text, matched text, and start/end in video seconds. level = exact JLPT (5 = N5 … 1 = N1). feed true = only feed clips. Pages with limit + cursor. Needs clip_token_index: apply drizzle 0026_clip_token_index, then `pnpm clip:index-backfill --write`.",
+      inputSchema: {
+        word: z.string().min(1).max(80).describe("Exact surface to find, e.g. ちゃう, ています, される."),
+        level: z.number().int().min(1).max(5).optional().describe("Exact JLPT level (5 = N5 … 1 = N1)."),
+        feed: z.boolean().optional().describe("Only clips in the feed."),
+        limit: z.number().int().min(1).max(100).default(20),
+        cursor: z.string().optional(),
+      },
+    },
+    async ({ word, level, feed, limit, cursor }) => {
+      try {
+        const params = new URLSearchParams();
+        params.set("word", word);
+        if (level !== undefined) params.set("level", String(level));
+        if (feed) params.set("feed", "1");
+        params.set("limit", String(limit));
+        if (cursor) params.set("cursor", cursor);
+        return jsonResult(await studioFetch(`/api/experiments/clips/token-search?${params}`));
+      } catch (error) {
+        return errorResult(error);
+      }
+    }
+  );
+
+  server.registerTool(
     "get_clip",
     {
       title: "Get clip",
@@ -1180,7 +1209,7 @@ export function registerClipTools(server: McpServer) {
     {
       title: "Rebuild the clip index",
       description:
-        "Runs `pnpm clip:index-backfill`: rebuilds the Postgres clip_index (what the app's lists and feed read) from the drafts in R2. Needed after changing a feed rule threshold in lib/experiments/clips/feed.ts, since the index only picks up a new verdict when a clip is re-saved. Dry run (what would change) unless write is true. Uses webapp/.env.local (production R2 and database).",
+        "Runs `pnpm clip:index-backfill`: rebuilds the Postgres clip_index (what the app's lists and feed read) and clip_token_index (token search / supercuts) from the drafts in R2. Needed after changing a feed rule threshold in lib/experiments/clips/feed.ts, since the index only picks up a new verdict when the clip is re-saved, and after applying drizzle 0026_clip_token_index. Dry run (what would change) unless write is true. Uses webapp/.env.local (production R2 and database). Do not run --write against production until Colton has approved the migration.",
       inputSchema: { write: z.boolean().default(false), waitSeconds: waitSecondsSchema(50) },
     },
     async ({ write, waitSeconds }) => {

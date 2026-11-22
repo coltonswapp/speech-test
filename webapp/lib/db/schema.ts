@@ -4,6 +4,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   real,
   text,
   timestamp,
@@ -540,6 +541,47 @@ export const clipIndex = pgTable(
     index("clip_index_listed_idx").on(t.listed, t.inFeed, t.listedAt),
     index("clip_index_video_idx").on(t.videoId),
     index("clip_index_tags_idx").using("gin", t.tags),
+  ]
+);
+
+// --- Clip token index ---
+// One row per token per clip line, for surface / reading search (v1 is exact
+// surface, including a word split across adjacent tokens). Drafts stay in R2;
+// this is kept in step by writeClipDraft / deleteClip (same path as
+// clip_index) and rebuilt by `pnpm clip:index-backfill`. lemma / grammar_tags
+// are unused in v1.
+
+export const clipTokenIndex = pgTable(
+  "clip_token_index",
+  {
+    clipId: text("clip_id").notNull(),
+    videoId: text("video_id").notNull(),
+    lineIndex: integer("line_index").notNull(),
+    lineText: text("line_text").notNull(),
+    tokenIndex: integer("token_index").notNull(),
+    surface: text("surface").notNull(),
+    reading: text("reading"),
+    /** YouTube-timeline seconds (clip start + clip-relative + shift). */
+    startSec: real("start_sec").notNull(),
+    endSec: real("end_sec").notNull(),
+    /** Clip-relative seconds (0 = draft.startSec, before shift). */
+    clipStartSec: real("clip_start_sec").notNull(),
+    clipEndSec: real("clip_end_sec").notNull(),
+    listed: boolean("listed").notNull(),
+    inFeed: boolean("in_feed").notNull(),
+    /** 5 = N5 … 1 = N1; null until rated. */
+    jlptLevel: integer("jlpt_level"),
+    /** Reserved: unused in v1 (exact surface only). */
+    lemma: text("lemma"),
+    /** Reserved: unused in v1. */
+    grammarTags: text("grammar_tags").array(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.clipId, t.lineIndex, t.tokenIndex], name: "clip_token_index_pk" }),
+    index("clip_token_index_surface_idx").on(t.surface),
+    index("clip_token_index_reading_idx").on(t.reading),
+    index("clip_token_index_listed_idx").on(t.listed, t.inFeed, t.jlptLevel),
+    index("clip_token_index_clip_idx").on(t.clipId),
   ]
 );
 

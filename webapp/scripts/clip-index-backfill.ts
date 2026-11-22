@@ -1,22 +1,34 @@
-// Rebuilds the clip index (`clip_index` in lib/db/schema.ts) from the drafts
-// in R2, creating the table if it isn't there yet.
+// Rebuilds the clip index (`clip_index` in lib/db/schema.ts) and the token
+// index (`clip_token_index`) from the drafts in R2, creating the tables if
+// they aren't there yet.
 //
 //   pnpm clip:index-backfill           # dry run: what would change
-//   pnpm clip:index-backfill --write   # create the table, upsert every draft, drop rows with no draft
+//   pnpm clip:index-backfill --write   # create the tables, upsert every draft, drop rows with no draft
 //
-// Run it once to fill the index, and again after changing a feed rule
-// threshold (lib/experiments/clips/feed.ts): the index stores each clip's
+// Run it once to fill the indexes, and again after changing a feed rule
+// threshold (lib/experiments/clips/feed.ts): the clip index stores each clip's
 // verdict, so it only picks up a new threshold when the clip is re-saved.
+// Token rows are rebuilt for every draft on --write (safe to re-run).
 //
 // --write also stamps `listedAt` on listed drafts from before the field (their
 // alignment time; see clipListedAt), so a later re-align can't move them up
 // the app's list. Their updatedAt is left alone.
+//
+// That listedAt stamp writes draft.json in R2 directly (not writeClipDraft),
+// so it does not bump updatedAt. Token rows for those clips are still rebuilt
+// in this same --write pass from the in-memory drafts.
 import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { inArray, sql } from "drizzle-orm";
 import { db } from "../lib/db/standalone-client";
-import { clipIndex } from "../lib/db/schema";
-import { clipDraftSchema, clipListedAt, type ClipDraft } from "../lib/experiments/clips/types";
+import { clipIndex, clipTokenIndex } from "../lib/db/schema";
 import { CLIP_INDEX_DDL, clipIndexRow } from "../lib/experiments/clips/summary";
+import {
+  CLIP_TOKEN_INDEX_DDL,
+  clipTokenIndexRows,
+  clipTokenIndexSkip,
+} from "../lib/experiments/clips/token-index";
+import { deleteClipTokenIndex, replaceClipTokenIndex } from "../lib/experiments/clips/token-index-db";
+import { clipDraftSchema, clipListedAt, sentenceIsTimed, type ClipDraft } from "../lib/experiments/clips/types";
 
 const ROOT = "experiments/clips/";
 
@@ -64,6 +76,36 @@ async function readDraft(id: string): Promise<ClipDraft | null> {
   }
 }
 
+function sample(ids: string[], n = 8): string {
+  if (ids.length === 0) return "";
+  const shown = ids.slice(0, n).join(", ");
+  return ids.length > n ? ` (${shown}, …)` : ` (${shown})`;
+}
+
+function tokenStats(drafts: ClipDraft[]) {
+  let tokenRows = 0;
+  const noTokens: string[] = [];
+  const noAlignment: string[] = [];
+  let partial = 0;
+  for (const draft of drafts) {
+    const rows = clipTokenIndexRows(draft);
+    tokenRows += rows.length;
+    const skip = clipTokenIndexSkip(draft);
+    if (skip === "no_tokens") {
+      noTokens.push(draft.id);
+      continue;
+    }
+    if (skip === "no_alignment") {
+      noAlignment.push(draft.id);
+      continue;
+    }
+    const tokenLines = draft.sentences.filter((s) => (s.tokens?.length ?? 0) > 0).length;
+    const timedLines = draft.sentences.filter((s) => (s.tokens?.length ?? 0) > 0 && sentenceIsTimed(s)).length;
+    if (timedLines < tokenLines) partial++;
+  }
+  return { tokenRows, noTokens, noAlignment, partial };
+}
+
 async function main() {
   const write = process.argv.includes("--write");
   const ids = await listDraftIds();
@@ -74,11 +116,18 @@ async function main() {
   }
   const rows = drafts.map(clipIndexRow);
   const unstamped = drafts.filter((d) => !d.listedAt && clipListedAt(d));
+  const tokens = tokenStats(drafts);
   console.log(
     `${drafts.length} drafts in R2: ${rows.filter((r) => r.listed).length} listed, ${rows.filter((r) => r.inFeed).length} in the feed; ${unstamped.length} listed without listedAt.`
   );
+  console.log(
+    `Token index: ${tokens.tokenRows} rows from ${drafts.length - tokens.noTokens.length - tokens.noAlignment.length} clips; ` +
+      `${tokens.noTokens.length} skipped (no tokens)${sample(tokens.noTokens)}; ` +
+      `${tokens.noAlignment.length} skipped (no alignment)${sample(tokens.noAlignment)}; ` +
+      `${tokens.partial} clips with some untimed lines (those lines omitted).`
+  );
   if (!write) {
-    console.log("Dry run. Add --write to create the table and fill it.");
+    console.log("Dry run. Add --write to create the tables and fill them.");
     process.exit(0);
   }
 
@@ -99,17 +148,34 @@ async function main() {
   if (unstamped.length > 0) console.log(`Stamped listedAt on ${unstamped.length} drafts.`);
 
   await db.execute(sql.raw(CLIP_INDEX_DDL));
+  await db.execute(sql.raw(CLIP_TOKEN_INDEX_DDL));
   for (const row of rows) {
     await db
       .insert(clipIndex)
       .values(row)
       .onConflictDoUpdate({ target: clipIndex.id, set: { ...row, id: undefined } });
   }
+  let tokenCount = 0;
+  for (const draft of drafts) {
+    tokenCount += await replaceClipTokenIndex(db, draft);
+  }
   const indexed = await db.select({ id: clipIndex.id }).from(clipIndex);
   const live = new Set(rows.map((r) => r.id));
   const stale = indexed.map((r) => r.id).filter((id) => !live.has(id));
-  if (stale.length > 0) await db.delete(clipIndex).where(inArray(clipIndex.id, stale));
-  console.log(`Upserted ${rows.length}; removed ${stale.length} rows with no draft.`);
+  if (stale.length > 0) {
+    await db.delete(clipIndex).where(inArray(clipIndex.id, stale));
+    for (const id of stale) await deleteClipTokenIndex(db, id);
+  }
+  const leftover = await db
+    .selectDistinct({ clipId: clipTokenIndex.clipId })
+    .from(clipTokenIndex);
+  const extra = [...new Set(leftover.map((r) => r.clipId).filter((id) => !live.has(id)))];
+  if (extra.length > 0) {
+    await db.delete(clipTokenIndex).where(inArray(clipTokenIndex.clipId, extra));
+  }
+  console.log(
+    `Upserted ${rows.length} clip_index rows and ${tokenCount} token rows; removed ${stale.length} clips with no draft.`
+  );
   process.exit(0);
 }
 

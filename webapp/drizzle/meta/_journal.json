@@ -183,6 +183,13 @@
       "when": 1791200000000,
       "tag": "0025_studio_agent_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791300000000,
+      "tag": "0026_clip_token_index",
+      "breakpoints": true
     }
   ]
 }

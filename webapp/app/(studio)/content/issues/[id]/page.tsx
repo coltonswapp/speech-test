@@ -8,9 +8,10 @@ import { IssueStatusBadge } from "@/components/content-issues/issue-status-badge
 import { parseIssueId } from "@/lib/content-issues/subjects";
 import { ClipIssueDetail } from "@/components/experiments/clips/clip-feedback";
 import { SceneIssue } from "@/components/content-issues/scene-issue";
-import { IssueReporter, usageUserHref } from "@/components/content-issues/issue-reporter";
+import { IssueReporter } from "@/components/content-issues/issue-reporter";
 import { LocalTime } from "@/components/content-issues/local-time";
 import { agentSettings } from "@/lib/content-issues/agents";
+import { usageUserHref } from "@/lib/content-issues/reporter";
 import { issueAttemptState } from "@/lib/content-issues/attempt-state";
 import { sceneDetail } from "@/lib/content-issues/scenes";
 import { issueReasonLabel, ISSUE_SUBJECT_LABELS } from "@/lib/content-issues/labels";

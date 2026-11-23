@@ -6,6 +6,7 @@ import {
   geminiGenerateContentUrl,
   geminiThinkingConfig,
 } from "@/lib/gemini/text-model";
+import { ASR_PROMPT, splitLongAsrLines } from "@/lib/experiments/clips/asr-lines";
 import type { GeminiTokenCounts } from "@/lib/experiments/clips/types";
 import { geminiTokenCounts } from "@/lib/experiments/clips/usage";
 
@@ -19,20 +20,15 @@ export class ClipPipelineError extends Error {
   }
 }
 
-const ASR_PROMPT = `Transcribe the Japanese speech in this audio verbatim.
-
-Rules:
-- Write exactly what is spoken, in standard Japanese orthography (kanji and kana as a native subtitle would use). Do not summarize, correct grammar, or translate.
-- Keep fillers and hesitations that are clearly spoken (えー, あの, まあ). Drop coughs, laughter, music and sound effects.
-- Write numbers the way a Japanese subtitle would (e.g. 三つ, 2020年).
-- Write English words and phrases the speaker says in katakana, as a Japanese subtitle would (Let's go → レッツゴー！, OK → オッケー). Never use the Latin alphabet.
-- Split the transcript into sentences, one per array item, each ending with 。, ？ or ！ where natural. Keep the order they are spoken in.
-- No speaker labels, timestamps, romaji or notes.
-- If there is no Japanese speech, return an empty array.`;
-
 const responseSchema = z.object({ sentences: z.array(z.string()) });
 
-/** Gemini audio-in ASR. Returns one trimmed sentence per entry. */
+/**
+ * Gemini audio-in ASR. Returns trimmed spoken-unit lines: the model is asked
+ * for short clauses, then `splitLongAsrLines` re-splits anything still too
+ * long. Tokenize, align, translate, and the clip token index all run on this
+ * list (see pipeline.ts / translate.ts / token-index.ts), so new timestamps
+ * attach to the short lines. Existing clips are unchanged until re-transcribed.
+ */
 export async function transcribeClipAudio(
   wav: Buffer,
   modelOverride?: string
@@ -96,6 +92,8 @@ export async function transcribeClipAudio(
   return {
     model,
     tokens,
-    sentences: parsed.data.sentences.map((s) => s.trim()).filter((s) => s.length > 0),
+    sentences: splitLongAsrLines(
+      parsed.data.sentences.map((s) => s.trim()).filter((s) => s.length > 0)
+    ),
   };
 }

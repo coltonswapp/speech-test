@@ -437,10 +437,10 @@ function FeedbackVotesPanel() {
   );
 }
 
-function AggregatesPanel() {
+function AggregatesPanel({ initialUid }: { initialUid?: string }) {
   const [period, setPeriod] = useState<UsagePeriod>("day");
-  const [uidDraft, setUidDraft] = useState("");
-  const [loadedUid, setLoadedUid] = useState<string | undefined>(undefined);
+  const [uidDraft, setUidDraft] = useState(initialUid ?? "");
+  const [loadedUid, setLoadedUid] = useState<string | undefined>(initialUid);
 
   const query = useQuery({
     queryKey: ["studio-usage", period, loadedUid ?? ""],
@@ -649,7 +649,7 @@ function AggregatesPanel() {
   );
 }
 
-export function UsageView() {
+export function UsageView({ initialUid }: { initialUid?: string }) {
   const [section, setSection] = useState<UsageSection>("aggregates");
 
   return (
@@ -682,7 +682,7 @@ export function UsageView() {
         </Tabs>
       </div>
 
-      {section === "aggregates" ? <AggregatesPanel /> : <FeedbackVotesPanel />}
+      {section === "aggregates" ? <AggregatesPanel initialUid={initialUid} /> : <FeedbackVotesPanel />}
     </div>
   );
 }

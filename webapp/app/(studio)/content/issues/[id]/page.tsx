@@ -8,6 +8,7 @@ import { IssueStatusBadge } from "@/components/content-issues/issue-status-badge
 import { parseIssueId } from "@/lib/content-issues/subjects";
 import { ClipIssueDetail } from "@/components/experiments/clips/clip-feedback";
 import { SceneIssue } from "@/components/content-issues/scene-issue";
+import { IssueReporter, usageUserHref } from "@/components/content-issues/issue-reporter";
 import { LocalTime } from "@/components/content-issues/local-time";
 import { agentSettings } from "@/lib/content-issues/agents";
 import { issueAttemptState } from "@/lib/content-issues/attempt-state";
@@ -26,6 +27,7 @@ function Header({
   agentWorking,
   reasons,
   createdAt,
+  reporterUserId,
   action,
 }: {
   eyebrow: string;
@@ -35,6 +37,7 @@ function Header({
   agentWorking?: boolean;
   reasons: string[];
   createdAt: string | null;
+  reporterUserId?: string | null;
   action?: React.ReactNode;
 }) {
   return (
@@ -58,6 +61,12 @@ function Header({
             ))}
             <span className="text-xs text-muted-foreground">
               Reported <LocalTime iso={createdAt} className="tabular-nums" />
+              {reporterUserId ? (
+                <>
+                  {" "}
+                  <IssueReporter userId={reporterUserId} href={usageUserHref(reporterUserId)} />
+                </>
+              ) : null}
             </span>
           </div>
         </div>
@@ -93,6 +102,7 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
           agentWorking={state.agentWorking}
           reasons={report.reason ? [issueReasonLabel("clip", report.reason)] : []}
           createdAt={report.createdAt}
+          reporterUserId={report.userId}
           action={
             <div className="flex flex-wrap items-center gap-2">
               <CopyIssueLink issueId={id} label="Copy link to issue" />
@@ -155,6 +165,7 @@ export default async function DetailPage({ params }: { params: Promise<{ id: str
         agentWorking={sceneState.agentWorking}
         reasons={report.categories.map((category) => issueReasonLabel("scene", category))}
         createdAt={report.createdAt}
+        reporterUserId={report.userId}
         action={
           <div className="flex flex-wrap items-center gap-2">
             <CopyIssueLink issueId={id} label="Copy link to issue" />

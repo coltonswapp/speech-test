@@ -75,6 +75,9 @@ const TOKENIZE_CONCURRENCY = 4;
 
 /**
  * Tokenize every sentence that has no tokens yet (cached per line).
+ * Lines are the post-ASR spoken units (see asr.ts / asr-lines.ts), so
+ * alignment and the clip token index time the short lines, not the raw
+ * Gemini sentences.
  * `retokenize`: sentence indexes to throw away and tokenize again (their
  * timings go too; "Align edited lines" times them without touching the rest).
  */

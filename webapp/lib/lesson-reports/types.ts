@@ -62,6 +62,11 @@ export type LessonReportEntry = {
   publishedVariantId: string | null;
   appVersion: string | null;
   osVersion: string | null;
+  /**
+   * Firebase Auth uid when the client sent one (`uid` from the gateway,
+   * or `userId`). Older / anonymous reports may omit it.
+   */
+  userId: string | null;
 };
 
 export type ScenarioReports = {
@@ -137,5 +142,6 @@ export function parseLessonReportEntry(
     publishedVariantId: str(data.publishedVariantId),
     appVersion: str(data.appVersion),
     osVersion: str(data.osVersion),
+    userId: str(data.userId) ?? str(data.uid),
   };
 }

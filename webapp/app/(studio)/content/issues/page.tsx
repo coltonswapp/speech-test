@@ -159,6 +159,7 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
                       agentFinishedAt={issue.agentFinishedAt}
                       resolvedAt={issue.resolvedAt}
                       status={issue.status}
+                      reporterUserId={issue.reporterUserId}
                     />
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1.5">

@@ -43,6 +43,7 @@ type SceneRow = {
   note: string | null;
   createdAt: string;
   resolvedAt: string | null;
+  reporterUserId: string | null;
 };
 
 function mapSceneDoc(doc: FirebaseFirestore.QueryDocumentSnapshot): SceneRow {
@@ -55,6 +56,7 @@ function mapSceneDoc(doc: FirebaseFirestore.QueryDocumentSnapshot): SceneRow {
     title: String(doc.get("sceneKey")), location: row.focusTitle, reasons: row.categories,
     status: row.status, note: row.note, createdAt: row.createdAt ?? "",
     resolvedAt: row.status !== "open" ? row.statusUpdatedAt : null,
+    reporterUserId: row.userId,
   };
 }
 
@@ -164,6 +166,7 @@ export async function listIssues(q: z.output<typeof issueQuery>) {
     title: row.clipTitle ?? row.clipId, location: row.line?.textJP ?? null,
     reasons: row.reason ? [row.reason] : [], status: row.status, note: row.note, createdAt: row.createdAt,
     resolvedAt: row.status && row.status !== "open" ? row.resolvedAt ?? row.updatedAt : null,
+    reporterUserId: row.userId,
   })), ...scenes.rows].sort((a, b) =>
     b.timestamp.localeCompare(a.timestamp) || (a.subject === b.subject ? 0 : a.subject === "clip" ? -1 : 1)
   );
